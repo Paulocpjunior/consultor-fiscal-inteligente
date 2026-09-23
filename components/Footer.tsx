@@ -56,6 +56,19 @@ const Footer: React.FC = () => {
         >
           📗 Como conferir uma entrega nova (e o que reportar)
         </a>
+        <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">·</span>
+        {/* Material da equipe NUNCA vai como link de chat: o link é privado de
+            quem publicou e o colaborador recebe "link inválido" (regra de
+            31/07). O trilho é HTML estático em public/, servido pelo app, com
+            a fonte em docs/ — par travado por `guiaParDuplo`. */}
+        <a
+          href="/pendencias-cfi.html"
+          target="_blank"
+          rel="noreferrer"
+          className="text-slate-400 dark:text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 underline underline-offset-2"
+        >
+          📋 Pendências do CFI — o que falta e quem resolve
+        </a>
       </p>
     </footer>
   );

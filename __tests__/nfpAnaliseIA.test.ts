@@ -55,9 +55,9 @@ describe('montarPromptAnaliseIA', () => {
         expect(prompt).toContain('diagnóstico manual lançado pelo colaborador');
         expect(prompt).toContain('DÉBITOS (1)');
         expect(prompt).toContain('IRPJ em aberto');
-        expect(prompt).toContain('CERTIDÕES (1 consultadas)');
-        expect(prompt).not.toContain('CND Municipal'); // não consultada fica de fora
-        expect(prompt).toContain('OBRIGAÇÕES ACESSÓRIAS (1 verificadas)');
+        expect(prompt).toContain('CERTIDÕES (2 registros;');
+        expect(prompt).toContain('CND Municipal: nao_consultada');
+        expect(prompt).toContain('OBRIGAÇÕES ACESSÓRIAS (1 registros;');
         expect(prompt).toContain('PLANO DE AÇÃO PROPOSTO (1 itens)');
         expect(prompt).toContain('Resumo executivo');
     });

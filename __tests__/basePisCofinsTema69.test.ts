@@ -51,9 +51,15 @@ describe('a régua: receita ≠ base, e as duas ≠ vProd', () => {
         const r = receitaEBaseDoDocumento({}, 2500);
         // `desconto`/`receitaBruta` entraram em 24/08 para o aviso da geração
         // dizer QUANTO foi tirado (PWR) — sem itens não há desconto a tirar.
+        //
+        // ⚠️ `frete` SAI SEMPRE, inclusive zerado (16/09): zero aqui é a
+        // RESPOSTA ("não houve frete"), não o default de quem não olhou — e é
+        // o campo que o aviso da geração lê para decidir se nasce mudo. Campo
+        // que só aparece quando há valor faz o leitor confundir ausência com
+        // ausência de medição.
         expect(r).toEqual({
             receita: 2500, base: 2500, icms: 0, temItens: false,
-            descontoDoDocumento: 0, desconto: 0, receitaBruta: 2500,
+            descontoDoDocumento: 0, desconto: 0, receitaBruta: 2500, frete: 0,
         });
     });
 });
@@ -323,7 +329,12 @@ describe('🚨 PWR 07/2026 — a receita do M210 é a Σ VL_ITEM, e o desconto r
     it('reproduz a linha que o PVA valida — 38.316,84 × base 30.958,77', () => {
         const l = buildBlocoM(dados()).map((x: string) => x.replace(/\r?\n$/, ''));
         expect(l.find((x: string) => x.startsWith('|M210|')))
-            .toBe('|M210|51|38316,84|30958,77|||30958,77|0,6500|||201,23|||||201,23|');
+        // ⚠️ Os quatro `0,00` são os campos de AJUSTE (5, 6, 12, 13): eles saíam
+        // VAZIOS e o PVA recusou com "Campo de preenchimento obrigatório"
+        // (DGB, 28/08). Sem M220/M620 não há ajuste, e aqui o zero É a
+        // resposta. Quantidade (9-10) e diferimento (14-15) seguem vazios —
+        // esses o PVA não acusou.
+            .toBe('|M210|51|38316,84|30958,77|0,00|0,00|30958,77|0,6500|||201,23|0,00|0,00|||201,23|');
     });
 
     // 🚨 O IMPOSTO É O MESMO — é isto que fecha o assunto. O desconto sai da
@@ -402,7 +413,7 @@ describe('🚨 VL_REC_BRT = Σ VL_ITEM dos C170 de saída', () => {
     const c170 = (item: string) => `|C170|1|3|TELHA|187,60000|MT|${item}|562,24|0|000|5101|`
         + '|18179,00|18,00|3272,22|0,00|0,00|0,00|0|||0,00|0,00|0,00|01|14906,78|0,6500|||96,89'
         + '|01|14906,78|3,0000|||447,20||';
-    const m210 = (rec: string) => `|M210|51|${rec}|14906,78|||14906,78|0,6500|||96,89|||||96,89|`;
+    const m210 = (rec: string) => `|M210|51|${rec}|14906,78|0,00|0,00|14906,78|0,6500|||96,89|0,00|0,00|||96,89|`;
 
     it('nasce VERDE quando o M210 traz a soma', () => {
         expect(conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), m210('18741,24')]).erros)
@@ -440,7 +451,7 @@ describe('🚨 VL_REC_BRT = Σ VL_ITEM dos C170 de saída', () => {
 
     // ⚠️ E só julga os COD_CONT que a validação nomeia.
     it('COD_CONT fora da lista não é julgado', () => {
-        const m = '|M210|99|1,00|14906,78|||14906,78|0,6500|||96,89|||||96,89|';
+        const m = '|M210|99|1,00|14906,78|0,00|0,00|14906,78|0,6500|||96,89|0,00|0,00|||96,89|';
         expect(conferirReceitaBrutaDoM210([c100('1'), c170('18741,24'), m]).erros).toHaveLength(0);
     });
 });

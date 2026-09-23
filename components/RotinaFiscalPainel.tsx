@@ -15,6 +15,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
+// 🔒 A PROJEÇÃO DO BLOQUEIO VEM DO DONO — montá-la aqui à mão foi o defeito da
+// VINCENZO (28/08). O módulo é PURO (só puxa `rotina-fiscal` e `competencia`),
+// então a tela o importa direto, como já faz com as outras réguas do backend.
+import { bloqueioDaEtapa } from '../sefaz-backend/fim-de-mes.js';
+import type { BloqueioFimDeMes } from '../services/fimDeMesService';
 
 interface Props {
     /** Leva o colaborador à tela da etapa (App resolve o SearchType). */
@@ -53,10 +58,35 @@ const PONTO: Record<string, string> = {
 const ICONE: Record<string, string> = { concluida: '✓', na: '–', atencao: '!', pendente: '•' };
 
 const FAROL_CARD: Record<string, string> = {
+    // 🔒 FECHADO é FATO (o carimbo), e a página virou: borda discreta, sem cor
+    // de alarme. `ok` é "pronto para fechar" — ainda pede um clique, então
+    // continua verde para chamar quem vai dá-lo.
+    fechado: 'border-slate-200 dark:border-slate-700 opacity-75',
     ok: 'border-emerald-300 dark:border-emerald-700',
     atencao: 'border-amber-300 dark:border-amber-700',
     pendente: 'border-red-300 dark:border-red-700',
 };
+
+/**
+ * As etapas ABERTAS viram os bloqueios do fim de mês.
+ *
+ * O RECORTE é daqui (é o que evita uma requisição por card — o HTTP 429 de
+ * 27/08). A PROJEÇÃO, não: ela vem de `bloqueioDaEtapa`, o mesmo dono que o
+ * backend usa na recusa do ato.
+ *
+ * 🚨 ATÉ 28/08 ELA ERA MONTADA À MÃO AQUI, com sete campos — e esquecia
+ * `podeDeclararEnvio`. Resultado no print do Paulo (VINCENZO GUERRA): o app
+ * ENVIOU a guia, o cliente PAGOU, a etapa mandava `false`… e a Rotina oferecia
+ * *"📋 Já enviei esta guia por fora"* assim mesmo, porque `undefined !== false`.
+ * Ele registrou, e o mês continuou travado. A porta convidava a declarar o que
+ * o app já tinha feito, e a que resolvia de verdade não existia.
+ *
+ * ⚠️ E a mesma lacuna, ao contrário, APAGAVA a porta nova da etapa 4 (a tela
+ * pergunta `=== true`): a saída da MANTOAN ficava invisível justamente aqui.
+ */
+const FECHADAS_NA_TELA = new Set(['concluida', 'na']);
+export const bloqueiosDasEtapas = (etapas: EtapaRotina[]): BloqueioFimDeMes[] =>
+    (etapas || []).filter((e) => !FECHADAS_NA_TELA.has(e.status)).map(bloqueioDaEtapa);
 
 /** Trilha das 5 etapas de uma empresa. */
 const Trilha: React.FC<{ etapas: EtapaRotina[]; destaque?: string }> = ({ etapas, destaque }) => (
@@ -179,9 +209,20 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                     </p>
                                 </button>
                             ))}
+                            {/* 🚨 ESTE NÚMERO ERA DEDUÇÃO — "não tem próximo
+                                passo ⇒ mês fechado". Agora ele é o CARIMBO, e
+                                "pronta para fechar" saiu para um contador
+                                PRÓPRIO: as duas pedem ações opostas (uma não
+                                pede nada, a outra pede um clique), e juntas
+                                faziam empresa pronta passar por entregue. */}
                             <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/10 p-2">
-                                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Mês fechado</p>
-                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{dados.funil.completos}</p>
+                                <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Mês FECHADO</p>
+                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{dados.funil.fechados ?? 0}</p>
+                                {(dados.funil.prontos ?? 0) > 0 && (
+                                    <p className="text-[10px] text-blue-600 dark:text-blue-400">
+                                        + {dados.funil.prontos} pronta(s) para fechar
+                                    </p>
+                                )}
                             </div>
                         </div>
                         {etapaFiltro && (
@@ -261,20 +302,32 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                 o que este painel NÃO garante
                             </summary>
                             <div className="px-3 pb-3 space-y-1.5">
+                                {/* 22/09 (Paulo: "interfere em alguma coisa?"): a lista misturava
+                                    duas coisas. A "a confirmar" VIRA tarefa com o prazo do catálogo
+                                    (só o prazo pede conferência); a "depende de…" NÃO vira tarefa.
+                                    Uma frase só para as duas dizia o contrário para metade. */}
                                 <p className="text-[11px] text-amber-800 dark:text-amber-300">
                                     Prazo de obrigação é definido por órgão, e o catálogo só carimba o que foi conferido.
-                                    O que está aqui <strong>não vira tarefa automática</strong> — logo não aparece em
-                                    Vencimentos nem na trilha abaixo. Entregue por fora e não dê o mês por fechado
-                                    pela lista.
+                                    Duas situações: <strong>“vira tarefa, prazo a confirmar”</strong> — a obrigação entra em
+                                    Vencimentos com a data do catálogo, e a equipe confere o prazo (o admin corrige em
+                                    ⚙️ Config Admin → Calendário de prazos); <strong>“não vira tarefa”</strong> — depende de
+                                    algo que o app não sabe (folha, evento, cadastro), então não aparece em Vencimentos:
+                                    entregue por fora e não dê o mês por fechado pela lista. Esta lista é do catálogo
+                                    inteiro, não deste cliente.
                                 </p>
                                 {dados.catalogoPendencias.map((p2) => (
-                                    <div key={p2.obrigacao} className="text-[11px] text-slate-700 dark:text-slate-300">
+                                    <div key={`${p2.obrigacao}|${p2.status}|${p2.dependeDe || ''}`} className="text-[11px] text-slate-700 dark:text-slate-300">
                                         <strong>{p2.label}</strong>
                                         <span className="ml-1 px-1 rounded bg-slate-200 dark:bg-slate-700 text-[10px] uppercase">
                                             {p2.esfera}
                                         </span>
                                         <span className="ml-1 font-mono text-[10px] text-slate-500">{p2.abrangencia}</span>
-                                        <span className="block text-slate-500 dark:text-slate-400">{p2.motivo}</span>
+                                        <span className={`ml-1 px-1 rounded text-[10px] ${p2.status === 'ativa'
+                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                                            {p2.status === 'ativa' ? 'vira tarefa · prazo a confirmar' : `não vira tarefa · depende de ${p2.dependeDe || '—'}`}
+                                        </span>
+                                        <span className="block text-slate-500 dark:text-slate-400">{p2.oQueFalta || p2.motivo || ''}</span>
                                     </div>
                                 ))}
                             </div>
@@ -380,6 +433,15 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                         <FimDeMesBloco
                                             empresaId={r.empresa.id}
                                             competencia={competencia}
+                                            // 📋 Para a declaração de envio fora do app: a
+                                            // auditoria de `impostos_enviados` é por CNPJ.
+                                            empresaCnpj={r.empresa.cnpj}
+                                            empresaNome={r.empresa.nome}
+                                            // 🚨 O carimbo e os bloqueios vêm do PAINEL, que já leu
+                                            // tudo numa requisição. Cada card buscando o seu era
+                                            // ~400 requisições simultâneas — o HTTP 429 de 27/08.
+                                            fechamento={r.fechamento || null}
+                                            bloqueios={bloqueiosDasEtapas(r.etapas)}
                                             ehAdmin={ehAdmin}
                                             onIrPara={(etapaId) => onIrPara?.(etapaId, r.empresa)}
                                             onMudou={() => carregar(competencia)}

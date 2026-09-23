@@ -13,6 +13,14 @@
  * mailto daqui garante o 2 no fluxo "e-mail padrão do colaborador".
  */
 import { getAuth } from 'firebase/auth';
+import { mensagemDeCredencialRecusada } from '../sefaz-backend/sharepoint-erro-credencial.js';
+// 🚨 O e-mail do cliente passa pelo DONO (02/09, print da colaboradora: "a
+// opção ABRIR PELO OUTLOOK WEB dá erro"). A URL do print traz
+// `to=marcio07%2FMD%40gmail.com` — uma BARRA dentro do endereço —, e o app
+// mandava o campo CRU para a URL: o Outlook respondia "Something went wrong",
+// que não diz nada e faz procurar defeito no app quando o problema é o
+// cadastro. Quem lê o campo é o dono, nunca um `includes('@')` de cada lado.
+import { lerDestinatarios, recusaDeDestinatario } from '../sefaz-backend/email-destinatarios-helper.js';
 
 export const GESTOR_EMAIL = 'alexandre@spassessoriacontabil.com.br';
 
@@ -24,7 +32,7 @@ export interface EnvioImpostoInput {
     tipo: string;
     /** 'AAAA-MM' ou 'MM/AAAA' */
     competencia: string;
-    canal: 'email-app' | 'email-graph' | 'whatsapp';
+    canal: 'email-app' | 'email-graph' | 'whatsapp' | 'fora-do-app';
     para?: string;
     pdfBase64?: string | null;
     pdfFileName?: string;
@@ -33,6 +41,49 @@ export interface EnvioImpostoInput {
     debitos?: Array<{ codigo: string; extensao?: string | null; descricao?: string | null; valor?: number | null; departamento?: string | null }>;
     /** Reenvio proposital: motivo escrito, gravado com quem seguiu. */
     reenvioMotivo?: string | null;
+    /** 📋 Só no canal 'fora-do-app' — a declaração. O backend RECUSA sem ela. */
+    meio?: string;
+    comoFoi?: string;
+    quando?: string;
+}
+
+/** Um meio de envio fora do app — a lista vem do BACKEND, nunca copiada. */
+export interface MeioForaDoApp { id: string; label: string; }
+
+/**
+ * 📋 Os meios de envio fora do app.
+ *
+ * ⚠️ Ela é LIDA do backend de propósito: copiar a lista para cá criaria a
+ * segunda cópia, e no dia em que um meio entrar a tela ofereceria um id que o
+ * backend RECUSA — o erro chegaria como "escolha o meio" sobre um meio
+ * escolhido.
+ */
+export async function meiosForaDoApp(): Promise<MeioForaDoApp[]> {
+    const u = getAuth().currentUser;
+    if (!u) throw new Error('Sessão expirada');
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/meios-fora-do-app', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data.meios || [];
+}
+
+/**
+ * 📋 REGISTRA UM ENVIO QUE ACONTECEU FORA DO APP.
+ *
+ * Caso AC MASON (27/08): a guia já tinha ido ao cliente, a etapa 5 travava o
+ * fim de mês, e reenviar pelo app DUPLICARIA a guia. O que o app não pode é
+ * fingir que enviou: o canal é `fora-do-app`, `canalComprovaEnvio` devolve
+ * **false** para ele, e a declaração (meio + texto + data + autor) fica gravada
+ * na auditoria. O mês fecha; a ressalva fica.
+ */
+export async function registrarEnvioForaDoApp(
+    input: Omit<EnvioImpostoInput, 'canal' | 'para' | 'pdfBase64'>
+        & { meio: string; comoFoi: string; quando: string },
+): Promise<RitoResultado & { declaracao?: { texto: string } | null }> {
+    return registrarEnvioImposto({ ...input, canal: 'fora-do-app' });
 }
 
 export interface RitoResultado {
@@ -67,16 +118,22 @@ export async function registrarEnvioImposto(input: EnvioImpostoInput): Promise<R
  * cópia de arquivo da ordem técnica é garantida pelo SharePoint (regra 1).
  */
 export function montarMailtoEnvio(p: { para: string; assunto?: string; corpo?: string; cc?: string[] }): string {
-    const dest = String(p.para || '').trim();
+    const destinos = lerDestinatarios(p.para).validos;
+    const dest = destinos.join(',');
+    const jaNoPara = new Set(destinos.map((e) => e.toLowerCase()));
     const listaCc = [...new Set([GESTOR_EMAIL, ...(p.cc || [])]
         .map((e) => String(e || '').trim().toLowerCase())
-        .filter((e) => e && e !== dest.toLowerCase()))];
+        .filter((e) => e && !jaNoPara.has(e)))];
     const qs = new URLSearchParams();
     if (listaCc.length) qs.set('cc', listaCc.join(','));
     if (p.assunto) qs.set('subject', p.assunto);
     if (p.corpo) qs.set('body', p.corpo);
     const query = qs.toString().replace(/\+/g, '%20');
-    return `mailto:${encodeURIComponent(dest)}${query ? `?${query}` : ''}`;
+    // ⚠️ Codifica CADA endereço e junta com vírgula: `encodeURIComponent` na
+    // lista inteira viraria a vírgula em %2C e o mailto trataria os dois
+    // endereços como UM só, inválido.
+    const paraNaUrl = destinos.map((e) => encodeURIComponent(e)).join(',');
+    return `mailto:${paraNaUrl}${query ? `?${query}` : ''}`;
 }
 
 export type ModoComposicao = 'outlook-web' | 'app-instalado';
@@ -93,10 +150,14 @@ export type ModoComposicao = 'outlook-web' | 'app-instalado';
  * O deep link do Outlook Web abre a composição numa aba, já preenchida.
  */
 export function montarLinkOutlookWeb(p: { para: string; assunto?: string; corpo?: string; cc?: string[] }): string {
-    const dest = String(p.para || '').trim();
+    // Só endereço LIDO pelo dono entra na URL — endereço torto vira
+    // "Something went wrong" do Outlook, sem dizer o que houve.
+    const destinos = lerDestinatarios(p.para).validos;
+    const dest = destinos.join(';');
+    const jaNoPara = new Set(destinos.map((e) => e.toLowerCase()));
     const listaCc = [...new Set([GESTOR_EMAIL, ...(p.cc || [])]
         .map((e) => String(e || '').trim().toLowerCase())
-        .filter((e) => e && e !== dest.toLowerCase()))];
+        .filter((e) => e && !jaNoPara.has(e)))];
     const qs = new URLSearchParams();
     qs.set('to', dest);
     if (listaCc.length) qs.set('cc', listaCc.join(';'));
@@ -149,11 +210,13 @@ export function abrirComposicaoEmail(
 export async function enviarPorEmailDoColaborador(
     input: Omit<EnvioImpostoInput, 'canal'> & { assunto?: string; corpo?: string; modo?: ModoComposicao },
 ): Promise<RitoResultado & { composicao?: ComposicaoAberta }> {
-    if (!input.para || !input.para.includes('@')) {
-        return { ok: false, error: 'E-mail do cliente ausente — preencha o e-mail no cadastro da empresa (dados fiscais).' };
-    }
+    // ⚠️ RECUSA ANTES DE ABRIR A JANELA: abrir com endereço torto entrega ao
+    // colaborador o "Something went wrong" do Outlook, que não nomeia nada — e
+    // o rito seria registrado sobre um envio que não tem como acontecer.
+    const recusa = recusaDeDestinatario(lerDestinatarios(input.para));
+    if (recusa) return { ok: false, error: recusa };
     const composicao = abrirComposicaoEmail(
-        { para: input.para, assunto: input.assunto, corpo: input.corpo },
+        { para: input.para || '', assunto: input.assunto, corpo: input.corpo },
         input.modo || 'outlook-web',
     );
     const { assunto: _a, corpo: _c, modo: _m, ...resto } = input;
@@ -189,7 +252,15 @@ export interface PainelEnvios {
     /** Envios sem registro das etapas do rito — não são completos nem pendência. */
     naoConferidos?: string[];
     porTipo?: Record<string, number>;
-    pendencias?: Record<string, { qtd: number; acao: string; empresas: string[] }>;
+    pendencias?: Record<string, {
+        qtd: number; acao: string; empresas: string[];
+        /** Em qual ponta do rito: só a do SharePoint aceita declarar a cópia à mão. */
+        etapa?: 'sharepoint' | 'baixa' | null;
+        /** ♻️ Os envios desta causa — é com eles que se refaz o rito. */
+        envioIds?: string[];
+    }>;
+    /** 📁 Cópias na pasta declaradas à mão (fecham o rito, ditas). */
+    arquivadosDeclarados?: number;
     semGestorEmCopia?: string[];
     valorTotal?: number;
     farol?: 'ok' | 'atencao' | 'vazio';
@@ -276,7 +347,12 @@ export async function enviarGuiaPeloServidor(input: {
         body: JSON.stringify(input),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    if (!res.ok) {
+        // DARF, DARE e ISS passam por aqui — a tradução da recusa de credencial
+        // fica no DONO, senão cada tela mostraria a mensagem crua do jeito dela.
+        const cru = data.error || `HTTP ${res.status}`;
+        return { ok: false, error: mensagemDeCredencialRecusada(cru) || cru };
+    }
     return data;
 }
 
@@ -411,4 +487,59 @@ export async function perguntarDebitosJaEnviados(input: {
     } catch (e: any) {
         return { ok: false, indeterminado: true, error: e?.message || 'falha na consulta' };
     }
+}
+
+
+/**
+ * ♻️ REFAZER O RITO de envios já registrados (admin).
+ *
+ * O status do rito é um CARIMBO do instante do envio: consertar a causa depois
+ * — cadastrar a pasta, gerar a tarefa, corrigir o proxy — não o move sozinho, e
+ * o fim de mês fica travado para sempre (Paulo, 28/08: *"Já criei a pasta e
+ * continua assim"*).
+ *
+ * ⚠️ Não emite nada e não reenvia nada ao cliente: só tenta de novo o
+ * arquivamento e a baixa, que são idempotentes.
+ */
+export async function refazerRitoDosEnvios(logIds: string[]): Promise<{
+    ok: boolean; error?: string;
+    total?: number; arquivados?: number; baixados?: number; semPdf?: number; falhas?: number;
+    /** Envios que já estavam fechados nas duas pontas — nada a refazer (não é falha). */
+    jaFechados?: number;
+    /** Tipo sem obrigação do catálogo — nada a baixar (desfecho legítimo). */
+    semObrigacao?: number;
+    resultados?: Array<{ logId: string; ok?: boolean; erro?: string; texto?: string }>;
+}> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/refazer-rito', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logIds }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
+}
+
+/**
+ * 📁 Declara à mão o arquivamento na pasta IMPOSTOS de envios cuja cópia o
+ * app não consegue refazer (não guarda o PDF de DARF/DARE). Admin; o texto
+ * é obrigatório e fica gravado com nome e data. Não envia nada ao cliente.
+ */
+export async function declararArquivamentoDosEnvios(logIds: string[], comoFoi: string): Promise<{
+    ok: boolean; error?: string; total?: number; declarados?: number; recusados?: number;
+}> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/envio-imposto/refazer-rito/declarar-arquivamento', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logIds, comoFoi }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ...data, ok: true };
 }

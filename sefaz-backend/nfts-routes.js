@@ -18,9 +18,14 @@ import express from 'express';
 import multer from 'multer';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
+import { importarNftsDoCsv } from './nfts-sp-importer.js';
 import { parseCsvNftsSp } from './nfts-sp-csv-parser.js';
 import { cruzarServicosComNfts } from './nfts-cruzamento.js';
-import { docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento } from './xml-metadata-helper.js';
+import {
+    dataDeclaradaDoDocumento, docCancelado, direcaoEfetivaDoc, issRetidoDoDocumento,
+    docContaNoLivro,
+} from './xml-metadata-helper.js';
 import { ehNotaDeServico } from './sped-selecao-documentos.js';
 
 const router = express.Router();
@@ -48,6 +53,9 @@ async function carregarServicosTomados(db, empresaId, competencia) {
     const out = [];
     snap.forEach((s) => {
         const d = s.data() || {};
+        // Documento TIRADO do livro não se declara na NFTS — e sem isto ele
+        // voltaria como divergência do cruzamento sobre uma decisão correta.
+        if (!docContaNoLivro(d)) return;
         if (docCancelado(d)) return;
         // 🚨 `d.tipo !== 'NFSe'` era a forma MAIS RARA: a NFS-e do ADN grava
         // `tipo: 'nfseNacional'` e sumia da declaração de serviços TOMADOS —
@@ -58,7 +66,10 @@ async function carregarServicosTomados(db, empresaId, competencia) {
         const v = d.valores || {};
         out.push({
             numero: d.numero || '—',
-            data: (d.dhEmi || '').slice(0, 10),
+            // 🚨 `.slice(0, 10)` só acerta a forma ISO: sobre a do portal de SP
+            // (`11/05/2026 14:31:31`) ele devolve `11/05/2026`, que NÃO é data
+            // ISO — e vai para uma DECLARAÇÃO da prefeitura. Quem lê é o DONO.
+            data: dataDeclaradaDoDocumento(d.dhEmi),
             participante: parte.nome || '—',
             doc: String(parte.cnpjCpf || '').replace(/\D/g, ''),
             municipio: parte.municipio || '',
@@ -89,9 +100,28 @@ router.post('/cruzamento', requireAdmin, uploadCsv.single('csv'), async (req, re
             return res.status(400).json({ erro: `Arquivo não pôde ser lido: ${e.message}` });
         }
         if (parsed.colunasFaltando.length) {
+            // 🚨 A RECUSA AFIRMAVA SOBRE A POSSE DO ARQUIVO (03/09, Paulo: *"o
+            // CSV por causa do layout"*): ela dizia *"este arquivo não parece o
+            // export de NFTS"*, o que manda procurar no portal um export que já
+            // está certo. O portal tem VERSÕES de layout (o print traz "Layout
+            // V. 003"), e é o app que não conhece a coluna — não o arquivo que
+            // está errado. Dizer a falha errada manda procurar no lugar errado.
+            //
+            // 📌 E O APP RESPONDE O QUE SÓ ELE SABE: o cabeçalho que ele leu.
+            // Com ele na mão, a versão nova do layout se mapeia numa mensagem
+            // (a régua do `xmlOndeEstaOCnpj`, 02/09) — sem isso, a única saída
+            // era mandar o arquivo, que é o que aquela régua existe para evitar.
             return res.status(400).json({
-                erro: 'Este arquivo não parece o export de NFTS do portal — faltam colunas essenciais: '
-                    + parsed.colunasFaltando.join(', ') + '. Exporte de novo pela consulta de NFTS.',
+                erro: `Não consegui mapear ${parsed.colunasFaltando.length} coluna(s) que o app precisa: `
+                    + `${parsed.colunasFaltando.join(', ')}. O arquivo TEM ${parsed.colunas} coluna(s) e o `
+                    + `app reconheceu ${parsed.colunasReconhecidas.length} — o portal exporta em VERSÕES de `
+                    + 'layout, e esta o app ainda não conhece. Isto NÃO quer dizer que o arquivo está errado.',
+                colunasFaltando: parsed.colunasFaltando,
+                colunasReconhecidas: parsed.colunasReconhecidas,
+                // Só NOMES de coluna — nenhuma linha de nota sai daqui.
+                cabecalhoLido: parsed.cabecalhoLido,
+                acao: 'Mande este cabeçalho ao time (ele aparece abaixo, é só copiar) — com ele o layout '
+                    + 'novo entra sem precisar do arquivo do cliente.',
             });
         }
 
@@ -99,9 +129,41 @@ router.post('/cruzamento', requireAdmin, uploadCsv.single('csv'), async (req, re
         const servicos = await carregarServicosTomados(db, empresaId, competencia);
         const cruzamento = cruzarServicosComNfts(servicos, parsed.notas);
 
+        // 🚨 A NFTS VIRA DOCUMENTO (03/09, Paulo: *"ela não aparece pra mim no
+        // consultor"*). Até aqui este módulo só CRUZAVA — ele lia
+        // `documentos_fiscais` e nunca escrevia, então a NFTS não existia em
+        // recorte nenhum: nem no Livro de Serviços tomados, nem na competência.
+        // Não era defeito de captura, era ausência de trilho. E o que ficava de
+        // fora é justamente o documento que carrega o ISS RETIDO do cliente.
+        //
+        // ⚠️ OPT-IN: gravar por padrão faria uma conferência (que é leitura)
+        // escrever no banco sem ninguém pedir. Quem grava é o clique.
+        let importacao = null;
+        if (String(req.body?.importar || '') === 'true') {
+            const emp = await db.collection('simples_empresas').doc(empresaId).get()
+                .then((s) => (s.exists ? s : db.collection('lucro_empresas').doc(empresaId).get()));
+            const dados = emp.exists ? emp.data() : {};
+            importacao = await importarNftsDoCsv(parsed.notas, {
+                empresaId,
+                // O CNPJ da empresa mora no TOPO do cadastro — ele não é campo
+                // de `dadosFiscais` (não está na whitelist do modal), e um
+                // fallback ali seria uma segunda forma de um dado que tem uma.
+                empresaCnpj: dados.cnpj || '',
+                empresaNome: dados.nome || dados.razaoSocial || '',
+                // 🚨 O CCM PASSA PELO DONO, sempre: ele lê as DUAS formas
+                // (`dadosFiscais.ccmSp` do modal × `ccmSp` do cadastro legado) e
+                // trata a sequência de ZEROS como vazio — o contorno que a
+                // equipe usava. Sem ele, o id da NFTS sairia carimbado com um
+                // CCM `00000000` que significa "não tem" (o caso LAV, 29/08).
+                ccmTomador: ccmSpDaEmpresa(dados),
+                layout: 'csv-portal-sp-nfts',
+            });
+        }
+
         return res.json({
             ok: true,
             empresaId, competencia,
+            importacao,
             arquivo: {
                 nome: req.file.originalname,
                 colunas: parsed.colunas,

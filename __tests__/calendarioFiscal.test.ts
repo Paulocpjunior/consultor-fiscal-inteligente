@@ -21,8 +21,8 @@ describe('calendarioFiscal', () => {
         // recolhe no dia útil ANTERIOR — pagar antes nunca gera multa; depois,
         // sim. Antes desta decisão o cron antecipava e esta tela prorrogava, e a
         // mesma obrigação tinha duas datas (19/06 × 22/06).
-        it('FGTS competência 05/2026 dia 20/06 (sábado) → ANTECIPA 19/06', () => {
-            const regra = OBRIGACOES_POR_REGIME.SIMPLES.find(r => r.obrigacao === 'FGTS')!;
+        it('DAS competência 05/2026 dia 20/06 (sábado) → ANTECIPA 19/06', () => {
+            const regra = OBRIGACOES_POR_REGIME.SIMPLES.find(r => r.obrigacao === 'DAS')!;
             const v = calcularVencimento('05/2026', regra);
             expect(v.getDate()).toBe(19);
             expect(v.getMonth()).toBe(5);  // junho
@@ -35,11 +35,11 @@ describe('calendarioFiscal', () => {
             expect(v.getMonth()).toBe(4);
         });
 
-        it('INSS_CPP competência 04/2026 vence 20/05/2026', () => {
-            const regra = OBRIGACOES_POR_REGIME.LUCRO_PRESUMIDO.find(r => r.obrigacao === 'INSS_CPP')!;
-            const v = calcularVencimento('04/2026', regra);
-            expect(v.getDate()).toBe(20);
-            expect(v.getMonth()).toBe(4);
+        it('👥 FGTS e INSS_CPP não existem em regime nenhum — são do DP (22/09)', () => {
+            for (const lista of Object.values(OBRIGACOES_POR_REGIME)) {
+                expect((lista as any[]).map((r) => r.obrigacao)).not.toContain('FGTS');
+                expect((lista as any[]).map((r) => r.obrigacao)).not.toContain('INSS_CPP');
+            }
         });
 
         it('EFD-Contribuições competência 04/2026 dia 14/06 (domingo) → ANTECIPA 12/06', () => {

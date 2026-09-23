@@ -30,7 +30,37 @@ import { selecionarCertA1PorBase } from './cert-base-helper.js';
 import { caminhoNfseRecomendado, CAMINHO_NFSE } from './municipio-nfse-caminho.js';
 import { normalizarCodCliente } from './cod-cliente.js';
 import { validarRegimeParaGravacao } from './regime-tributario.js';
+// 🏦 DeRE: o regime específico de IBS/CBS é vocabulário fechado — fora dele é
+// RECUSA com a lista, nunca descarte calado (o desenho do regimeTributario).
+import { validarRegimeEspecificoParaGravacao, REGIMES_ESPECIFICOS_IBS_CBS } from './dere-regimes.js';
+import { TABELA_13_UF, lerAtividadeDere } from './dere-evento-d1001.js';
+
+/** 🏦 DeRE — listas do D-1001 só entram com código que a tabela oficial tem. */
+function validarListaDere(campo, bruto) {
+    const itens = (Array.isArray(bruto) ? bruto : String(bruto ?? '').split(/[,;\s]+/))
+        .map((x) => String(x ?? '').trim().toUpperCase()).filter(Boolean);
+    const lista = [...new Set(itens)];
+    const ruins = [];
+    if (campo === 'dereAtividades') {
+        // `REGIME:NNC` — as tabelas repetem códigos, então a atividade só existe junto do regime.
+        for (const c of lista) if (!lerAtividadeDere(c).ok) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `Atividade(s) fora das Tabelas 21/31/41 do Anexo I da DeRE (forma REGIME:NNC): ${ruins.join(', ')}.` };
+    } else if (campo === 'dereRegimesSecundarios') {
+        const validos = new Set(REGIMES_ESPECIFICOS_IBS_CBS.filter((r) => r.dereConfirmada).map((r) => r.codigo));
+        for (const c of lista) if (!validos.has(c)) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `Regime(s) secundário(s) sem código no D-1001: ${ruins.join(', ')}. Só valem SERVICOS_FINANCEIROS, PLANOS_SAUDE e CONCURSOS_PROGNOSTICOS.` };
+        if (lista.length > 3) return { ok: false, lista, motivo: 'O D-1001 admite até 3 regimes secundários.' };
+    } else if (campo === 'dereUfsCredenciadas') {
+        for (const c of lista) if (!TABELA_13_UF[Number(c)]) ruins.push(c);
+        if (ruins.length) return { ok: false, lista, motivo: `UF(s) fora da Tabela 13 (código IBGE de 2 dígitos): ${ruins.join(', ')}.` };
+    }
+    return { ok: true, lista, motivo: null };
+}
 import { coberturaAgenteA3, resumirCoberturaA3 } from './captura-a3-cobertura.js';
+import { ccmSpDaEmpresa, ccmSpParaGravar } from './ccm-sp.js';
+import { trilhoDaNfceSaida, avisoDaLinhaNfce } from './trilho-saida-modelo.js';
+import { coberturaNfseSpPortal } from './captura-nfse-sp-cobertura.js';
+import { coberturaNfseNacional } from './captura-nfse-nacional-cobertura.js';
 
 const router = express.Router();
 
@@ -85,6 +115,85 @@ function toMillis(v) {
 // CNPJ do escritório (SP Assessoria Contábil) — quem detém o cert default.
 const CNPJ_ESCRITORIO = (process.env.CNPJ_ESCRITORIO || '44388152000189').replace(/\D/g, '');
 
+// ============================================================================
+// GET /api/admin/sefaz/trilho-saida?empresaId=&cnpj=
+//
+// "Por qual trilho a NFC-e (mod 65) desta empresa chega?" — a pergunta que o
+// painel de Canceladas/Faltantes não sabia responder (02/09, Paulo na MV LIDER:
+// *"não puxou todas as NFC-E, só puxou 1"*).
+//
+// 🔒 O certificado NÃO trafega: sai só o METADADO (tipo, se está válido, se a
+// matriz cobre). `empresas_certificados` é fechado ao navegador de propósito —
+// ele guarda `storagePath` e `passwordEnc`.
+// ============================================================================
+router.get('/trilho-saida', requireAuth, async (req, res) => {
+    try {
+        const empresaId = String(req.query.empresaId || '').trim();
+        const cnpj = String(req.query.cnpj || '').replace(/\D/g, '');
+        if (!empresaId && !cnpj) return res.status(400).json({ error: 'Informe empresaId ou cnpj.' });
+
+        const db = fa().firestore();
+        const agora = new Date();
+        let cert = null;
+        if (empresaId) {
+            const snap = await db.collection('empresas_certificados').doc(empresaId).get();
+            if (snap.exists) cert = snap.data();
+        }
+        // Filial sem cert próprio: a matriz cobre pela RAIZ (regra de 27/08).
+        // ⚠️ Só se olha a raiz quando NÃO há cert próprio — o próprio vence.
+        let temA1MesmaRaizValido = false;
+        if (!cert && cnpj.length === 14) {
+            const base = cnpj.slice(0, 8);
+            const todos = await db.collection('empresas_certificados')
+                .select('cnpj', 'tipoCert', 'notAfter', 'storagePath', 'passwordEnc').get();
+            const daRaiz = [];
+            todos.forEach((d) => {
+                const x = d.data() || {};
+                const c = String(x.cnpj || '').replace(/\D/g, '');
+                if (c.slice(0, 8) !== base) return;
+                // 🔒 Só a EXISTÊNCIA das partes sigilosas atravessa — o caminho
+                // no Storage e a senha cifrada não saem deste laço (a régua do
+                // túnel de certificados, 07/08).
+                daRaiz.push({
+                    empresaId: d.id,
+                    cnpj: c,
+                    tipoCert: x.tipoCert || 'A1',
+                    notAfter: x.notAfter || null,
+                    hasStoragePath: !!x.storagePath,
+                    hasPasswordEnc: !!x.passwordEnc,
+                });
+            });
+            temA1MesmaRaizValido = !!selecionarCertA1PorBase(daRaiz, cnpj, agora.getTime());
+        }
+
+        const tipoCert = cert ? (cert.tipoCert || 'A1') : 'nenhum';
+        const certUploaded = !!cert;
+        const certValido = cert
+            ? (cert.notAfter ? new Date(cert.notAfter) > agora : tipoCert === 'A3')
+            : false;
+
+        const nfce = trilhoDaNfceSaida({
+            tipoCert,
+            certUploaded,
+            certValido,
+            temA1MesmaRaizValido,
+            ehEscritorio: cnpj === CNPJ_ESCRITORIO,
+        });
+        return res.json({
+            ok: true,
+            empresaId: empresaId || null,
+            cnpj: cnpj || null,
+            // Metadado, nunca o certificado.
+            certificado: { tipoCert, certUploaded, certValido, temA1MesmaRaizValido },
+            nfce,
+            avisoNfce: avisoDaLinhaNfce(nfce),
+        });
+    } catch (e) {
+        console.error('[trilho-saida] erro:', e.message);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 router.get('/empresas-status-captura', requireAuth, async (req, res) => {
     try {
         const db = fa().firestore();
@@ -122,9 +231,14 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                     fonte: col,
                     capturarSefaz: d.capturarSefaz !== false, // default true
                     uf: d.dadosFiscais?.uf || d.uf || '',
-                    // Cadastro UNICO: ccmSp em dadosFiscais.ccmSp (canonico, igual
-                    // uf/IE). Fallback ao top-level d.ccmSp so pra dado legado.
-                    ccmSp: (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, ''),
+                    // 🚨 CCM pelo DONO (`ccm-sp.js`): duas formas E os SÓ-ZEROS
+                    // como vazio. Com a leitura crua, `'00000000'` é truthy —
+                    // então `nfseSpAplicavel` DECIDIA que o trilho da capital
+                    // vale, `capturaNfseSpOk` saía true e a tela pintava
+                    // `✓ NFSe SP` **engolindo o bloqueio** *"falta Inscrição
+                    // Municipal (CCM)"*, que é a frase que resolveria o caso
+                    // (LAV, 29/08).
+                    ccmSp: ccmSpDaEmpresa(d),
                     codMunIBGE: String(d.dadosFiscais?.codMunIBGE || d.codMunIBGE || '').replace(/\D/g, ''),
                     nfseSpAutorizadoEm: toMillis(d.nfseSpAutorizadoEm),
                     nfseNacionalDfeAtivo: d.nfseNacionalDfeAtivo === true,
@@ -180,6 +294,64 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             });
         });
 
+        // 3c. Estado do trilho NFS-e SP (portal da capital), por CNPJ.
+        //
+        // 🚨 É ele que faz o pill responder por RESULTADO. Até 29/08 o
+        // `capturaNfseSpOk` saía de DOIS campos de cadastro (CCM preenchido +
+        // data de autorização marcada) — status, não resultado —, e a linha da
+        // LAV dizia `✓ NFSe SP` sobre uma empresa cujas NFS-e tomadas nunca
+        // foram baixadas. É a primeira regra permanente deste projeto
+        // invertida, e a mesma família do `temA3Proprio` de 23/08.
+        //
+        // ⚠️ UMA query para a carteira inteira — leitura por card foi o HTTP
+        // 429 de 27/08.
+        const nfseSpStateMap = new Map();
+        try {
+            const nfseSpSnap = await db.collection('nfsesp_portal_state').get();
+            nfseSpSnap.forEach(doc => {
+                const d = doc.data() || {};
+                nfseSpStateMap.set(limparCnpj(doc.id), {
+                    ultimaSyncMs: d.ultimaSync?.toMillis?.() ?? null,
+                    ultimoPeriodo: d.ultimoPeriodo || null,
+                    prestadasUlt: d.prestadasUlt ?? null,
+                    tomadasUlt: d.tomadasUlt ?? null,
+                    erroPrestadas: d.erroPrestadas || null,
+                    erroTomadas: d.erroTomadas || null,
+                });
+            });
+        } catch (e) {
+            // Falha de leitura NÃO derruba o painel da carteira inteira nem
+            // vira "nunca entregou": sem o mapa, a cobertura fica indefinida e
+            // o pill volta ao que era. Afirmar ausência por rede que piscou
+            // mandaria a equipe conferir cadastro que está certo.
+            console.warn('[empresa-status] nfsesp_portal_state indisponível:', e.message);
+        }
+
+        // 3d. Estado do trilho NFS-e Nacional (ADN), por CNPJ.
+        //
+        // 🚨 O TERCEIRO trilho decidia por CADASTRO igual aos outros dois — e é
+        // ele que responde pela maioria da carteira (quem não é de SP capital).
+        // Foi o caso da LAV (29/08): cadastro impecável, `— ADN` na coluna do
+        // portal, `✓ NFSe Nac` verde, e ZERO NFS-e tomada no relatório.
+        //
+        // ⚠️ UMA query para a carteira inteira — leitura por card foi o HTTP
+        // 429 de 27/08.
+        const nfseNacStateMap = new Map();
+        try {
+            const nacSnap = await db.collection('nfse_nacional_dfe_state').get();
+            nacSnap.forEach(doc => {
+                const d = doc.data() || {};
+                nfseNacStateMap.set(limparCnpj(doc.id), {
+                    ultimaSyncMs: d.ultimaSync?.toMillis?.() ?? null,
+                    ultNSU: d.ultNSU ?? null,
+                    maxNSU: d.maxNSU ?? null,
+                });
+            });
+        } catch (e) {
+            // Falha de leitura não derruba o painel nem vira "nunca entregou".
+            console.warn('[empresa-status] nfse_nacional_dfe_state indisponível:', e.message);
+        }
+
         // 3b. Responsáveis (vínculos da Carteira de Clientes) por CNPJ.
         // Permite admin/colaborador ver de cara quem cuida de cada empresa
         // direto no painel de Status (antes precisava abrir Carteira de Clientes
@@ -209,6 +381,17 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             // conta certificado e não conta captura.
             a3SemEntrega: 0,
             a3ComEntrega: 0,
+            // Das que usam o portal da capital, quantas o trilho NUNCA baixou.
+            // É o número que o "✓ NFSe SP" escondia.
+            nfseSpSemEntrega: 0,
+            nfseSpComErro: 0,
+            nfseSpEntregue: 0,
+            // ADN: sem visita e não-lido são PENDÊNCIA; sem movimento é
+            // EXPLICAÇÃO (o município não transcreve) e vai contado à parte.
+            nfseNacSemVisita: 0,
+            nfseNacNaoLido: 0,
+            nfseNacSemMovimento: 0,
+            nfseNacEntregue: 0,
             usandoCertEscritorio: 0,
             semCertNenhum: 0,
             certExpirado: 0,
@@ -381,10 +564,22 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 ? recNfse.caminho === CAMINHO_NFSE.SP_PORTAL
                 : !!emp.ccmSp;
             let capturaNfseSpOk;
+            // 🚨 O CADASTRO responde *"existe caminho?"*; quem responde
+            // *"ENTREGOU?"* é a última rodada REAL do portal. São perguntas
+            // DIFERENTES, e o pill mostra as duas — o alerta VENCE o ok, senão
+            // a linha diria `✓ NFSe SP` ao lado de "nunca baixou nota desta
+            // empresa", que é a contradição na mesma tela que esta casa mais
+            // paga (a lição do `capturaNfeOk` em 23/08).
+            const coberturaNfseSp = coberturaNfseSpPortal({
+                aplicavel: nfseSpAplicavel && !!emp.ccmSp && !!emp.nfseSpAutorizadoEm,
+                state: nfseSpStateMap.get(emp.cnpj) || null,
+            });
             if (nfseSpAplicavel) {
-                capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm;
+                capturaNfseSpOk = !!emp.ccmSp && !!emp.nfseSpAutorizadoEm
+                    && coberturaNfseSp.entregou !== false;
                 if (!emp.ccmSp) motivosBloqueio.push('NFS-e SP: falta Inscrição Municipal (CCM) nos dados fiscais da empresa.');
                 else if (!emp.nfseSpAutorizadoEm) motivosBloqueio.push('NFS-e SP: falta autorizar o escritório no portal nfe.prefeitura.sp.gov.br.');
+                else if (coberturaNfseSp.acao) motivosBloqueio.push(`NFS-e SP: ${coberturaNfseSp.texto} ${coberturaNfseSp.acao}`);
             } else {
                 // Trilho da capital não se aplica — não bloqueia nem pede CCM.
                 capturaNfseSpOk = true;
@@ -413,10 +608,31 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacAtiva: emp.procuracaoEcacAtiva,
                 certUploaded,
                 certValido,
+                // 🚨 O portal de SP capital não usa certificado — sem este fato
+                // a frase do A3 afirmaria "não há trilho" sobre empresa cuja
+                // NFS-e tomada já é capturada (02/09).
+                nfseSpAplicavel,
             });
-            const capturaNfseNacionalOk = nfseNacStatus.ok;
             const capturaNfseNacionalVia = nfseNacStatus.via;
             if (nfseNacStatus.motivo) motivosBloqueio.push(nfseNacStatus.motivo);
+
+            // 🚨 O CADASTRO responde *"existe caminho?"*; a última rodada do ADN
+            // responde *"ENTREGOU?"*. São perguntas diferentes, e o pill mostra
+            // as duas — verde ao lado de "nunca rodou" seria a contradição na
+            // mesma tela que esta casa mais paga.
+            const coberturaNfseNac = coberturaNfseNacional({
+                aplicavel: nfseNacStatus.ok,
+                state: nfseNacStateMap.get(emp.cnpj) || null,
+            });
+            // ⚠️ `adn-sem-movimento` NÃO derruba o ok: o ADN respondeu e não tem
+            // nada — é explicação, não pendência. Acusar toda empresa de
+            // município que não usa o Padrão Nacional seria o alarme que
+            // ninguém consegue apagar.
+            const capturaNfseNacionalOk = nfseNacStatus.ok
+                && !['adn-sem-visita', 'adn-nao-lido'].includes(coberturaNfseNac.situacao);
+            if (coberturaNfseNac.cor === 'atencao' && coberturaNfseNac.acao) {
+                motivosBloqueio.push(`NFS-e Nacional: ${coberturaNfseNac.texto} ${coberturaNfseNac.acao}`);
+            }
 
             const item = {
                 id: emp.id,
@@ -436,6 +652,8 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
                 procuracaoEcacAtiva: procuracaoInferida,
                 procuracaoEcacFlagBruta: emp.procuracaoEcacAtiva,
                 ccmSp: emp.ccmSp,
+                coberturaNfseSp,
+                coberturaNfseNac,
                 dadosFiscais: emp.dadosFiscais || {},
                 nfseSpAutorizado: !!emp.nfseSpAutorizadoEm,
                 // Trilho SP-capital se aplica a esta empresa? (município do
@@ -481,6 +699,13 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
             if (procuracaoInferida) resumo.comProcuracaoEcac++;
             else resumo.semProcuracaoEcac++;
             if (nfseSpAplicavel && capturaNfseSpOk) resumo.ccmSpAutorizado++;
+            if (coberturaNfseSp.situacao === 'nfsesp-sem-entrega') resumo.nfseSpSemEntrega++;
+            else if (coberturaNfseSp.situacao === 'nfsesp-com-erro') resumo.nfseSpComErro++;
+            else if (coberturaNfseSp.situacao === 'nfsesp-entregue') resumo.nfseSpEntregue++;
+            if (coberturaNfseNac.situacao === 'adn-sem-visita') resumo.nfseNacSemVisita++;
+            else if (coberturaNfseNac.situacao === 'adn-nao-lido') resumo.nfseNacNaoLido++;
+            else if (coberturaNfseNac.situacao === 'adn-sem-movimento') resumo.nfseNacSemMovimento++;
+            else if (coberturaNfseNac.situacao === 'adn-entregue') resumo.nfseNacEntregue++;
             if (emp.nfseNacionalDfeAtivo) resumo.nfseNacionalAtivo++;
             if (capturaNfeOk) resumo.capturaNfeOk++;
             else resumo.capturaNfeBloqueada++;
@@ -591,6 +816,28 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // ("Registro filho obrigatório não foi informado · 0002" — PWR 07/2026).
     // Mesmo desenho do código 9 do ISS fixo: o número mora no cadastro.
     'classEstabIpi', 'contribuinteIpi',
+    // 🏛️ Contribuinte de ICMS (28/08): a inscrição estadual era usada como
+    // prova, e ter IE não é apurar ICMS — empresa de SERVIÇO fora de SP
+    // (Brasília) acendia a pendência do E116 sem ter o registro. Quem responde
+    // é o cadastro; o app não deduz. Campo entra na whitelist E no modal no
+    // MESMO PR (regra do #382).
+    'contribuinteIcms',
+    // 🏦 DeRE — o INSUMO do D-1001 (Informações do Contribuinte), 02/09 à noite,
+    // Paulo: "Fiscal, tudo roda no Fiscal". O evento sai INTEIRO do cadastro:
+    // atividades das Tabelas 21/31/41 (NNC), regimes secundários, natureza
+    // tributária (0 regular · 1 imunidade), UFs credenciadas (só prognósticos,
+    // Tabela 13) e início/fim da validade. Nenhum é deduzido pelo app — e sem
+    // eles a prévia do D-1001 RECUSA nomeando o campo. Whitelist E modal no
+    // MESMO PR (regra do #382).
+    'dereAtividades', 'dereRegimesSecundarios', 'dereIndNatTrib', 'dereUfsCredenciadas', 'dereIniValid', 'dereFimValid',
+    // 🏭 Bloco K (29/08). Quem apresenta o controle da produção e do estoque é
+    // o estabelecimento INDUSTRIAL ou equiparado — e o app NÃO DEDUZ isso: a
+    // 🚦 Migração detecta produção pelos CFOPs, mas detectar movimento é SINAL,
+    // não enquadramento. O LEIAUTE (K010) é ESCOLHA do contribuinte (Ajuste
+    // SINIEF 02/09: 0 simplificado · 1 completo · 2 restrito aos saldos) e
+    // escolher por ele faria o arquivo prometer detalhamento que o PVA cobra.
+    // Os dois entram na whitelist E no modal no MESMO PR (regra do #382).
+    'entregaBlocoK', 'leiauteBlocoK',
     // Consolidação da receita no 1900 do EFD-Contribuições. Havendo F550 o
     // registro é OBRIGATÓRIO (recusa do PVA na AFFITTARE 07/2026, 24/08), e
     // COD_MOD/COD_SIT são TABELA OFICIAL que depende de qual documento a
@@ -635,6 +882,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // #382 na íntegra. São EIXOS SEPARADOS de propósito: "terceiro setor" não é
     // regime, e convive com ele (um templo é imune E sem fins lucrativos).
     'regimeTributario', 'semFinsLucrativos',
+    // 🏦 DeRE (02/09): em qual regime ESPECÍFICO de IBS/CBS a empresa fornece
+    // (LC 214/2025, Título V). É o fato que decide se a DeRE entra no mês do
+    // cliente — e o app NÃO deduz pelo CNAE (CNAE é sinal, vira candidata).
+    // Vocabulário e régua em `dere-regimes.js`. Whitelist + modal no MESMO PR.
+    'regimeEspecificoIbsCbs',
 ]);
 
 // Cadastro (IE, UF, CCM, endereço) é trabalho da EQUIPE — colaborador grava.
@@ -667,9 +919,9 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
         if ('ccmSp' in dadosFiscais && String(dadosFiscais.ccmSp || '').trim() !== '') {
             const ccmDigits = String(dadosFiscais.ccmSp).replace(/\D/g, '');
             // Só zeros = "não tenho CCM" digitado num campo que parecia
-            // obrigatório (26/07: vários cadastros com 000000000) — trata como
-            // vazio (apaga) em vez de validar/gravar um CCM fantasma.
-            if (/^0*$/.test(ccmDigits)) {
+            // obrigatório (26/07: vários cadastros com 000000000) — vira vazio
+            // (apaga) em vez de gravar um CCM fantasma. Quem decide é o DONO.
+            if (ccmSpParaGravar(dadosFiscais.ccmSp) === '') {
                 dadosFiscais.ccmSp = '';
             } else if (ccmDigits.length < 6 || ccmDigits.length > 11) {
                 return res.status(400).json({
@@ -716,6 +968,27 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
                 dadosFiscais[k] = v.regime;
             }
             let val = typeof v === 'string' ? v.trim() : v;
+            if (k === 'regimeEspecificoIbsCbs') {
+                const r = validarRegimeEspecificoParaGravacao(val);
+                if (!r.ok) return res.status(400).json({ error: 'REGIME_ESPECIFICO_INVALIDO', message: r.motivo });
+                val = r.codigo || '';
+            }
+            // 🏦 DeRE: as listas do D-1001 entram só com códigos que a FONTE tem
+            // (Tabelas 21/31/41, vocabulário dos regimes, Tabela 13). Código
+            // fora da tabela é RECUSA com o valor nomeado — gravar e deixar a
+            // prévia recusar depois faria a pessoa procurar o erro na tela
+            // errada. Lista vazia APAGA o campo.
+            if (k === 'dereAtividades' || k === 'dereRegimesSecundarios' || k === 'dereUfsCredenciadas') {
+                const r = validarListaDere(k, val);
+                if (!r.ok) return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: r.motivo });
+                val = r.lista.length ? r.lista : '';
+            }
+            if (k === 'dereIndNatTrib' && val !== '' && !['0', '1'].includes(String(val))) {
+                return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: 'indNatTrib deve ser 0 (tributação regular) ou 1 (imunidade/não incidência).' });
+            }
+            if ((k === 'dereIniValid' || k === 'dereFimValid') && val !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(val))) {
+                return res.status(400).json({ error: 'DERE_CAMPO_INVALIDO', message: `${k} deve estar em AAAA-MM-DD.` });
+            }
             if (k === 'uf' && typeof val === 'string') val = val.toUpperCase();
             if (k === 'ccmSp' && typeof val === 'string') val = val.replace(/\D/g, '');
             // Condição rural (🌾 DIPAM/FUNRURAL): objeto com forma fixa — grava

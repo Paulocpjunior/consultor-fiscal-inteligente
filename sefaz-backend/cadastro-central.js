@@ -40,6 +40,7 @@
 // ============================================================================
 
 import { regimeDaEmpresa, rotuloRegime, semFinsLucrativos as ehSemFinsLucrativos } from './regime-tributario.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 export const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 const texto = (v) => {
     const t = String(v ?? '').trim();
@@ -92,6 +93,11 @@ export function normalizarEmpresaCadastro(doc, regime) {
         regimeRessalva: vereditoRegime.motivo || null,
         // Eixo SEPARADO: terceiro setor não é regime, e convive com ele.
         semFinsLucrativos: ehSemFinsLucrativos(doc),
+        // 🏦 DeRE (02/09): regime ESPECÍFICO de IBS/CBS (LC 214/2025, Título V).
+        // Atravessa o túnel porque o Contábil é quem tem o insumo dos eventos
+        // (PGCC, balancete) — sem saber quem está na DeRE ele não tem por onde
+        // começar. `null` = não informado, que NÃO é "não se aplica".
+        regimeEspecificoIbsCbs: texto(df.regimeEspecificoIbsCbs),
 
         codCliente: texto(df.codCliente),
         cnae: texto(doc.cnae) || texto(df.cnae),
@@ -99,7 +105,10 @@ export function normalizarEmpresaCadastro(doc, regime) {
         uf: texto(df.uf) || texto(doc.uf),
         codMunIBGE: texto(df.codMunIBGE) || texto(doc.codMunIBGE),
         // CCM só existe pra SP capital, e vazio é resposta válida (#311).
-        ccmSp: soDigitos(df.ccmSp || doc.ccmSp) || null,
+        // Pelo dono: os SÓ-ZEROS não atravessam o túnel como se fossem
+        // inscrição — cadastro central que propaga o contorno é pior que
+        // cadastro central nenhum.
+        ccmSp: ccmSpDaEmpresa(doc) || null,
         inscricaoMunicipal: texto(df.inscricaoMunicipal),
         dataAbertura: texto(doc.dataAbertura) || texto(df.dataAbertura),
         email: texto(doc.email) || texto(df.email),

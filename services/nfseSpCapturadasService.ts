@@ -63,11 +63,11 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
         ];
         try {
             const [snapP, snapT] = await Promise.all([
-                getDocs(query(collection(db, 'documentos_fiscais'), ...baseConstraints, where('prestadorCnpj', '==', cnpjFiltro))),
-                getDocs(query(collection(db, 'documentos_fiscais'), ...baseConstraints, where('tomadorCnpj', '==', cnpjFiltro))),
+                fetchAllDocs('documentos_fiscais', [...baseConstraints, where('prestadorCnpj', '==', cnpjFiltro)]),
+                fetchAllDocs('documentos_fiscais', [...baseConstraints, where('tomadorCnpj', '==', cnpjFiltro)]),
             ]);
             const mapa = new Map<string, NfseSpCapturada>();
-            [...snapP.docs, ...snapT.docs].forEach(d => {
+            [...snapP, ...snapT].forEach(d => {
                 mapa.set(d.id, { id: d.id, ...(d.data() as any) } as NfseSpCapturada);
             });
             let lista = Array.from(mapa.values());
@@ -104,9 +104,8 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
     constraints.push(fbLimit(lim));
 
     try {
-        const q = query(collection(db, 'documentos_fiscais'), ...constraints);
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada));
+        const snaps = await fetchAllDocs('documentos_fiscais', constraints);
+        return snaps.map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada));
     } catch (e: any) {
         console.warn('[nfseSpCapturadasService] query falhou, fallback simples:', e?.message);
         const fallback: any[] = [
@@ -114,9 +113,8 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
             where('fonte', '==', 'csv-portal-sp'),
             fbLimit(lim),
         ];
-        const q2 = query(collection(db, 'documentos_fiscais'), ...fallback);
-        const snap = await getDocs(q2);
-        return snap.docs
+        const snaps = await fetchAllDocs('documentos_fiscais', fallback);
+        return snaps
             .map(d => ({ id: d.id, ...(d.data() as any) } as NfseSpCapturada))
             .filter(d => !filtros.direcao || filtros.direcao === 'todas' || d.direcao === filtros.direcao)
             .sort((a, b) => (b.dhEmi || '').localeCompare(a.dhEmi || ''));

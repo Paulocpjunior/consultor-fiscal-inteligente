@@ -74,12 +74,17 @@ describe('a trava pega o arquivo real que o PVA recusou', () => {
         // provados. Trocar a FIXTURE é o certo — trocar a régua para manter o
         // teste verde seria desligar a trava que acabou de pegar um defeito.
         // ⚠️ E a fixture MUDOU DE NOVO em 25/08, pela mesma razão: com o Guia
-        // no repo o 0150 passou a ser conferido (13 campos). Quem continua
-        // descoberto é o 0100 — o número de um campo dele se perdeu na
-        // conversão do .docx, então a contagem seria um chute.
-        const s = conferirContagemDeCampos(['|0100|X|Y|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
+        // no repo o 0150 passou a ser conferido (13 campos), e o exemplo virou
+        // o 0100.
+        // ⚠️ E MUDOU PELA TERCEIRA VEZ em 29/08, pelo melhor motivo possível:
+        // a leitura tolerante do Guia — medida contra o gabarito, onde ela
+        // acerta 11 de 11 e a estrita acertava 10 — passou a cobrir os **201**
+        // registros, então **não existe mais registro REAL descoberto**. O
+        // exemplo virou hipotético, e o teste continua provando o que importa:
+        // registro que a tabela não conhece NÃO vira erro, volta NOMEADO.
+        const s = conferirContagemDeCampos(['|ZZ99|X|Y|', '|M210|01|1|2|3|4|5|6|7|8|9|10|11|12|13|14|']);
         expect(s.erros).toHaveLength(0);      // o M210 acima tem os 16
-        expect(s.naoConferidos).toContain('0100');
+        expect(s.naoConferidos).toContain('ZZ99');
         // Silêncio não é aprovação: quem lê precisa saber o que ficou de fora.
         expect(s.naoConferidos).not.toContain('M210');
     });
@@ -134,10 +139,20 @@ describe('o gerador corrigido produz o leiaute que o PVA aceita', () => {
         expect(m610[15]).toBe('1316,70');
     });
 
-    it('campo de ajuste/diferimento sai VAZIO, nunca 0,00 inventado', () => {
+    // 🚨 TESTE TROCADO (28/08, DGB): ele exigia os OITO campos vazios, e o PVA
+    // recusou QUATRO deles — *"Campo de preenchimento obrigatório"* em
+    // VL_AJUS_ACRES_BC (5), VL_AJUS_REDUC_BC (6), VL_AJUS_ACRES (12) e
+    // VL_AJUS_REDUC (13). Ele descrevia uma dedução minha, não o leiaute.
+    // Trocar a fixture é o certo; trocar a régua para o teste passar seria
+    // manter o arquivo recusado.
+    it('ajuste sai 0,00 (zero É a resposta) e diferimento/quantidade seguem VAZIOS', () => {
         const m210 = camposDaLinha(buildBlocoM(dados).find((l: string) => l.startsWith('|M210|'))!);
-        // 5,6 = ajustes de BC · 12,13 = ajustes de contribuição · 14,15 = diferimento
-        for (const i of [4, 5, 8, 9, 11, 12, 13, 14]) expect(m210[i]).toBe('');
+        // 5,6 = ajustes de BC · 12,13 = ajustes de contribuição — obrigatórios.
+        for (const i of [4, 5, 11, 12]) expect(m210[i]).toBe('0,00');
+        // 9,10 = por QUANTIDADE (excludente com a alíquota) · 14,15 =
+        // diferimento. O PVA NÃO os acusou: preenchê-los "por simetria" seria
+        // a mesma dedução, na direção contrária.
+        for (const i of [8, 9, 13, 14]) expect(m210[i]).toBe('');
     });
 
     it('avisosDeContagemDeCampos entrega frase pronta para os warnings', () => {
@@ -350,5 +365,145 @@ describe('🚨 a contagem só protege o registro que está NELA', () => {
         const s = conferirContagemDeCampos(['|0500|a|b|c|', '|9XYZ|1|2|']);
         expect(s.erros[0].registro).toBe('0500');   // este está na tabela: acusa
         expect(s.naoConferidos).toContain('9XYZ');  // este não: volta nomeado
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 M205/M605 COM VALOR ZERO — recusa do PVA (DGB CONSULTORIA · 07/2026, 28/08)
+//
+// "O registro de detalhamento (M205/M605) não deve existir quando o valor
+//  informado no campo Valor da Contribuição ... a Recolher/Pagar é 0" e
+// "Valor informado deve ser maior que zero." — duas recusas por registro.
+//
+// ⚠️ E o gerador TINHA a guarda (`> 0`). Errou porque comparava o FLOAT: a
+// contribuição vem de base × alíquota (106.553,01 × 0,65% = 692,5945650) e a
+// retenção do documento em centavos (692,59). Sobrava 0,0045 — maior que zero
+// para o `>`, e 0,00 na linha impressa.
+// ════════════════════════════════════════════════════════════════════════════
+describe('M205/M605 não existe sem valor a recolher', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { conferirM205ComValorZero } = require('../sefaz-backend/sped-contrib-campos.js');
+
+    it('acusa as linhas reais da DGB', () => {
+        const r = conferirM205ComValorZero(['|M205|12|810902|0,00|', '|M605|12|217201|0,00|']);
+        expect(r.erros).toHaveLength(2);
+        expect(r.erros[0].mensagem).toMatch(/não deve existir/);
+        expect(r.erros[0].mensagem).toMatch(/maior que zero/);
+    });
+
+    // 🔒 NASCE VERDE no arquivo correto — a linha provada da PWR (03/2026).
+    it('registro com valor não é acusado', () => {
+        expect(conferirM205ComValorZero(['|M205|12|810902|104,36|', '|M605|12|217201|481,66|']).erros)
+            .toEqual([]);
+    });
+
+    it('campo vazio também é acusado — vazio não é "tem valor"', () => {
+        expect(conferirM205ComValorZero(['|M205|12|810902||']).erros).toHaveLength(1);
+    });
+
+    it('não confunde outros registros do bloco M', () => {
+        expect(conferirM205ComValorZero(['|M200|0,00|0,00|', '|M210|51|106553,01|']).erros).toEqual([]);
+    });
+});
+
+// A régua que decidiu o defeito: o que sai NA LINHA é o que manda.
+describe('zeroNoArquivo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { zeroNoArquivo } = require('../sefaz-backend/base-pis-cofins.js');
+
+    it('a sobra de arredondamento da DGB é ZERO no arquivo', () => {
+        // 106553,01 × 0,65% = 692,5945650 ; retenção 692,59
+        expect(zeroNoArquivo(106553.01 * 0.0065 - 692.59)).toBe(true);
+    });
+
+    it('meio centavo arredonda para 0,01 e NÃO é zero', () => {
+        expect(zeroNoArquivo(0.005)).toBe(false);
+        expect(zeroNoArquivo(0.004)).toBe(true);
+    });
+
+    it('valor de verdade não é zero, e ilegível é tratado como zero', () => {
+        expect(zeroNoArquivo(104.36)).toBe(false);
+        expect(zeroNoArquivo(null)).toBe(true);
+        expect(zeroNoArquivo(undefined)).toBe(true);
+        expect(zeroNoArquivo(NaN)).toBe(true);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 OS QUATRO CAMPOS DE AJUSTE DO M210/M610 SAÍAM EM BRANCO
+//
+// 28/08, DGB CONSULTORIA 21903193000160 · 08/2026 — **8 erros**, quatro por
+// registro: *"Campo de preenchimento obrigatório"* em `5 - VL_AJUS_ACRES_BC`,
+// `6 - VL_AJUS_REDUC_BC`, `12 - VL_AJUS_ACRES` e `13 - VL_AJUS_REDUC`.
+//
+// A causa foi uma DEDUÇÃO minha escrita no comentário do gerador ("campo de
+// ajuste sai VAZIO, nunca 0,00 inventado"). A regra de 06/08 nunca disse isso:
+// ela diz que **zero só entra quando zero É a resposta** — e o app não gera
+// M220/M620, então não há ajuste, e o zero é FATO.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 M210/M610 com campo de ajuste em branco', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { conferirAjustesDoM210 } = require('../sefaz-backend/sped-contrib-campos.js');
+    /** A LINHA REAL que o PVA recusou (relatório do Paulo, 28/08). */
+    const M210_RECUSADA = '|M210|51|106553,01|106553,01|||106553,01|0,6500|||692,59||||692,59|';
+    const M610_RECUSADA = '|M610|51|106553,01|106553,01|||106553,01|3,0000|||3196,59||||3196,59|';
+
+    it('acusa os QUATRO campos, com o número que o PVA usa', () => {
+        const { erros } = conferirAjustesDoM210([M210_RECUSADA]);
+        expect(erros).toHaveLength(1);
+        expect(erros[0].mensagem).toMatch(/5 - VL_AJUS_ACRES_BC/);
+        expect(erros[0].mensagem).toMatch(/6 - VL_AJUS_REDUC_BC/);
+        expect(erros[0].mensagem).toMatch(/12 - VL_AJUS_ACRES/);
+        expect(erros[0].mensagem).toMatch(/13 - VL_AJUS_REDUC/);
+    });
+
+    it('acusa os dois registros — foram 8 erros, não 4', () => {
+        expect(conferirAjustesDoM210([M210_RECUSADA, M610_RECUSADA]).erros).toHaveLength(2);
+    });
+
+    // ✅ NASCE VERDE sobre a linha corrigida.
+    it('fica MUDA com os ajustes preenchidos com 0,00', () => {
+        const corrigida = '|M210|51|106553,01|106553,01|0,00|0,00|106553,01|0,6500|||692,59|0,00|0,00|||692,59|';
+        expect(conferirAjustesDoM210([corrigida]).erros).toEqual([]);
+    });
+
+    // ⚠️ QUANT_BC/ALIQ_QUANT (9-10) e o diferimento (14-15) NÃO foram acusados
+    // pelo PVA. Exigi-los aqui seria alarme sobre arquivo que ele aceita — e a
+    // mesma dedução que produziu o defeito, na direção contrária.
+    it('NÃO cobra quantidade nem diferimento', () => {
+        const corrigida = '|M210|51|106553,01|106553,01|0,00|0,00|106553,01|0,6500|||692,59|0,00|0,00|||692,59|';
+        const m = conferirAjustesDoM210([corrigida]);
+        expect(JSON.stringify(m)).not.toMatch(/QUANT|DIFER/);
+    });
+
+    it('ignora registro que não é M210/M610', () => {
+        expect(conferirAjustesDoM210(['|M200|0,00|0,00|', '|M205|51|810902|692,59|']).erros).toEqual([]);
+    });
+});
+
+// 🔒 O GERADOR REAL nasce sem a recusa — a régua lê o ARQUIVO que ele produz,
+// nunca uma linha escrita à mão (fixture que não é o que o gerador produz é
+// teste verde sobre defeito vivo).
+describe('🔒 o gerador não emite mais ajuste em branco', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { conferirAjustesDoM210, avisosDaPrevalidacaoContrib } = require('../sefaz-backend/sped-contrib-campos.js');
+    const dadosDgb = {
+        empresa: { cnpj: '21903193000160', nome: 'DGB CONSULTORIA EMPRESARIAL LTDA' },
+        competencia: '2026-08',
+        regimeApuracao: '2',
+        notas: [{ numero: '1', direcao: 'saida', tipo: 'nfse', valorTotal: 106553.01 }],
+        itens: [], participantes: [], warnings: [],
+    };
+
+    it('o M210/M610 que o buildBlocoM produz passa na regra', () => {
+        const linhas: string[] = buildBlocoM(dadosDgb);
+        const mm = linhas.filter((l) => /^\|M[26]10\|/.test(l));
+        expect(mm.length).toBe(2);
+        expect(conferirAjustesDoM210(mm).erros).toEqual([]);
+    });
+
+    it('e a prevalidação inteira fica MUDA sobre ele', () => {
+        const avisos = avisosDaPrevalidacaoContrib(buildBlocoM(dadosDgb)).join(' ');
+        expect(avisos).not.toMatch(/VL_AJUS/);
     });
 });

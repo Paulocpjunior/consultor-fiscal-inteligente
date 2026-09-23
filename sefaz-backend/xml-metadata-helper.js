@@ -100,6 +100,34 @@ export function extrairParticipantesNfe(xml) {
     const endEmit = pickFirstBlock(emit, 'enderEmit');
     const endDest = pickFirstBlock(dest, 'enderDest');
 
+    // 🚨 O LOGRADOURO ESTAVA NO XML E O LEITOR DESCARTAVA (18/09, J.N. VINATEX
+    // · 08/2026: **732 recusas do PVA**, todas *"Campo obrigatório"* no
+    // registro **0150, campo 10 - ENDERECO**, em 123 páginas de relatório).
+    //
+    // O comentário logo acima diz *"ENDEREÇO importa"* — e o extrator lia do
+    // `<enderDest>` só a UF e o município. `xLgr`, `nro`, `xCpl` e `xBairro`
+    // vêm no MESMO bloco, sempre, e eram jogados fora: é a família do
+    // `localErroAviso` (12/08) — o dado chega e quem lê o descarta.
+    //
+    // 🚨 E O QUE PREENCHIA O CAMPO ERA A **BrasilAPI**, que responde outra
+    // pergunta: ela devolve o endereço do CADASTRO da Receita, não o que a
+    // NOTA declara — e o 0150 descreve *"os dados atualizados no último evento
+    // fiscal"* (Guia 3.2.3, 0150). Além de ser fonte errada, ela é REDE: com
+    // rate-limit, 403 ou timeout o campo fica vazio e o arquivo inteiro é
+    // recusado. O parser do NAVEGADOR (`xmlParserService`) já lia os quatro
+    // desde sempre — era a paridade entre os dois parsers que faltava (a mesma
+    // lição do C190 em 12/09).
+    //
+    // ⚠️ Campo 10 é **Obrig. O** no Guia — sem condição, sem exceção para
+    // domiciliado no Brasil.
+    const enderecoDe = (bloco) => ({
+        logradouro: pickTag(bloco, 'xLgr') || null,
+        numero: pickTag(bloco, 'nro') || null,
+        complemento: pickTag(bloco, 'xCpl') || null,
+        bairro: pickTag(bloco, 'xBairro') || null,
+        cep: pickTag(bloco, 'CEP') || null,
+    });
+
     return {
         emitente: {
             cnpj: pickTag(emit, 'CNPJ') || pickTag(emit, 'CPF') || null,
@@ -107,6 +135,7 @@ export function extrairParticipantesNfe(xml) {
             uf: pickTag(endEmit, 'UF') || null,
             codMunIBGE: pickTag(endEmit, 'cMun') || null,
             ie: pickTag(emit, 'IE') || null,
+            ...enderecoDe(endEmit),
         },
         destinatario: {
             cnpj: pickTag(dest, 'CNPJ') || pickTag(dest, 'CPF') || null,
@@ -114,6 +143,7 @@ export function extrairParticipantesNfe(xml) {
             uf: pickTag(endDest, 'UF') || null,
             codMunIBGE: pickTag(endDest, 'cMun') || null,
             ie: pickTag(dest, 'IE') || null,
+            ...enderecoDe(endDest),
         },
     };
 }
@@ -200,6 +230,82 @@ export function ehNotaPropriaDeEntrada(d, empresaCnpj) {
     return { sim: true, prova: 'tpNF' };
 }
 
+/**
+ * O ESPELHO: a entrada declarada neste documento é do **EMITENTE**, não nossa.
+ *
+ * 🚨 CASO REAL (09/09, Paulo, MV LIDER · comércio do SIMPLES · 08/2026):
+ * *"como não escriturar essas notas que são de devolução do próprio
+ * fornecedor? que não entra na escrituração?"* — com os dois XMLs anexos, que
+ * respondem sozinhos:
+ *
+ *   · **NF 640644 · FERA ATAC → MV LIDER** — `tpNF 0` · `finNFe 4` · CFOP
+ *     **1411** · natOp *"Dev vda merc terc suj reg ST"* · `refNFe` da NF
+ *     **636428 da PRÓPRIA FERA** · infCpl *"NF. DE ENTRADA REFERENTE A NOSSA
+ *     NF. 636428"*.
+ *   · **NF 1138363 · LPS COMPANY (SC) → MV LIDER** — `tpNF 0` · `finNFe 4` ·
+ *     CFOP **2202** · natOp *"DEVOL. VENDAS"* · `refNFe` da NF **1131980 da
+ *     PRÓPRIA LPS"* · **vBC 199,59 · vICMS 7,98**, que é o número que ele
+ *     circulou subindo no Livro de Entradas dela.
+ *
+ * Nas duas o emitente é o FORNECEDOR e o `tpNF` é **0**. Ou seja: é o
+ * fornecedor emitindo a nota de entrada DELE para dar entrada no estoque dele
+ * da mercadoria que a MV LIDER devolveu (RICMS/SP art. 136 — a mesma régua da
+ * nota própria de entrada, do outro lado do balcão). A MV LIDER só ocupa o
+ * bloco `<dest>` porque o leiaute exige um contra-lado.
+ *
+ * ═══ POR QUE ISTO É FATO DO DOCUMENTO, E NÃO INTERPRETAÇÃO ══════════════════
+ *
+ * `tpNF=0` significa *"operação de ENTRADA"* na perspectiva de QUEM EMITIU. Se
+ * a mercadoria está entrando no emitente, ela está SAINDO de quem está no
+ * `<dest>` — nunca entrando. Não existe hipótese em que uma nota `tpNF=0` de
+ * TERCEIRO seja entrada do destinatário: devolução recebida, retorno de
+ * industrialização, conserto, comodato — em todas a mercadoria volta para o
+ * emitente. Escriturá-la como entrada nossa é escriturar a operação DELE, que
+ * é a classe de defeito que este arquivo já pagou três vezes (o CST de
+ * PIS/COFINS da entrada, o CST 00→90 do caso KALUNGA e o crédito de ICMS de
+ * optante do Simples, todos "o documento é do fornecedor").
+ *
+ * 🚨 **E O CUSTO É NAS DUAS PONTAS.** Se o cliente emitiu a nota de devolução
+ * dele (o normal — contribuinte de ICMS emite), a saída DELE já está no livro
+ * e a nota do fornecedor entrando nas entradas conta a MESMA devolução duas
+ * vezes: é a dedup do art. 136 (11/08, DAMIÃO × EDUARDO GUERRA) espelhada. Se
+ * ele não emitiu, não houve entrada nenhuma — a mercadoria saiu. Nos dois
+ * casos a nota não pertence ao livro de ENTRADAS dele.
+ *
+ * ⚠️ **AUSÊNCIA NÃO É PROVA, e aqui isso decide o LADO do erro.** Sem `tpNF`
+ * legível, sem saber quem é a empresa ou sem o emitente, a resposta é **não** —
+ * a nota FICA no livro. Tirar nota legítima é livro a MENOS, que é o erro que
+ * não se confere depois; deixar uma a mais aparece no total.
+ *
+ * ⚠️ E ela DELEGA ao dono da pergunta oposta: o que é nota própria NOSSA nunca
+ * é entrada do emitente. Duas perguntas, dois donos — reescrever o laço aqui
+ * seria a segunda cópia que este projeto mais paga.
+ *
+ * @returns {{ sim: boolean, prova: 'tpNF'|null }}
+ */
+export const MOTIVO_ENTRADA_DO_EMITENTE =
+    'Nota de ENTRADA DO FORNECEDOR (tpNF=0 emitido por ele) — devolução recebida ou retorno. '
+    + 'A mercadoria entrou no estoque DELE, então esta não é entrada da sua empresa. '
+    + 'Se houve devolução, o documento que se escritura é a nota de SAÍDA que a sua empresa emite.';
+
+export function ehEntradaDoEmitente(d, empresaCnpj) {
+    const nao = { sim: false, prova: null };
+    if (!d) return nao;
+    if (String(d.tpNF ?? '').trim() !== '0') return nao;
+    // A NOSSA nota própria de entrada (art. 136) é o caso oposto — quem
+    // responde por ela é o dono dela, nunca uma condição repetida aqui.
+    if (ehNotaPropriaDeEntrada(d, empresaCnpj).sim) return nao;
+
+    const norm = (c) => String(c || '').replace(/\D/g, '');
+    const emp = norm(empresaCnpj || d.empresaCnpj);
+    const emi = norm(d.cnpjEmit || d.emitente?.cnpjCpf || d.emitente?.cnpj);
+    // Sem os dois lados o app NÃO afirma: dizer "não é sua" no escuro tira do
+    // livro uma entrada que pode ser legítima.
+    if (!emp || !emi || emi === emp) return nao;
+
+    return { sim: true, prova: 'tpNF' };
+}
+
 // ── Cancelamento EFETIVO — mesma lição da direção: o campo gravado pode mentir ──
 // Duas formas de o status ficar torto (bug 11/08, MV LIDER 639 — cancelada
 // contada no Livro de Saídas e no fechamento):
@@ -269,10 +375,20 @@ export function chaveDaNotaDoEvento(d) {
  * corrigidas no dia anterior. Consertar o leitor não basta se a consulta não
  * traz o campo.
  */
-export const CAMPOS_PARA_DOC_CANCELADO = Object.freeze(['status', 'cStat', 'eventos']);
+export const CAMPOS_PARA_DOC_CANCELADO = Object.freeze(['status', 'cStat', 'eventos', 'cancelamentoDeclarado']);
 
 export function docCancelado(d) {
     if (!d) return false;
+    // 🚨 A DECLARAÇÃO HUMANA VENCE (10/09, JG SOLUCOES · Barueri · NFS-e 76):
+    // o Padrão Nacional entregou a nota como `autorizado` porque o
+    // cancelamento aconteceu DEPOIS, no portal da PREFEITURA — e o CFI não
+    // fala com aquele portal. Sem isto a nota cancelada continuava somando no
+    // faturamento, no Livro e no bloco A, sem nenhum validador acusar.
+    //
+    // ⚠️ Ela só CANCELA, nunca "descancela": o `status` capturado continua lá,
+    // intocado, e é contra ele que a declaração se confere. Quem afirmou, por
+    // quê e quando ficam no próprio campo (`cancelamentoDeclarado`).
+    if (String(d.cancelamentoDeclarado?.em || '').trim()) return true;
     if (STATUS_CANCELADO.has(String(d.status || '').toLowerCase())) return true;
     if (CSTAT_NOTA_CANCELADA.has(String(d.cStat || ''))) return true;
     const eventos = Array.isArray(d.eventos) ? d.eventos : [];
@@ -289,6 +405,64 @@ export function docCancelado(d) {
     });
 }
 
+
+/**
+ * ESTE DOCUMENTO FOI TIRADO DO ACERVO? — a LÁPIDE, lida num lugar só.
+ *
+ * 🚨 POR QUE ISTO EXISTE (10/09, medindo o alcance da correção de número): a
+ * retirada por lápide está no ar desde 03/09 (*"lancei uma nota da J.P. PISSATO
+ * na empresa SILVIO FREIRE … como resolver?"*) e o mata-burro daquele dia diz
+ * que *"`_deleted` já é filtrado por toda a listagem"* — **verdade para a
+ * LISTAGEM, e FALSO para o arquivo fiscal**. A varredura mediu: os DOIS
+ * orquestradores do SPED liam `documentos_fiscais` sem olhar a lápide (o do
+ * EFD-Contribuições não olhava nem o `_merged_into`), e o crédito de PIS/COFINS
+ * também não.
+ *
+ * Ou seja: a nota tirada do livro **continuava saindo no arquivo entregue à
+ * Receita**. É a "régua que só escreve" (04/09) pela ponta do LIVRO — a pessoa
+ * faz o trabalho certo, a tela obedece, e o SPED declara o contrário.
+ *
+ * ⚠️ **DUAS LÁPIDES, UM SÓ FATO**: `_deleted` é a retirada (24/07, caso
+ * WALDESA; 03/09, empresa errada; 10/09, número corrigido) e `_merged_into` é o
+ * PERDEDOR de um merge. Nos dois o documento continua guardado como prova e
+ * **não conta no livro** — quem lê um sem o outro deixa metade passar, que é
+ * exatamente o que o EFD-Contribuições fazia.
+ *
+ * ⚠️ **E ELA NÃO SERVE PARA TUDO, de propósito.** Onde a pergunta é sobre
+ * CAPTURA — a cobertura de saída, a prova de captura, a conferência por chaves,
+ * o diagnóstico — o documento retirado **ainda prova que a captura funcionou**,
+ * e escondê-lo faria o cliente parecer descoberto por causa de uma correção de
+ * digitação. Filtra quem monta LIVRO, ARQUIVO ou IMPOSTO.
+ */
+export const CAMPOS_PARA_DOC_RETIRADO = Object.freeze(['_deleted', '_merged_into']);
+
+export function docRetiradoDoAcervo(d) {
+    if (!d) return false;
+    if (d._deleted === true) return true;
+    return !!String(d._merged_into || '').trim();
+}
+
+/** O contrário, para ler como filtro: `notas.filter(docContaNoLivro)`. */
+export function docContaNoLivro(d) {
+    return !docRetiradoDoAcervo(d);
+}
+
+
+/**
+ * QUEM AFIRMOU O CANCELAMENTO — e a resposta tem TRÊS valores, não dois.
+ *
+ * `'documento'` = a fonte disse (status, cStat ou evento) · `'declarado'` =
+ * alguém afirmou, e o carimbo diz quem · `null` = a nota vale.
+ *
+ * Número derivado de declaração humana NÃO se apresenta como lido: é a régua
+ * do `inssOrigem`, do `issRetidoOrigem` e do `competenciaOrigem`. Sem isto, o
+ * faturamento cai e quem confere procura buraco de captura.
+ */
+export function origemDoCancelamento(d) {
+    if (!d) return null;
+    if (String(d.cancelamentoDeclarado?.em || '').trim()) return 'declarado';
+    return docCancelado(d) ? 'documento' : null;
+}
 
 /**
  * O VALOR do documento, em TODAS as formas em que ele é gravado.
@@ -468,4 +642,38 @@ export function issRetidoDeclarado(doc) {
     if (d.issRetido === true || d.valores?.issRetido === true) return true;
     const v = issRetidoDoDocumento(d);
     return Number.isFinite(v) && v > 0;
+}
+
+/**
+ * QUANTO de ISS o tomador reteve nesta nota — o número que vai para o
+ * LANÇAMENTO (o túnel do Contábil, o R-4020 não; ISS é municipal).
+ *
+ * 🚨 O CASO (08/09, CLUDE · serviços TOMADOS 08/2026): o CCI recebia
+ * `issRetido: 0` em duas notas do portal de SP com **ISS Retido: Sim** (5,56 e
+ * 7,00), porque `issRetidoDoDocumento` só responde quando existe VALOR
+ * separado — e o portal não grava valor separado: grava o BOOLEANO
+ * (`issRetido: true`) e o ISS da nota em `valorIss`. O Contábil lançava
+ * "ISS retido: R$ 0,00" sobre duas notas retidas — o mesmo `0` que a régua de
+ * 22/08 proibia de SOMAR, agora atravessando o túnel como se fosse o retido.
+ *
+ * 📌 NA NFS-e PAULISTANA A RETENÇÃO É INTEGRAL: "ISS Retido: Sim" significa que
+ * o tomador é o responsável pelo ISS DA NOTA — o "Valor do ISS" impresso É o
+ * que ele recolhe (não há retenção parcial nesse leiaute; a coluna do CSV é
+ * S/N, sem valor próprio). Por isso, declarado sem valor separado, o retido é
+ * o ISS da nota — e sai CARIMBADO (`origem: 'declarado-iss-integral'`),
+ * porque número derivado não se apresenta como lido do documento.
+ *
+ * ⚠️ VALOR EXPLÍCITO VENCE (`origem: 'documento'`); sem declaração nenhuma o
+ * retido é `null`, nunca zero — "não houve" e "não achei" continuam sendo
+ * fatos diferentes, e quem consome decide o que fazer com o null.
+ */
+export function issRetidoEfetivoDoc(doc) {
+    const d = doc || {};
+    const explicito = issRetidoDoDocumento(d);
+    if (Number.isFinite(explicito)) return { valor: explicito, origem: 'documento' };
+    if (d.issRetido === true || d.valores?.issRetido === true) {
+        const iss = issDoDocumento(d);
+        if (Number.isFinite(iss)) return { valor: iss, origem: 'declarado-iss-integral' };
+    }
+    return { valor: null, origem: null };
 }

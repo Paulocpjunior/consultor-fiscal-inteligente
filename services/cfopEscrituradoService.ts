@@ -23,9 +23,10 @@
  * `_substituidoEm` da importação com substituição (14/08).
  */
 import {
-    doc, updateDoc, deleteField, collection, addDoc, getDocs, query, where, orderBy,
+    doc, updateDoc, deleteField, collection, addDoc, where,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { fetchAllDocs } from './firestorePaginate';
 
 /** A coleção mora aqui porque `COLLECTIONS` do xmlFiscalService não é exportada. */
 const COLECAO_DOCUMENTOS = 'documentos_fiscais';
@@ -84,6 +85,8 @@ export async function gravarCfopEscriturado(i: GravarCfopEscrituradoInput): Prom
 // um é o fornecedor de revenda do outro.
 
 const COLECAO_PARAMETROS = 'cfop_parametros';
+/** O teto que `firestore.rules` exige no `list` desta coleção. */
+const LIMITE_LIST_PARAMETROS = 2000;
 
 export interface ParametroCfopDoc {
     id?: string;
@@ -98,18 +101,46 @@ export interface ParametroCfopDoc {
     criadoEm?: string | null;
 }
 
-/** Os parâmetros ATIVOS da empresa. Falha de leitura devolve [] — o cérebro é
- *  um palpite melhor, não uma trava: sem ele a régua automática segue valendo. */
-export async function lerParametrosCfop(empresaId: string): Promise<ParametroCfopDoc[]> {
-    if (!empresaId) return [];
+export interface LeituraParametrosCfop {
+    parametros: ParametroCfopDoc[];
+    /** Mensagem da falha de LEITURA. `null` = leitura feita (pode ter vindo vazia). */
+    erro: string | null;
+}
+
+/**
+ * Os parâmetros da empresa.
+ *
+ * 🚨 A CONSULTA PRECISA DO `limit` — SEM ELE A REGRA NEGA (10/09, ELS: Paulo
+ * criava o parâmetro do POSTO BORDO 5656 → 1407, o campo limpava e a lista
+ * continuava dizendo "Parâmetros ativos (0)"). `firestore.rules` libera o
+ * `list` de `cfop_parametros` com `request.query.limit <= 2000`, e consulta sem
+ * limite volta *"Missing or insufficient permissions"* — o fato já estava
+ * escrito em DOIS comentários desta casa (`giaStService` e `firestorePaginate`)
+ * e nunca tinha virado trava. Quem passa o limite é `fetchAllDocs`, que ainda
+ * pagina: `fbLimit(2000)` sozinho truncaria em silêncio.
+ *
+ * ⚠️ FALHA DE LEITURA NÃO É "NÃO HÁ PARÂMETRO". O `catch { return [] }` antigo
+ * fazia a recusa do banco ficar indistinguível de "esta empresa não tem
+ * parâmetro" — e o custo é duplo: no painel a pessoa lê "não gravou" (e cria de
+ * novo, por cima do que já existe) e no `.FML` o arquivo sai pela régua
+ * AUTOMÁTICA, ignorando o CFOP que alguém ensinou de propósito. O erro viaja
+ * para quem chamou DIZER, do mesmo jeito que o `lerParametrosCfopDaEmpresa` do
+ * backend já fazia desde 07/09 — a metade do front tinha ficado para trás.
+ */
+export async function lerParametrosCfop(empresaId: string): Promise<LeituraParametrosCfop> {
+    if (!empresaId) return { parametros: [], erro: null };
     try {
-        const snap = await getDocs(query(
-            collection(db, COLECAO_PARAMETROS),
-            where('empresaId', '==', empresaId),
-        ));
-        return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroCfopDoc[];
-    } catch {
-        return [];
+        const snaps = await fetchAllDocs(
+            COLECAO_PARAMETROS,
+            [where('empresaId', '==', empresaId)],
+            { batchSize: LIMITE_LIST_PARAMETROS },
+        );
+        return {
+            parametros: snaps.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroCfopDoc[],
+            erro: null,
+        };
+    } catch (e: any) {
+        return { parametros: [], erro: e?.message || String(e) };
     }
 }
 
@@ -163,4 +194,70 @@ export async function desligarParametroCfop(id: string, porEmail: string): Promi
         desligadoPor: porEmail || null,
         desligadoEm: new Date().toISOString(),
     });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✂️ POR ITEM — a nota MISTA (Sandra, 11/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// *"essa nota tem 2 produtos … um produto é com ST outro sem, ou seja 1407 e
+// 1556 … aqui nesse informar CFOP e CST só consigo colocar um CFOP e um CST
+// só"*. O campo por NOTA (17/08) continua sendo o caso comum; este é o degrau
+// acima dele: ITEM > NOTA > cérebro > empresa > régua (quem aplica é
+// `cfopDoLancamento`/`cstInformadoDoItem`, lidos por todos os leitores).
+//
+// 🚨 O MAPA GRAVA POR CAMINHO (`escrituracaoItens.<nItem>`), nunca o objeto
+// inteiro: gravar o mapa todo a partir do que a tela carregou apagaria o item
+// que OUTRA pessoa informou entre a leitura e o clique — o defeito do ✕ de
+// 14/08. E `itens[]` não é tocado: é o que o DOCUMENTO declara, e o merge do
+// Firestore substitui arrays inteiros.
+
+import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
+import { validarCstEscriturado } from '../sefaz-backend/cst-correlacao.js';
+
+export interface GravarEscrituracaoItemInput {
+    documentoId: string;
+    direcao: 'entrada' | 'saida';
+    /** O `nItem` do item (o atributo <det nItem> do XML). */
+    nItem: string | number;
+    /** CFOP informado para o item. VAZIO = este item segue a nota/régua. */
+    cfop: string;
+    /** Tributação do CST (2 dígitos). VAZIO = segue a nota/régua. */
+    cst: string;
+    porEmail: string;
+}
+
+export async function gravarEscrituracaoItem(i: GravarEscrituracaoItemInput): Promise<{ cfop: string; cst: string }> {
+    if (!i.documentoId) throw new Error('Documento sem id — não dá para gravar.');
+    if (!String(i.porEmail || '').trim()) {
+        throw new Error('Sessão sem usuário identificado — saia e entre de novo. '
+            + 'A escrituração do item fica gravada com quem informou.');
+    }
+    const chave = chaveDoItem({ nItem: i.nItem });
+    if (!chave) {
+        // Item sem identidade não recebe decisão: casar por posição faria a
+        // escolha pular de produto na próxima releitura do XML.
+        throw new Error('Este item não tem número (nItem) legível — reimporte o XML completo antes de informar por item.');
+    }
+    const vc = validarCfopEscriturado(i.cfop, i.direcao);
+    if (!vc.ok) throw new Error(`Item ${chave}: ${vc.motivo}`);
+    const vs = validarCstEscriturado(i.cst);
+    if (!vs.ok) throw new Error(`Item ${chave}: ${vs.motivo}`);
+
+    const ref = doc(db, COLECAO_DOCUMENTOS, i.documentoId);
+    const caminho = `escrituracaoItens.${chave}`;
+    if (!vc.cfop && !vs.cst) {
+        await updateDoc(ref, { [caminho]: deleteField() });
+        return { cfop: '', cst: '' };
+    }
+    await updateDoc(ref, {
+        [caminho]: {
+            cfop: vc.cfop || '',
+            cst: vs.cst || '',
+            por: i.porEmail,
+            em: new Date().toISOString(),
+        },
+    });
+    return { cfop: vc.cfop || '', cst: vs.cst || '' };
 }

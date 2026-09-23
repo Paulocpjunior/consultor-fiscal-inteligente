@@ -25,6 +25,12 @@
 
 import { invokeIntegraContador } from './serpro-client.js';
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
+// 🚨 Quem responde *"o canal da Prefeitura de SP se aplica a esta empresa, e
+// com qual CCM?"* é o DONO — ele lê o município pelo `caminhoNfseRecomendado`
+// e o CCM pelo `ccmSpDaEmpresa` (as duas formas, zeros = vazio). Antes disto,
+// o `ccmSp` chegava sempre `undefined` e a carteira INTEIRA lia "CCM não
+// configurado" — inclusive quem tem CCM e quem nem é de SP capital.
+import { canalPrefeituraSp } from './caixa-postal-prefeitura-sp.js';
 
 // Default 'serpro' (REAL). 'mock' só com CAIXA_POSTAL_MODE=mock explícito (dev local).
 // Sem config, falha no SERPRO em vez de devolver dado fake pro cliente.
@@ -241,14 +247,14 @@ class MockProvider {
         return this._gerarMensagensCanal(empresaCnpj, MOCK_TEMPLATES_PREFEITURA_SP, 'prefeitura_sp', 1, 3);
     }
 
-    async listarTodasMensagens(empresaCnpj, uf = 'SP') {
+    async listarTodasMensagens(empresaCnpj, uf = 'SP', empresa = null) {
         const [ecac, det, dec, dje, emac, prefSp] = await Promise.all([
             this.listarMensagens(empresaCnpj),
             this.listarMensagensDET(empresaCnpj),
             this.listarMensagensDEC(empresaCnpj, uf),
             this.listarMensagensDJE(empresaCnpj),
             this.listarMensagensEMAC(empresaCnpj),
-            this.listarMensagensPrefeituraSP(empresaCnpj),
+            this.listarMensagensPrefeituraSP(empresaCnpj, empresa),
         ]);
         return {
             mensagens: [...ecac, ...det, ...dec, ...dje, ...emac, ...prefSp],
@@ -431,17 +437,25 @@ class SerproProvider {
     }
 
     // Prefeitura SP — Dados reais via nfse-sp-client.js (ConsultaNFeRecebidas)
-    async listarMensagensPrefeituraSP(empresaCnpj, ccmSp) {
+    //
+    // ⚠️ `empresa` é o DOC da empresa, não o CCM solto: o dono precisa do
+    // município para saber se este canal sequer se aplica. Passar só o CCM
+    // faria a régua responder "falta CCM" para quem não é da capital.
+    async listarMensagensPrefeituraSP(empresaCnpj, empresa) {
         const cnpj = String(empresaCnpj).replace(/\D/g, '');
-        if (!ccmSp) {
+        const canal = canalPrefeituraSp(empresa);
+        if (canal.situacao !== 'pronto') {
             return {
                 ok: true,
                 mensagens: [],
                 fonte: 'prefeitura_sp',
-                status: 'nao_integrado',
-                motivo: 'CCM (inscrição municipal SP) não configurado — preencha em Empresas → Dados Fiscais',
+                // "não se aplica" e "falta cadastrar" pedem ações OPOSTAS —
+                // um número/rótulo só faria as duas parecerem a mesma coisa.
+                status: canal.aplicavel ? 'nao_integrado' : 'nao_se_aplica',
+                motivo: canal.motivo,
             };
         }
+        const ccmSp = canal.ccm;
         try {
             const now = new Date();
             const dtFim = { ano: now.getFullYear(), mes: now.getMonth() + 1 };
@@ -501,14 +515,14 @@ class SerproProvider {
         }
     }
 
-    async listarTodasMensagens(empresaCnpj, uf = 'SP') {
+    async listarTodasMensagens(empresaCnpj, uf = 'SP', empresa = null) {
         const [ecac, det, decResult, djeResult, emacResult, prefSpResult] = await Promise.all([
             this.listarMensagens(empresaCnpj),
             this.listarMensagensDET(empresaCnpj),
             this.listarMensagensDEC(empresaCnpj, uf),
             this.listarMensagensDJE(empresaCnpj),
             this.listarMensagensEMAC(empresaCnpj),
-            this.listarMensagensPrefeituraSP(empresaCnpj),
+            this.listarMensagensPrefeituraSP(empresaCnpj, empresa),
         ]);
 
         // DEC, DJE, e-MAC, Prefeitura SP retornam objeto { ok, mensagens, ... } quando não integrados

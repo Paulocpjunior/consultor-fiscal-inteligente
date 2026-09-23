@@ -15,6 +15,8 @@
  */
 import React, { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
+// As obrigações federais do catálogo — só para SUGERIR o código no cadastro federal.
+import { CATALOGO } from '../sefaz-backend/catalogo-obrigacoes.js';
 
 interface Cadastro {
     id: string;
@@ -36,16 +38,31 @@ interface MunicipioFaltando {
     total: number;
     /** % dos clientes pendentes cobertos até esta linha, na ordem da fila. */
     coberturaAcumuladaPct?: number;
-    clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
+    clientes: Array<{ id: string | null; nome: string; cnpj: string; municipioNome?: string | null }>;
+    /** Nomes de município que os clientes desta linha têm no cadastro. */
+    nomesNoCadastro?: string[];
+    /** Mesmo código IBGE, nomes diferentes — o código está errado em alguém. */
+    divergencia?: boolean;
 }
 
 const FORM_VAZIO = {
-    esfera: 'municipal' as 'municipal' | 'estadual',
+    esfera: 'municipal' as 'municipal' | 'estadual' | 'federal',
     uf: '',
     codMunIBGE: '', municipioNome: '', obrigacao: 'ISS',
     diaVencimento: '', mesesApos: '1', baseLegal: '',
     vigenciaInicio: '', vigenciaFim: '',
+    // 🏦 22/09 (Paulo: "a DCTFWeb ainda está com vencimento de todo dia 15,
+    // mas vence no final do mês"): a esfera FEDERAL entrou, com "último dia
+    // útil" e a reaplicação nas tarefas abertas — é a permissão de mudar a
+    // data sem esperar deploy, com vigência e norma.
+    ultimoDiaUtilDoMes: false,
+    reaplicarNasTarefas: true,
 };
+
+/** As obrigações federais do catálogo — sugestão no cadastro federal. */
+const OBRIGACOES_FEDERAIS: string[] = Array.from(new Set(
+    (Object.values(CATALOGO) as any[]).flat().filter((r: any) => r?.esfera === 'federal').map((r: any) => String(r.obrigacao)),
+)).sort();
 
 const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToast }) => {
     const [dados, setDados] = useState<any>(null);
@@ -97,13 +114,22 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                 headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...form,
-                    diaVencimento: Number(form.diaVencimento),
+                    diaVencimento: form.ultimoDiaUtilDoMes ? null : Number(form.diaVencimento),
                     mesesApos: Number(form.mesesApos),
                 }),
             });
             const j = await r.json().catch(() => ({}));
             if (!r.ok) { setErros(j.erros || [j.error || `HTTP ${r.status}`]); return; }
-            onShowToast?.(`Prazo de ${form.obrigacao} cadastrado para ${form.esfera === 'estadual' ? form.uf : (form.municipioNome || form.codMunIBGE)}.`);
+            const alvo = form.esfera === 'federal' ? 'todo o país (federal)'
+                : form.esfera === 'estadual' ? form.uf : (form.municipioNome || form.codMunIBGE);
+            // O que aconteceu com as tarefas sai DITO — reaplicação silenciosa
+            // deixaria a Rotina acusando "atrasada" sem ninguém entender.
+            const reaplicadas = form.reaplicarNasTarefas
+                ? (j.erroReaplicar
+                    ? ` ⚠ As tarefas abertas NÃO foram atualizadas (${j.erroReaplicar}).`
+                    : ` ${j.tarefasReaplicadas || 0} tarefa(s) aberta(s) receberam a nova data.`)
+                : ' As tarefas já criadas ficaram como estavam.';
+            onShowToast?.(`Prazo de ${form.obrigacao} cadastrado para ${alvo}.${reaplicadas}`);
             setForm({ ...FORM_VAZIO });
             await carregar();
         } catch (e: any) {
@@ -117,7 +143,13 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
     return (
         <div className="space-y-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-2">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🏛️ Calendário de prazos (municipal e estadual)</h3>
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">🏛️ Calendário de prazos (federal, estadual e municipal)</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-3xl">
+                    <strong>Federal:</strong> o catálogo do app já tem o prazo de cada obrigação (DCTFWeb no último dia
+                    útil do mês seguinte, FGTS dia 20…). Quando a norma mudar, cadastre aqui a vigência nova: o cadastro
+                    <strong> vence o catálogo</strong> daquela competência em diante, para todos os clientes, e pode
+                    reaplicar a data nas tarefas abertas.
+                </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-3xl">
                     Não existe “dia do ISS” nacional — <strong>cada prefeitura tem o seu</strong>. Enquanto a cidade não
                     estiver cadastrada aqui, o ISS aparece na Rotina como <strong>pendência nomeada</strong>, nunca com
@@ -168,12 +200,21 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                                     className="flex items-center justify-between gap-2 text-[11px] p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                                     <span className="text-amber-800 dark:text-amber-300">
                                         <strong>{m.municipioNome || `IBGE ${m.codMunIBGE}`}</strong>
+                                        <span className="opacity-70"> · IBGE {m.codMunIBGE}</span>
                                         {' · '}{m.total} cliente(s)
                                         {typeof m.coberturaAcumuladaPct === 'number' && (
                                             <span className="opacity-70"> · acumulado {m.coberturaAcumuladaPct}%</span>
                                         )}
-                                        {': '}{m.clientes.slice(0, 3).map((c) => c.nome).join(', ')}
+                                        {': '}{m.clientes.slice(0, 3).map((c) => (m.divergencia && c.municipioNome ? `${c.nome} (cadastro: ${c.municipioNome})` : c.nome)).join(', ')}
                                         {m.clientes.length > 3 && ` +${m.clientes.length - 3}`}
+                                        {m.divergencia && (
+                                            <span className="block mt-1 text-rose-700 dark:text-rose-400 font-semibold">
+                                                ⚠ Estes clientes têm o MESMO código IBGE ({m.codMunIBGE}) e nomes de município diferentes
+                                                ({(m.nomesNoCadastro || []).join(' · ')}). A fila agrupa pelo CÓDIGO, não pelo nome: o
+                                                "Código Município IBGE" está errado em pelo menos um deles — corrija em Empresas → Dados Fiscais
+                                                e clique Atualizar. Cadastrar o calendário aqui NÃO resolve.
+                                            </span>
+                                        )}
                                     </span>
                                     <span className="flex gap-1 whitespace-nowrap">
                                         <button
@@ -281,9 +322,9 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     A estadual existe porque de manhã o app passou a denunciar que
                     o prazo do SPED de SP ia para todo estado — e denunciar sem dar
                     saída é meia correção. */}
-                <div className="flex gap-2">
-                    {([['municipal', '🏛️ Municipal (ISS)'], ['estadual', '🗺️ Estadual (SPED)']] as const).map(([id, txt]) => (
-                        <button key={id} onClick={() => setForm({ ...form, esfera: id, obrigacao: id === 'estadual' ? 'SPED' : 'ISS' })}
+                <div className="flex gap-2 flex-wrap">
+                    {([['municipal', '🏛️ Municipal (ISS)'], ['estadual', '🗺️ Estadual (SPED)'], ['federal', '🏦 Federal (DCTFWeb, FGTS…)']] as const).map(([id, txt]) => (
+                        <button key={id} onClick={() => setForm({ ...form, esfera: id, obrigacao: id === 'estadual' ? 'SPED' : id === 'federal' ? 'DCTFWEB' : 'ISS', ultimoDiaUtilDoMes: id === 'federal' && true })}
                             className={`btn-press px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${form.esfera === id
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
@@ -292,7 +333,17 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     ))}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {form.esfera === 'estadual' ? (
+                    {form.esfera === 'federal' ? (
+                        <div className="col-span-2">
+                            <label className={rotulo}>Obrigação federal (vale para todos os clientes)</label>
+                            <input list="obrigacoes-federais" value={form.obrigacao}
+                                onChange={(e) => setForm({ ...form, obrigacao: e.target.value.toUpperCase() })}
+                                className={campo} placeholder="DCTFWEB" />
+                            <datalist id="obrigacoes-federais">
+                                {OBRIGACOES_FEDERAIS.map((o) => <option key={o} value={o} />)}
+                            </datalist>
+                        </div>
+                    ) : form.esfera === 'estadual' ? (
                         <>
                             <div>
                                 <label className={rotulo}>UF (2 letras)</label>
@@ -321,8 +372,15 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     )}
                     <div>
                         <label className={rotulo}>Dia do vencimento</label>
-                        <input value={form.diaVencimento} onChange={(e) => setForm({ ...form, diaVencimento: e.target.value })}
-                            className={campo} placeholder="10" />
+                        <input value={form.ultimoDiaUtilDoMes ? '' : form.diaVencimento}
+                            disabled={form.ultimoDiaUtilDoMes}
+                            onChange={(e) => setForm({ ...form, diaVencimento: e.target.value })}
+                            className={`${campo} disabled:opacity-50`} placeholder={form.ultimoDiaUtilDoMes ? 'último dia útil' : '10'} />
+                        <label className="flex items-center gap-1 mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                            <input type="checkbox" checked={form.ultimoDiaUtilDoMes}
+                                onChange={(e) => setForm({ ...form, ultimoDiaUtilDoMes: e.target.checked })} />
+                            último dia útil do mês
+                        </label>
                     </div>
                     <div>
                         <label className={rotulo}>Meses após a competência</label>
@@ -346,6 +404,12 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                         <input type="date" value={form.vigenciaFim}
                             onChange={(e) => setForm({ ...form, vigenciaFim: e.target.value })} className={campo} />
                     </div>
+                    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 pb-2"
+                        title="Recalcula o vencimento das tarefas ABERTAS desta obrigação (dentro da vigência). Concluídas e canceladas não mudam.">
+                        <input type="checkbox" checked={form.reaplicarNasTarefas}
+                            onChange={(e) => setForm({ ...form, reaplicarNasTarefas: e.target.checked })} />
+                        reaplicar nas tarefas abertas
+                    </label>
                     <button onClick={salvar} disabled={salvando}
                         className="btn-press px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 whitespace-nowrap">
                         {salvando ? '⏳ gravando…' : 'Cadastrar'}
@@ -367,11 +431,11 @@ const PrazosMunicipaisPanel: React.FC<{ onShowToast?: (m: string) => void }> = (
                     <div className="space-y-1">
                         {dados.cadastros.map((c: Cadastro) => (
                             <p key={c.id} className={`text-[11px] ${c.ativo === false ? 'opacity-50 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
-                                <strong>{c.municipioNome || (c as any).uf || c.codMunIBGE}</strong>
+                                <strong>{(c as any).esfera === 'federal' ? 'Brasil (federal)' : (c.municipioNome || (c as any).uf || c.codMunIBGE)}</strong>
                                 <span className="ml-1 px-1 rounded bg-slate-200 dark:bg-slate-700 text-[10px] uppercase">
                                     {(c as any).esfera || 'municipal'}
                                 </span>
-                                {' · '}{c.obrigacao} · dia {c.diaVencimento}
+                                {' · '}{c.obrigacao} · {(c as any).ultimoDiaUtilDoMes ? 'último dia útil' : `dia ${c.diaVencimento}`}
                                 {c.mesesApos !== 1 && ` (+${c.mesesApos} mês/meses)`}
                                 {' · '}<span className="opacity-80">{c.baseLegal}</span>
                                 {c.vigenciaInicio && ` · de ${c.vigenciaInicio}`}{c.vigenciaFim && ` até ${c.vigenciaFim}`}

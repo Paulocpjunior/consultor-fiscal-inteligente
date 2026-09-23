@@ -34,6 +34,31 @@ export function idDocumentoNfseSp({ prestadorCnpj, tomadorCnpj, numero }) {
 }
 
 /**
+ * O ID DO DOCUMENTO DE NFS-e — **a chave nacional VENCE**.
+ *
+ * 🚨 POR QUE ISTO EXISTE (10/09, importador do portal de Barueri): a NFS-e do
+ * padrão nacional TEM chave (50 dígitos), e a captura pelo ADN grava o
+ * documento **com a chave como id** (`nfse-nacional-dfe-importer.js`). O CSV
+ * do portal do município traz a MESMA chave — e se o importador dele usasse a
+ * fórmula por partes, a mesma nota entraria DUAS VEZES: uma pelo ADN e outra
+ * pelo município, e o serviço contaria em dobro no livro, no ISS e no
+ * faturamento. É a duplicidade do art. 136 com outra roupa.
+ *
+ * ✅ E o efeito bom é o que fechou o caso das canceladas: importar o CSV do
+ * município **cai por cima** do documento que o ADN trouxe — a nota que subiu
+ * ativa passa a ficar cancelada, sem ninguém marcar nada à mão.
+ *
+ * ⚠️ A chave é usada COMO VEIO quando já é só dígitos — é o id que o ADN já
+ * gravou em produção, e mudar a forma órfã o acervo (um teste prova isso).
+ * Sem chave, cai na fórmula por partes, que é a da NFS-e sem chave.
+ */
+export function idDocumentoNfse({ chave, prestadorCnpj, tomadorCnpj, numero } = {}) {
+    const c = soDigitos(chave);
+    if (c.length >= 44) return c;
+    return idDocumentoNfseSp({ prestadorCnpj, tomadorCnpj, numero });
+}
+
+/**
  * O documento que está no banco é uma NOTA DIGITADA à mão?
  */
 export function ehDigitada(existente) {

@@ -31,6 +31,9 @@
 // O env continua VENCENDO, para o dia em que o contabilista mudar.
 // ============================================================================
 
+// O DV do CPF tem dono — conferir o dígito aqui seria a segunda cópia.
+import { validarCpf } from './documento-dv.js';
+
 /** E-mail e município do escritório, como no 0100 já aceito pela Receita. */
 export const CONTADOR_EMAIL_PADRAO = 'spcontabil@spassessoriacontabil.com.br';
 export const CONTADOR_COD_MUN_PADRAO = '3550308';
@@ -59,4 +62,54 @@ export function getContadorPadrao() {
         email: process.env.CONTADOR_EMAIL || CONTADOR_EMAIL_PADRAO,
         codMunIBGE: process.env.CONTADOR_COD_MUN || CONTADOR_COD_MUN_PADRAO,
     };
+}
+
+/**
+ * O contabilista está completo para o 0100?
+ *
+ * 📖 Guia Prático da EFD-Contribuições 1.35, registro 0100: **NOME (campo 02),
+ * CPF (03) e CRC (04) são Obrig. `S`**, e o campo 03 traz a validação literal
+ * *"será conferido o dígito verificador (DV) do CPF informado"*.
+ *
+ * 🚨 **POR QUE ISTO NASCEU (29/08)**: os dois geradores tinham DEFAULT
+ * INVENTADO nesses campos — `'CONTADOR SP CONTABIL'` e `'1SP123456/O-7'`. Sem
+ * a env, o arquivo declarava ao fisco um contabilista que não existe, com um
+ * CRC que não é de ninguém — e o PVA **aceita**, porque a forma está certa. É
+ * a família do `1405`, do `PARTSEM` e do `5352`: dado fabricado que só aparece
+ * na fiscalização.
+ *
+ * ⚠️ **EMAIL e COD_MUN ficam de FORA desta conferência, de propósito.** No
+ * EFD-Contribuições eles são **Obrig. `N`** (o Guia é explícito), e no EFD
+ * ICMS/IPI o PVA os recusou como obrigatórios (PWR 19/08) — quem cobra lá é a
+ * R13, que é da família certa. Cobrar aqui produziria alarme falso sobre
+ * arquivo correto, que é o jeito conhecido de a equipe desligar a trava.
+ *
+ * @returns {{completo: boolean, faltando: string[], cpfInvalido: boolean, aviso: string|null}}
+ */
+export function conferirContador(c) {
+    const faltando = [];
+    if (!String(c?.nome || '').trim()) faltando.push('CONTADOR_NOME');
+    if (!String(c?.cpf || '').trim()) faltando.push('CONTADOR_CPF');
+    if (!String(c?.crc || '').trim()) faltando.push('CONTADOR_CRC');
+
+    // O DV é FATO sobre o número — vale em qualquer família de arquivo.
+    const cpfInvalido = !!String(c?.cpf || '').trim() && !validarCpf(String(c.cpf));
+
+    if (!faltando.length && !cpfInvalido) return { completo: true, faltando: [], cpfInvalido: false, aviso: null };
+
+    const partes = [];
+    if (faltando.length) {
+        partes.push(
+            `Registro 0100 (contabilista) incompleto: ${faltando.join(', ')} sem valor. `
+            + 'Os campos NOME, CPF e CRC são OBRIGATÓRIOS e o app não os inventa mais — eles saem VAZIOS '
+            + 'e o PVA vai recusar. Preencha as variáveis de ambiente no Cloud Run.',
+        );
+    }
+    if (cpfInvalido) {
+        partes.push(
+            'Registro 0100: o CPF do contabilista não passa no dígito verificador — o PVA confere o DV '
+            + '(Guia 1.35, 0100 campo 03). Confira a env CONTADOR_CPF.',
+        );
+    }
+    return { completo: false, faltando, cpfInvalido, aviso: partes.join(' ') };
 }

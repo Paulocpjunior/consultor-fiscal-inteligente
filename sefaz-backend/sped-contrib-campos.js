@@ -38,9 +38,10 @@
  * dos `TOTAIS_VIGIADOS`/`DETALHES_VIGIADOS` da auditoria de saída.
  */
 
+import { validarCnpj } from './documento-dv.js';
 import {
-    conferirCodModContraChave, conferirDtDocNoPeriodo, POS_DT_FIN_CONTRIBUICOES,
-    conferirPeriodoDoArquivo as periodoDoArquivoComum,
+    conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, conferirCodPartDoC100, POS_DT_FIN_CONTRIBUICOES,
+    conferirPeriodoDoArquivo as periodoDoArquivoComum, conferirEnderecoDo0150, conferirNumDocContraChave,
 } from './sped-c100-regras-comuns.js';
 // A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
 // por `scripts/extrair-leiaute-contrib.mjs`, não escrita à mão.
@@ -399,6 +400,51 @@ export function conferirCodItemDosItens(linhas) {
 }
 
 /**
+ * COD_PART vazio em A100 de ENTRADA — o campo que barra o ARQUIVO INTEIRO.
+ *
+ * FONTE: PVA do INSTITUTO HAYAY CIENCIA E FE · 08/2026 (03/09) —
+ * `Total de Erros 1 · "Campo obrigatório na entrada." · Linha 16 · Campo
+ * "4 - COD_PART" · Registro A100`, sobre a linha
+ * `|A100|0|1||00|||23||25082026|25082026|3000,00|0||3000,00|19,50|...`.
+ *
+ * A NFS-e era um serviço TOMADO que entrou pelo importador de PDF no leiaute
+ * DANFSe que o leitor não sabe nomear (o caso RADIO E TV SUL AMERICANA, 02/09
+ * — *"o PDF veio com prestador e tomador VAZIOS"*), e o gerador emitiu a linha
+ * assim mesmo. **O PVA não importa o arquivo** — não é recusa de um registro
+ * que se conserta e reenvia.
+ *
+ * ⚠️ **SÓ A ENTRADA ACUSA, e é a recusa que diz isso**: a mensagem é literal
+ * (*"Campo obrigatório **na entrada**"*). Na SAÍDA o campo sai vazio há meses
+ * em arquivos ACEITOS (MANTOAN 07/2026, HS 05/2026) — acusar ali seria alarme
+ * sobre arquivo correto, o jeito conhecido de a equipe desligar a
+ * prevalidação.
+ *
+ * 📌 Ela nasce **VERDE** sobre o gerador de hoje: `separarDeclaraveisNoBlocoA`
+ * tira essas notas antes de o A100 sair, NOMEADAS no aviso da geração. A regra
+ * é a rede — se alguém religar o caminho, o arquivo acusa aqui em vez de no PVA.
+ */
+export function conferirCodPartDoA100(linhas) {
+    const erros = [];
+    (Array.isArray(linhas) ? linhas : []).forEach((linha, i) => {
+        const campos = camposDaLinha(linha);
+        if (String(campos[0] || '').trim() !== 'A100') return;
+        if (!ehDocumentoDeEntrada(campos)) return;
+        if (String(campos[3] || '').trim()) return;
+        erros.push({
+            registro: 'A100', linha: i + 1,
+            fonte: 'PVA: "Campo obrigatório na entrada · 4 - COD_PART" '
+                + '(INSTITUTO HAYAY CIENCIA E FE · 08/2026, 03/09).',
+            mensagem: `A100 na linha ${i + 1} é um documento de ENTRADA (serviço TOMADO) e está sem `
+                + 'COD_PART. O PVA recusa o ARQUIVO INTEIRO — com esta linha ele nem importa. Não é falta '
+                + 'de cadastro do cliente: é o documento que entrou sem o CNPJ do PRESTADOR. Reimporte o '
+                + 'PDF da NFS-e preenchendo o CNPJ do prestador (Central de XMLs → Importar → NFS-e (PDF), '
+                + 'com "↻ Substituir os que já estão no banco") e gere de novo.',
+        });
+    });
+    return { erros };
+}
+
+/**
  * IND_ORIG_CRED vazio em A170 de documento de ENTRADA.
  *
  * FONTE: PVA da MANTOAN (18/08) — *"Campo obrigatório PARA NOTAS FISCAIS DE
@@ -512,30 +558,38 @@ const CST_PISCOFINS_VALIDOS = new Set([
     '70', '71', '72', '73', '74', '75', '98', '99',
 ]);
 
-/** Posições PROVADAS no C170 de 37 campos (recibo do PVA · PWR 07/2026). */
-const C170_CST_PIS = 25;
-const C170_CST_COFINS = 31;
+/**
+ * Posições dos CST por registro (1-based, como o PVA nomeia). C170: provadas
+ * pelo recibo do PVA (PWR 07/2026). C175: Guia 1.35, campos 05 e 11.
+ */
+const POSICOES_CST_PISCOFINS = {
+    C170: { CST_PIS: 25, CST_COFINS: 31 },
+    C175: { CST_PIS: 5, CST_COFINS: 11 },
+};
 
 export function conferirCstPisCofins(linhas) {
     const erros = [];
     (linhas || []).forEach((linha, i) => {
         const f = String(linha).split('|');
-        if (f[1] !== 'C170') return;   // forEach: `return` é o continue
+        const reg = f[1];
+        const posicoes = POSICOES_CST_PISCOFINS[reg];
+        if (!posicoes) return;   // forEach: `return` é o continue
         const conferir = (pos, nome) => {
             const cst = String(f[pos] || '').trim();
             if (CST_PISCOFINS_VALIDOS.has(cst)) return;
             erros.push({
-                regra: 'cst-piscofins-fora-da-tabela', registro: 'C170', campo: `${pos} - ${nome}`,
+                regra: 'cst-piscofins-fora-da-tabela', registro: reg, campo: `${pos} - ${nome}`,
                 valor: cst,
-                fonte: 'Tabela 4.3.3/4.3.4 do EFD-Contribuições. Posições provadas pelo recibo do PVA '
-                    + '(PWR 31947349000169 · 07/2026, 20/08) e pelo arquivo aceito de 03/2026.',
-                mensagem: `C170 na linha ${i + 1}: ${nome} = "${cst || '(vazio)'}", que não existe na `
+                fonte: 'Tabela 4.3.3/4.3.4 do EFD-Contribuições. Posições do C170 provadas pelo recibo do PVA '
+                    + '(PWR 31947349000169 · 07/2026, 20/08) e pelo arquivo aceito de 03/2026; as do C175 são '
+                    + 'as do Guia 1.35 (campos 05 e 11).',
+                mensagem: `${reg} na linha ${i + 1}: ${nome} = "${cst || '(vazio)'}", que não existe na `
                     + 'Tabela 4.3.3/4.3.4. O PVA recusa a importação. Confira o CST do item na Central de '
                     + 'Documentos — CSOSN (101, 500…) e código de ICMS não valem para PIS/COFINS.',
             });
         };
-        conferir(C170_CST_PIS, 'CST_PIS');
-        conferir(C170_CST_COFINS, 'CST_COFINS');
+        conferir(posicoes.CST_PIS, 'CST_PIS');
+        conferir(posicoes.CST_COFINS, 'CST_COFINS');
     });
     return { erros, ok: erros.length === 0 };
 }
@@ -614,10 +668,114 @@ export function conferirC170DeNfce(linhas) {
             mensagem: `A NFC-e nº ${numPai || '?'} levou C170 na linha ${i + 1}, e o leiaute do `
                 + 'EFD-Contribuições não admite detalhe de item em cupom — o PVA recusa a importação com '
                 + '"O registro não deve ser informado para o modelo de documento do \'Registro Pai\'". '
-                + 'A receita da NFC-e é declarada no C100 e no bloco M; e os itens que só existem em cupom '
-                + 'têm de sair do 0200 junto, senão viram item órfão.',
+                + 'O cupom se escritura em C100 + C175 (consolidado por CFOP, CST e alíquota); e os itens que '
+                + 'só existem em cupom têm de sair do 0200 junto, senão viram item órfão.',
         });
     });
+    return { erros };
+}
+
+// ── R: NFC-e (COD_MOD 65) SEM C175 — e C175 fora da NFC-e ──────────────────
+//
+// FONTE: PVA 6.2.0 da HYPE CAFE SERVICOS DE ALIMENTACAO 66641236000115 ·
+// 08/2026 (14/09) — **295 recusas**, uma por NFC-e, literal:
+//
+//   "A escrituração das receitas auferidas por Notas Fiscais Eletrônicas de
+//    Consumidor Final - NFC-e (COD_MOD = 65) deve ser efetuada de forma
+//    individualizada no registro C100, sendo o campo COD_PART facultativo e
+//    com a informação referente à base de cálculo, alíquota e valor das
+//    contribuições apuradas sendo escrituradas de forma consolidada e
+//    analítica (por CST e alíquotas), no registro C175."
+//
+// mais **2** no M210/M610 (*"Não deverá existir um registro M210/M610 … não
+// informados nos documentos com CST de 01 a 05"*), que são CONSEQUÊNCIA: sem
+// C175 a Receita não vê receita no cupom e o M210 fica sem documento que o
+// sustente. Guia 1.35: C175 é *"O (se existir C100 e COD_MOD igual a 65)"*,
+// só admite CFOP iniciado com 5, e não pode repetir a combinação
+// CFOP + CST + alíquotas dentro do mesmo documento.
+//
+// 📌 É A SEGUNDA METADE DA REGRA DE 24/08: tirar o C170 do cupom estava certo,
+// e faltou o registro que o Guia manda no lugar. Nasce VERDE sobre o gerador
+// corrigido e acusaria o arquivo de 14/09 com as 295 linhas.
+/**
+ * C100 de NFC-e sem filho C175; C175 pendurado em documento que não é NFC-e;
+ * CFOP fora de 5xxx; combinação CFOP+CST+alíquotas repetida no mesmo C100.
+ */
+export function conferirC175DaNfce(linhas) {
+    const erros = [];
+    const lista = Array.isArray(linhas) ? linhas : [];
+    let pai = null;
+    const FONTE = 'PVA 6.2.0: "A escrituração das receitas auferidas por NFC-e (COD_MOD = 65) deve ser '
+        + 'efetuada de forma individualizada no registro C100 … escrituradas de forma consolidada e '
+        + 'analítica (por CST e alíquotas), no registro C175" (HYPE CAFE 1385 · 08/2026, 14/09 — 295 '
+        + 'recusas, uma por NFC-e).';
+    const fechar = () => {
+        if (!pai) return;
+        if (pai.mod === '65' && pai.c175 === 0) {
+            erros.push({
+                registro: 'C100', linha: pai.linha, fonte: FONTE,
+                mensagem: `A NFC-e nº ${pai.num || '?'} (linha ${pai.linha}) saiu SEM C175. O leiaute exige, `
+                    + 'para cada NFC-e, ao menos um C175 consolidando os itens por CFOP, CST e alíquota de '
+                    + 'PIS/COFINS — sem ele o PVA recusa a NFC-e e regera o M200/M210 ZERADO, porque a '
+                    + 'receita do cupom é lida do VL_OPR do C175.',
+            });
+        }
+        pai = null;
+    };
+    for (let i = 0; i < lista.length; i += 1) {
+        const c = camposDaLinha(lista[i]);
+        const reg = String(c[0] || '').trim();
+        if (!reg) continue;
+        if (reg === 'C100') {
+            fechar();
+            pai = {
+                linha: i + 1, mod: String(c[4] || '').trim(), num: String(c[7] || '').trim(),
+                c175: 0, combinacoes: new Set(),
+            };
+            continue;
+        }
+        if (reg === 'C175') {
+            if (!pai || pai.mod !== '65') {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, Registro C175: "Registro Analítico do Documento (Código 65)" — '
+                        + 'filho de C100 com COD_MOD 65.',
+                    mensagem: `O C175 da linha ${i + 1} está pendurado em ${pai ? `um C100 modelo ${pai.mod}` : 'nenhum C100'}. `
+                        + 'O C175 é exclusivo da NFC-e (modelo 65); a NF-e (55) detalha item a item no C170.',
+                });
+                continue;
+            }
+            pai.c175 += 1;
+            const cfop = String(c[1] || '').trim();
+            if (!cfop.startsWith('5')) {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, C175 campo 02: "Na escrituração analítica das NFC-e, só poderão '
+                        + 'ser informados CFOP iniciados com 5".',
+                    mensagem: `O C175 da NFC-e nº ${pai.num || '?'} (linha ${i + 1}) declara CFOP ${cfop || '(vazio)'}. `
+                        + 'Cupom só admite CFOP iniciado com 5 — confira o CFOP do item na Central de Documentos.',
+                });
+            }
+            const combinacao = [cfop, c[4], c[6], c[10], c[12]].map(v => String(v || '').trim()).join('|');
+            if (pai.combinacoes.has(combinacao)) {
+                erros.push({
+                    registro: 'C175', linha: i + 1,
+                    fonte: 'Guia Prático 1.35, C175, Validação do Registro: "não podem ser informados dois ou mais '
+                        + 'registros com a mesma combinação de valores dos campos: CFOP, CST (PIS/Pasep e Cofins) '
+                        + 'e alíquotas (PIS/Pasep e Cofins)".',
+                    mensagem: `A NFC-e nº ${pai.num || '?'} tem dois C175 com a mesma combinação CFOP/CST/alíquota `
+                        + `(linha ${i + 1}). A consolidação tem de somar os itens num registro só.`,
+                });
+            }
+            pai.combinacoes.add(combinacao);
+            continue;
+        }
+        // Qualquer outro registro (C170 de outra nota não existe sob NFC-e;
+        // C110/C111 são filhos legítimos) — só um registro que NÃO é filho de
+        // C100 fecha o pai.
+        if (!/^C1[0-9]{2}$/.test(reg) || reg === 'C100' || reg === 'C180' || reg === 'C190') fechar();
+    }
+    fechar();
     return { erros };
 }
 
@@ -659,7 +817,7 @@ export function conferirCadastrosOrfaosContrib(linhas) {
                 + '(PWR 1364, 19/08).',
             mensagem: `O item ${cod} está declarado no 0200 (linha ${linha}) e nenhum C170/A170 o `
                 + 'referencia — o PVA recusa item órfão. Item que só existia em NFC-e cai aqui: '
-                + 'o cupom não leva C170 neste arquivo, então o item dele também não entra no 0200.',
+                + 'o cupom sai em C175 (consolidado, sem código de item), então o item dele não entra no 0200.',
         });
     }
 
@@ -707,7 +865,7 @@ export function conferirSomaDosItensContrib(linhas) {
             fonte: 'Guia Prático, C170 campo 07: "a soma de valores dos registros C170 deve ser igual ao '
                 + 'valor informado no campo VL_MERC do registro C100".',
             mensagem: `O documento nº ${pai.num || '?'} (linha ${pai.linha}) declara VL_MERC `
-                + `${(pai.merc / 100).toFixed(2)} e a soma dos VL_ITEM dos C170 dá `
+                + `${(pai.merc / 100).toFixed(2)} e a soma dos VL_ITEM dos C170 (VL_OPR dos C175) dá `
                 + `${(pai.soma / 100).toFixed(2)}. O pai e os filhos têm de dizer o mesmo valor — se o `
                 + 'desconto incondicional saiu de um lado, tem de sair do outro.',
         });
@@ -721,6 +879,9 @@ export function conferirSomaDosItensContrib(linhas) {
             return;
         }
         if (reg === 'C170' && pai) { pai.soma += cent(campos[6]); pai.temFilho = true; return; }
+        // C175 campo 03 (VL_OPR): "somatório do valor das mercadorias e produtos
+        // constantes na NFC-e" — a Σ dos C175 fecha com o VL_MERC do pai.
+        if (reg === 'C175' && pai) { pai.soma += cent(campos[2]); pai.temFilho = true; return; }
         if (reg) { fechar(); pai = null; }
     });
     fechar();
@@ -756,8 +917,18 @@ export function conferirReceitaBrutaDoM210(linhas) {
     // Outras fontes de receita bruta na MESMA soma — havendo qualquer uma,
     // a Σ dos C170 é um PISO, não o total, e a regra fica muda.
     const OUTRAS_FONTES = ['A170', 'C181', 'C481', 'C491', 'C381', 'C601', 'C870',
-        'C880', 'D201', 'D601', 'D300', 'D350', 'C175', 'F100', 'F200', 'F500',
+        'C880', 'D201', 'D601', 'D300', 'D350', 'F100', 'F200', 'F500',
         'F510', 'F550', 'F560', 'I100'];
+    // A condição da própria validação: *"quando o CST da operação vinculada for
+    // 01, 02, 03, 04, 05 com alíquota diferente de zero e 49"*. Item CST 06
+    // (alíquota zero) ou 04 com alíquota zero NÃO entra na receita bruta — e o
+    // gerador o emite assim desde 14/09 (C175 da HYPE).
+    const contaNaReceita = (cst, aliqTxt) => {
+        const c = String(cst || '').trim();
+        if (c === '49') return true;
+        const a = Number(String(aliqTxt || '0').replace(/\./g, '').replace(',', '.')) || 0;
+        return ['01', '02', '03', '04', '05'].includes(c) && a !== 0;
+    };
     let temOutraFonte = false;
     let saida = false;
     let somaItens = 0;
@@ -770,7 +941,14 @@ export function conferirReceitaBrutaDoM210(linhas) {
         if (OUTRAS_FONTES.includes(reg)) { temOutraFonte = true; continue; }
         if (reg === 'C100') { saida = String(c[1] || '').trim() === '1'; continue; }
         if (reg === 'C170') {
-            if (saida) { somaItens += cent(c[6]); temC170DeSaida = true; }
+            // CST_PIS campo 25, ALIQ_PIS campo 27 (posições provadas, PWR 07/2026).
+            if (saida && contaNaReceita(c[24], c[26])) { somaItens += cent(c[6]); temC170DeSaida = true; }
+            continue;
+        }
+        if (reg === 'C175') {
+            // "VL_OPR do registro C175" está na MESMA lista da validação. CST_PIS
+            // campo 05, ALIQ_PIS campo 07 (Guia 1.35, Registro C175).
+            if (saida && contaNaReceita(c[4], c[6])) { somaItens += cent(c[2]); temC170DeSaida = true; }
             continue;
         }
         if (reg === 'M210' || reg === 'M610') {
@@ -788,7 +966,7 @@ export function conferirReceitaBrutaDoM210(linhas) {
                 + 'soma dos seguintes campos … VL_ITEM dos registros C170 … [IND_OPER = 1]" (PWR 1364, '
                 + '07/2026 — cinco dias porque o PVA regera o registro por esta regra).',
             mensagem: `O ${d.reg} (linha ${d.linha}) declara VL_REC_BRT ${(d.valor / 100).toFixed(2)} e a `
-                + `soma dos VL_ITEM dos C170 de saída dá ${(somaItens / 100).toFixed(2)}. É esta soma que a `
+                + `soma dos VL_ITEM dos C170 (VL_OPR dos C175) de saída com CST tributado dá ${(somaItens / 100).toFixed(2)}. É esta soma que a `
                 + 'Receita valida no campo — o PVA regera o registro e sobrescreve o que estiver aqui. '
                 + 'O desconto incondicional não entra nesta conta: ele sai no campo 08 (VL_DESC) do C170 e '
                 + 'reduz a BASE (campo 04), que é onde ele reduz tributo.',
@@ -897,6 +1075,8 @@ const ARITMETICA_PIS_COFINS = {
     //            [base, alíquota, valor, (base_quant, aliq_quant)]  — 1-based
     A170: [[10, 11, 12], [14, 15, 16]],
     C170: [[26, 27, 30, 28, 29], [32, 33, 36, 34, 35]],
+    // Guia 1.35, C175 campos 10 e 16 — a mesma validação, sobre a consolidação da NFC-e.
+    C175: [[6, 7, 10, 8, 9], [12, 13, 16, 14, 15]],
     D101: [[6, 7, 8]],
     D105: [[6, 7, 8]],
     F100: [[8, 9, 10], [12, 13, 14]],
@@ -958,7 +1138,7 @@ export function conferirAritmeticaPisCofins(linhas) {
             erros.push({
                 registro: reg, linha: i + 1,
                 fonte: 'Guia Prático da EFD-Contribuições 1.35 — a mesma validação em A170 (campos 12 e 16), '
-                    + 'C170 (30 e 36), D101/D105 (08), F100 (10 e 14) e F550 (07 e 12): "o valor do campo '
+                    + 'C170 (30 e 36), C175 (10 e 16), D101/D105 (08), F100 (10 e 14) e F550 (07 e 12): "o valor do campo '
                     + 'deve corresponder ao valor da base de cálculo multiplicado pela alíquota aplicável ao '
                     + 'item … O resultado deverá ser dividido pelo valor 100".',
                 mensagem: `O ${reg} da linha ${i + 1} não fecha consigo mesmo: base ${r$(base)} × `
@@ -989,9 +1169,423 @@ export function conferirPeriodoDoArquivo(linhas) {
     return { erros: periodoDoArquivoComum(linhas, POS_DT_FIN_CONTRIBUICOES) };
 }
 
+/**
+ * 🚨 M205/M605 COM VALOR ZERO — recusa do PVA, literal (DGB CONSULTORIA
+ * 21903193000160 · 07/2026, 28/08):
+ *
+ *   "O registro de detalhamento (M205/M605) não deve existir quando o valor
+ *    informado no campo Valor da Contribuição Não Cumulativa a Recolher/Pagar
+ *    é 0 do campo Valor da Contribuição"
+ *   "Valor informado deve ser maior que zero."
+ *
+ * São DUAS recusas por registro, e a causa é a mesma: o detalhamento por código
+ * de receita existe para dizer sob qual receita da DCTF o valor A RECOLHER
+ * será pago. Sem valor a recolher — quando a RETENÇÃO cobre a contribuição
+ * inteira — não há o que detalhar.
+ *
+ * ⚠️ E o gerador não errou por falta de guarda: ele tinha `> 0`. Errou porque
+ * comparava o FLOAT (0,0045 de sobra entre a contribuição calculada e a
+ * retenção em centavos) enquanto a linha imprimia `0,00`. Esta regra lê o
+ * ARQUIVO, que é o que o PVA lê.
+ */
+export function conferirM205ComValorZero(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = String(l || '').split('|');
+        const reg = c[1];
+        if (reg !== 'M205' && reg !== 'M605') continue;
+        // |M205|NUM_CAMPO|COD_REC|VL_DEBITO|
+        const bruto = String(c[4] ?? '').trim();
+        const n = Number(bruto.replace(/\./g, '').replace(',', '.'));
+        if (bruto !== '' && Number.isFinite(n) && Math.round(n * 100) !== 0) continue;
+        erros.push({
+            regra: 'M205_VALOR_ZERO',
+            registro: reg,
+            mensagem: `${reg} com valor ${bruto || '(vazio)'} — o PVA recusa duas vezes: "o registro de `
+                + 'detalhamento não deve existir quando o valor a recolher é 0" e "valor informado deve ser '
+                + 'maior que zero". Quando a RETENÇÃO cobre a contribuição inteira não há valor a detalhar, '
+                + `e o ${reg} não deve sair.`,
+        });
+    }
+    return { erros };
+}
+
+/**
+ * 🚨 OS QUATRO CAMPOS DE AJUSTE DO M210/M610 EM BRANCO — recusa do PVA,
+ * literal (DGB CONSULTORIA 21903193000160 · 08/2026, 28/08, **8 erros**):
+ *
+ *   "Campo de preenchimento obrigatório."
+ *   5 - VL_AJUS_ACRES_BC · 6 - VL_AJUS_REDUC_BC · 12 - VL_AJUS_ACRES ·
+ *   13 - VL_AJUS_REDUC  →  "Registro/Campo não informado ou inválido"
+ *
+ * sobre a linha `|M210|51|106553,01|106553,01|||106553,01|0,6500|||692,59||||692,59|`.
+ *
+ * Quatro por registro, dois registros. O gerador os deixava vazios por uma
+ * DEDUÇÃO minha ("campo de valor não recebe default") que a regra de 06/08
+ * nunca autorizou: ela diz que **zero só entra quando zero É a resposta**, e
+ * aqui é — o app não gera M220/M620, então não há ajuste, e isso é fato.
+ *
+ * ⚠️ SÓ ESTES QUATRO. `QUANT_BC`/`ALIQ_QUANT` (a alternativa por quantidade) e
+ * `VL_CONT_DIFER`/`VL_CONT_DIFER_ANT` (diferimento) NÃO foram acusados, e
+ * exigi-los aqui produziria alarme sobre arquivo que o PVA aceita.
+ */
+const AJUSTES_OBRIGATORIOS_M210 = [
+    { pos: 5, nome: 'VL_AJUS_ACRES_BC' },
+    { pos: 6, nome: 'VL_AJUS_REDUC_BC' },
+    { pos: 12, nome: 'VL_AJUS_ACRES' },
+    { pos: 13, nome: 'VL_AJUS_REDUC' },
+];
+
+export function conferirAjustesDoM210(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = String(l || '').split('|');
+        const reg = c[1];
+        if (reg !== 'M210' && reg !== 'M610') continue;
+        // `c[0]` é o vazio antes da primeira barra, então o campo N está em
+        // `c[N]` — a mesma contagem que o PVA usa (REG é o campo 1).
+        const vazios = AJUSTES_OBRIGATORIOS_M210.filter((a) => String(c[a.pos] ?? '').trim() === '');
+        if (!vazios.length) continue;
+        erros.push({
+            regra: 'M210_AJUSTE_VAZIO',
+            registro: reg,
+            mensagem: `${reg} com ${vazios.length} campo(s) de ajuste em branco `
+                + `(${vazios.map((a) => `${a.pos} - ${a.nome}`).join(' · ')}) — o PVA recusa com `
+                + '"Campo de preenchimento obrigatório". Sem ajuste, o valor é 0,00: aqui o zero É a '
+                + 'resposta, não um default.',
+        });
+    }
+    return { erros };
+}
+
+/**
+ * O M200/M600 fecha consigo mesmo — a aritmética que o Guia escreve por extenso.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro M200:
+ *  · campo 05: *"correspondendo a VL_TOT_CONT_NC_PER - VL_TOT_CRED_DESC -
+ *    VL_TOT_CRED_DESC_ANT"*;
+ *  · campo 06: *"O valor a ser informado no Campo 06 deve ser igual ou menor
+ *    que o valor constante no campo 05"*;
+ *  · campo 08: *"correspondendo a VL_TOT_CONT_NC_DEV - VL_RET_NC -
+ *    VL_OUT_DED_NC"*;
+ *  · campo 10: *"deve ser igual ou menor que o valor constante no campo 09"*;
+ *  · campo 12: *"correspondendo a VL_TOT_CONT_CUM_PER - VL_RET_CUM -
+ *    VL_OUT_DED_CUM"*;
+ *  · campo 13: *"correspondendo a VL_CONT_NC_REC + VL_CONT_CUM_REC"*.
+ *
+ * 🚨 **POR QUE ELA IMPORTA**: este registro **já se desmentiu** — em 24/08 o
+ * campo 04 saía `0` CRAVADO enquanto o campo 07 vinha cheio, ou seja o arquivo
+ * dizia que NADA era devido no não-cumulativo e declarava valor a recolher na
+ * linha seguinte. É a classe do E110 campo 11 (02/08) e do E110 que não fechava
+ * consigo mesmo (R17, 26/08): cada total, isolado, parece certo — o que não
+ * fecha é a EXPRESSÃO, e nada perguntava por ela.
+ *
+ * ⚠️ **UM CENTAVO DE TOLERÂNCIA**: os campos saem de multiplicações que
+ * arredondam a cada passo. Alarme sobre arredondamento é o que ensina a equipe
+ * a ignorar a prevalidação — e campo trocado de casa erra por ORDEM DE
+ * GRANDEZA, nunca por um centavo.
+ */
+export function conferirFechamentoDoM200(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        // ⚠️ A CONVENÇÃO DE ÍNDICE DESTE MÓDULO É OUTRA. Aqui `camposDaLinha`
+        // devolve o REG na posição **0**, então o campo N do leiaute é o índice
+        // N-1 — no `sped-prevalidacao.js` o split cru deixa o REG no 1 e o campo
+        // N cai no índice N. Carimbar a convenção do vizinho leria o campo
+        // errado com toda confiança: é o erro do `DT_FIN` de 22/08, agora entre
+        // dois módulos do mesmo projeto.
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg !== 'M200' && reg !== 'M600') continue;
+        const v = (n) => num(c[n - 1]);
+        const cent = (x) => Math.round(x * 100);
+        const trib = reg === 'M200' ? 'PIS' : 'COFINS';
+
+        const conta = (campo, esperado, nome, formula) => {
+            if (Math.abs(cent(v(campo)) - cent(esperado)) <= 1) return;
+            erros.push({
+                regra: 'm200-fechamento', registro: reg, campo: `${campo} - ${nome}`, linha: l,
+                valor: v(campo).toFixed(2), esperado: esperado.toFixed(2),
+                mensagem: `O ${reg} (${trib}) não fecha consigo mesmo: o campo ${campo} (${nome}) diz `
+                    + `${v(campo).toFixed(2)} e a conta do Guia dá ${esperado.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O registro se desmentindo por dentro é a '
+                    + 'classe do campo trocado de casa.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo ${campo}: "${formula}".`,
+            });
+        };
+
+        conta(5, v(2) - v(3) - v(4), 'VL_TOT_CONT_NC_DEV',
+            'correspondendo a VL_TOT_CONT_NC_PER - VL_TOT_CRED_DESC - VL_TOT_CRED_DESC_ANT');
+        conta(8, v(5) - v(6) - v(7), 'VL_CONT_NC_REC',
+            'correspondendo a VL_TOT_CONT_NC_DEV - VL_RET_NC - VL_OUT_DED_NC');
+        conta(12, v(9) - v(10) - v(11), 'VL_CONT_CUM_REC',
+            'correspondendo a VL_TOT_CONT_CUM_PER - VL_RET_CUM - VL_OUT_DED_CUM');
+        conta(13, v(8) + v(12), 'VL_TOT_CONT_REC',
+            'correspondendo a "VL_CONT_NC_REC" + "VL_CONT_CUM_REC"');
+
+        // 🚨 A RETENÇÃO NÃO PODE SER MAIOR QUE O DEVIDO — e este é o caso comum
+        // do prestador de serviço, não uma hipótese: em 28/08 (DGB) a retenção
+        // cobria a contribuição quase inteira. O excedente NÃO some: ele é
+        // crédito de retenção a usar em períodos futuros, que o Guia manda
+        // declarar no registro **1300** — e o app não gera o 1300.
+        for (const [campo, teto, nome] of [[6, 5, 'VL_RET_NC'], [10, 9, 'VL_RET_CUM']]) {
+            if (cent(v(campo)) - cent(v(teto)) > 1) {
+                erros.push({
+                    regra: 'm200-retencao-maior', registro: reg, campo: `${campo} - ${nome}`, linha: l,
+                    valor: v(campo).toFixed(2), esperado: `≤ ${v(teto).toFixed(2)}`,
+                    mensagem: `O ${reg} (${trib}) declara retenção de ${v(campo).toFixed(2)} sobre `
+                        + `contribuição devida de ${v(teto).toFixed(2)} — o leiaute não admite.`,
+                    acao: 'A retenção que sobra é crédito a usar em períodos futuros e se declara no registro '
+                        + '1300, que o app NÃO gera. Confira a apuração e leve o excedente à mão, senão a '
+                        + 'empresa perde o crédito.',
+                    fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo ${campo}: "O valor a ser `
+                        + `informado no Campo ${campo} deve ser igual ou menor que o valor constante no campo ${teto}".`,
+                });
+            }
+        }
+    }
+    return { erros };
+}
+
+/**
+ * Σ dos M205/M605 bate com o "a recolher" do M200/M600 que eles detalham.
+ *
+ * 📖 FONTE — Guia 1.35, registro M205, Atenção: *"O somatório dos valores
+ * informados no campo 04 (VL_DEBITO) informado neste registro, deve
+ * corresponder ao valor constante de contribuição a recolher, do Registro Pai
+ * M200"*. E o campo 02 (NUM_CAMPO) diz QUAL campo do M200 está sendo
+ * detalhado: **08** (não cumulativo) ou **12** (cumulativo).
+ *
+ * 🚨 O M205 já custou **12 recusas** (DGB, 28/08) por existir com valor zero.
+ * Esta regra é a outra metade: ele existir com o valor ERRADO — que o PVA
+ * cobra e que ninguém confere a olho, porque são dois números plausíveis em
+ * linhas diferentes.
+ */
+export function conferirSomaDosM205(linhas) {
+    const erros = [];
+    const lista = linhas || [];
+    const pares = [['M200', 'M205', 'PIS'], ['M600', 'M605', 'COFINS']];
+    for (const [pai, filho, trib] of pares) {
+        const regDe = (l) => String(camposDaLinha(l)[0] || '').trim();
+        const linhaPai = lista.find((l) => regDe(l) === pai);
+        if (!linhaPai) continue;
+        const filhos = lista.filter((l) => regDe(l) === filho);
+        if (!filhos.length) continue;
+        // O NUM_CAMPO separa as duas seções: somar tudo junto compararia o
+        // detalhamento do cumulativo com o total do não-cumulativo.
+        for (const [numCampo, campoPai] of [['08', 8], ['12', 12]]) {
+            // NUM_CAMPO é o campo 02 (índice 1) e VL_DEBITO o 04 (índice 3).
+            const doGrupo = filhos.filter((l) => String(camposDaLinha(l)[1] || '').trim().padStart(2, '0') === numCampo);
+            if (!doGrupo.length) continue;
+            const soma = doGrupo.reduce((a, l) => a + num(camposDaLinha(l)[3]), 0);
+            const total = num(camposDaLinha(linhaPai)[campoPai - 1]);
+            if (Math.abs(Math.round(soma * 100) - Math.round(total * 100)) > 1) {
+                erros.push({
+                    regra: 'm205-soma', registro: filho, campo: '4 - VL_DEBITO', linha: doGrupo[0],
+                    valor: soma.toFixed(2), esperado: total.toFixed(2),
+                    mensagem: `Os ${doGrupo.length} ${filho} (${trib}) somam ${soma.toFixed(2)} e o campo `
+                        + `${campoPai} do ${pai} diz ${total.toFixed(2)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. É por este detalhamento que o débito '
+                        + 'chega à DCTF: divergir aqui declara o imposto no código de receita errado.',
+                    fonte: `Guia Prático da EFD-Contribuições 1.35, ${filho}: "O somatório dos valores `
+                        + 'informados no campo 04 (VL_DEBITO) informado neste registro, deve corresponder ao '
+                        + `valor constante de contribuição a recolher, do Registro Pai ${pai}".`,
+                });
+            }
+        }
+    }
+    return { erros };
+}
+
+/**
+ * Os estabelecimentos: o 0140 é o CADASTRO, e A010/C010/D010/F010 apontam
+ * para ele.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35. No **0140**: campo 04
+ * (CNPJ) *"Validação: será conferido o dígito verificador (DV) do CNPJ
+ * informado"* e campo 07 (COD_MUN) *"o valor informado no campo deve existir na
+ * Tabela de Municípios do IBGE, possuindo 7 dígitos"*. E em **A010, C010, D010
+ * e F010**, a MESMA frase: *"é conferido o dígito verificador (DV) do CNPJ
+ * informado. O estabelecimento informado neste registro deve está cadastrado no
+ * Registro 0140"*.
+ *
+ * 🚨 É a família do participante do 0150 e do item do 0200 ÓRFÃOS — registro
+ * que referencia um cadastro que o arquivo não traz —, e as duas já custaram
+ * rodada de PVA (MANTOAN e PWR, 19/08).
+ *
+ * ⚠️ **O município NÃO é conferido contra a tabela do IBGE**: ela não está
+ * neste repo, e reconstruí-la de memória seria inventar tabela oficial (a
+ * família do `1405`). O que se confere é o que o Guia diz sem tabela nenhuma —
+ * **7 dígitos**.
+ */
+export function conferirEstabelecimentosContrib(linhas) {
+    const erros = [];
+    const lista = linhas || [];
+    const regDe = (l) => String(camposDaLinha(l)[0] || '').trim();
+    const digitos = (v) => String(v ?? '').replace(/\D/g, '');
+
+    const cadastrados = new Set();
+    for (const l of lista) {
+        if (regDe(l) !== '0140') continue;
+        const c = camposDaLinha(l);
+        const cnpj = digitos(c[3]);          // campo 04
+        const codMun = digitos(c[6]);        // campo 07
+        if (cnpj) cadastrados.add(cnpj);
+        if (cnpj && !validarCnpj(cnpj)) {
+            erros.push({
+                regra: '0140-estabelecimento', registro: '0140', campo: '4 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'CNPJ com DV válido',
+                mensagem: `O CNPJ do estabelecimento (${cnpj}) não passa no dígito verificador.`,
+                acao: 'Confira o CNPJ da empresa em Empresas → Dados Fiscais.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0140 campo 04, Validação: "será conferido o '
+                    + 'dígito verificador (DV) do CNPJ informado".',
+            });
+        }
+        if (codMun.length !== 7) {
+            erros.push({
+                regra: '0140-estabelecimento', registro: '0140', campo: '7 - COD_MUN', linha: l,
+                valor: codMun || '', esperado: '7 dígitos',
+                mensagem: `O código do município do estabelecimento tem ${codMun.length} dígito(s), e o `
+                    + 'leiaute exige 7.',
+                acao: 'Preencha o código IBGE do município em Empresas → Dados Fiscais.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0140 campo 07, Validação: "o valor informado '
+                    + 'no campo deve existir na Tabela de Municípios do IBGE, possuindo 7 dígitos".',
+            });
+        }
+    }
+
+    // A010/C010/D010/F010 — o CNPJ é o campo 02 em todos.
+    for (const l of lista) {
+        const reg = regDe(l);
+        if (!['A010', 'C010', 'D010', 'F010'].includes(reg)) continue;
+        const cnpj = digitos(camposDaLinha(l)[1]);
+        if (!cnpj) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: '', esperado: 'CNPJ do estabelecimento',
+                mensagem: `O ${reg} abriu o bloco sem CNPJ do estabelecimento.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02: campo obrigatório.`,
+            });
+            continue;
+        }
+        if (!validarCnpj(cnpj)) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'CNPJ com DV válido',
+                mensagem: `O CNPJ do ${reg} (${cnpj}) não passa no dígito verificador.`,
+                acao: 'Confira o CNPJ da empresa em Empresas → Dados Fiscais.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02, Validação: "é conferido o `
+                    + 'dígito verificador (DV) do CNPJ informado".',
+            });
+            continue;
+        }
+        if (cadastrados.size && !cadastrados.has(cnpj)) {
+            erros.push({
+                regra: 'estabelecimento-orfao', registro: reg, campo: '2 - CNPJ', linha: l,
+                valor: cnpj, esperado: 'estabelecimento declarado no 0140',
+                mensagem: `O ${reg} aponta o estabelecimento ${cnpj}, que o 0140 não declara.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recusa bloco que abre em '
+                    + 'estabelecimento que a Tabela de Cadastro não conhece.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02: "O estabelecimento `
+                    + 'informado neste registro deve está cadastrado no Registro 0140".',
+            });
+        }
+    }
+    return { erros };
+}
+
+/**
+ * O M100/M500 (crédito) fecha consigo mesmo.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro M100:
+ *  · campo 12 **VL_CRED_DISP** = *"Valor Total do Crédito Disponível relativo
+ *    ao Período (08 + 09 – 10 – 11)"*;
+ *  · campo 14 **VL_CRED_DESC**: *"Se IND_DESC_CRED=0, informar o valor total
+ *    do Campo 12; Se IND_DESC_CRED=1, informar o valor parcial do Campo 12"*;
+ *  · campo 15 **SLD_CRED** = *"Saldo de créditos a utilizar em períodos
+ *    futuros (12 – 14)"*.
+ *
+ * 🚨 **POR QUE ELA NASCEU (29/08)**: o gerador punha o crédito no campo 08
+ * (certo), **de novo no 09** (ajuste de acréscimo que não existe) e **de novo
+ * no 11** (crédito DIFERIDO — "não usei nada neste período"), com o campo 12
+ * (disponível) em **ZERO** e os campos 13 e 15, `Obrig. S`, VAZIOS. A conta do
+ * Guia dava o crédito inteiro e o registro dizia zero — e o campo 14 descontava
+ * um valor que o 12 afirmava não existir.
+ *
+ * É a família do M210 da MANTOAN (18/08): a CONTAGEM de campos está certa, e
+ * por isso `conferirContagemDeCampos` não vê — quem vê é a conta.
+ *
+ * ⚠️ Só não apareceu ainda porque o M100/M500 sai apenas no NÃO-cumulativo com
+ * crédito de entrada, e as seis empresas fechadas por recibo são todas
+ * CUMULATIVAS — a mesma sorte do IPI em E200/E210 e do Bloco H zerado.
+ */
+export function conferirCreditoDoM100(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg !== 'M100' && reg !== 'M500') continue;
+        const v = (n) => num(c[n - 1]);
+        const cent = (x) => Math.round(x * 100);
+        const trib = reg === 'M100' ? 'PIS' : 'COFINS';
+
+        const disp = v(8) + v(9) - v(10) - v(11);
+        if (Math.abs(cent(v(12)) - cent(disp)) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '12 - VL_CRED_DISP', linha: l,
+                valor: v(12).toFixed(2), esperado: disp.toFixed(2),
+                mensagem: `O ${reg} (${trib}) declara crédito disponível de ${v(12).toFixed(2)} e a conta do `
+                    + `Guia (08+09-10-11) dá ${disp.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É deste campo que sai o crédito descontado '
+                    + 'no M200.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 12: "Valor Total do Crédito `
+                    + 'Disponível relativo ao Período (08 + 09 – 10 – 11)".',
+            });
+        }
+        const saldo = v(12) - v(14);
+        if (Math.abs(cent(v(15)) - cent(saldo)) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '15 - SLD_CRED', linha: l,
+                valor: v(15).toFixed(2), esperado: saldo.toFixed(2),
+                mensagem: `O ${reg} (${trib}) declara saldo de ${v(15).toFixed(2)} e a conta do Guia (12-14) `
+                    + `dá ${saldo.toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. Este saldo é o crédito que a empresa leva '
+                    + 'para os períodos seguintes.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 15: "Saldo de créditos a `
+                    + 'utilizar em períodos futuros (12 – 14)".',
+            });
+        }
+        // 📖 Campo 13: 0 = usa o total do campo 12; 1 = usa parcial.
+        const ind = String(c[12] || '').trim();
+        if (!['0', '1'].includes(ind)) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '13 - IND_DESC_CRED', linha: l,
+                valor: ind, esperado: '0 ou 1',
+                mensagem: `O ${reg} (${trib}) não diz se usou o crédito por inteiro ou em parte.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print. É campo obrigatório.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 13 (Obrig. S): "0 – Utilização `
+                    + 'do valor total para desconto da contribuição apurada no período".',
+            });
+        } else if (ind === '0' && Math.abs(cent(v(14)) - cent(v(12))) > 1) {
+            erros.push({
+                regra: 'm100-fechamento', registro: reg, campo: '14 - VL_CRED_DESC', linha: l,
+                valor: v(14).toFixed(2), esperado: v(12).toFixed(2),
+                mensagem: `O ${reg} (${trib}) diz que usou o crédito por INTEIRO (IND_DESC_CRED = 0) e `
+                    + `desconta ${v(14).toFixed(2)} de um disponível de ${v(12).toFixed(2)}.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 14: "Se IND_DESC_CRED=0, `
+                    + 'informar o valor total do Campo 12".',
+            });
+        }
+    }
+    return { erros };
+}
+
 export function avisosDaPrevalidacaoContrib(linhas) {
     const todos = [
         ...conferirC170DeNfce(linhas).erros,
+        ...conferirC175DaNfce(linhas).erros,
         ...conferirBlocoDContrib(linhas).erros,
         ...conferirAritmeticaPisCofins(linhas).erros,
         ...conferirPeriodoDoArquivo(linhas).erros,
@@ -999,6 +1593,8 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirSomaDosItensContrib(linhas).erros,
         ...conferirCadastrosOrfaosContrib(linhas).erros,
         ...conferirCodItemDosItens(linhas).erros,
+        // 🚨 O campo que barra o ARQUIVO INTEIRO (INSTITUTO HAYAY, 03/09).
+        ...conferirCodPartDoA100(linhas).erros,
         ...conferirIndOrigCredDasEntradas(linhas).erros,
         ...conferirRetencaoDoBlocoM(linhas).erros,
         ...conferirCstPisCofins(linhas).erros,
@@ -1013,8 +1609,35 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // (no ICMS/IPI é o 5). Carimbar a posição do vizinho faria a regra ler
         // o nome da empresa como se fosse data.
         ...conferirCodModContraChave(linhas),
+        // NUM_DOC vazio/divergente da chave — os dez primeiros campos do C100 e
+        // do D100 são os mesmos nas duas famílias (18/09, EDUARDO GUERRA).
+        ...conferirNumDocContraChave(linhas),
+        ...conferirCodPartDoC100(linhas),
+        // 🚨 O 0150 é o MESMO registro nas duas famílias, e o campo 10
+        // (ENDERECO) é obrigatório SEM condição — 732 recusas num arquivo só
+        // (VINATEX, 18/09). Deixá-la numa família é a meia trava de sempre.
+        ...conferirEnderecoDo0150(linhas),
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
         ...conferirConsolidacao1900(linhas).erros,
+        ...conferirM205ComValorZero(linhas).erros,
+        ...conferirAjustesDoM210(linhas).erros,
+        // 🚨 O 0100 tinha DEFAULT INVENTADO nos dois geradores (29/08) —
+        // 'CONTADOR SP CONTABIL' e '1SP123456/O-7'. Apagado o default, o campo
+        // sai VAZIO, e vazio o PVA acusa: esta regra o pega antes.
+        ...conferirContador0100(linhas),
+        // 🚨 O M200 já se desmentiu por dentro (campo 04 zerado com o 07 cheio,
+        // 24/08) e o M205 já custou 12 recusas (28/08) — e nenhuma das duas
+        // aritméticas que o Guia escreve por extenso era conferida.
+        ...conferirFechamentoDoM200(linhas).erros,
+        ...conferirSomaDosM205(linhas).erros,
+        // 📖 O 0140 é o CADASTRO de estabelecimento e A010/C010/D010/F010
+        // apontam para ele — a família do 0150/0200 órfãos, que já custou
+        // rodada de PVA nas duas pontas (MANTOAN e PWR, 19/08).
+        ...conferirEstabelecimentosContrib(linhas).erros,
+        // 🚨 O M100/M500 se desmentia por dentro: o crédito aparecia como
+        // AJUSTE e como DIFERIDO, e o disponível saía ZERO. Contagem de campos
+        // certa, casas trocadas — a família do M210 da MANTOAN (18/08).
+        ...conferirCreditoDoM100(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

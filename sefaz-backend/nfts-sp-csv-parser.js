@@ -110,6 +110,15 @@ export function parseCsvNftsSp(input) {
 
     const cabecalho = parseCsvLine(linhas[0]);
     const col = mapearColunas(cabecalho);
+    // 🚨 O QUE O APP LEU SAI JUNTO (03/09, Paulo: *"o CSV por causa do
+    // layout"*). Sem isto a recusa dizia *"este arquivo não parece o export de
+    // NFTS"* — afirmação sobre a POSSE do arquivo, que manda procurar no
+    // portal um export que já está certo. Quem sabe quais colunas vieram é o
+    // app, e é ele que responde: com o cabeçalho na mão, a versão nova do
+    // layout se mapeia numa mensagem (a régua do `xmlOndeEstaOCnpj`, 02/09).
+    const cabecalhoLido = cabecalho.map((c) => String(c || '').trim()).filter(Boolean);
+    const colunasReconhecidas = Object.entries(col)
+        .filter(([, i]) => i !== null).map(([campo]) => COLUNAS[campo]);
 
     // Coluna essencial ausente ⇒ NÃO é export de NFTS (ou o layout mudou). Não
     // se adivinha posição: quem chama recebe a lista e decide o que dizer.
@@ -198,6 +207,8 @@ export function parseCsvNftsSp(input) {
         }));
 
     return {
+        cabecalhoLido,
+        colunasReconhecidas,
         notas,
         totalDeclarado,
         valorServicosDeclarado,

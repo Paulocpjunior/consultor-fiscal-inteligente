@@ -4,6 +4,10 @@
  * (puro e testado), porque é ela que decide o que vai declarado à SEFAZ.
  */
 import { getAuth } from 'firebase/auth';
+// A forma do resultado e a FRASE dele têm dono único: a mesma rota é chamada
+// pela 🌾 DIPAM e pela ✏️ CFOP por nota, e duas descrições do mesmo resultado
+// divergem no primeiro campo novo.
+import type { ReleituraParticipantes } from './relerParticipantes';
 
 export interface DipamPendencia {
     codigo: string;
@@ -106,13 +110,20 @@ export interface DipamPainel {
         tiradosPorDecisao?: Array<{
             doc: string | null;
             fornecedor: string | null;
-            decisao: 'nao_aplica' | 'folha';
+            /**
+             * `nota-nao-aplica` é a decisão de UMA nota (30/08, caso COSME): o
+             * mesmo produtor tem nota que fica e nota que sai, e antes o ✕
+             * tirava todas — inclusive a nota própria de entrada do art. 136.
+             */
+            decisao: 'nao_aplica' | 'folha' | 'nota-nao-aplica';
             rotulo: string;
-            /** Só o ✕ se desfaz na linha; a opção pela FOLHA é do cadastro. */
+            /** O ✕ e a decisão por nota se desfazem na linha; a FOLHA é do cadastro. */
             reversivelNaLinha: boolean;
             notas: number;
             valor: number;
             funruralPotencial: number;
+            /** Chaves das notas tiradas uma a uma — é o que o ↩ devolve. */
+            chaves?: string[];
         }>;
     };
     notas?: any[];
@@ -233,7 +244,7 @@ export const salvarProdutorRural = (produtor: Partial<ProdutorRural> & { doc: st
  * seria pedir trabalho por algo que já existe.
  */
 export const relerMunicipiosDipam = (empresaId: string, competencia: string) =>
-    req<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; acao: string | null }>(
+    req<ReleituraParticipantes>(
         '/api/admin/dipam/reler-municipios', {
             method: 'POST',
             body: JSON.stringify({ empresaId, competencia }),

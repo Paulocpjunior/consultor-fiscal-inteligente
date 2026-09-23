@@ -84,7 +84,27 @@ describe('🚨 aviso ao usuário aponta TELA, não chave do banco', () => {
                 .toEqual({ rel, ok: true });
         diz('sefaz-backend/sync-orchestrator-cte.js', 'Empresas → Dados Fiscais');
         diz('sefaz-backend/sped-bloco-h.js', 'aba 📦 Inventário (Bloco H)');
-        diz('sefaz-backend/caixa-postal-provider.js', 'Empresas → Dados Fiscais');
+        // ⚠️ A do canal da Prefeitura de SP MUDOU DE CASA em 29/08, e a trava
+        // literal reprovou a própria correção — a 7ª vez desta família.
+        //
+        // A mensagem vivia no `caixa-postal-provider.js` e dizia "preencha o
+        // CCM" para a carteira INTEIRA, porque o `ccmSp` nunca era passado.
+        // Agora quem responde é o DONO (`caixa-postal-prefeitura-sp.js`), e ele
+        // só manda preencher quem é de SP CAPITAL — para os demais o campo não
+        // existe e mandar preencher era o aviso que não resolve.
+        diz('sefaz-backend/caixa-postal-prefeitura-sp.js', 'Empresas → Dados Fiscais');
+    });
+
+    // 🚨 E a MESMA classe, um passo adiante: a mensagem tem de apontar um lugar
+    // que RESOLVA. Mandar preencher o CCM em empresa que não é de SP capital
+    // aponta uma tela que existe e um campo que ela não tem — a pessoa procura,
+    // preenche, e nada muda.
+    it('o canal da Prefeitura de SP não manda preencher CCM em quem não é da capital', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { canalPrefeituraSp } = require('../sefaz-backend/caixa-postal-prefeitura-sp.js');
+        const fora = canalPrefeituraSp({ dadosFiscais: { codMunIBGE: '3518800' } });
+        expect(fora.situacao).toBe('nao-se-aplica');
+        expect(String(fora.motivo)).not.toMatch(/Dados Fiscais/);
     });
 
     // O achado que abriu a classe: o aviso mandava cadastrar num lugar que não

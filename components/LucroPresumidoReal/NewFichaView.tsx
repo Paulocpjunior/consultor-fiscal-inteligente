@@ -28,6 +28,9 @@ import {
 } from '../Icons';
 import { CurrencyInput, ToggleSwitch } from './inputs';
 import { avaliarPresuncaoReduzida16, avisoPeriodoApuracao } from '../../services/lucroService';
+import type {
+    PropostaSaldoAnterior, AvisoSaldoAnterior, TributoComTransporte,
+} from '../../services/saldoAnteriorProposto';
 import BaseCreditoModal from './BaseCreditoModal';
 
 interface NewFichaViewProps {
@@ -105,6 +108,10 @@ interface NewFichaViewProps {
     saldoCredorIpi: number; setSaldoCredorIpi: (v: number) => void;
     saldoCredorIcmsTransportar: number | null; setSaldoCredorIcmsTransportar: (v: number | null) => void;
     saldoCredorIpiTransportar: number | null; setSaldoCredorIpiTransportar: (v: number | null) => void;
+    /** O que a competência ANTERIOR mandou transportar (régua em services/). */
+    propostaSaldoAnterior: PropostaSaldoAnterior;
+    avisosSaldoAnterior: AvisoSaldoAnterior[];
+    onAplicarSaldoAnterior: (tributo: TributoComTransporte, valor: number) => void;
     saldoCredorPis: number; setSaldoCredorPis: (v: number) => void;
     saldoCredorCofins: number; setSaldoCredorCofins: (v: number) => void;
 
@@ -482,6 +489,45 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                         </div>
                     )}
 
+                    {/* 🔁 O QUE A COMPETÊNCIA ANTERIOR MANDOU TRANSPORTAR —
+                        Paulo, 15/09 (PWR 07→08/2026): a ficha de 07 dizia
+                        "IPI a transportar p/ 08/2026: R$ 4.747,84" e a de 08
+                        nascia com 0,00. Quem apura tinha de digitar de novo, e
+                        esquecer significa GUIA a maior — com o SPED declarando
+                        o crédito assim mesmo, porque ele já lê o transporte da
+                        anterior quando este campo está vazio.
+                        ⚠️ A tela não decide nada: a régua mora em
+                        services/saldoAnteriorProposto.ts e o clique é de quem
+                        apura. */}
+                    {p.avisosSaldoAnterior.length > 0 && (
+                        <div className="mb-3 space-y-2">
+                            {p.avisosSaldoAnterior.map(a => (
+                                <div
+                                    key={`${a.tributo}-${a.causa}`}
+                                    className={`text-[11px] p-2 rounded border ${a.causa === 'zerado-com-transporte'
+                                        ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}
+                                >
+                                    <p className="font-bold">
+                                        {a.tributo}: {a.proposto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        {' '}a transportar · nesta ficha:{' '}
+                                        {a.atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </p>
+                                    <p className="mt-0.5">{a.texto}</p>
+                                    {a.causa === 'zerado-com-transporte' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => p.onAplicarSaldoAnterior(a.tributo, a.proposto)}
+                                            className="btn-press mt-1 px-2 py-1 rounded bg-amber-600 text-white font-bold whitespace-nowrap"
+                                        >
+                                            Trazer {a.proposto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para o campo
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <CurrencyInput
                             label="Saldo Credor ICMS (Mês Anterior)"
@@ -526,6 +572,28 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                             className="bg-sky-50 dark:bg-sky-900/10 p-2 rounded border border-sky-200 dark:border-sky-800"
                         />
                     </div>
+
+                    {/* O CARIMBO DA ORIGEM — número que veio de outra ficha não
+                        se apresenta como se tivesse sido apurado aqui. Só
+                        aparece para o tributo cujo campo está DE FATO com o
+                        valor proposto: some assim que alguém digita outro. */}
+                    {p.propostaSaldoAnterior.itens
+                        .filter(i => i.origem === 'ficha-anterior' && i.valor != null && i.valor > 0
+                            && Math.round((i.tributo === 'ICMS' ? p.saldoCredorIcms : p.saldoCredorIpi) * 100)
+                                === Math.round((i.valor || 0) * 100))
+                        .map(i => (
+                            <p key={i.tributo} className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">
+                                🔁 {i.texto}
+                            </p>
+                        ))}
+
+                    {/* PIS e COFINS ficam de fora da proposta, e isso vai DITO:
+                        a ficha não tem o par "a transportar" deles, então não há
+                        de onde herdar — propor por analogia seria inventar saldo
+                        federal a partir de uma régua estadual. */}
+                    <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                        PIS e COFINS não são propostos: a ficha não tem campo de saldo a transportar para eles.
+                    </p>
                 </div>
             </div>
 

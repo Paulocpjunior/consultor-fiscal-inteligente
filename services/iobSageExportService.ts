@@ -8,11 +8,19 @@ import { buildFile, buildRecord, LAYOUT_VERSION } from './iobSageLayout';
 import { LAYOUT } from './iobSageLayoutData';
 // MESMA regra de correlação do backend — CFOP de entrada não se duplica aqui.
 import { cfopDoLancamento } from '../sefaz-backend/cfop-correlacao.js';
+import type { ParametroCfop } from '../sefaz-backend/cfop-cerebro.js';
 // Régua ÚNICA de cancelamento — o campo `status` mente quando o cancelamento
 // chega por evento (caso MV LIDER 639, 11/08).
-import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+import {
+    docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento,
+    ehEntradaDoEmitente, MOTIVO_ENTRADA_DO_EMITENTE,
+} from '../sefaz-backend/xml-metadata-helper.js';
 // O LADO da contraparte tem dono — ver o comentário em `participanteDoDoc`.
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
+// 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
+// na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
+import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
+import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -153,6 +161,18 @@ interface ExportarParams {
     /** Documentos a exportar. */
     documentos: DocumentoFiscal[];
     /**
+     * CNPJ de quem ESCRITURA — é ele que separa a nota própria de entrada
+     * NOSSA (art. 136) da nota de entrada do FORNECEDOR (`tpNF=0` dele), que
+     * não é operação desta empresa e não vai ao `.FML`.
+     *
+     * Opcional no tipo só porque a régua tem o fallback do próprio documento
+     * (`d.empresaCnpj`), mas os DOIS caminhos de produção — o botão Exportar e
+     * o preflight — têm de passar: `__tests__/entradaDoEmitente.test.ts` varre
+     * as duas chamadas. Preflight que não passasse prometeria um arquivo
+     * diferente do que sai, que é o defeito de 12/08.
+     */
+    empresaCnpj?: string;
+    /**
      * Código do "Tipo para o Inventário" (E020 campo 11) como cadastrado no
      * E-Fiscal do cliente. Vazio (padrão) = não informar.
      */
@@ -282,17 +302,38 @@ export function serieDaNota(d: DocumentoFiscal): string {
 export interface CfopCtx {
     naturezaAtividade?: string | null;
     cfopOverrides?: Record<string, string> | null;
+    /**
+     * 🧠 Parâmetros do cérebro (por fornecedor). Entram entre a decisão da NF e
+     * o override da empresa — sem eles aqui, o .FML e o preflight gravavam o
+     * CFOP da régua automática num fornecedor que a pessoa já tinha ensinado
+     * (07/09: só a aba ✏️ CFOP por nota os passava).
+     */
+    parametrosCfop?: ParametroCfop[] | null;
+    /**
+     * Regime de quem ESCRITURA (vocabulário de `regime-tributario.js`). Ele não
+     * decide CFOP — decide o CRÉDITO de ICMS da entrada, e por isso viaja no
+     * MESMO contexto: quem monta o ctx da escrituração já tem a empresa na mão,
+     * e um segundo parâmetro seria mais um que dá para esquecer.
+     *
+     * ⚠️ Ausente NÃO é "sem crédito": `entradaGeraCreditoIcms` mantém o
+     * comportamento antigo quando o regime não é conhecido.
+     */
+    regimeTributario?: string | null;
 }
 
 export function cfopParaEscriturar(
-    cfop: string | undefined, direcao: string, ctx?: CfopCtx, doc?: any,
+    cfop: string | undefined, direcao: string, ctx: CfopCtx | undefined, doc: any, item: any,
 ): string {
     // `doc` traz o CFOP informado NA NF — decisão humana naquela nota, que vence
-    // o override da empresa e a régua automática. Sem ele nada muda.
+    // o override da empresa e a régua automática. `item` traz o informado NO
+    // ITEM (11/09, Sandra — nota mista), que vence o da nota. Os dois são
+    // obrigatórios (registro `consumidoresMedidos`): sem o item o .FML gravaria
+    // no item com ST o CFOP do item sem, calado.
     return cfopDoLancamento(doc, cfop || '', direcao === 'entrada' ? 'entrada' : 'saida', {
         naturezaAtividade: ctx?.naturezaAtividade ?? null,
         cfopOverrides: ctx?.cfopOverrides ?? null,
-    });
+        parametrosCfop: ctx?.parametrosCfop ?? null,
+    }, item);
 }
 
 /**
@@ -537,18 +578,122 @@ function buildE020(
  *   demais (51/60/90, CSOSN…)   → OUTRAS = valor do item
  * O que sobrar do contábil (IPI, frete, seguro, despesas, ST) vai em OUTRAS —
  * é a regra do livro. Centavo de ajuste fecha na maior coluna.
+ *
+ * ═══ O `ctx` É OBRIGATÓRIO POR CONSTRUÇÃO, E O MOTIVO É CARO ════════════════
+ *
+ * Ela recebia SÓ os itens, então não conhecia nem quem escritura nem a decisão
+ * de quem olhou a nota. Duas consequências, as duas medidas em 09/09 na MV
+ * LIDER (comércio do SIMPLES):
+ *
+ * 1. **Creditava ICMS de optante do Simples.** O `vICMS` do item é o destaque
+ *    da operação do FORNECEDOR; optante não se credita (LC 123 art. 23), e
+ *    aquilo é coluna Outras. O livro dela somava R$ 2.623,17 de crédito que
+ *    não existe — e o PVA/E-Fiscal aceita, porque as três colunas fecham.
+ * 2. **O CST informado por nota (`cstEscriturado`, 19/08) não chegava aqui.**
+ *    Ele valia no C170/C190 e não no LIVRO: informar o CST não tirava o
+ *    crédito da tela em que a pessoa estava olhando — a "régua que só escreve".
+ *
+ * Por isso `ctx` NÃO tem default: parâmetro que dá para esquecer volta a
+ * creditar em silêncio, e o número fica plausível (a mesma razão pela qual
+ * `resumoPorCfop` exige o `ctx` da correlação).
  */
+export interface CtxAlocacaoIcms {
+    /**
+     * CST de tributação informado NAQUELA nota. Vence o CST do item — quem
+     * informou olhou o papel. `null`/vazio = a nota segue o XML.
+     */
+    cstEscriturado?: string | null;
+    /**
+     * CST de tributação informado POR ITEM (`escrituracaoItens[nItem].cst`,
+     * 11/09 — o caso da Sandra: item com ST e item sem na MESMA nota). Vence o
+     * da nota no item que o tem; os outros itens seguem `cstEscriturado`.
+     * Chave = `chaveDoItem(it)`.
+     */
+    cstEscrituradoItens?: Record<string, string> | null;
+    /**
+     * `true` quando quem escritura NÃO se credita de ICMS (optante do Simples).
+     * Quem responde é `entradaGeraCreditoIcms`, nunca um `if` de tela.
+     */
+    semCreditoIcms?: boolean;
+    /**
+     * `true` quando quem escritura NÃO se credita de IPI (optante do Simples).
+     * A coluna IPI do Livro de Entradas é IPI CREDITADO — deixá-la cheia numa
+     * optante é a mesma afirmação falsa que a base e o ICMS faziam.
+     */
+    semCreditoIpi?: boolean;
+}
+
+/**
+ * Monta o `ctx` da alocação a partir do DOCUMENTO e do contexto da empresa.
+ *
+ * Dono único de propósito: os três leitores das colunas (Livro, Resumo por
+ * CFOP e Exportar SAGE) precisam responder IGUAL sobre a mesma nota — se cada
+ * um montar o seu, o livro dirá uma coisa e o `.FML` outra, que é a divergência
+ * que esta casa mais paga.
+ */
+export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocacaoIcms {
+    const direcao = direcaoEfetivaDoc(d);
+    const regime = ctxEmpresa?.regimeTributario ?? null;
+    const credito = entradaGeraCreditoIcms({ regime, direcao });
+    const creditoIpi = entradaGeraCreditoIpi({ regime, direcao });
+    const porItem: Record<string, string> = {};
+    const mapa = d?.escrituracaoItens;
+    if (mapa && typeof mapa === 'object') {
+        for (const [k, e] of Object.entries(mapa as Record<string, any>)) {
+            const cst = String(e?.cst ?? '').replace(/\D/g, '');
+            if (cst) porItem[String(Number(k))] = cst;
+        }
+    }
+    return {
+        cstEscriturado: d?.cstEscriturado ?? null,
+        cstEscrituradoItens: Object.keys(porItem).length ? porItem : null,
+        semCreditoIcms: !credito.credita,
+        semCreditoIpi: !creditoIpi.credita,
+    };
+}
+
 export function alocarTributacaoIcms(
     itens: DocumentoFiscalItem[],
     contabilAlvo: number,
-): { base: number; icms: number; aliquota: number; isentos: number; outras: number; ipi: number } {
+    ctx: CtxAlocacaoIcms,
+): {
+    base: number; icms: number; aliquota: number; isentos: number; outras: number;
+    /** IPI **creditado**. Zero em quem não se credita — a coluna é de crédito. */
+    ipi: number;
+    /** O IPI destacado que virou CUSTO (já dentro de Outras). Só informa. */
+    ipiCusto: number;
+    /**
+     * ICMS-ST retido pelo fornecedor. NUNCA é crédito, em regime nenhum: é
+     * custo, e já está dentro de Outras. Existe para o livro poder DIZER —
+     * antes ele ficava invisível, e foi essa a pergunta do Paulo em 09/09
+     * (*"por que ele puxa IPI e não puxa ICMS ST?"*).
+     */
+    st: number;
+} {
     const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-    let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0;
+    const colunaDaNota = colunaDoCstInformado(ctx?.cstEscriturado);
+    const semCredito = ctx?.semCreditoIcms === true;
+    const semCreditoIpi = ctx?.semCreditoIpi === true;
+    let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0, st = 0;
     for (const it of itens) {
         const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
         const cst = String(it.cst || '').replace(/\D/g, '');
+        // O CST informado no ITEM vence o da NOTA (11/09) — é o que separa,
+        // na mesma NF, o item com ST (60 → Outras, já era) do item de
+        // uso/consumo (90 → Outras, sem crédito) do item que segue tributado.
+        const doItem = ctx?.cstEscrituradoItens?.[chaveDoItem(it)];
+        const colunaInformada = doItem ? colunaDoCstInformado(doItem) : colunaDaNota;
         ipi += it.vIPI || 0;
-        if ((it.vICMS || 0) > 0) {
+        st += (it as any).vICMSST || 0;
+        // O que a PESSOA informou vence o XML; depois vem o regime de quem
+        // escritura; só então o destaque do documento do fornecedor.
+        if (colunaInformada === 'isentas') {
+            isentos += valorItem;
+        } else if (colunaInformada === 'outras' || (semCredito && (it.vICMS || 0) > 0)) {
+            // ⚠️ O item vai INTEIRO para Outras — não se parte base e resto.
+            // "Sem crédito" é sobre a operação toda, não sobre uma fatia dela.
+            outras += valorItem;
+        } else if ((it.vICMS || 0) > 0) {
             base += (it.vBC || 0) > 0 ? (it.vBC as number) : valorItem;
             icms += it.vICMS || 0;
             // Base reduzida (CST 20/70): a parte fora da base é OUTRAS.
@@ -562,7 +707,13 @@ export function alocarTributacaoIcms(
             outras += valorItem;
         }
     }
-    base = r2(base); icms = r2(icms); isentos = r2(isentos); outras = r2(outras); ipi = r2(ipi);
+    base = r2(base); icms = r2(icms); isentos = r2(isentos); outras = r2(outras); ipi = r2(ipi); st = r2(st);
+    // 🚨 A COLUNA IPI DO LIVRO DE ENTRADAS É IPI **CREDITADO** — em quem não se
+    // credita ela sai ZERADA, e o valor vai DITO como custo. Nenhum total muda:
+    // o IPI já está dentro de Outras (o contábil da nota o inclui, e o `resto`
+    // abaixo o joga lá). O que muda é o livro parar de afirmar crédito.
+    const ipiCusto = semCreditoIpi ? ipi : 0;
+    if (semCreditoIpi) ipi = 0;
     // Fecha no contábil: IPI/frete/seguro/despesas/ST entram em OUTRAS.
     const resto = r2(contabilAlvo - (base + isentos + outras));
     if (resto > 0) outras = r2(outras + resto);
@@ -575,7 +726,7 @@ export function alocarTributacaoIcms(
         if (abate > 0) base = r2(Math.max(0, base - abate));
     }
     const aliquota = base > 0 && icms > 0 ? (icms / base) * 100 : 0;
-    return { base, icms, aliquota, isentos, outras, ipi };
+    return { base, icms, aliquota, isentos, outras, ipi, ipiCusto, st };
 }
 
 function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsumidor = '', ufEmpresa = '') {
@@ -713,7 +864,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
     // Agrupa itens por CFOP.
     const porCfop = new Map<string, DocumentoFiscalItem[]>();
     for (const it of d.itens || []) {
-        const cfop = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d) || '0000';
+        const cfop = cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d, it) || '0000';
         if (!porCfop.has(cfop)) porCfop.set(cfop, []);
         porCfop.get(cfop)!.push(it);
     }
@@ -737,7 +888,7 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             ? r2(contabilNota - contabilDistribuido)
             : (totalItens > 0 ? r2(contabilNota * (valorGrupo(itens) / totalItens)) : 0);
         contabilDistribuido = r2(contabilDistribuido + contabilLinha);
-        const a = alocarTributacaoIcms(itens, contabilLinha);
+        const a = alocarTributacaoIcms(itens, contabilLinha, ctxAlocacaoDoDoc(d, ctxCfop));
 
         linhas.push(buildRecord(L('E201'), {
             'ENTRADAS OU SAÍDAS': c.es,
@@ -758,6 +909,9 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'ICMS SUBST. TRIB.': 0,
             'BASE SUBST. TRIB.': 0,
             'BC IPI': 0,
+            // 🚨 IPI **CREDITADO** — zero em optante do Simples (09/09). O
+            // valor destacado continua no E222, que descreve o DOCUMENTO; o
+            // E201 é a ESCRITURAÇÃO, e ali o Simples não credita IPI.
             'VALOR DO IPI': a.ipi,
             'ISENTOS DE IPI': 0,
             'OUTRAS DE IPI': 0,
@@ -821,7 +975,7 @@ function buildE222sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
             'NÚMERO N.F.': c.numero,
             'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
             'Nº ITEM': parseInt(it.nItem || String(idx + 1), 10) || (idx + 1),
-            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d),
+            'CFOP': cfopParaEscriturar(it.cfop, direcaoDoDoc(d), ctxCfop, d, it),
             'CÓDIGO DO PRODUTO/SERVIÇO': codigoProduto(it.cProd),
             'ALÍQUOTA DO ICMS': aliquota,
             'QUANTIDADE': it.qCom || 0,
@@ -881,6 +1035,14 @@ export interface ExportarResult {
      * nele estava formalmente correto (caso 28/07: 204 produtos, zero notas).
      */
     falhas: Array<{ documento: string; motivo: string }>;
+    /**
+     * O que ficou de fora por DECISÃO da régua, não por defeito — hoje, a nota
+     * de ENTRADA DO FORNECEDOR (`tpNF=0` dele). Fica separado das `falhas` de
+     * propósito: falha pede conserto (reimportar, cadastrar UF), isto é
+     * escrituração correta, e fundir os dois faria a equipe procurar problema
+     * onde não há.
+     */
+    foraDaEscrituracao: Array<{ documento: string; motivo: string }>;
     /** Conteúdo textual do .FML — permite conferir o arquivo sem baixar/abrir. */
     conteudo: string;
     fileName: string;
@@ -914,7 +1076,23 @@ export function rotuloDocumentoFalha(d: DocumentoFiscal): string {
 }
 
 export function exportarParaIobSage(params: ExportarParams): ExportarResult {
-    const { documentos, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante } = params;
+    const { documentos: documentosCrus, numeroEmpresaEfiscal, tipoInventario = '', cfopCtx, codigosParticipantes, redfNfPaulista = '', codigoParticipanteConsumidor = '', ufPorParticipante, empresaCnpj } = params;
+    // 🚨 A ENTRADA PODE SER DO EMITENTE, NÃO NOSSA (09/09, MV LIDER · 08/2026).
+    // `tpNF=0` de TERCEIRO é o fornecedor dando entrada no estoque DELE
+    // (devolução recebida, retorno): a mercadoria entra nele, logo SAI de quem
+    // está no `<dest>`. Mandá-la no `.FML` escritura a operação do fornecedor no
+    // livro do cliente — e o E-Fiscal ACEITA, porque a linha é formalmente
+    // correta. Sai NOMEADA, nunca calada: nota que some do arquivo sem ninguém
+    // saber é livro a menor, que é o defeito que a PS VIDROS denunciou.
+    const foraDaEscrituracao: Array<{ documento: string; motivo: string }> = [];
+    const documentos = documentosCrus.filter((d) => {
+        if (!(ehEntradaDoEmitente(d, empresaCnpj) as { sim: boolean }).sim) return true;
+        foraDaEscrituracao.push({
+            documento: rotuloDocumentoFalha(d),
+            motivo: MOTIVO_ENTRADA_DO_EMITENTE,
+        });
+        return false;
+    });
     if (ufPorParticipante) definirUfPorParticipante(ufPorParticipante);
     const codConsumidor = String(codigoParticipanteConsumidor || '').trim().slice(0, 20);
     // UF da empresa: sai da chave de uma nota PRÓPRIA de saída (cUF do
@@ -923,7 +1101,12 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         ? ufDaChave(documentos.find((d) => d.direcao === 'saida' && d.chave)!.chave)
         : '') || '';
     if (!documentos.length) {
-        throw new Error('Nenhum documento para exportar.');
+        // A causa vai junto: "nenhum documento" sobre um recorte que TINHA
+        // notas manda procurar buraco de captura que não existe.
+        throw new Error(foraDaEscrituracao.length
+            ? `Nenhum documento a exportar: as ${foraDaEscrituracao.length} nota(s) do recorte são de `
+                + 'ENTRADA DO FORNECEDOR (tpNF=0 emitido por ele) e não se escrituram nesta empresa.'
+            : 'Nenhum documento para exportar.');
     }
 
     // 1. E001 (uma vez).
@@ -1052,6 +1235,7 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
         blob,
         conteudo,
         falhas,
+        foraDaEscrituracao,
         fileName,
         totalLinhas: linhas.length,
         estatisticas: {

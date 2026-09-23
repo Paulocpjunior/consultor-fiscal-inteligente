@@ -12,6 +12,7 @@ import type { LucroPresumidoEmpresa, User } from '../../types';
 import { ArrowLeftIcon, BuildingIcon, CalculatorIcon, PlusIcon } from '../Icons';
 import NfseSpAdminPanel from '../NfseSpAdminPanel';
 import DareSpModal from './DareSpModal';
+import { ccmSpDaEmpresa } from '../../sefaz-backend/ccm-sp.js';
 
 const fmtCnpj = (c?: string): string => {
     const d = String(c || '').replace(/\D/g, '');
@@ -63,7 +64,7 @@ const DetailsView: React.FC<DetailsViewProps> = ({
             <NfseSpAdminPanel
                 empresaId={empresa.id}
                 colecao="lucro_empresas"
-                ccmSpAtual={empresa.dadosFiscais?.ccmSp || empresa.ccmSp}
+                ccmSpAtual={ccmSpDaEmpresa(empresa) || undefined}
                 nfseSpAutorizadoEmAtual={empresa.nfseSpAutorizadoEm}
                 onSalvarConfig={onSalvarNfseSpConfig}
                 onShowToast={onShowToast}

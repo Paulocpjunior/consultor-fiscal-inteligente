@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, ItemFinanceiroAvulso } from '../types';
 import * as lucroPresumidoService from '../services/lucroPresumidoService';
 import { fetchCnpjFromBrasilAPI } from '../services/externalApiService';
 import { acharFichaCompetencia } from '../sefaz-backend/ipi-varredura.js';
+import {
+    proporSaldoAnterior,
+    valorPropostoDe,
+    aplicarPropostaAoCampo,
+    avisosDeSaldoAnteriorNaFicha,
+} from '../services/saldoAnteriorProposto';
 import { useConfirm } from './dialog/DialogProvider';
 import { calcularLucro, mesEncerraTrimestre } from '../services/lucroService';
 import ConferirDctfwebModal from './DCTFWeb/ConferirDctfwebModal';
@@ -126,6 +132,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const [saldoCredorIpiTransportar, setSaldoCredorIpiTransportar] = useState<number | null>(null);
     const [saldoCredorPis, setSaldoCredorPis] = useState(0);
     const [saldoCredorCofins, setSaldoCredorCofins] = useState(0);
+    /**
+     * O que a PROPOSTA pôs nos dois campos de saldo anterior — não o que está
+     * neles agora. É a diferença entre os dois que diz se a pessoa digitou
+     * (`aplicarPropostaAoCampo`): sem isso, trocar a competência reescreveria
+     * um número que alguém apurou. Ref, não estado: mudar a proposta não deve
+     * re-renderizar por si só.
+     */
+    const ultimoPropostoRef = useRef<{ icms: number | null; ipi: number | null }>({ icms: null, ipi: null });
 
     // Configurações Fiscais (Tempo Real)
     const [isEquiparacaoHospitalar, setIsEquiparacaoHospitalar] = useState(false);
@@ -144,6 +158,44 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         () => getRetencoesAcumuladasTrimestre(selectedEmpresa, fichaMes, periodoApuracao),
         [selectedEmpresa, fichaMes, periodoApuracao]
     );
+
+    /**
+     * 🔁 O SALDO CREDOR QUE VEM DO MÊS ANTERIOR (Paulo, 15/09, PWR 07→08/2026).
+     *
+     * A régua mora em `services/saldoAnteriorProposto.ts` — régua dentro de
+     * `.tsx` é régua sem prova. Aqui só se LIGA: a proposta acompanha a
+     * competência ESCOLHIDA no formulário (trocar de 09 para 08 muda a
+     * proposta), nunca a de abertura da tela.
+     */
+    const propostaSaldoAnterior = useMemo(
+        () => proporSaldoAnterior(selectedEmpresa?.fichaFinanceira, fichaMes),
+        [selectedEmpresa, fichaMes],
+    );
+
+    /**
+     * Os avisos da ficha ABERTA. Só nascem quando há divergência de verdade —
+     * ficha em dia não ganha alarme nenhum.
+     */
+    const avisosSaldoAnterior = useMemo(
+        () => avisosDeSaldoAnteriorNaFicha(propostaSaldoAnterior, { saldoCredorIcms, saldoCredorIpi }),
+        [propostaSaldoAnterior, saldoCredorIcms, saldoCredorIpi],
+    );
+
+    /**
+     * Ficha NOVA acompanha a competência: trocou o mês, troca a proposta.
+     *
+     * ⚠️ Só em ficha nova (`selectedFichaId === null`). Reabrir ficha gravada
+     * NÃO recebe proposta — o valor que está lá foi apurado por alguém, e
+     * sobrescrevê-lo mudaria imposto pelas costas de quem o digitou.
+     */
+    useEffect(() => {
+        if (view !== 'new_ficha' || selectedFichaId !== null) return;
+        const icmsProposto = valorPropostoDe(propostaSaldoAnterior, 'ICMS');
+        const ipiProposto = valorPropostoDe(propostaSaldoAnterior, 'IPI');
+        setSaldoCredorIcms(prev => aplicarPropostaAoCampo(prev, ultimoPropostoRef.current.icms, icmsProposto));
+        setSaldoCredorIpi(prev => aplicarPropostaAoCampo(prev, ultimoPropostoRef.current.ipi, ipiProposto));
+        ultimoPropostoRef.current = { icms: icmsProposto, ipi: ipiProposto };
+    }, [view, selectedFichaId, propostaSaldoAnterior]);
 
     useEffect(() => {
         loadEmpresas();
@@ -305,7 +357,23 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
         setFichaMonofasico(0); setIsMonofasicoOption(false);
         setFichaIpiRecolher(0); setFichaIcmsProprio(0); setFichaIcmsSt(0);
         setAjustesLucroRealAdicoes(0); setAjustesLucroRealExclusoes(0);
+        // Os dois de "mês anterior" nascem zerados e o useEffect da proposta os
+        // preenche a partir do "a TRANSPORTAR" da competência anterior — por
+        // isso o ref volta a null aqui, senão a proposta da ficha ANTERIOR
+        // contaria como "já aplicada" e a nova não entraria.
         setSaldoCredorIcms(0); setSaldoCredorIpi(0); setSaldoCredorPis(0); setSaldoCredorCofins(0);
+        ultimoPropostoRef.current = { icms: null, ipi: null };
+        /**
+         * 🚨 O RESET NÃO ZERAVA OS "A TRANSPORTAR" (achado de 15/09, no caminho
+         * do caso PWR). Quem abria a ficha de julho e clicava em nova ficha
+         * levava o transporte de JULHO grudado na de agosto — a tela passava a
+         * afirmar ao cliente um saldo de agosto que ninguém apurou. É o mesmo
+         * defeito do saldo anterior, na direção contrária.
+         *
+         * ⚠️ `null`, nunca 0: "não informado" e "o crédito acabou" são respostas
+         * diferentes, e o relatório imprime cada uma de um jeito.
+         */
+        setSaldoCredorIcmsTransportar(null); setSaldoCredorIpiTransportar(null);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoFinanceira(0);
         setAcumuladoComercio(0); setAcumuladoIndustria(0); setAcumuladoServico(0); setAcumuladoServicoHospitalar(0); setAcumuladoAluguel(0);
         setSaldoAnteriorLc224(0);
@@ -804,6 +872,15 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             saldoCredorIpiTransportar={saldoCredorIpiTransportar} setSaldoCredorIpiTransportar={setSaldoCredorIpiTransportar}
             saldoCredorPis={saldoCredorPis} setSaldoCredorPis={setSaldoCredorPis}
             saldoCredorCofins={saldoCredorCofins} setSaldoCredorCofins={setSaldoCredorCofins}
+            propostaSaldoAnterior={propostaSaldoAnterior}
+            avisosSaldoAnterior={avisosSaldoAnterior}
+            onAplicarSaldoAnterior={(tributo, valor) => {
+                // Aplicar é DECISÃO da pessoa, então ela vence a proposta daqui
+                // em diante: o ref passa a guardar o valor aplicado, senão uma
+                // troca de competência o desfaria sem ninguém pedir.
+                if (tributo === 'ICMS') { setSaldoCredorIcms(valor); ultimoPropostoRef.current.icms = valor; }
+                else { setSaldoCredorIpi(valor); ultimoPropostoRef.current.ipi = valor; }
+            }}
             isEquiparacaoHospitalar={isEquiparacaoHospitalar} setIsEquiparacaoHospitalar={setIsEquiparacaoHospitalar}
             isPresuncaoReduzida={isPresuncaoReduzida} setIsPresuncaoReduzida={setIsPresuncaoReduzida}
             issTipo={issTipo} setIssTipo={setIssTipo}

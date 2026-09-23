@@ -49,8 +49,13 @@ const ehData = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 // município, 'UF:PR' para estado. Duas cópias da resolução por vigência seria
 // o defeito que este projeto mais paga.
 
-/** Escopo canônico de um cadastro: 'IBGE:3550308' ou 'UF:PR'. */
+/** Escopo canônico de um cadastro: 'IBGE:3550308', 'UF:PR' ou 'BR' (federal). */
 export function escopoDoPrazo(p) {
+    // 🏦 FEDERAL (22/09, Paulo: *"a DCTFWeb ainda está com vencimento de todo
+    // dia 15, mas vence no final do mês"*): a obrigação federal vale para o
+    // país inteiro, então o escopo é 'BR' — sem IBGE nem UF. É a mesma régua
+    // de vigência e base legal das outras esferas; o que muda é o alcance.
+    if (String(p?.esfera || '').trim() === 'federal') return 'BR';
     const mun = soDigitos(p?.codMunIBGE);
     if (mun.length === 7) return `IBGE:${mun}`;
     const uf = String(p?.uf || '').trim().toUpperCase();
@@ -60,6 +65,7 @@ export function escopoDoPrazo(p) {
 
 /** Escopo do CLIENTE para uma obrigação, pela abrangência dela. */
 export function escopoDoCliente({ esfera, uf, codMunIBGE }) {
+    if (esfera === 'federal') return 'BR';
     if (esfera === 'estadual') {
         const u = String(uf || '').trim().toUpperCase();
         return u.length === 2 ? `UF:${u}` : '';
@@ -92,9 +98,12 @@ export function validarPrazoMunicipal(p) {
         erros.push('Informe a obrigação (ex.: ISS).');
     }
 
+    // "Último dia útil do mês" dispensa o dia fixo (é a regra da DCTFWeb desde
+    // 2025). Com a flag, o dia informado é IGNORADO — e dito na validação.
+    const ultimoDiaUtil = p?.ultimoDiaUtilDoMes === true;
     const dia = Number(p?.diaVencimento);
-    if (!Number.isInteger(dia) || dia < 1 || dia > 31) {
-        erros.push('Dia de vencimento deve ser um número de 1 a 31.');
+    if (!ultimoDiaUtil && (!Number.isInteger(dia) || dia < 1 || dia > 31)) {
+        erros.push('Dia de vencimento deve ser um número de 1 a 31 — ou marque "último dia útil do mês".');
     }
 
     const mesesApos = p?.mesesApos;
@@ -237,6 +246,54 @@ export function resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, compe
     };
 }
 
+/**
+ * Resolve o prazo de uma obrigação FEDERAL cadastrado pelo admin — vale para
+ * TODO cliente (escopo 'BR'), por vigência.
+ *
+ * 22/09, Paulo: *"preciso que me dê permissão para alterar a data dos
+ * vencimentos; a DCTFWeb ainda está com vencimento de todo dia 15, mas vence
+ * no final do mês"*. O catálogo do código tem o prazo de cada federal; quando
+ * a norma muda, o admin cadastra a vigência nova AQUI e o cadastro VENCE o
+ * catálogo daquela competência em diante — sem esperar deploy. Competência
+ * anterior à vigência continua com a regra que valia nela.
+ *
+ * @returns {{achou: boolean, prazo: object|null, situacao: string, motivo: string}}
+ */
+export function resolverPrazoFederal(cadastros, { obrigacao, competencia }) {
+    const obr = String(obrigacao || '').trim().toUpperCase();
+    const federais = (cadastros || []).filter((c) =>
+        escopoDoPrazo(c) === 'BR'
+        && String(c?.obrigacao || '').trim().toUpperCase() === obr
+        && c?.ativo !== false);
+    if (federais.length === 0) {
+        return { achou: false, prazo: null, situacao: 'sem-cadastro', motivo: `Sem prazo federal cadastrado para ${obr}: vale o catálogo.` };
+    }
+    const vigentes = federais.filter((c) => vigenteNaCompetencia(c, competencia));
+    if (vigentes.length === 0) {
+        return { achou: false, prazo: null, situacao: 'fora-de-vigencia', motivo: `Há prazo federal de ${obr} cadastrado, mas nenhum vigente em ${competencia}: vale o catálogo.` };
+    }
+    const escolhido = [...vigentes].sort((a, b) =>
+        String(b.vigenciaInicio || '').localeCompare(String(a.vigenciaInicio || '')))[0];
+    const ultimoDiaUtilDoMes = escolhido.ultimoDiaUtilDoMes === true;
+    return {
+        achou: true,
+        prazo: {
+            esfera: 'federal',
+            obrigacao: obr,
+            ultimoDiaUtilDoMes,
+            diaVencimento: ultimoDiaUtilDoMes ? null : Number(escolhido.diaVencimento),
+            mesesApos: Number.isFinite(Number(escolhido.mesesApos)) ? Number(escolhido.mesesApos) : 1,
+            ajusteDiaNaoUtil: escolhido.ajusteDiaNaoUtil || 'antecipa',
+            baseLegal: escolhido.baseLegal,
+            vigenciaInicio: escolhido.vigenciaInicio || null,
+            vigenciaFim: escolhido.vigenciaFim || null,
+            cadastradoPorEmail: escolhido.cadastradoPorEmail || null,
+        },
+        situacao: 'cadastrado',
+        motivo: `Prazo federal de ${obr} cadastrado pelo admin — ${escolhido.baseLegal}.`,
+    };
+}
+
 /** Id determinístico: 1 doc por escopo × obrigação × início de vigência. */
 export function idPrazoMunicipal(p) {
     const ini = String(p?.vigenciaInicio || 'sem-inicio').slice(0, 10);
@@ -290,12 +347,14 @@ export function resolverPrazoEstadual(cadastros, { uf, obrigacao, competencia })
     const escolhido = [...vigentes].sort((a, b) =>
         String(b.vigenciaInicio || '').localeCompare(String(a.vigenciaInicio || '')))[0];
 
+    const ultimoDiaUtilDoMes = escolhido.ultimoDiaUtilDoMes === true;
     return {
         achou: true,
         prazo: {
             uf: escopo.slice(3),
             obrigacao: obr,
-            diaVencimento: Number(escolhido.diaVencimento),
+            ultimoDiaUtilDoMes,
+            diaVencimento: ultimoDiaUtilDoMes ? null : Number(escolhido.diaVencimento),
             mesesApos: Number.isFinite(Number(escolhido.mesesApos)) ? Number(escolhido.mesesApos) : 1,
             ajusteDiaNaoUtil: escolhido.ajusteDiaNaoUtil || 'antecipa',
             baseLegal: escolhido.baseLegal,
@@ -345,7 +404,28 @@ export function municipiosSemCalendario(clientes, cadastros, { obrigacao = 'ISS'
         // dizer QUAL cidade é manda o colaborador procurar o que o cadastro já
         // tem — e o dado está ali, no cliente seguinte.
         if (!linha.municipioNome) linha.municipioNome = String(c?.municipioNome || '').trim() || null;
-        linha.clientes.push({ id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj) });
+        linha.clientes.push({
+            id: c?.id || null, nome: c?.nome || '—', cnpj: soDigitos(c?.cnpj),
+            // O nome que ESTE cliente tem no cadastro — é por ele que a pessoa
+            // percebe que o CÓDIGO está errado (ver `divergencia` abaixo).
+            municipioNome: String(c?.municipioNome || '').trim() || null,
+        });
+    }
+
+    // 🚨 A FILA AGRUPA PELO CÓDIGO IBGE, e o nome é só o texto do primeiro
+    // cliente (08/09, Paulo: *"sabe Deus por que essas duas não saem de
+    // BELÉM, e ambas estão cadastradas como Caxias do Sul"*). Estavam: no
+    // NOME. O código gravado nos Dados Fiscais era o de Belém nas três — e a
+    // linha, dizendo só "BELEM · 3 clientes", escondia exatamente a
+    // divergência. Agora cada cliente vai com o nome DELE, e a linha DIZ
+    // quando os nomes não concordam entre si: código igual com nomes
+    // diferentes é cadastro errado em pelo menos um deles.
+    for (const linha of faltando.values()) {
+        const nomes = [...new Set(linha.clientes
+            .map((c) => String(c.municipioNome || '').trim().toUpperCase())
+            .filter(Boolean))];
+        linha.nomesNoCadastro = nomes;
+        linha.divergencia = nomes.length > 1;
     }
 
     const lista = [...faltando.values()]

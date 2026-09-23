@@ -23,6 +23,7 @@ import KanbanColuna from './Tarefas/KanbanColuna';
 import type { User } from '../types';
 import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../services/empresaOption';
+import { getAuth } from 'firebase/auth';
 
 interface TarefasProps {
     currentUser: User | null;
@@ -40,6 +41,69 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     const [carteira, setCarteira] = useState<VinculoCarteira[]>([]);
     const [versao, setVersao] = useState(0);
     const [erro, setErro] = useState<string | null>(null);
+    // 📅 22/09 (AFFITTARE): a regra do catálogo mudou e a tarefa ficou com o
+    // dia velho — "atrasada" sobre prazo que não venceu. O admin reaplica o
+    // prazo de hoje nas tarefas ABERTAS da competência; o resultado sai
+    // nomeado (quantas mudaram, de quando para quando).
+    const [reaplicando, setReaplicando] = useState(false);
+    const [avisoReaplicar, setAvisoReaplicar] = useState<string | null>(null);
+    const reaplicarPrazos = async () => {
+        if (!filtroCompetencia) { setAvisoReaplicar('Escolha a competência (MM/AAAA) no filtro.'); return; }
+        if (!confirm(`Reaplicar o prazo atual do catálogo nas tarefas ABERTAS de ${filtroCompetencia}?\n\nConcluídas, canceladas e manuais não mudam. Cada alteração fica registrada.`)) return;
+        setReaplicando(true); setAvisoReaplicar(null);
+        try {
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre novamente.');
+            const r = await fetch('/api/admin/tarefas/reaplicar-prazos', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ competencia: filtroCompetencia }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+            const exemplos = (j.alteracoes || []).slice(0, 5)
+                .map((a: any) => `${a.obrigacao} ${a.empresaNome || a.empresaId}: ${a.de || '—'} → ${a.para}`).join(' · ');
+            setAvisoReaplicar(`${j.alteradas} tarefa(s) mudaram de data · ${j.iguais} já estavam certas · `
+                + `${j.fechadas} concluídas/canceladas (não mudam) · ${j.manuais} manuais (não mudam) · `
+                + `${j.semRegra} sem regra no catálogo · ${j.semData} sem data no catálogo.`
+                + (exemplos ? ` Ex.: ${exemplos}${(j.alteracoes || []).length > 5 ? '…' : ''}` : '')
+                + (j.erros?.length ? ` ⚠ ${j.erros.length} erro(s): ${j.erros[0]}` : ''));
+            setVersao(v => v + 1);
+        } catch (e: any) {
+            setAvisoReaplicar(`Falha ao reaplicar: ${e?.message || e}`);
+        } finally {
+            setReaplicando(false);
+        }
+    };
+
+    // 👥 22/09: FGTS e INSS patronal são do DP — o cron parou de gerar, e as
+    // tarefas já geradas o admin cancela em lote (sem competência = todas).
+    const [cancelandoDp, setCancelandoDp] = useState(false);
+    const cancelarTarefasDp = async () => {
+        const alvo = filtroCompetencia ? `de ${filtroCompetencia}` : 'de TODAS as competências';
+        if (!confirm(`Cancelar as tarefas ABERTAS e automáticas de FGTS e INSS patronal ${alvo}?\n\nSão obrigações do DP, não do Fiscal. Concluídas, canceladas e manuais não mudam. Fica registrado quem cancelou e por quê.`)) return;
+        setCancelandoDp(true); setAvisoReaplicar(null);
+        try {
+            const u = getAuth().currentUser;
+            if (!u) throw new Error('Sessão expirada — entre novamente.');
+            const r = await fetch('/api/admin/tarefas/cancelar-dp', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtroCompetencia ? { competencia: filtroCompetencia } : {}),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+            const porComp = Object.entries(j.canceladasPorCompetencia || {}).map(([c, n]) => `${c}: ${n}`).join(' · ');
+            setAvisoReaplicar(`${j.canceladas} tarefa(s) de FGTS/INSS cancelada(s)${porComp ? ` (${porComp})` : ''} · `
+                + `${j.jaFechadas} já concluídas/canceladas · ${j.manuais} manuais (não mudam) · ${j.tarefasLidas} lidas.`
+                + (j.erros?.length ? ` ⚠ ${j.erros.length} erro(s): ${j.erros[0]}` : ''));
+            setVersao(v => v + 1);
+        } catch (e: any) {
+            setAvisoReaplicar(`Falha ao cancelar: ${e?.message || e}`);
+        } finally {
+            setCancelandoDp(false);
+        }
+    };
 
     // Filtros (padrao: minhas tarefas + a_fazer + mes atual)
     const mesAtual = useMemo(() => {
@@ -275,8 +339,31 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                         >
                             ➕ Nova tarefa
                         </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => void reaplicarPrazos()}
+                                disabled={reaplicando}
+                                className="px-3 py-2 rounded-xl border border-amber-500 text-amber-700 dark:text-amber-300 font-semibold text-xs disabled:opacity-50"
+                                title="Recalcula o vencimento das tarefas ABERTAS e automáticas da competência pelo catálogo atual (e pelos prazos cadastrados em Config Admin). Concluídas, canceladas e manuais não mudam."
+                            >
+                                {reaplicando ? '⏳ Reaplicando…' : '📅 Reaplicar prazos do catálogo'}
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <button
+                                onClick={() => void cancelarTarefasDp()}
+                                disabled={cancelandoDp}
+                                className="px-3 py-2 rounded-xl border border-slate-400 text-slate-700 dark:text-slate-200 font-semibold text-xs disabled:opacity-50"
+                                title="FGTS e INSS patronal são do DP (22/09). Cancela as tarefas ABERTAS e automáticas dessas obrigações — da competência do filtro, ou de todas se o filtro estiver vazio."
+                            >
+                                {cancelandoDp ? '⏳ Cancelando…' : '👥 Cancelar tarefas do DP (FGTS/INSS)'}
+                            </button>
+                        )}
                     </div>
                 </div>
+                {avisoReaplicar && (
+                    <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">{avisoReaplicar}</p>
+                )}
 
                 {/* Resumo */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">

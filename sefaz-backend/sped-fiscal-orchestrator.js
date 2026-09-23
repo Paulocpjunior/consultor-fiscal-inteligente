@@ -8,12 +8,17 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
-import { buildBlocoC } from './sped-fiscal-blocoC.js';
+import { buildBlocoC, convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+// 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117): o par de E111
+// (débito pela interna + crédito da origem) nasce aqui e entra no E110 pela
+// MESMA lista dos ajustes lançados à mão — dois somadores divergiriam.
+import { consolidarDifalArt117 } from './difal-art117-apuracao.js';
 import { buildBloco9 } from './sped-fiscal-bloco9.js';
 import {
-    buildBlocoB,
-    buildBlocoG, buildBlocoK, buildBloco1,
+    buildBlocoG, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
 import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped-fiscal-blocoE.js';
@@ -22,21 +27,38 @@ import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped
 import { resolverSaldoAnterior, competenciasEntre } from './saldo-abertura.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
 import { dataInventario } from './sped-bloco-h.js';
+import { buildBlocoK } from './sped-fiscal-blocoK.js';
 import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
 import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+// O 0150 é da PESSOA, não da primeira nota: ausência num documento não apaga
+// presença no outro (18/09, VINATEX — o 'primeiro vence' deixava sem endereço
+// o cliente cujo primeiro documento do mês não tinha sido relido).
+import { mesclarParticipante } from './sped-bloco0-cadastros.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 // Régua ÚNICA de quem entra em cada bloco — o 0150 tem que casar com ela,
 // senão o PVA acusa participante que nenhum registro referencia.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, tipoItemDoDocumento, codItemDoItem,
+    selecionarNotasBlocoC, documentosEscrituradosNoFiscal, tipoItemDoDocumento, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido,
     unidadeDoItem, descreverUnidade,
+    unidadesPorCodItem, codItemNoArquivo, codigosComDuasUnidades, avisoDeItemComDuasUnidades,
 } from './sped-selecao-documentos.js';
-import { getContadorPadrao } from './contador-escrituracao.js';
-import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
+import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
+import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
+// 🔒 O acervo que o fim de mês congelou — o dono da pergunta "este documento
+// já estava aqui quando o mês foi fechado?".
+import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
+import { docContaNoLivro } from './xml-metadata-helper.js';
+// 🏛️ Bloco B — ISS do DF (11/09, LEGACY): B001|0 + B470 em quem é de Brasília.
+import { buildBlocoB, apurarIssBlocoB, avisosDoBlocoB } from './sped-fiscal-blocoB.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+// 🧠 O cérebro do CFOP entra no ARQUIVO (07/09): sem esta leitura o C170/C190
+// saíam pela régua automática num fornecedor que a pessoa já tinha ensinado.
+import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametros-store.js';
 // RÉGUA ÚNICA da leitura da ficha por competência (mesReferencia tem 3 formas).
 import { acharFichaCompetencia } from './ipi-varredura.js';
 
@@ -85,6 +107,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         throw err;
     }
     const empresa = { id: empresaId, ...empresaSnap.data(), _regime: regime };
+    // 🧠 Parâmetros de CFOP por fornecedor — lidos UMA vez por geração e
+    // entregues ao bloco C (`dados.parametrosCfop`). Falha de leitura vira
+    // AVISO, nunca "não há parâmetro": o arquivo sairia pela régua automática
+    // justamente no CFOP que alguém corrigiu de propósito.
+    const { parametros: parametrosCfop, erro: erroParametrosCfop } = await lerParametrosCfopDaEmpresa(db, empresaId);
 
     // Validacao critica: precisa ter dadosFiscais
     if (!empresa.dadosFiscais || !empresa.dadosFiscais.uf || !empresa.dadosFiscais.codMunIBGE) {
@@ -118,8 +145,33 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             .map(d => ({ id: d.id, ...d.data() }))
             .filter(n => n.competencia >= periodoInicio && n.competencia <= periodoFim);
     }
-    // Ignora docs marcados como duplicata (vencedor do merge fica na lista).
-    notas = notas.filter(n => !n._merged_into);
+    // 🚨 A LÁPIDE VALE NO ARQUIVO, não só na listagem (10/09). Este filtro
+    // via só metade dela (`_merged_into`), então a nota TIRADA do livro —
+    // importada na empresa errada (03/09) ou com o número corrigido (10/09) —
+    // continuava saindo no C100/C190 e na apuração. Quem responde é o dono.
+    const totalAntesDaLapide = notas.length;
+    notas = notas.filter(docContaNoLivro);
+    const retiradasDoAcervo = totalAntesDaLapide - notas.length;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
+    //
+    // Paulo: o fim de mês *"deve ser usada como régua para nos nortear, usar
+    // como base p impostos, livros, ficha financeira"*. Sem este recorte, o
+    // arquivo de agosto REGERADO em dezembro sairia DIFERENTE se uma nota de
+    // agosto chegou em novembro — e o Contábil já teria importado o outro
+    // número. É a divergência que o ato existe para matar.
+    //
+    // ⚠️ Sem fechamento (ou com a competência REABERTA) nada muda: quem não
+    // usar o ato gera exatamente como antes.
+    // ═══════════════════════════════════════════════════════════════════════
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, periodoFim);
+    const recorte = recortarPeloFechamento(notas, fechamento);
+    notas = recorte.docs;
+    // ⚠️ Os avisos ficam guardados: `warnings` só nasce mais abaixo, e um
+    // `push` aqui seria ReferenceError — a MESMA classe que derrubou a
+    // geração do SPED em 20/08, e que a trava de nomes do backend pega.
+    const avisosDoFechamento = avisosDoRecorte(recorte);
 
     // ─── 4. Extrai participantes unicos (entrada + saida) ───
     //
@@ -134,16 +186,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     //   · Nota que NÃO foi escriturada (só o resumo na base, ou sem itens) —
     //     ela sai do bloco C nomeada, e o participante dela vai junto.
     //
-    // Mesma régua do 0200 logo abaixo, que já fazia isso pelos itens.
-    const nfceOuNaoEscriturada = (() => {
-        const escrituradas = new Set(
-            selecionarNotasBlocoC(notas)
-                .notas.filter(n => modeloDoDoc(n) !== '65')
-                .map(n => n.id || n.chave),
-        );
-        for (const c of selecionarCtesBlocoD(notas)) escrituradas.add(c.id || c.chave);
-        return (n) => !escrituradas.has(n.id || n.chave);
-    })();
+    // A régua é a MESMA do 0200 logo abaixo, e mora no dono
+    // (`documentosEscrituradosNoFiscal`): até 11/09 o participante tinha esta
+    // trava e o item NÃO — o 0200 da LEGACY saiu com o `ITEM-1` de uma NFS-e,
+    // que este arquivo não escritura, e o PVA recusou (item órfão).
+    const escriturados = documentosEscrituradosNoFiscal(notas, empresa.cnpj);
+    const nfceOuNaoEscriturada = (n) => !escriturados.escriturado(n);
     const participantesMap = new Map();
     let participantesOrfaos = 0;
     for (const nota of notas) {
@@ -160,7 +208,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
         const docLimpo = String(cnpjBruto).replace(/\D/g, '');
         if (!docLimpo) continue;
-        if (participantesMap.has(docLimpo)) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
 
         // Detecta PF (CPF 11 digitos) vs PJ (CNPJ 14 digitos) pelo tamanho.
         // Documentos com outros tamanhos sao invalidos — loga e pula.
@@ -176,7 +226,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
 
         // codPart = documento limpo (suficiente como identificador unico)
-        participantesMap.set(docLimpo, {
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
             codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjFinal,
@@ -187,7 +237,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             numero: participanteRaw.numero || '',
             complemento: participanteRaw.complemento || '',
             bairro: participanteRaw.bairro || '',
-        });
+        }));
     }
     const participantes = Array.from(participantesMap.values());
 
@@ -210,10 +260,39 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // itens dela no 0200 sem nenhum C170 apontando para eles.
     const itensMap = new Map();
     const unidadesMap = new Map();
+    // 🚨 O 0200 é a tabela do ARQUIVO e o `ITEM-n` é numerado por DOCUMENTO —
+    // dois produtos sem `cProd` colidem, e o `if (!map.has())` abaixo faz o
+    // segundo desaparecer dentro do primeiro, CALADO. A chave não muda aqui
+    // (mexer nela produz item órfão); o que muda é a colisão passar a ser DITA.
+    const colisoesDeItem = [];
+    // 🚨 O MESMO CÓDIGO COM DUAS UNIDADES ganha o sufixo nos DOIS lados (0200
+    // aqui, C170 no bloco C) — o mapa é um só, e viaja em `dados` (ELS, 11/09).
+    const entraNo0200 = (n) => !ehEmissaoPropriaDoc(n, empresa.cnpj) && !nfceOuNaoEscriturada(n);
+    const unidadesPorCodigo = unidadesPorCodItem(notas, entraNo0200);
     for (const nota of notas) {
         if (ehEmissaoPropriaDoc(nota, empresa.cnpj)) continue;
+        // 🚨 Item de nota que este arquivo NÃO escritura (NFS-e, resumo, sem
+        // itens, entrada do emitente) não pode cadastrar-se no 0200: nenhum
+        // C170 o referenciaria, e o PVA recusa (LEGACY, 11/09).
+        if (nfceOuNaoEscriturada(nota)) continue;
         for (const item of (nota.itens || [])) {
-            const codItem = codItemDoItem(item);
+            // `codItemDoItem` é a chave; `codItemNoArquivo` é a chave + a
+            // unidade quando o código circula com mais de uma.
+            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
+            const jaCadastrado = itensMap.get(codItem);
+            if (jaCadastrado) {
+                const campo = conferirColisaoDeItem(jaCadastrado, {
+                    descricao: item.xProd || item.descricao || '',
+                    ncm: item.NCM || item.ncm || '',
+                });
+                if (campo) {
+                    colisoesDeItem.push({
+                        codItem,
+                        de: jaCadastrado[campo],
+                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
+                    });
+                }
+            }
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,
@@ -250,8 +329,44 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // "Codigo invalido. Informar codigo da unidade de medida (UNID) se
     //  referenciado em pelo menos um dos blocos ou no Registro 0200 ou 0220."
 
+    // ─── 5b. Bloco B (ISS do DF) ───
+    // Apurado AQUI, junto das notas, para o aviso sair com os outros — o
+    // gerador (`buildBlocoB`) só formata o que este objeto carrega.
+    const blocoB = apurarIssBlocoB({ notas, empresaCnpj: empresa.cnpj });
+
     // ─── 6. Warnings ───
     const warnings = [];
+    warnings.push(...avisosDoFechamento);
+    warnings.push(...avisosDoBlocoB({ uf: empresa?.dadosFiscais?.uf, apuracao: blocoB }));
+    if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
+    // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
+    // erro é quem lê o livro, e é por isso que ela tem de sair DITA.
+    if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
+    if (codigosComSufixo.length) warnings.push(avisoDeItemComDuasUnidades(codigosComSufixo));
+    // O regime de quem ESCRITURA — o bloco C decide o crédito de ICMS da
+    // entrada por ele (optante do Simples não se credita, LC 123 art. 23).
+    const regimeEscrituracao = (() => {
+        const r = regimeDaEmpresa({ ...empresa, colecao: regime === 'simples' ? 'simples_empresas' : 'lucro_empresas' }).regime;
+        return r === 'INDEFINIDO' ? '' : r;
+    })();
+    // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
+    // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
+    // destinação: ela não está no XML.
+    const avisoTipoItem = avisoDeTipoItemPresumido(itens, {
+        contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
+    });
+    if (avisoTipoItem) warnings.push(avisoTipoItem);
+    // O que sai do arquivo sai DITO — mas só quando houve retirada: aviso em
+    // arquivo normal é o que ensina a equipe a ignorar os avisos que importam.
+    if (retiradasDoAcervo > 0) {
+        warnings.push(
+            `${retiradasDoAcervo} documento(s) NAO entraram no arquivo porque foram tirados do livro `
+            + `(nota importada na empresa errada, numero corrigido ou perdedor de merge). `
+            + `O documento continua guardado com o motivo e com quem tirou — confira na Central de `
+            + `Documentos Fiscais se algum deles deveria estar aqui.`,
+        );
+    }
     if (notas.length === 0) {
         warnings.push(`Empresa "${empresa.nome}" nao tem documentos fiscais no periodo. Arquivo sera gerado com estrutura minima (apenas registros 0000-0100 + Bloco 9).`);
     }
@@ -314,6 +429,31 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`Não consegui ler a contagem do inventário (${e.message}) — o bloco H pode sair incompleto.`);
     }
 
+    // ─── 6c. Apontamento de produção e estoque (Bloco K) ──────────────────
+    // Mesma natureza do inventário: NÃO sai das notas. É o controle de
+    // produção do cliente, gravado na aba 🏭 Bloco K. Sem ele o bloco sai
+    // VAZIO — nunca zerado, que declararia "não produzi e não tenho estoque".
+    let blocoK = null;
+    try {
+        const kSnap = await admin.firestore().collection('sped_bloco_k')
+            .doc(`${empresaId}_${String(periodoFim).replace(/\D/g, '')}`).get();
+        if (kSnap.exists) {
+            const k = kSnap.data() || {};
+            // ⚠️ `movimentacoes` (K220) entra aqui no MESMO PR em que a rota
+            // passa a gravá-la — dado gravado que o orquestrador descarta é a
+            // classe 'o dado existe e ninguém lê', três vezes nesta semana.
+            blocoK = {
+                estoques: k.estoques || [],
+                producao: k.producao || [],
+                movimentacoes: k.movimentacoes || [],
+            };
+        }
+    } catch (e) {
+        // Falhar em LER não pode virar "não tem apontamento": o bloco sairia
+        // vazio parecendo decisão, quando foi a rede que piscou.
+        warnings.push(`Não consegui ler o apontamento do bloco K (${e.message}) — o bloco pode sair incompleto.`);
+    }
+
     // ─── 7. Saldos credores que vêm de trás (E110 c.10 e E520 VL_SD_ANT) ────
     //
     // 🚨 A FICHA NÃO MORA EM COLEÇÃO NENHUMA — ela é EMBUTIDA no documento da
@@ -326,10 +466,25 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // indistinguível de "não tem saldo": o defeito da ausência plausível outra
     // vez, agora do lado da leitura.
     //
-    // ⚠️ E TRANSPORTAR é o campo do MÊS ANTERIOR: `saldoCredor*Transportar` é o
-    // que SOBROU dele (calculado, 18/08 — caso KROYA), enquanto `saldoCredor*`
-    // é o que ENTROU. Preferir o "transportar" da anterior corrige a defasagem
-    // registrada em 17/08; o outro fica de reserva, carimbado na origem.
+    // ⚠️ A FICHA TEM DOIS CAMPOS, E OS DOIS SÃO DIGITADOS (nenhum é calculado —
+    // `saldoCredorFicha.ts` diz por quê): em cada competência M, "Saldo Credor
+    // ICMS (Mês Anterior)" (`saldoCredorIcms`) é o que ENTROU em M — o número
+    // que a própria ficha ABATE da guia de M —, e "a TRANSPORTAR"
+    // (`saldoCredor*Transportar`) é o que a pessoa diz que SOBROU de M.
+    //
+    // 🚨 11/09, LEGACY · 08/2026: o E110 saiu com c.10 = 0,00 e Paulo, com a
+    // ficha aberta: *"ela carrega um saldo credor anterior, já informado na
+    // ficha financeira"*. Estava informado — em AGOSTO, no campo "Mês
+    // Anterior". O código lia `saldoCredorIcms` da ficha de JULHO (o que
+    // entrou em julho, não o que sobrou dele — a defasagem nomeada em 17/08 e
+    // nunca fechada) e ignorava o campo de agosto. O IPI já lia o de agosto
+    // desde 19/08 (PWR); o ICMS ficou atrás, e o espelho divergiu.
+    //
+    // A régua, IGUAL para ICMS e IPI: **o campo desta competência manda** —
+    // é o mesmo número que abateu a GUIA, e arquivo e guia bebem da mesma
+    // fonte (a lição do F600 × ficha, 28/08). O "a transportar" da anterior
+    // é a RESERVA, quando o campo desta está vazio; e quando os dois existem
+    // e DIVERGEM, isso é alerta (06/08), nunca escolha calada.
     let saldoCredorIcmsAnterior = 0;
     let saldoCredorIpiAnterior = 0;
     let origemSaldoIcms = '';
@@ -366,6 +521,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     // E110/E520 (somarIcmsPorDirecao / somarImpostoPorDirecao)
                     // sobre as notas daquele mês + os ajustes E111 lançados.
                     const movimentos = {};
+                    // O contexto que decide o CRÉDITO de cada mês da cadeia é o
+                    // MESMO do arquivo (regime de quem escritura + CNPJ) —
+                    // senão a cadeia somaria o destaque cru e o E110 o zerado.
+                    const ctxCronologia = { empresa, regimeEscrituracao };
                     for (const comp of mesesCadeia) {
                         const [snapNotas, snapAj] = await Promise.all([
                             db.collection('documentos_fiscais')
@@ -374,15 +533,15 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                             db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${comp}`).get(),
                         ]);
                         const notasMes = snapNotas.docs.map((d) => ({ id: d.id, ...d.data() }))
-                            .filter((n) => !n._merged_into);
+                            .filter(docContaNoLivro);
                         const cls = classificarAjustes(
                             snapAj.exists ? (snapAj.data().ajustes || []) : [],
                             (empresa.dadosFiscais?.uf || '').toUpperCase(),
                         );
                         movimentos[comp] = {
                             icms: {
-                                debitos: somarIcmsPorDirecao(notasMes, 'saida'),
-                                creditos: somarIcmsPorDirecao(notasMes, 'entrada'),
+                                debitos: somarIcmsPorDirecao(notasMes, 'saida', ctxCronologia),
+                                creditos: somarIcmsPorDirecao(notasMes, 'entrada', ctxCronologia),
                                 cls,
                             },
                             ipi: {
@@ -429,21 +588,40 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 const n = parseFloat(v);
                 return Number.isFinite(n) && n > 0 ? n : 0;
             };
-            if (num(anterior?.saldoCredorIcmsTransportar)) {
+            const r2 = (v) => Math.round(v * 100) / 100;
+            const divergencia = (rotulo, desta, transportar) => {
+                warnings.push(
+                    `A ficha diz DOIS saldos anteriores de ${rotulo}: ${desta.toFixed(2)} no campo "Mês Anterior" desta `
+                    + `competência e ${transportar.toFixed(2)} no "a TRANSPORTAR" da competência anterior. O arquivo `
+                    + `sai com ${desta.toFixed(2)} — o mesmo número que abateu a guia. Se o certo é o outro, corrija `
+                    + 'a ficha desta competência antes de transmitir.',
+                );
+            };
+
+            if (num(atual?.saldoCredorIcms)) {
+                saldoCredorIcmsAnterior = num(atual.saldoCredorIcms);
+                origemSaldoIcms = 'campo "Saldo Credor ICMS (Mês Anterior)" da ficha desta competência';
+                if (num(anterior?.saldoCredorIcmsTransportar)
+                    && r2(num(anterior.saldoCredorIcmsTransportar)) !== r2(saldoCredorIcmsAnterior)) {
+                    divergencia('ICMS', saldoCredorIcmsAnterior, num(anterior.saldoCredorIcmsTransportar));
+                }
+            } else if (num(anterior?.saldoCredorIcmsTransportar)) {
                 saldoCredorIcmsAnterior = num(anterior.saldoCredorIcmsTransportar);
-                origemSaldoIcms = 'saldo A TRANSPORTAR da ficha da competência anterior';
-            } else if (num(anterior?.saldoCredorIcms)) {
-                saldoCredorIcmsAnterior = num(anterior.saldoCredorIcms);
-                origemSaldoIcms = 'campo "Saldo Credor ICMS (mês anterior)" da ficha da competência ANTERIOR '
-                    + '— é o que ENTROU naquele mês, não o que sobrou dele';
+                origemSaldoIcms = 'saldo A TRANSPORTAR da ficha da competência anterior '
+                    + '(o campo "Saldo Credor ICMS (Mês Anterior)" desta competência está vazio)';
             }
 
-            if (num(anterior?.saldoCredorIpiTransportar)) {
-                saldoCredorIpiAnterior = num(anterior.saldoCredorIpiTransportar);
-                origemSaldoIpi = 'saldo de IPI A TRANSPORTAR da ficha da competência anterior';
-            } else if (num(atual?.saldoCredorIpi)) {
+            if (num(atual?.saldoCredorIpi)) {
                 saldoCredorIpiAnterior = num(atual.saldoCredorIpi);
                 origemSaldoIpi = 'campo "Cred. IPI do mês anterior (compensado)" da ficha desta competência';
+                if (num(anterior?.saldoCredorIpiTransportar)
+                    && r2(num(anterior.saldoCredorIpiTransportar)) !== r2(saldoCredorIpiAnterior)) {
+                    divergencia('IPI', saldoCredorIpiAnterior, num(anterior.saldoCredorIpiTransportar));
+                }
+            } else if (num(anterior?.saldoCredorIpiTransportar)) {
+                saldoCredorIpiAnterior = num(anterior.saldoCredorIpiTransportar);
+                origemSaldoIpi = 'saldo de IPI A TRANSPORTAR da ficha da competência anterior '
+                    + '(o campo "Cred. IPI do mês anterior" desta competência está vazio)';
             }
         } catch (err) {
             console.warn(`[sped-fiscal] saldos anteriores falharam: ${err.message}`);
@@ -468,6 +646,17 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // o E250 nunca saía e o aviso mandava "informe no cadastro", um cadastro
     // que não existia. Mora no MESMO doc dos ajustes, como o código do C197.
     let obrigacoesStPorUf = {};
+    // 🚨 E316 — a obrigação do DIFAL/FCP da EC 87/15 a recolher, POR UF DE
+    // DESTINO (18/09, VINATEX). Mesma régua e mesma casa do E250: o COD_REC é
+    // código ESTADUAL e o DT_VCTO é o prazo daquele estado — nenhum dos dois
+    // está no documento nem se deduz. Sem eles o E316 não sai e a falta vai
+    // NOMEADA na geração, nunca em silêncio.
+    let obrigacoesDifalEc87PorUf = {};
+    // 🧭 DIFAL na apuração (art. 117): códigos dos dois E111 + o informado por
+    // nota, no MESMO doc dos ajustes (14/09, HYPE CAFÉ). Trimestral concatena
+    // o informado dos três meses; os códigos são os do último doc que os tem.
+    let difalArt117Cfg = { codigoDebito: '', codigoCredito: '', porChave: {} };
+    let difalArt117 = null;
     if (regime === 'lucro') {
         try {
             const comps = listarCompetenciasPeriodo(periodoInicio, periodoFim);
@@ -480,7 +669,36 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 if (s.exists && s.data().obrigacoesStPorUf) {
                     obrigacoesStPorUf = { ...obrigacoesStPorUf, ...s.data().obrigacoesStPorUf };
                 }
+                if (s.exists && s.data().obrigacoesDifalEc87PorUf) {
+                    obrigacoesDifalEc87PorUf = {
+                        ...obrigacoesDifalEc87PorUf, ...s.data().obrigacoesDifalEc87PorUf,
+                    };
+                }
+                const a117 = s.exists ? (s.data().difalArt117 || null) : null;
+                if (a117) {
+                    difalArt117Cfg = {
+                        codigoDebito: a117.codigoDebito || difalArt117Cfg.codigoDebito,
+                        codigoCredito: a117.codigoCredito || difalArt117Cfg.codigoCredito,
+                        porChave: { ...difalArt117Cfg.porChave, ...(a117.porChave || {}) },
+                    };
+                }
             }
+            // O CFOP entregue ao dono é o ESCRITURADO — a régua do bloco C (nota,
+            // item, cérebro, empresa). Ler o cru deixaria a nota do Mercado Livre
+            // (6102) fora do DIFAL: o caso KALUNGA, na apuração.
+            const dadosCfop = { empresa, parametrosCfop };
+            difalArt117 = consolidarDifalArt117({
+                notas,
+                ufEmpresa: (empresa.dadosFiscais?.uf || '').toUpperCase(),
+                aliqInternaPadrao: Number(difalCfg.difalAliqInternaPadrao) || undefined,
+                cfopDoItem: (nota, item) => convertCfopParaEntrada(item?.cfop, 'entrada', dadosCfop, nota, item),
+                informadoPorChave: difalArt117Cfg.porChave,
+                codigoDebito: difalArt117Cfg.codigoDebito,
+                codigoCredito: difalArt117Cfg.codigoCredito,
+                codigoC197: difalCfg.difalCodigoAjusteC197 || '',
+            });
+            ajustesApuracao.push(...difalArt117.ajustes);
+            for (const a of difalArt117.avisos) warnings.push(`DIFAL na apuração (art. 117): ${a}`);
             const clsPrev = classificarAjustes(ajustesApuracao, (empresa.dadosFiscais?.uf || '').toUpperCase());
             for (const erro of clsPrev.erros) {
                 warnings.push(`Ajuste E111 IGNORADO: ${erro}`);
@@ -550,9 +768,25 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         warnings.push(`DIPAM não pôde ser apurada (${err.message}) — o Registro 1400 sai vazio. Confira antes de transmitir.`);
     }
 
+    // O contabilista é conferido ANTES de virar linha: campo obrigatório do
+    // 0100 que sai vazio é recusa do PVA, e campo INVENTADO é pior — ele passa.
+    const contadorDoArquivo = getContadorPadrao();
+    const conf = conferirContador(contadorDoArquivo);
+    if (conf.aviso) warnings.push(conf.aviso);
+
     return {
         empresa,
-        contador: getContadorPadrao(),
+        // O regime decide a DISPENSA do bloco K (Resolução CGSN 94) — ele já
+        // foi resolvido acima; relê-lo no gerador seria a segunda leitura.
+        regime,
+        // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
+        // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
+        // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —
+        // some calado seria o arquivo declarando um profissional que não
+        // existe, num campo que a fiscalização lê.
+        contador: contadorDoArquivo,
+        // 🧠 Lido pelo bloco C (`convertCfopParaEntrada`) — C170, C190 e E510.
+        parametrosCfop,
         competenciaInicio: periodoInicio,
         competenciaFim: periodoFim,
         notas,
@@ -560,8 +794,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         // MOT_INV vem do doc do inventário (a pessoa escolhe ao contar); o
         // cadastro da empresa fica de reserva pra quem já usava.
         inventarioMotInv,
+        blocoK,
+        blocoB,
         participantes,
         unidades,
+        unidadesPorCodItem: unidadesPorCodigo,
+        regimeEscrituracao,
         saldoCredorIcmsAnterior,
         saldoCredorIpiAnterior,
         origemSaldoIcms,
@@ -569,9 +807,18 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
         obrigacoesStPorUf,
+        obrigacoesDifalEc87PorUf,
         difalCodObservacao: difalCfg.difalCodObservacao || '',
         difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
-        difalAliqInternaPorChave: difalCfg.difalAliqInternaPorChave || {},
+        // A alíquota interna INFORMADA por nota na aba do art. 117 vale também
+        // para o C197 — uma alíquota por nota, não uma por registro.
+        difalAliqInternaPorChave: {
+            ...(difalCfg.difalAliqInternaPorChave || {}),
+            ...Object.fromEntries((difalArt117?.porNota || [])
+                .filter((n) => n.origem === 'informada' && n.aliqInterna > 0)
+                .map((n) => [n.chave, n.aliqInterna])),
+        },
+        difalArt117,
         ciap,
         dipam,
         warnings,
@@ -586,9 +833,18 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  * @returns {Promise<string>} arquivo .txt em encoding Windows-1252.
  */
 export async function montarBlocos({ dados }) {
-    const linhasBloco0 = buildBloco0(dados);
-    const linhasBlocoB = buildBlocoB();   // vazio
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+    // 🚨 O BLOCO C É MONTADO ANTES DO 0 — a ORDEM DE EXECUÇÃO, não a do arquivo.
+    //
+    // O `0460` (Tabela de Observações) mora no bloco 0 e só pode existir quando
+    // ALGUÉM o referencia: o Guia 3.2.3 valida nos DOIS sentidos — o C195 exige
+    // um 0460, e o 0460 exige *"existir em pelo menos um registro dos demais
+    // blocos"*. Quem sabe se o C195 saiu é o bloco C, e ele grava a resposta em
+    // `dados.difalTemC195`. A ordem de CONCATENAÇÃO continua a oficial (0 → B →
+    // C → …), travada por teste.
     const linhasBlocoC = buildBlocoC(dados);
+    const linhasBloco0 = buildBloco0(dados);
+    const linhasBlocoB = buildBlocoB(dados);  // B001|0 + B470 no DF; vazio fora dele
     const linhasBlocoD = buildBlocoD(dados);  // CTe modelo 57
     const linhasBlocoE = buildBlocoE(dados);  // ICMS (E100/E110/E116) + IPI (E200/E210 se houver)
     // Bloco G — CIAP real quando a empresa tem bens cadastrados; senão, vazio.
@@ -600,7 +856,9 @@ export async function montarBlocos({ dados }) {
         })
         : buildBlocoG();
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)
-    const linhasBlocoK = buildBlocoK();   // vazio
+    // Bloco K — produção e estoque. Como o H, a quantidade NÃO sai das notas:
+    // vem do apontamento da empresa. Sem ele o bloco sai vazio, nunca zerado.
+    const linhasBlocoK = buildBlocoK(dados);
     // Bloco 1 traz o Registro 1400 (DIPAM por município) quando houver compra
     // de produtor rural paulista — e só aí o 1010 liga o IND_VA.
     const linhasBloco1 = buildBloco1(dados.dipam?.dipam?.registro1400 || []);
@@ -657,4 +915,3 @@ function listarCompetenciasPeriodo(inicio, fim) {
     }
     return out;
 }
-

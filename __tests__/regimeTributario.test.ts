@@ -15,11 +15,11 @@
  * PIS/COFINS sobre FATURAMENTO em quem, em regra, recolhe PIS sobre a FOLHA
  * (Lei 9.532/97 art. 13).
  */
-// @ts-ignore — módulo JS do backend
+// O `.d.ts` deste módulo nasceu em 09/09 (o Livro precisou do regime para
+// decidir o crédito de ICMS): sem `@ts-ignore` o tsc passa limpo E confere.
 import {
     regimeDaEmpresa, normalizarRegime, rotuloRegime, semFinsLucrativos,
     validarRegimeParaGravacao, REGIMES, REGIMES_VALIDOS,
-// @ts-ignore
 } from '../sefaz-backend/regime-tributario.js';
 import { resolverRegime, CATALOGO, obrigacoesAplicaveis } from '../sefaz-backend/catalogo-obrigacoes.js';
 // @ts-ignore

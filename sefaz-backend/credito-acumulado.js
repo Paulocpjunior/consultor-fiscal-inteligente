@@ -129,9 +129,11 @@ export function detectarHipotesesArt71(notas) {
  * anterior — quem faz isso é o gerador do SPED. Aqui é SINAL, e a tela precisa
  * dizer isso: um ajuste grande muda o saldo e não aparece nesta conta.
  */
-export function apurarCompetencia(notas) {
-    const debitos = r2(somarIcmsPorDirecao(notas, 'saida'));
-    const creditos = r2(somarIcmsPorDirecao(notas, 'entrada'));
+export function apurarCompetencia(notas, ctx) {
+    // `ctx` é o contexto do arquivo ({ empresa }): o crédito de ENTRADA é o
+    // que o bloco C escritura, e ele depende de quem escritura (11/09).
+    const debitos = r2(somarIcmsPorDirecao(notas, 'saida', ctx));
+    const creditos = r2(somarIcmsPorDirecao(notas, 'entrada', ctx));
     const saldo = r2(debitos - creditos);
     return {
         debitos, creditos, saldo,
@@ -239,7 +241,7 @@ export function montarPainelCreditoAcumulado(empresas, notasPorEmpresaCompetenci
 
         const porComp = ler(e.empresaId || e.id);
         const competencias = Object.keys(porComp).sort()
-            .map((c) => ({ competencia: c, ...apurarCompetencia(porComp[c]) }));
+            .map((c) => ({ competencia: c, ...apurarCompetencia(porComp[c], { empresa: { ...e, _regime: e.regime } }) }));
         const veredito = classificarEmpresa(competencias);
         linhas.push({ ...e, competencias, ...veredito });
     }

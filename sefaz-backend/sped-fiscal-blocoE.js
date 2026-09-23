@@ -26,15 +26,26 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { classificarAjustes, aplicarAjustesApuracao, montarLinhasE111 } from './sped-ajustes-apuracao.js';
+import { montarLinhasE111 } from './sped-ajustes-apuracao.js';
+// 📒 A apuração do ICMS próprio tem UM dono (14/09, HYPE CAFÉ): o E110 e o
+// Registro de Apuração (relatório) leem a MESMA conta — duas contas fariam a
+// tela prometer um imposto e o arquivo declarar outro.
+import { apurarIcmsProprio } from './apuracao-icms-raicms.js';
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
+// DIFAL de SAÍDA (EC 87/15) — E300/E310/E316, por UF de DESTINO. É o TERCEIRO
+// desenho de DIFAL da casa e o único que sai em registro próprio: ele não toca
+// o E110 (mata-burro de 14/09 — a régua de um não serve para o outro).
+import { montarLinhasDifalBlocoE, avisoDifalNaoCapturado } from './difal-ec87-saida.js';
 import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
 import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
 // Régua ÚNICA: o modelo vem dela (o campo cru não existe em nota capturada) e
 // o cancelamento vem de `docCancelado` (o campo `status` mente por evento).
 import { ehNotaDeMercadoria } from './sped-selecao-documentos.js';
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
-import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+// 🚨 O ICMS do E110 é a Σ do que o BLOCO C ESCRITUROU — o dono é
+// `somarIcmsNoArquivo` (11/09, LEGACY: E110 c.06 com 4.569,96 sobre C190
+// zerados). Somar `vICMS` cru aqui de novo é a segunda leitura do mesmo item.
+import { convertCfopParaEntrada, somarIcmsNoArquivo } from './sped-fiscal-blocoC.js';
 
 const ZERO = '0,00';
 
@@ -86,16 +97,24 @@ export function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
     return total;
 }
 
-// ICMS por direção (mantém a assinatura/comportamento original).
 /**
- * Débito (saídas) ou crédito (entradas) de ICMS do período.
+ * Débito (saídas) ou crédito (entradas) de ICMS do período — o número que vai
+ * no E110, que é a Σ do que o BLOCO C escriturou nos C190.
  *
- * EXPORTADA porque o detector de crédito acumulado precisa do MESMO número que
- * vai no E110 — dois jeitos de somar ICMS é o painel divergindo do arquivo, e
- * aí ninguém sabe qual dos dois está certo.
+ * EXPORTADA porque o detector de crédito acumulado e a cronologia do saldo de
+ * abertura precisam do MESMO número que vai no E110 — dois jeitos de somar
+ * ICMS é o painel divergindo do arquivo, e aí ninguém sabe qual está certo.
+ *
+ * 🚨 ELA NÃO SOMA `vICMS` CRU (11/09, LEGACY): o C190 zera o crédito que o
+ * regime ou o CST informado tiram (`icmsDoItemNoArquivo`), e o E110 tem de
+ * declarar o MESMO zero — o PVA cruza os dois. Quem responde é o dono no
+ * bloco C; `somarImpostoPorDirecao` (cru) fica para o IPI do E520 e o ST.
+ *
+ * @param {object} dados  contexto do arquivo (regime de quem escritura + CNPJ).
+ *   OBRIGATÓRIO — registro `consumidoresMedidos`.
  */
-export function somarIcmsPorDirecao(notas, direcao) {
-    return somarImpostoPorDirecao(notas, direcao, 'vICMS', 'vICMS');
+export function somarIcmsPorDirecao(notas, direcao, dados) {
+    return somarIcmsNoArquivo(notas, direcao, dados);
 }
 
 function calcularDataVencimento(competenciaFim, diaVencimento) {
@@ -182,25 +201,14 @@ export function buildBlocoE(dados) {
     // classificados pelo TIPO embutido no código (4º caractere) e aplicados
     // na fórmula do E110. Só pra Lucro — Simples não apura ICMS aqui.
     const uf = (dados?.empresa?.dadosFiscais?.uf || '').toUpperCase();
-    const cls = classificarAjustes(regime === 'lucro' ? dados.ajustesApuracao : [], uf);
-    // Só se avisa sobre o saldo do bloco que REALMENTE saiu — aviso sobre bloco
-    // inexistente é o alarme sem ação que ensina a ignorar os que importam.
+    // ST e IPI também são apurados aqui — o aviso de saldo anterior precisa
+    // saber se cada bloco SAIU, e isso só se sabe depois de montá-los.
     let geraSt = false;
     let geraIpi = false;
 
-    let ap = {
-        vlTotDebitos: 0, vlTotAjDebitos: 0, vlEstornosCred: 0,
-        vlTotCreditos: 0, vlTotAjCreditos: 0, vlEstornosDeb: 0,
-        vlSldCredorAnt: 0, vlSldApurado: 0, vlTotDed: 0,
-        vlIcmsRecolher: 0, vlSldCredorTransportar: 0, vlDebEsp: 0,
-    };
-    if (regime === 'lucro') {
-        ap = aplicarAjustesApuracao({
-            vlTotDebitos: somarIcmsPorDirecao(dados.notas, 'saida'),
-            vlTotCreditos: somarIcmsPorDirecao(dados.notas, 'entrada'),
-            vlSldCredorAnt: parseFloat(dados.saldoCredorIcmsAnterior || 0),
-        }, cls);
-    }
+    // A apuração do ICMS próprio — a MESMA que o Registro de Apuração
+    // (Relatórios → 📒) imprime. Fora do Lucro vem zerada (o Simples não apura).
+    const { ap, cls } = apurarIcmsProprio(dados);
 
     linhas.push(fmt.buildLine([
         'E110',
@@ -272,6 +280,48 @@ export function buildBlocoE(dados) {
                     + 'antes de transmitir.',
                 );
             }
+        }
+    }
+
+    // ── DIFAL DE SAÍDA — EC 87/2015 (E300/E310/E316) ──────────────────────
+    //
+    // 🚨 18/09, Paulo, VINATEX: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS,
+    // precisa ajustar isso também, que vai no SPED"*. O relatório do e-Fiscal
+    // dela lista o DIFAL venda a venda por UF (BA 323,29 + FCP 44,54, CE
+    // 162,06, MG 1.428,99, MS 160,84) e o CFI não declarava NADA — nem C101,
+    // nem E300/E310/E316. E o pior: **ausência de registro o PVA não acusa**,
+    // então o arquivo era aceito afirmando que a empresa não deve diferencial.
+    //
+    // ⚠️ A ORDEM É DO LEIAUTE: E300 vem DEPOIS do E250 (ST) e ANTES do E500
+    // (IPI). O PVA lê a ordem — bloco fora de sequência não é importado.
+    //
+    // ⚠️ Só UF de DESTINO: *"A partir de janeiro de 2019, deixa de ser
+    // obrigatória a apresentação do registro E300 para a UF de origem"*
+    // (Guia 3.2.3). É o que o relatório dela confirma — SP não está na lista.
+    if (regime === 'lucro') {
+        const difal = montarLinhasDifalBlocoE({
+            notas: dados.notas,
+            ufEmpresa: uf,
+            dtIni: fmt.formatCompetenciaInicio(dados.competenciaInicio),
+            dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
+            mesRef: formatMesRef(dados.competenciaFim),
+            obrigacoesPorUf: dados.obrigacoesDifalEc87PorUf || {},
+            ajustes: dados.ajustesApuracao,
+        });
+        // O módulo devolve ARRAYS de campos — quem forma a linha é o
+        // `buildLine`, igual ao E111 e ao ST. Empurrar string crua foi o que
+        // grudou o bloco G inteiro numa linha só (29/08).
+        for (const campos of difal.linhas) linhas.push(fmt.buildLine(campos));
+        if (Array.isArray(dados.warnings)) dados.warnings.push(...difal.avisos);
+
+        // 🚨 O SILÊNCIO É O DEFEITO CARO, e ele tem data: a captura só passou a
+        // ler o grupo `ICMSUFDest` em 18/09. Nota capturada antes disso não o
+        // tem gravado, então a competência sairia SEM o bloco — e o PVA aceita.
+        // A prova de que há algo a declarar é o CFOP 6107/6108 (venda a NÃO
+        // contribuinte), que é o mesmo sinal que o painel 🚦 usa desde 05/08.
+        if (Array.isArray(dados.warnings)) {
+            const aviso = avisoDifalNaoCapturado(dados.notas, uf);
+            if (aviso) dados.warnings.push(aviso);
         }
     }
 
@@ -362,7 +412,7 @@ function buildE500E520(dados) {
     // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
     // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
     const e510 = montarLinhasE510(dados.notas, {
-        convertCfop: (cfop, direcao, notaDados, nota) => convertCfopParaEntrada(cfop, direcao, notaDados, nota),
+        convertCfop: (cfop, direcao, notaDados, nota, item) => convertCfopParaEntrada(cfop, direcao, notaDados, nota, item),
     });
     if (Array.isArray(dados.warnings)) dados.warnings.push(...e510.avisos);
 

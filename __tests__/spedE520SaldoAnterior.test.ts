@@ -102,10 +102,18 @@ describe('🚨 o ORQUESTRADOR lê a ficha EMBUTIDA na empresa, não uma coleçã
         expect(fonte).toMatch(/mesReferencia/);
     });
 
-    it('prefere o saldo A TRANSPORTAR da ficha ANTERIOR (o que sobrou), com o outro de reserva', () => {
-        expect(fonte).toMatch(/anterior\?\.saldoCredorIpiTransportar/);
-        expect(fonte).toMatch(/atual\?\.saldoCredorIpi\b/);
+    it('o campo "Mês Anterior" da ficha DESTA competência manda (é o que abateu a guia); o "a transportar" da anterior é a reserva — ICMS e IPI iguais (11/09, LEGACY)', () => {
+        expect(fonte).toMatch(/atual\?\.saldoCredorIcms\b/);
         expect(fonte).toMatch(/anterior\?\.saldoCredorIcmsTransportar/);
+        expect(fonte).toMatch(/atual\?\.saldoCredorIpi\b/);
+        expect(fonte).toMatch(/anterior\?\.saldoCredorIpiTransportar/);
+        // A DEFASAGEM (17/08) morreu: o "entrou no mês anterior" não é o saldo
+        // anterior deste mês — e ler isso deixou o E110 da LEGACY com c.10 zero.
+        const codigo = fonte.split('\n').filter(l => !l.trim().startsWith('//'));
+        expect(codigo.filter(l => /anterior\??\.saldoCredorIcms\b/.test(l))).toEqual([]);
+        expect(codigo.filter(l => /anterior\??\.saldoCredorIpi\b/.test(l))).toEqual([]);
+        // Dois saldos que divergem saem DITOS, nunca escolhidos calados.
+        expect(fonte).toMatch(/A ficha diz DOIS saldos anteriores/);
     });
 
     it('os campos viajam no retorno, com a ORIGEM junto', () => {

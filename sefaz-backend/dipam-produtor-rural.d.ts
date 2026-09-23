@@ -103,3 +103,15 @@ export function agruparTiradosPorDecisao(
  * NFS-e passar por NF-e. Serviço nunca é produção rural (FUNRURAL).
  */
 export function ehDocumentoDeServico(d: any): boolean;
+
+/**
+ * Esta NOTA foi tirada do FUNRURAL por decisão gravada?
+ *
+ * É a decisão da NOTA, não do produtor — quem responde pelo produtor inteiro
+ * continua sendo `cadastro.funrural`. Sem chave devolve false: documento sem
+ * chave legível não pode ser casado com decisão nenhuma.
+ */
+export function notaForaDoFunruralPorDecisao(
+    cadastro: unknown,
+    chave: string | null | undefined,
+): boolean;

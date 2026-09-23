@@ -246,3 +246,79 @@ describe('decidirAlertaCron — anti-spam por assinatura', () => {
         expect(r.problemas).toHaveLength(1);
     });
 });
+
+// ============================================================================
+// 🚨 "AGORA NÃO SEI SE FOI DELA" — o painel não dizia DE QUEM foi a falha.
+//
+// 30/08, colaborador via Paulo: rodou a captura com A3 da empresa 93 (SILVIO
+// FREIRE), viu no card **"1 falha(s)"** com o motivo do cStat 656, e perguntou
+// — com razão — se a falha era daquela empresa. **O painel não tinha como
+// responder.**
+//
+// 🔴 E O DADO ESTAVA NO LOG O TEMPO TODO. O cron grava `errosResumo[].nome` e
+// `.cnpj` desde o #28, justamente porque *"painel só dizia '17 falhas' sem
+// nenhuma pista de QUAIS empresas"* — e `extrairMotivoTop` lia só o `motivo`,
+// jogando o nome fora. O mesmo com a `fonte`, que o heartbeat grava desde
+// sempre e o painel descartava.
+//
+// É a classe "o dado existe e ninguém lê", a terceira da semana (o
+// `naoConferidos` num header que a tela não lê; a flag `coberturaIncompleta`).
+// ============================================================================
+describe('🚨 o card diz DE QUEM foi a falha e QUEM disparou a rodada', () => {
+    const reg = {
+        collection: 'sefaz_cron_logs', label: 'Captura NF-e (DistDFe)',
+        tsField: 'executadoEm', maxIdleHoras: 48,
+    };
+    const log = (over: Record<string, unknown> = {}) => ({
+        executadoEm: new Date().toISOString(), sucessos: 0, falhas: 1, ...over,
+    });
+
+    it('nomeia a empresa da falha — o caso SILVIO FREIRE', () => {
+        const n = normalizarEntradaLog(reg, log({
+            fonte: 'sefaz-cron-noturno',
+            errosResumo: [{
+                cnpj: '12345678000199', nome: 'SILVIO FREIRE',
+                motivo: 'SEFAZ retornou cStat 656 (Consumo Indevido)', codigo: 'cStat=656',
+            }],
+        }));
+        expect(n.motivoTop).toContain('SILVIO FREIRE');
+        expect(n.motivoTop).toContain('656');
+    });
+
+    it('e diz a FONTE — é ela que separa "foi o cron" de "fui eu"', () => {
+        expect(normalizarEntradaLog(reg, log({ fonte: 'sefaz-cron-noturno' })).fonte)
+            .toBe('sefaz-cron-noturno');
+        expect(normalizarEntradaLog(reg, log({ fonte: 'admin-dirigida' })).fonte)
+            .toBe('admin-dirigida');
+    });
+
+    // ⚠️ COM MAIS DE UMA FALHA ELE NÃO FINGE QUE É UMA SÓ: nomear só a
+    // primeira faria a pessoa conferir uma empresa e concluir que o resto
+    // está certo.
+    it('com várias falhas, diz "e mais N"', () => {
+        const n = normalizarEntradaLog(reg, log({
+            falhas: 3,
+            errosResumo: [
+                { nome: 'EMPRESA A', motivo: 'cStat 656' },
+                { nome: 'EMPRESA B', motivo: 'x' },
+                { nome: 'EMPRESA C', motivo: 'y' },
+            ],
+        }));
+        expect(n.motivoTop).toContain('EMPRESA A');
+        expect(n.motivoTop).toContain('e mais 2');
+    });
+
+    // ⚠️ AUSÊNCIA NÃO VIRA RÓTULO INVENTADO — log antigo não tem os campos, e
+    // afirmar "cron" ali mandaria procurar no lugar errado.
+    it('log sem nome mantém a frase antiga, e sem fonte devolve null', () => {
+        const n = normalizarEntradaLog(reg, log({ errosResumo: [{ cnpj: '999', motivo: 'erro qualquer' }] }));
+        expect(n.motivoTop).toBe('erro qualquer');
+        expect(n.fonte).toBeNull();
+        expect(normalizarEntradaLog(reg, log()).fonte).toBeNull();
+    });
+
+    it('e nome em branco não vira prefixo vazio', () => {
+        const n = normalizarEntradaLog(reg, log({ errosResumo: [{ nome: '   ', motivo: 'cStat 656' }] }));
+        expect(n.motivoTop).toBe('cStat 656');
+    });
+});

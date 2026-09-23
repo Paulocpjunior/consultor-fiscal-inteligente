@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: esta página e a fonte em docs/ se atualizam JUNTAS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="pendencias-cfi">
+<meta name="guia-revisao" content="2026-09-14">
+<title>Pendências do CFI — o que falta e quem resolve · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+<style>
+    .fila { border-left: 4px solid var(--borda); padding-left: 14px; margin: 14px 0; }
+    .fila.dinheiro { border-left-color: var(--vermelho); }
+    .fila.decisao  { border-left-color: var(--ambar); }
+    .fila.nomeada  { border-left-color: var(--cinza); }
+    .fila.feito    { border-left-color: var(--verde); }
+    .fila h3 { margin: 0 0 4px; }
+    .fila p { margin: 4px 0; font-size: .94rem; }
+    .estado { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+    .estado div {
+        border: 1px solid var(--borda); border-radius: 10px; background: #fff;
+        padding: 10px 16px; min-width: 150px; flex: 1;
+    }
+    .estado dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--cinza); }
+    .estado dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 700; color: var(--verde); font-variant-numeric: tabular-nums; }
+    .estado dd small { display: block; font-size: .78rem; font-weight: 400; color: var(--cinza); }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Pendências do CFI</h1>
+            <p>O que falta, e quem resolve cada item · medido em 11/09/2026</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<section>
+    <h2>📌 Como ler esta página</h2>
+    <p>Tudo aqui foi <strong>medido contra o código</strong> na data acima, não copiado de anotação
+    antiga. A ordem é por <strong>quem resolve</strong>, porque é isso que decide a próxima ação.</p>
+    <dl class="estado">
+        <div><dt>Testes</dt><dd>7.755<small>516 suítes, todas verdes</small></dd></div>
+        <div><dt>Tipos e build</dt><dd>ok<small>lint, tsc e build limpos</small></dd></div>
+        <div><dt>Vulnerabilidades</dt><dd>0<small>em 412 dependências de produção</small></dd></div>
+    </dl>
+</section>
+
+<section>
+    <h2>🔴 Só o Paulo resolve <span class="selo selo-vermelho">13 itens</span></h2>
+    <p>Nenhum é trabalho de código. São leituras de painel, cliques em produção ou acessos
+    que o time de desenvolvimento não tem.</p>
+
+    <div class="fila dinheiro">
+        <h3>HYPE CAFÉ 08/2026: regerar o EFD-Contribuições e validar no PVA (C175)</h3>
+        <p>O PVA devolveu 298 erros: 295 eram <em>uma por NFC-e</em>, pedindo o registro C175 (a receita do cupom
+        consolidada por CST e alíquota), e 2 no M210/M610 — consequência, porque sem C175 o PVA não vê receita
+        nenhuma e mostra o M200 zerado. Corrigido em 14/09: o arquivo passa a sair com C100 + C175 para cada
+        NFC-e, e item com CST 04/06 (monofásico, alíquota zero) sai sem PIS/COFINS. Sobra 1 erro que é de
+        cadastro: o participante <code>05425342667</code> no 0150 sem código de município (na mão, como sempre).</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> gerar o EFD-Contribuições de 08/2026 de novo, apagar a
+        escrituração antiga no PVA e importar o arquivo novo. Conferir na tela do PVA se o M200/M210 vieram com a
+        receita das NFC-e. Vale também para 07/2026, que nunca teve recibo.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>SPED ICMS/IPI de agosto de TODA empresa de Brasília: regerar</h3>
+        <p>O bloco B (ISS do DF) saía vazio e o PVA recusa (<code>B470</code>). Corrigido em 11/09 pelo caso
+        LEGACY — e, à tarde, o B470 regerado saía com o campo <em>ISS substituto</em> vindo da nota TOMADA
+        (R$ 6,17 na LEGACY), corrigido de novo: nota tomada não entra, o campo sai zero. Toda empresa do DF
+        que já gerou pelo CFI gerou com o bloco errado. <strong>À noite, a terceira rodada:</strong> o E110
+        da LEGACY saiu com créditos de 4.569,96 sobre C190 zerados (o PVA recusa) e saldo anterior 0,00 com
+        o saldo na ficha — corrigidos: o E110 soma o que o C190 escriturou e o campo 10 lê a ficha DESTA
+        competência. Regerar a LEGACY de novo e conferir o saldo no aviso.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar, ler a caixa de avisos (a prevalidação
+        acusa antes do PVA — o item órfão do 0200 já aparecia lá) e validar no PVA.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>SPED entregue com nota que já tinha sido tirada do livro</h3>
+        <p>Entre <code>03/09</code> e <code>10/09</code> a retirada de nota valia na tela e não valia no
+        arquivo. Quem tirou uma nota nesse período e já gerou o SPED daquela competência entregou o
+        arquivo <strong>com a nota tirada</strong>.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> regerar e conferir, competência por competência.
+        O app não sabe quais já foram transmitidas.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>LEGACY × Federação e KROYA × GOLDLOG: importar os XMLs e tirar do livro o que foi digitado</h3>
+        <p>Desde 11/09 a mesma NF-e pode ficar nas DUAS empresas da carteira (saída de uma, entrada da
+        outra). As saídas da <strong>LEGACY</strong> que a tela recusou entram agora: basta importar de novo.
+        As saídas da <strong>KROYA</strong> lançadas pelo ✍️ <em>sem chave</em> em agosto viram
+        <strong>duplicata</strong> no dia em que os XMLs entrarem.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> importar os XMLs de saída das duas; depois, na KROYA,
+        <strong>🚫 Tirar do livro</strong> cada nota digitada sem chave que agora tem o XML ao lado. Se a
+        competência já foi entregue, regerar o arquivo.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>SPED da distribuidora (ELS · 08/2026): corrigir a IE no cadastro, regerar e reconferir</h3>
+        <p>A segunda rodada do PVA trouxe 37 erros. Três eram do gerador e foram corrigidos em 11/09:
+        nota <strong>cancelada</strong> com código de participante, <strong>item com duas unidades</strong>
+        (o PVA cobrava o 0220) e <strong>ICMS creditado na entrada</strong> de uma optante. O quarto é
+        <strong>cadastro</strong>: a Inscrição Estadual está com <strong>11 dígitos</strong> (a de SP tem
+        12) em Empresas → Dados Fiscais — o app tira a pontuação, mas não completa o número.</p>
+        <div class="alerta">⚠️ <strong>O que fazer:</strong> corrigir a IE, regerar o SPED e validar. Se
+        voltarem <em>"Campo obrigatório"</em> ou <em>"domiciliado no Brasil"</em>, mandar o Relatório de Erros
+        do PVA (o arquivo, não o print) — o print não nomeia o registro.</div>
+    </div>
+
+    <div class="fila dinheiro">
+        <h3>NOVA ERA: seis produtores fora do FUNRURAL por engano</h3>
+        <p>Foram tirados quando a tela ainda não dizia qual nota era qual. Eram justamente as notas
+        próprias de entrada, que <strong>devem</strong> gerar sub-rogação. Enquanto não voltarem, o
+        FUNRURAL dela sai a menor.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → 🌾 DIPAM / Produtor rural.
+        O botão de desfazer mostra quanto volta ao total antes do clique.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>EXPERTE: captura bloqueada</h3>
+        <p>Zero documento no banco em qualquer competência, com IPI apurado na ficha. É esta empresa
+        que segura a prova final do registro E510.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → 📋 Status por Empresa diz o bloqueio.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>PS VIDROS: marcar contribuinte de IPI como Não</h3>
+        <p>Sem isso o E500/E520 continua saindo num comércio, onde o IPI da nota do fornecedor é custo
+        e não crédito. O PVA recusa o arquivo.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Empresas → Dados Fiscais.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>VINATEX 08/2026: qual evento a Receita tem registrado</h3>
+        <p>O <code>MS1028</code> diz que o evento já existe, o que contradiz a conclusão de que nada
+        tinha sido aceito. Só o recibo do e-CAC diz se a competência já está entregue e com quais valores.</p>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>JOAO EVANGELISTA: cadastro duplicado</h3>
+        <p>Mesma família do caso WALDESA. A exclusão é lápide, não apagamento.</p>
+        <div class="alerta">⚠️ <strong>Conferir:</strong> que não volta depois de recarregar e em outro navegador.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Rotação do segredo do cron <span class="selo selo-ambar">aberta desde 27/07</span></h3>
+        <p>O valor vazou duas vezes em colagem de terminal. Trocar exige rodar os dois scripts de agendamento.</p>
+        <div class="alerta">⚠️ Neste serviço o tráfego fica fixado numa revisão, então variável trocada
+        nasce a 0%. Os agendamentos continuariam com o segredo velho, falhando calados.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Bloco K: ler o número da fila de migração</h3>
+        <p>Zero empresa e o bloco é descartável, como o SAT foi. Uma que seja e vira alvo nomeado.
+        Não dá para decidir sem a leitura.</p>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>DeRE: três pré-requisitos e quatro schemas</h3>
+        <p>Piloto da Reforma, procuração no e-CAC e credencial. Faltam também os schemas de
+        <code>D-1199</code>, <code>D-2101</code>, <code>D-9121</code> e <code>D-9199</code>, mais o manual
+        de erros. A primeira competência é <code>10/2026</code>, com entrega em <code>13/11</code>.</p>
+    </div>
+</section>
+
+<section>
+    <h2>🟠 Decisão do Paulo <span class="selo selo-ambar">2 itens</span></h2>
+    <p>Estão parados esperando uma escolha. Nenhum será construído por dedução.</p>
+
+    <div class="fila decisao">
+        <h3>Converter os outros CST na correlação de CFOP</h3>
+        <p>Hoje a régua converte <code>00</code> e <code>20</code> e preserva <code>40</code>,
+        <code>41</code>, <code>50</code>, <code>51</code>, <code>60</code> e <code>70</code> de propósito:
+        cada um declara um fato (isenta, diferimento, ST já cobrada) que o <code>90</code> apagaria.</p>
+        <div class="quando"><strong>A pergunta:</strong> existe fornecedor em que o certo é converter um desses?</div>
+    </div>
+
+    <div class="fila decisao">
+        <h3>Dívida técnica de junho: atacar ou deixar</h3>
+        <p>São refatorações de dias num app fiscal em produção, com risco de regressão silenciosa.
+        Estão medidas e piorando (tabela abaixo), mas nenhuma está quebrando nada hoje.</p>
+        <div class="quando"><strong>A pergunta:</strong> vale parar para atacar, ou seguem esperando?</div>
+    </div>
+</section>
+
+<section>
+    <h2>⚪ Com o desenvolvimento, já nomeado no código <span class="selo">5 itens</span></h2>
+    <p>Nenhum é esquecimento: cada um está escrito dentro do próprio módulo, com o motivo de não ter
+    sido fechado. <strong>O app não afirma o que não sabe em nenhum deles.</strong></p>
+
+    <div class="fila nomeada">
+        <h3>Robô de auditoria de dependências travado</h3>
+        <p>Ele acha o problema, corrige e valida, e morre ao abrir o pedido de alteração: o GitHub não
+        dá essa permissão à automação. Medido de novo em <code>04/09</code>: a configuração marcada em
+        agosto <strong>não</strong> está em vigor.</p>
+        <div class="onde">📍 <strong>Como conferir sem esperar:</strong> a sonda abre um pedido vazio de
+        propósito no dia sem problema nenhum.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Código de ISS retido do CSV de Barueri</h3>
+        <p>A coluna vem <code>"2"</code> nas 24 notas e o significado não está provado: a convenção do
+        portal e a do padrão nacional dizem o oposto. Afirmar que não houve faz o ISS sair a maior;
+        afirmar que houve tira ISS devido.</p>
+        <div class="quando">O app guarda o valor cru e <strong>não afirma nada</strong>. Fecha com uma nota
+        de Barueri que tenha ISS retido.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Arquivo TXT de lote de Barueri não é lido</h3>
+        <p>Largura fixa, amostra com duas notas e campos sem significado provado. Leiaute posicional
+        deduzido é a família dos códigos inventados que já custaram caro.</p>
+        <div class="quando"><strong>Não é beco:</strong> a recusa manda usar o CSV do mesmo portal, que
+        cobre tudo que decide livro.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Tamanho máximo do campo de observação do R-2010</h3>
+        <p>O teto de <code>97</code> é o piso <strong>provado</strong> por um evento aceito em produção,
+        não o número do leiaute. O schema oficial é bloqueado pela rede do ambiente de desenvolvimento.</p>
+        <div class="alerta">⚠️ Acima de 97 volta a ser dedução, e dedução ali devolve o lote inteiro.</div>
+    </div>
+
+    <div class="fila nomeada">
+        <h3>Três partes do SPED ainda sem recibo</h3>
+        <p>O bloco D do EFD-Contribuições, o E510 de IPI e o E200/E210 de ST nunca passaram pelo
+        validador. São gerados e conferidos internamente, mas prova mesmo só vem do recibo.</p>
+    </div>
+</section>
+
+<section>
+    <h2>✅ Fechado em 14/09</h2>
+
+    <div class="fila feito">
+        <h3>🧾 NFC-e no EFD-Contribuições: o C175 que nunca tinha saído</h3>
+        <p>Em 24/08 o C170 saiu do cupom (o PVA recusava 572 vezes) e ficou faltando a outra metade: o Guia
+        1.35 manda <em>"somente os registros C100 e C175"</em>, e o PVA lê a receita do cupom no VL_OPR do C175.
+        Agora cada NFC-e sai com um C175 por CFOP + CST + alíquota, com base sem ICMS e sem desconto; a régua de
+        incidência (CST 04/06/07/08/09 ⇒ zero) vale no C170, no C175 e no bloco M; e a prevalidação acusa NFC-e
+        sem C175 antes do PVA.</p>
+        <div class="quando"><strong>Pendência do Paulo:</strong> regerar a HYPE 08/2026 e validar — o M200/M210
+        do PVA passa a vir do C175.</div>
+    </div>
+
+    <div class="fila feito">
+        <h3>📒 Registro de Apuração do ICMS (RAICMS) sem gerar o SPED</h3>
+        <p>HYPE CAFÉ: <em>"o valor de DIFAL só aparece lá no ajuste E111, ou eu tenho que gerar o SPED para
+        conferir o valor do ICMS a pagar ou credor"</em>. A apuração só existia a caminho do E110. Agora
+        <strong>Relatórios → 📒 Apuração do ICMS (RAICMS)</strong> imprime o modelo do e-Fiscal (linhas 001 a 014,
+        com cada ajuste E111 na Coluna Auxiliar — inclusive o par do art. 117) lendo a <strong>mesma apuração</strong>
+        que escreve o E110, sem gerar o arquivo. PDF com responsável e contador.</p>
+        <div class="quando"><strong>Pendência do Paulo:</strong> abrir a aba na HYPE 08/2026 e conferir contra o
+        print do e-Fiscal (1.204,16 + 32,09 − 19,93 = 1.216,32) — o número só bate depois de cadastrar os dois
+        códigos do art. 117.</div>
+    </div>
+
+    <div class="fila feito">
+        <h3>DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117)</h3>
+        <p>HYPE CAFÉ, Lucro Presumido: o DIFAL de uso/consumo e ativo não sai em guia — entra no E110 como
+        débito pela alíquota interna (art. 117, II) e crédito do imposto da origem (art. 117, I), como o
+        e-Fiscal fazia dentro da nota. O app propõe a base por dentro nota a nota (pelo CFOP escriturado) e
+        você confirma ou informa em <strong>SPED Fiscal → Ajustes E111 → 🧭 DIFAL de aquisição na
+        apuração</strong>. Os dois códigos da tabela 5.1.1 são cadastrados; sem os dois, nada entra.</p>
+        <div class="quando"><strong>Pendência do Paulo:</strong> cadastrar os dois códigos na HYPE 08/2026,
+        conferir a base das notas, regerar o SPED e validar no PVA.</div>
+    </div>
+</section>
+
+<section>
+    <h2>✅ Fechado em 12/09</h2>
+
+    <div class="fila feito">
+        <h3>VL_OPR do C190 sem frete, seguro, outras despesas e FCP-ST</h3>
+        <p>ELS 08/2026: Livro de Entradas 957.467,11 contra 955.593,91 no PVA. A causa era o parser do
+        navegador, que não gravava os quatro campos por item. Fonte, acervo (botão <strong>♻️ Reler itens
+        dos XMLs</strong> em Relatórios → ✏️ CFOP por nota) e gerador (reserva dos totais, dita no aviso da
+        geração) no mesmo PR. O aviso agora nomeia a nota em que VL_DOC e a soma dos VL_OPR divergem.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>A lápide (🚫 Tirar esta nota do livro) não valia nos relatórios do navegador</h3>
+        <p>GOLDLOG, nota 781 duplicada: a listagem de documentos que alimenta Relatórios e faturamento
+        não filtrava a retirada. Agora passa pelo mesmo dono do SPED — a nota retirada sai de todos os
+        leitores.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>Natureza de rendimento POR NOTA no R-4020 (Contábil)</h3>
+        <p>Entregue em 11/09 (v3.4.278) e corrigida em 12/09 (v3.4.279): a chave da nota do portal de SP
+        era descartada em silêncio; agora um evento por beneficiário com um pagamento por natureza, e a
+        retificação pelo recibo gravado ou informado à mão.</p>
+    </div>
+</section>
+
+<section>
+    <h2>✅ Fechado em 11/09</h2>
+
+    <div class="fila feito">
+        <h3>SPED da ELS (Simples): cancelada, unidade do item e ICMS de entrada</h3>
+        <p>Cancelada/denegada sai só com os campos da Exceção 1 e não sustenta participante nem item; código
+        de produto com duas unidades vira um cadastro por código+unidade; a entrada do optante sai sem
+        crédito, pela mesma régua do Livro de Entradas; a IE do 0000 sai só com dígitos. Regras R42-R45 na
+        prevalidação.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>Bloco B do DF no EFD ICMS/IPI</h3>
+        <p><code>B001|0</code> + <code>B470</code> em quem é de Brasília (zerado quando não houve prestação,
+        como o arquivo aceito do e-Fiscal); fora do DF continua vazio. Item de NFS-e deixou de entrar no
+        0200. Regra R41 na prevalidação. <strong>À tarde:</strong> o campo <em>ISS substituto</em> (M) deixou
+        de sair da nota TOMADA — sai zero, e a tomada com ISS retido é contada e dita no aviso.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>E110 pelo mesmo número do C190 + saldo anterior da ficha desta competência</h3>
+        <p>O campo 06 somava o ICMS cru do fornecedor que o C190 já zerava (regime ou CST informado); agora o
+        dono é um só (<code>somarIcmsNoArquivo</code>), e o campo 10 lê <em>"Saldo Credor ICMS (Mês
+        Anterior)"</em> da competência gerada, não da anterior. ICMS e IPI com a mesma régua; dois saldos
+        divergentes saem ditos no aviso.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>Retenção informada à mão que "sumia" ao reabrir a nota</h3>
+        <p>O ajuste estava gravado; o formulário é que abria vazio. Agora abre preenchido e o carimbo fica à
+        vista. A natureza de rendimento por NOTA no R-4020 é do Contábil e entrou no dia seguinte.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>A mesma NF-e em duas empresas da carteira</h3>
+        <p>O outro lado ganha documento próprio (id da chave + CNPJ de quem escritura), nos três
+        importadores; evento, cancelamento e manifestação chegam nos dois. E a tela deixou de cair em
+        "outra empresa" quando o gravado era só o resumo.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>CFOP e CST por ITEM — a nota mista</h3>
+        <p>Item com ST e item sem, na mesma nota, recebem um CFOP/CST por produto no <strong>✂️ por
+        item</strong> do detalhe da nota. O item vence a nota; vale no Livro, no Resumo, no SPED e no SAGE.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>C100 sem COD_PART nas entradas capturadas pela SEFAZ</h3>
+        <p>O dono da contraparte passou a ler a forma achatada da captura; regra nova na prevalidação
+        das duas famílias acusa antes do PVA.</p>
+    </div>
+
+    <div class="fila feito">
+        <h3>A nota gravada no mês errado agora tem como ser corrigida</h3>
+        <p>Em São Paulo a nota de 31/08 pode ser emitida até 10/09, e quem decide o mês é o
+        <strong>fato gerador</strong>. Até 03/09 a competência era gravada pela emissão: essas notas somem
+        do Livro de Serviços e do ISS do mês a que pertencem, e aparecem no mês seguinte.</p>
+        <div class="onde">📍 <strong>Onde:</strong> Central de Documentos → XMLs →
+        <strong>📅 Competência do acervo</strong>. Escolha a empresa e a competência que está fechando.</div>
+        <div class="alerta">⚠️ <strong>Uma nota por clique, com motivo escrito.</strong> Corrigir muda os
+        DOIS meses: se algum deles já foi entregue, o arquivo precisa ser regerado e conferido.</div>
+    </div>
+
+    <div class="fila feito">
+        <h3>A direção do documento parou de sair do campo gravado</h3>
+        <p>O campo mente na compra de produtor rural: a nota é emitida pela própria empresa e fica
+        guardada como saída. Cinco leitores decidiam livro, imposto ou farol por esse campo.</p>
+        <div class="alerta">⚠️ Em cliente que compra de produtor rural, a contagem de entradas e saídas da
+        Rotina do Mês pode mudar em relação ao que se via antes de 11/09 — e agora está certa.</div>
+    </div>
+</section>
+
+<section>
+    <h2>📊 O que a medição mostrou</h2>
+    <p>Três números que não estavam sendo acompanhados.</p>
+    <div class="tabela-rolagem">
+    <table>
+        <thead><tr><th>Medida</th><th class="num">Antes</th><th class="num">Hoje</th><th>Situação</th></tr></thead>
+        <tbody>
+            <tr><td>Erros de acesso a índice sem checagem</td><td class="num">1.031</td><td class="num">1.102</td><td>piorou 71</td></tr>
+            <tr><td>Telas acima de 800 linhas</td><td class="num">11</td><td class="num">15</td><td>piorou 4</td></tr>
+            <tr><td>Leituras cruas da direção do documento</td><td class="num">60</td><td class="num">0</td><td>fechado em 11/09</td></tr>
+        </tbody>
+    </table>
+    </div>
+    <p>O terceiro estava nomeado desde agosto com o número escrito, e em vinte dias cresceu de 60 para 97
+    sem ninguém reabrir. <strong>Pendência nomeada e não travada cresce</strong> — por isso ele agora tem
+    uma varredura que impede a volta.</p>
+</section>
+
+</main>
+<footer>
+    SP Assessoria Contábil · Consultor Fiscal Inteligente · página medida em 11/09/2026<br>
+    Fonte desta página: <code>docs/pendencias-cfi.md</code> — as duas metades se atualizam juntas.
+</footer>
+</body>
+</html>

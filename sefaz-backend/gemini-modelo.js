@@ -8,6 +8,12 @@
 // também"* — e, quando eu respondi com a explicação dos aliases: *"o que você
 // quer dizer? pedi para você atualizar p a versão 3.7"*. A ordem é PINAR.
 //
+// Paulo, 06/09: *"precisamos alterar nosso motor em todos os apps, do gemini,
+// 3.7 para 3.8 em todos"*. O PISO subiu para 3.8 — e só o piso: o ID continua
+// saindo do que a conta LISTA. Se a 3.8 ainda não aparecer para a conta, o app
+// pina no mais novo que existe e a tela DIZ que a linha está atrás (é a régua
+// de 16/08: a família é piso, não casamento exato).
+//
 // ═══ POR QUE ISTO É UM MÓDULO E NÃO DUAS CONSTANTES ═════════════════════════
 //
 // Escrever `'gemini-3.7-pro'` na mão é apostar a produção num ID que eu nunca
@@ -44,7 +50,7 @@
  * "Atualizar para a 3.7" quer dizer não ficar para trás — não quer dizer que
  * exista um 3.7 em todo degrau.
  */
-export const FAMILIA_ALVO_GEMINI = '3.7';
+export const FAMILIA_ALVO_GEMINI = '3.8';
 
 /** `gemini-3.7-flash` → 3.7 · `gemini-2.5-pro` → 2.5 · sem versão → null. */
 export function versaoDoModelo(nome) {

@@ -111,6 +111,55 @@ export function valoresApuradosDaFicha(ficha) {
 }
 
 /**
+ * 🚨 O BLOQUEIO DE UMA ETAPA — DONO ÚNICO (28/08, VINCENZO GUERRA).
+ *
+ * ═══ POR QUE ELE PRECISOU NASCER ════════════════════════════════════════════
+ *
+ * Esta projeção existia DUAS vezes: aqui e em `bloqueiosDasEtapas`, na Rotina
+ * do Mês. A da tela era montada À MÃO, com sete campos — e **esqueceu
+ * `podeDeclararEnvio`**, que tinha nascido no dia anterior justamente para
+ * fazer a porta do envio declarado sumir onde ela não resolve.
+ *
+ * O efeito, no print do Paulo: na VINCENZO o app ENVIOU a guia (e o cliente
+ * PAGOU), o campo dizia `false`… e a Rotina oferecia *"📋 Já enviei esta guia
+ * por fora"* assim mesmo, porque `undefined !== false`. Ele registrou, e o mês
+ * continuou travado — *"mesmo fazendo esse registro ele não assume"*. A porta
+ * existia convidando a declarar o que o app já tinha feito.
+ *
+ * ⚠️ E a MESMA lacuna, na direção contrária, apagava a porta NOVA: a etapa 4
+ * manda `podeDeclararCobertura: true` e a tela pergunta `=== true`, então a
+ * saída da MANTOAN ficava INVISÍVEL justamente na tela onde a trava aparece.
+ *
+ * 📌 É a lição de 27/08 (`rotina-empresa-insumo.js`) na outra ponta: lá era o
+ * INSUMO montado à mão, aqui é a SAÍDA. **Objeto montado à mão para atravessar
+ * uma fronteira é uma segunda cópia com outra roupa, e ela envelhece em
+ * SILÊNCIO no primeiro campo novo** — e nada quebra: as duas telas só passam a
+ * contar histórias diferentes sobre a mesma empresa.
+ */
+export function bloqueioDaEtapa(e) {
+    return {
+        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
+        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
+        // 📋 A porta do envio DECLARADO só aparece onde ela resolve — quem
+        // decide é a etapa, não a tela (ver `podeDeclararEnvio` na Rotina).
+        podeDeclararEnvio: typeof e.podeDeclararEnvio === 'boolean' ? e.podeDeclararEnvio : null,
+        // 📋 E a porta da COBERTURA declarada, pela MESMA régua: ela só existe
+        // quando o que trava é obrigação que o catálogo admite não cobrir. Nas
+        // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
+        // conserto, e declarar por cima apagaria o caminho.
+        podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
+        // As obrigações NOMEADAS: é essa lista que a declaração precisa
+        // mencionar, e é ela que a leitura compara depois.
+        propostas: Array.isArray(e.propostas) ? e.propostas : null,
+        // ⚠️ AS CAUSAS DO RITO, NOMEADAS pelo dono (`pendenciaSharePoint` /
+        // `pendenciaBaixa`). Sem elas a tela só sabe DIZER o que falta e não
+        // sabe para ONDE mandar — e foi assim que a única porta oferecida na
+        // VINCENZO virou a que não resolvia nenhuma das duas causas.
+        causas: Array.isArray(e.causas) ? e.causas : null,
+    };
+}
+
+/**
  * PRÉ-CONDIÇÃO: esta competência pode ser fechada?
  *
  * Lê as ETAPAS que a Rotina produziu — **nunca reimplementa a régua delas**.
@@ -127,10 +176,7 @@ export function podeDarFimDeMes(rotina) {
                 + 'para saber o que está aberto, e fechar no escuro é fechar sem base.',
         };
     }
-    const bloqueios = etapas.filter((e) => !etapaFechada(e)).map((e) => ({
-        id: e.id, ordem: e.ordem, nome: e.nome, status: e.status,
-        resumo: e.resumo || null, acao: e.acao || null, onde: e.onde || null,
-    }));
+    const bloqueios = etapas.filter((e) => !etapaFechada(e)).map(bloqueioDaEtapa);
     if (bloqueios.length) {
         return {
             pode: false,
@@ -176,6 +222,10 @@ export function montarCorte({ agoraIso, state, documentos }) {
 export function montarFimDeMes({
     empresaId, competencia, regime = null,
     rotina, ficha, corte, lastro = null,
+    // 🚨 A APURAÇÃO VEM DO DONO (`acharApuracaoDaCompetencia`), não da ficha.
+    // Ver o bloco da recusa logo abaixo: a ficha é do LUCRO, e o Simples —
+    // que é a maior parte da carteira — não tem nenhuma.
+    apuracao = null,
     quem, agoraIso, anterior = null,
 }) {
     const comp = normalizarCompetencia(competencia);
@@ -201,9 +251,25 @@ export function montarFimDeMes({
     const pre = podeDarFimDeMes(rotina);
     if (!pre.pode) return { ok: false, bloqueios: pre.bloqueios, motivo: pre.motivo };
 
-    // A ficha é a fonte dos valores. Sem ficha não há o que carimbar — e a
-    // etapa 3 da rotina já teria barrado, então isto é cinto e suspensório.
-    if (!ficha) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 ISTO BLOQUEAVA TODO O SIMPLES — e o comentário antigo dizia por quê,
+    // com a premissa errada: *"a etapa 3 da rotina já teria barrado, então isto
+    // é cinto e suspensório"*.
+    //
+    // Falso. A etapa 3 fecha pelo DONO (`acharApuracaoDaCompetencia`), que
+    // conhece TRÊS fontes: a `fichaFinanceira[]` do Lucro, o `faturamentoManual`
+    // e o `faturamentoMensalDetalhado` do Simples. Só a PRIMEIRA é "ficha".
+    //
+    // Resultado, no print do Paulo (REGINA CELIA PIRES · 07/2026, Simples): a
+    // Rotina dizia **"✓ Pronto para dar fim de mês"** com as cinco etapas
+    // verdes, e o botão recusava com *"sem apuração registrada"*. **Duas
+    // leituras do mesmo fato na mesma tela**, pela terceira vez esta semana —
+    // e desta o alcance é a maior parte da carteira, porque o Simples nunca
+    // teve fim de mês.
+    //
+    // A pré-condição é a ROTINA. Quem chegou aqui já passou pela etapa 3.
+    // ═══════════════════════════════════════════════════════════════════════
+    if (!ficha && !apuracao) {
         return {
             ok: false, bloqueios: [],
             motivo: 'Sem apuração registrada nesta competência não há valor a fechar.',
@@ -225,6 +291,21 @@ export function montarFimDeMes({
             fechadoPor: quem ? { uid: quem.uid || null, email: quem.email || null, nome: quem.nome || null } : null,
             corte: corte || null,
             apurado: valoresApuradosDaFicha(ficha),
+            // 🔒 DE ONDE VEIO O APURADO — sem isto o CCI não sabe interpretar o
+            // que recebeu, e um `apurado` todo null do Simples se leria como
+            // "este cliente não teve movimento", que é uma afirmação que
+            // ninguém fez.
+            apuradoFonte: ficha ? 'ficha-lucro' : (apuracao?.fonte || null),
+            // ⚠️ E a RESSALVA do Simples: o valor do DAS **não vive na ficha**
+            // — ele é calculado e emitido no card do Simples e registrado em
+            // `das_emitidos`. Carimbar zero aqui seria afirmar que não há
+            // imposto; carimbar a RECEITA seria levar INSUMO, e insumo convida
+            // o outro lado a RECALCULAR (a régua do R-2055).
+            apuradoRessalva: (!ficha && apuracao)
+                ? 'Cliente do Simples Nacional: a apuração desta competência é o faturamento lançado, '
+                  + 'e o valor do DAS não vive na ficha financeira — ele é emitido no card do Simples. '
+                  + 'Este carimbo congela o ACERVO e o LASTRO do mês; o valor do DAS se confere lá.'
+                : null,
             fichaId: ficha?.id || null,
             lastro: lastro || null,
             // O RETRATO das etapas no instante do fechamento. Sem ele, meses

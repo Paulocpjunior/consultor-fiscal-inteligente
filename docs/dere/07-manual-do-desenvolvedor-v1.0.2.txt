@@ -1,0 +1,1073 @@
+
+
+===== PÁGINA 1 =====
+Manual de Orientação aos Desenvolvedores
+Versão 1.0.2  |  18 de agosto de 2026
+ 
+DeRE
+Declaração de Regimes Específicos
+Manual do 
+Desenvolvedor
+
+
+===== PÁGINA 2 =====
+Histórico de Alterações
+Versão Data Alterações Seções impactadas
+1.0 10/06/2026 Versão inicial -
+1.0.1 22/06/2026 Ajustes na formatação do documento e 
+numeração de páginas
+-
+1.0.2 18/08/2026 - Inclusão do item “1.3.1 Guia Simplificado de 
+Acesso às APIs da DeRE pelo Receita Integra”
+- Inclusão do item "3.1.2 Estrutura e Montagem 
+do Lote de Eventos" detalhando informações 
+sobre a montagem do lote de eventos
+- Inclusão do item "4.7 API para limpeza dos 
+dados em Produção Restrita"
+Item 1.3.1
+Item 3.1.2
+Item 4.7
+
+===== PÁGINA 3 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 3 de 33
+SUMÁRIO
+1 INTRODUÇÃO........................................................................................................................................................................................4
+1.1 Objetivo............................................................................................................................................................................................4
+1.2 VISÃO GERAL DA ARQUITETURA....................................................................................................................................................4
+1.3 AUTENTICAÇÃO E SEGURANÇA (RECEITA INTEGRA).................................................................................................................5
+1.3.1 GUIA SIMPLIFICADO DE ACESSO ÀS APIS DA DERE PELO RECEITA INTEGRA [V.1.0.2]....................................................5
+1.3.2 CAMADA DE TRANSPORTE E CRIPTOGRAFIA (TLS).................................................................................................................6
+1.4 FLUXO DE TRANSMISSÃO DOS LOTES DE EVENTOS.................................................................................................................7
+1.5 FLUXO DE PROCESSAMENTO DOS LOTES DE EVENTOS...........................................................................................................8
+1.6 FLUXO DE CONSULTA DOS RESULTADOS DO PROCESSAMENTO............................................................................................9
+2. CONCEITOS FUNDAMENTAIS...........................................................................................................................................................12
+3. APIS DA DERE....................................................................................................................................................................................13
+3.1 API DE TRANSMISSÃO DE LOTES.................................................................................................................................................13
+3.1.1 Endpoint e URLBASE.................................................................................................................................................................13
+Cabeçalhos da Requisição..................................................................................................................................................................13
+Corpo da Requisição...........................................................................................................................................................................13
+3.1.2 Estrutura e Montagem do Lote de Eventos [v1.0.2]...................................................................................................................14
+Diretrizes para Montagem do Lote......................................................................................................................................................14
+Processamento e Unicidade................................................................................................................................................................14
+Exemplo Simplificado de Estrutura XML de um Lote..........................................................................................................................14
+3.1.3 Fluxo de Utilização da API de Transmissão de Lote..................................................................................................................16
+Obtenção do Token de Acesso............................................................................................................................................................16
+Exemplo de Transmissão.....................................................................................................................................................................17
+3.2 API DE CONSULTA DO RESULTADO DO PROCESSAMENTO.....................................................................................................17
+Endpoint...............................................................................................................................................................................................18
+Cabeçalhos da Requisição..................................................................................................................................................................18
+Parâmetros da Requisição...................................................................................................................................................................18
+Fluxo de Utilização...............................................................................................................................................................................18
+Resultado da Consulta.........................................................................................................................................................................19
+Tratamento dos Resultados.................................................................................................................................................................19
+3.3 BOAS PRÁTICAS NA CONSULTA DO RESULTADO DO PROCESSAMENTO.............................................................................21
+4. REGRAS GERAIS DE INTEGRAÇÃO................................................................................................................................................22
+4.1 VALIDAÇÃO DOS XMLS (SCHEMAS XSD).....................................................................................................................................22
+Objetivo da Validação..........................................................................................................................................................................22
+Versionamento dos Esquemas XML....................................................................................................................................................22
+Utilização do Namespace....................................................................................................................................................................23
+Evolução dos Leiautes.........................................................................................................................................................................23
+4.2 CERTIFICADOS DIGITAIS ACEITOS (ICP-BRASIL).......................................................................................................................24
+Requisitos do Certificado Digital..........................................................................................................................................................24
+Tipos de Certificados Aceitos...............................................................................................................................................................24
+Identificação do Assinante...................................................................................................................................................................25
+4.3 ASSINATURA DIGITAL DOS EVENTOS (XMLDSIG)......................................................................................................................25
+Elemento Assinado..............................................................................................................................................................................25
+Padrão de Assinatura...........................................................................................................................................................................25
+Requisitos Técnicos da Assinatura......................................................................................................................................................25
+Transformações Obrigatórias..............................................................................................................................................................26
+Estrutura do Certificado na Assinatura................................................................................................................................................26
+4.4 TRATAMENTO DE ERROS E RETENTATIVAS................................................................................................................................27
+Retentativas.........................................................................................................................................................................................27
+Tratamento dos Códigos de Respostas HTTP....................................................................................................................................27
+
+===== PÁGINA 4 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 4 de 33
+Códigos de Erros de Negócio..............................................................................................................................................................29
+4.5 LIMITES OPERACIONAIS.................................................................................................................................................................29
+4.6 AMBIENTE DE PRODUÇÃO RESTRITA..........................................................................................................................................30
+Limitações do Ambiente de Produção Restrita....................................................................................................................................30
+Limpeza Periódica dos Dados do Ambiente........................................................................................................................................30
+4.7 API PARA LIMPEZA DOS DADOS EM PRODUÇÃO RESTRITA [V1.0.2]......................................................................................31
+Endpoint em Produção Restrita:..........................................................................................................................................................31
+Cabeçalhos da Requisição..................................................................................................................................................................31
+Parâmetros da Requisição...................................................................................................................................................................31
+Exemplo...............................................................................................................................................................................................31
+ Tabela de Retornos Esperados (HTTP Status)..................................................................................................................................31
+Fluxo de Utilização...............................................................................................................................................................................31
+
+===== PÁGINA 5 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 5 de 33
+1 INTRODUÇÃO
+1.1 Objetivo
+Este manual tem por objetivo fornecer as orientações técnicas necessárias para o 
+desenvolvimento de soluções que realizem a geração, assinatura, transmissão, recepção 
+e tratamento dos eventos da Declaração de Regimes Específicos (DeRE).
+O documento apresenta os conceitos fundamentais da arquitetura da DeRE, as 
+regras gerais de integração, os fluxos de processamento dos eventos, os mecanismos de 
+retorno e as orientações para utilização dos leiautes e serviços disponibilizados pelo 
+ambiente da DeRE.
+A arquitetura adotada pela DeRE segue os mesmos princípios utilizados em outros 
+sistemas do Sistema Público de Escrituração Digital (SPED), tais como o eSocial, a e-
+Financeira e a EFD-Reinf, utilizando uma abordagem baseada em eventos eletrônicos 
+estruturados em XML, transmitidos por meio de APIs e processados de forma assíncrona.
+1.2 Visão Geral da Arquitetura
+A DeRE utiliza uma arquitetura orientada a eventos para recepção e 
+processamento das informações declaradas pelos contribuintes.
+As informações são organizadas em eventos eletrônicos estruturados conforme os 
+leiautes oficiais da declaração. Cada evento representa um conjunto específico de 
+informações e pode possuir dependências em relação a outros eventos previamente 
+transmitidos.
+O fluxo operacional da DeRE pode ser resumido nas seguintes etapas:
+1. Geração do evento em formato XML conforme o leiaute oficial;
+2. Assinatura digital do evento utilizando certificado ICP-Brasil;
+3. Agrupamento dos eventos em lote para transmissão;
+4. Envio do lote para o ambiente da DeRE por meio das APIs disponibilizadas;
+5. Recebimento imediato de um protocolo de recepção do lote;
+6. Processamento assíncrono dos eventos pelo ambiente da DeRE;
+7. Aplicação das validações estruturais e regras de negócio;
+8. Disponibilização dos resultados de processamento e dos respectivos recibos dos 
+eventos.
+O processamento assíncrono permite que a recepção dos arquivos ocorra de forma 
+rápida e escalável, desacoplando o envio dos eventos da execução das validações mais 
+
+===== PÁGINA 6 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 6 de 33
+complexas. Dessa forma, o recebimento de um protocolo não significa que os eventos 
+foram aceitos, sendo necessária a consulta posterior dos resultados de processamento 
+para obtenção dos recibos e da situação definitiva de cada evento.
+Os conceitos, nomenclaturas e padrões operacionais apresentados neste manual 
+foram concebidos para manter alinhamento com a experiência já consolidada pelos 
+desenvolvedores em integrações com sistemas do SPED, reduzindo a curva de 
+aprendizado e facilitando a implementação das soluções integradas à DeRE.
+1.3 Autenticação e Segurança (Receita Integra)
+O acesso às APIs do ambiente da DeRE é restrito e protegido por mecanismos de 
+autenticação e autorização centralizados no sistema Receita Integra.
+A integração utiliza o protocolo OAuth 2.0 (fluxo Client Credentials), exigindo que a 
+aplicação consumidora obtenha previamente um token de acesso e envie um Bearer 
+Token válido no cabeçalho de todas as requisições realizadas às APIs da DeRE, incluindo 
+operações de recepção de lotes, consultas de processamento e demais serviços 
+disponibilizados pelo ambiente da DeRE.
+A autenticação da aplicação consumidora é realizada por meio de credenciais 
+específicas fornecidas pelo sistema Receita Integra, compostas por identificadores e 
+senhas de acesso próprios da integração.
+Importante destacar que a autenticação das APIs e a assinatura digital dos eventos 
+possuem finalidades distintas. A autenticação via Receita Integra controla o acesso aos 
+serviços disponibilizados, enquanto a assinatura digital dos eventos é responsável por 
+garantir a autenticidade, a integridade e a validade jurídica das informações transmitidas.
+Para detalhes técnicos sobre a obtenção de credenciais (client_id e client_secret), 
+fluxos de geração e renovação de tokens, gerenciamento de escopos e regras de 
+segurança aplicáveis aos ambientes de homologação e produção, o desenvolvedor deve 
+consultar o documento específico "Manual de Integração Técnica – Receita Integra". 
+1.3.1 Guia Simplificado de Acesso às APIs da DeRE pelo Receita Integra [v.1.0.2]
+Para integrar sua aplicação às APIs da DeRE no ambiente de Produção Restrita, 
+siga as etapas abaixo, divididas entre configurações de acesso e fluxo técnico:
+a) Etapas Administrativas (Configuração de Acesso)
+1) Participação no Piloto: A empresa deve integrar o grupo piloto da Reforma Tributária. 
+Caso ainda não participe, solicite o cadastramento via e-mail ao canal "Fale Conosco" .
+2) Procuração Eletrônica (e-CAC): A empresa deve outorgar poderes para o CPF do 
+usuário que irá gerar a Credencial de Acesso à API no portal e-CAC, para os seguintes 
+serviços específicos:
+
+===== PÁGINA 7 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 7 de 33
+ Piloto da CBS na Reforma Tributária sobre o Consumo: Necessário para que o 
+usuário possa gerar as credenciais da API;
+ DeRE - Declaração de Regimes Específicos: Necessário quando a empresa não 
+utilizar o próprio certificado digital e-CNPJ para assinar os eventos XML.
+3) Geração de Credenciais: Acesse o Portal da Produção Restrita (https://piloto-
+cbs.tributos.gov.br/), autentique-se com sua conta gov.br e selecione a empresa 
+representada. Utilize o serviço “Gerar Credencial de Acesso para API” para obter o seu 
+client_id e client_secret.
+b) Etapas Técnicas (Fluxo da Aplicação)
+1) Obtenção do Token de Acesso: Antes de qualquer transmissão, a aplicação deve 
+solicitar um Bearer Token ao Authorization Server (OAuth 2.0) no endereço: 
+https://api.receitafederal.gov.br/token.
+ Utilize o fluxo Client Credentials;
+ O token gerado possui validade de 60 minutos.
+2) Assinatura e Montagem do Lote: Cada evento XML deve ser assinado 
+individualmente (padrão XMLDSig) e, em seguida, encapsulado dentro da estrutura de um 
+Lote de Eventos, conforme o Schema XSD de Lote vigente.
+3) Transmissão: Com o token válido, acione o endpoint de recepção: 
+https://api.receitafederal.gov.br/prr-dere/v1/recepcao/lotes.
+ Envie o token no cabeçalho (Authorization: Bearer) e o XML do lote no corpo da 
+requisição;
+ Armazene o Protocolo de Recebimento retornado para consultar o status do 
+processamento assíncrono posteriormente
+1.3.2 Camada de Transporte e Criptografia (TLS)
+Toda a comunicação entre as aplicações dos contribuintes e os endpoints da DeRE 
+e do Receita Integra é realizada obrigatoriamente sob o protocolo HTTPS, utilizando TLS 
+(Transport Layer Security) para garantir a confidencialidade e a integridade dos dados em 
+trânsito. 
+Para estabelecer uma conexão segura, o desenvolvedor deve observar as 
+seguintes especificações técnicas: 
+ Versão do Protocolo: É exigida a utilização do protocolo TLS na versão 1.2 ou 
+superior. Versões legadas, como SSL 2.0/3.0 e TLS 1.0/1.1, não são suportadas 
+devido a vulnerabilidades conhecidas. 
+
+===== PÁGINA 8 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 8 de 33
+ Cipher Suites (Suítes de Criptografia): O ambiente prioriza o uso de suítes de 
+criptografia fortes que ofereçam Forward Secrecy (PFS) e algoritmos de criptografia 
+autenticada (AEAD). Embora a lista exata possa ser atualizada conforme padrões 
+de segurança da ICP-Brasil, recomenda-se a configuração de suítes modernas, 
+como: 
+ TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 
+ TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 
+ Certificados de Servidor: A validade do certificado do servidor (server side) será 
+verificada pela aplicação do contribuinte durante o handshake TLS. Os certificados 
+de serviço da DeRE são emitidos por autoridades certificadoras confiáveis.
+1.4 Fluxo de Transmissão dos Lotes de Eventos
+O envio de informações para a DeRE é realizado por meio da transmissão de 
+eventos eletrônicos estruturados em XML, conforme os leiautes oficiais publicados para 
+cada versão do sistema.
+Antes da transmissão, o contribuinte deve gerar os arquivos XML correspondentes 
+aos eventos que deseja enviar, observando as regras de preenchimento, validações e 
+dependências previstas neste manual e nos respectivos leiautes.
+Cada evento deve ser assinado digitalmente com certificado válido emitido no 
+âmbito da Infraestrutura de Chaves Públicas Brasileira (ICP-Brasil), garantindo a 
+autenticidade, integridade e autoria das informações transmitidas.
+Antes de realizar qualquer chamada às APIs da DeRE, a aplicação consumidora 
+deve autenticar-se junto ao sistema Receita Integra e obter um token de acesso válido, 
+que deverá ser informado no cabeçalho da requisição utilizando o padrão Bearer Token.
+Após a obtenção do token e a assinatura dos eventos, os arquivos XML são 
+agrupados em lote e transmitidos para o ambiente da DeRE por meio das APIs de 
+recepção.
+Durante a recepção do lote, são realizadas validações iniciais relacionadas à 
+estrutura da requisição, integridade das informações e validade da assinatura digital. 
+Caso essas validações sejam concluídas com sucesso, o sistema retorna um protocolo de 
+recebimento, que identifica unicamente o lote transmitido.
+O protocolo confirma apenas o recebimento do lote pelo ambiente da DeRE, não 
+representando a aceitação definitiva dos eventos nele contidos.
+
+===== PÁGINA 9 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 9 de 33
+1.5 Fluxo de Processamento dos Lotes de Eventos
+Após a recepção do lote, os eventos são encaminhados para processamento 
+interno no ambiente da DeRE.
+A DeRE utiliza um modelo de processamento assíncrono, no qual a validação 
+detalhada dos eventos ocorre de forma desacoplada da etapa de transmissão. Essa 
+abordagem permite maior escalabilidade, disponibilidade e capacidade de processamento 
+do ambiente.
+Durante o processamento são executadas, entre outras, as seguintes verificações:
+
+===== PÁGINA 10 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 10 de 33
+ Validação da estrutura XML conforme os esquemas oficiais;
+ Verificação da assinatura digital;
+ Validação cadastral do transmissor;
+ Verificação das dependências entre eventos;
+ Aplicação das regras de negócio previstas nos leiautes;
+ Validação de tabelas e códigos de domínio;
+ Verificação de unicidade, vigência e consistência das informações.
+Os eventos de um lote são processados individualmente. Dessa forma, a aceitação 
+ou rejeição de um evento não implica necessariamente o mesmo resultado para os 
+demais eventos pertencentes ao mesmo lote.
+Ao término do processamento, o sistema gera o resultado individual de cada 
+evento, contendo sua situação de processamento e, quando aplicável, as respectivas 
+mensagens de erro, aviso ou sucesso.
+1.6 Fluxo de Consulta dos Resultados do Processamento
+Como o processamento dos eventos ocorre de forma assíncrona, o resultado 
+definitivo não é disponibilizado no momento da transmissão do lote.
+Para consultar o andamento ou o resultado do processamento, a aplicação 
+consumidora deve autenticar-se previamente junto ao sistema Receita Integra e obter um 
+token de acesso válido para utilização nas APIs de consulta.
+Após a autenticação, o contribuinte deve utilizar o protocolo de recebimento do lote 
+para consultar sua situação por meio dos serviços disponibilizados pelo ambiente da 
+DeRE.
+Durante a consulta, poderão ser identificadas diferentes situações para os eventos 
+transmitidos, tais como:
+ Em processamento;
+ Processado com sucesso;
+ Processado com advertências;
+ Rejeitado por erro de validação.
+Quando o processamento for concluído com sucesso, será disponibilizado o 
+respectivo recibo do evento, que constitui a comprovação definitiva do seu processamento 
+pelo ambiente da DeRE.
+
+===== PÁGINA 11 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 11 de 33
+Caso sejam identificadas inconsistências, o resultado da consulta apresentará os 
+códigos e descrições das ocorrências encontradas, permitindo ao contribuinte corrigir as 
+informações e realizar nova transmissão, quando aplicável.
+
+
+===== PÁGINA 12 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 12 de 33
+
+
+===== PÁGINA 13 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 13 de 33
+2. CONCEITOS FUNDAMENTAIS
+A seguir são apresentados os principais conceitos utilizados neste manual.
+Conceito Descrição
+Evento Unidade básica de informação transmitida à DeRE, representada  
+por um arquivo XML estruturado conforme leiaute oficial.
+Lote Agrupamento de um ou mais eventos transmitidos em uma única  
+requisição para o ambiente da DeRE.
+Protocolo Identificador gerado após a recepção de um lote. Confirma apenas 
+o recebimento da transmissão.
+Recibo Comprovante emitido após o processamento bem-sucedido de um  
+evento. Representa a aceitação definitiva da informação.
+Processamento 
+Assíncrono
+Modelo em que o lote é recebido inicialmente e processado  
+posteriormente, sendo necessário consultar o resultado para  
+verificar a situação dos eventos.
+Evento de Tabela Evento utilizado para manutenção de informações cadastrais ou  
+estruturais, controladas por vigência temporal.
+Evento Periódico Evento associado a um período de apuração específico, utilizado  
+para envio de informações periódicas da declaração.
+Evento TransacionalEvento destinado ao envio de informações detalhadas sobre  
+operações ou transações realizadas pelo contribuinte.
+Evento de Retorno Evento  gerado  pela  DeRE  para  comunicar  o  resultado  do 
+processamento dos eventos transmitidos.
+Vigência
+Período de validade de uma informação, definido por datas de  
+início e fim de vigência. Aplicável principalmente aos eventos de  
+tabela.
+Retificação Procedimento  utilizado  para  corrigir  informações  transmitidas 
+anteriormente à DeRE.
+
+===== PÁGINA 14 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 14 de 33
+Receita Integra Plataforma responsável pela autenticação e autorização de acesso 
+às APIs da DeRE por meio do protocolo OAuth 2.0.
+Bearer Token Credencial de acesso obtida junto ao Receita Integra e utilizada  
+para autenticar as chamadas às APIs da DeRE.
+Os conceitos apresentados neste capítulo têm caráter introdutório. As regras específicas 
+de utilização de cada elemento serão detalhadas nos capítulos posteriores deste manual.
+3. APIS DA DERE
+3.1 API DE TRANSMISSÃO DE LOTES
+A API de transmissão de lotes permite o envio de eventos da DeRE para 
+processamento.
+Os eventos devem ser previamente gerados conforme os leiautes oficiais, 
+assinados digitalmente e agrupados em um lote XML antes da transmissão.
+A autenticação deve seguir o padrão Bearer Token detalhado na Seção 1.3 e no 
+manual específico do Receita Integra.
+3.1.1 Endpoint e URLBASE
+A URLBASE das APIs é https://api.receitafederal.gov.br/prr-dere
+POST URLBASE/v1/recepcao/lotes
+Ou seja, a URL completa em Produção Restrita é:
+https://api.receitafederal.gov.br/prr-dere/v1/recepcao/lotes
+Cabeçalhos da Requisição
+Cabeçalho Valor
+Content-Type application/xml
+Authorization Bearer TOKEN_RECEITA_INTEGRA
+Corpo da Requisição
+O corpo da requisição deve conter um documento XML representando o lote de 
+eventos a ser transmitido. O lote poderá conter um ou mais eventos, observadas as 
+regras de dependência e precedência definidas para cada tipo de evento.
+
+===== PÁGINA 15 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 15 de 33
+3.1.2 Estrutura e Montagem do Lote de Eventos [v1.0.2]
+Para a transmissão de qualquer informação ao ambiente da DeRE, o 
+desenvolvedor deve, obrigatoriamente, utilizar a estrutura de lotes de eventos. O lote 
+funciona como um envelope digital (container) que agrupa os arquivos XML dos eventos, 
+sendo indispensável tanto para o envio de uma carga massiva quanto para a transmissão 
+de um único evento isolado.
+Diretrizes para Montagem do Lote
+A construção do arquivo de lote deve observar rigorosamente o seguinte fluxo 
+lógico:
+ Geração e Assinatura Individual: Cada evento que compõe o lote deve ser 
+gerado conforme o seu respectivo leiaute oficial e assinado digitalmente de forma 
+individual, seguindo o padrão XMLDSig (Enveloped Signature) e utilizando 
+certificado ICP-Brasil válido.
+ Encapsulamento no Lote: Os eventos, já assinados, devem ser inseridos dentro 
+da estrutura XML definida pelo Schema XSD de Lote vigente. É importante 
+destacar que o endpoint de recepção da API (/v1/recepcao/lotes) espera receber o 
+documento XML representativo do lote, e não os arquivos de eventos soltos.
+ Validação Estrutural: O arquivo final do lote será validado contra o seu esquema 
+XSD para verificar a conformidade de sua estrutura, cardinalidade e metadados 
+antes de ser encaminhado para a fila de processamento. Falhas na estrutura do 
+lote (como tags fora da ordem prevista ou ausência do envelope raiz) provocarão a 
+rejeição imediata de toda a transmissão (Erro HTTP 422).
+ Capacidade do Lote: Um lote pode conter um ou mais eventos, respeitando os 
+limites operacionais de quantidade de registros e tamanho total da mensagem (em 
+bytes) que serão definidos futuramente para o ambiente de produção.
+Processamento e Unicidade
+Após a recepção bem-sucedida do lote, o sistema gera um Protocolo de 
+Recebimento, que identifica unicamente aquela transmissão. O processamento dos 
+eventos contidos no lote ocorre de forma assíncrona e individualizada; assim, a aceitação 
+ou rejeição de um evento específico não invalida os demais eventos processados 
+corretamente dentro do mesmo envelope.
+O desenvolvedor deve manter a rastreabilidade entre o ID do evento, o protocolo 
+do lote e o recibo definitivo gerado após o processamento com sucesso.
+Exemplo Simplificado de Estrutura XML de um Lote
+Um lote de eventos funciona como um envelope que agrupa um ou mais eventos 
+XML já assinados. Abaixo, um exemplo conceitual de como essa estrutura deve ser 
+montada para transmissão via API:
+
+===== PÁGINA 16 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 16 de 33
+<?xml version="1.0" encoding="utf-8"?>
+<DeRE xmlns="http://www.dere.gov.br/schemas/envioLoteDere/v1_0_1">
+<loteEventos>
+<ideContrib>
+<nrInsc>12345678</nrInsc>
+</ideContrib>
+<eventos>
+<evento id="ID0000000000000000000000000000000001">
+<!-- Evento 1: D-1001 (Assinado individualmente) -->
+<DeRE xmlns="http://www.dere.gov.br/schemas/evtInfoContrib/v1_0_1">
+<evtInfoContrib id="DeRE10011000000123456782026080504584504912">
+<!-- Dados do Evento -->
+</evtInfoContrib>
+<!-- Assinatura obrigatória para cada evento -->
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">...</Signature>
+</DeRE>
+</evento>
+<evento id="ID0000000000000000000000000000000002">
+<!-- Evento 2: D-1011 (Assinado individualmente) -->
+<DeRE xmlns="http://www.dere.gov.br/schemas/evtPGCC/v1_0_2">
+<evtPGCC id="DeRE10111000000123456782026080504584602611">
+<!-- Dados do Evento -->
+</evtPGCC>
+<!-- Assinatura obrigatória para cada evento -->
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">...</Signature>
+</DeRE>
+</evento>
+<!-- demais eventos -->
+</eventos>
+</loteEventos>
+</DeRE>
+Pontos de Atenção para o Desenvolvedor:
+ Encapsulamento: Observe que cada evento possui seu próprio envelope <DeRE> 
+e sua própria declaração de namespace específica para a versão do seu leiaute.
+ Assinatura Digital: A assinatura digital (<Signature>) deve ser aplicada 
+individualmente a cada evento (referenciando o atributo Id do evento) antes de sua 
+inserção no lote.
+ Unicidade: O ID de cada evento deve seguir o padrão de 42 caracteres e ser único 
+para garantir que o sistema não o rejeite por duplicidade. Ele deve ser 
+integralmente único na base de dados para o mesmo contribuinte e tipo de evento. 
+Embora o campo termine com um sequencial numérico de cinco dígitos (QQQQQ), 
+é fundamental compreender que a unicidade é garantida pela combinação de todos 
+os elementos que compõem os 42 caracteres: Tipo de Evento + Inscrição + Data 
++ Hora + Sequencial.
+◦ Como utilizar o sequencial QQQQQ?
+▪ A parte final do ID (QQQQQ) funciona como um "desempate" técnico e sua 
+incrementação segue uma lógica condicional:
+▪ Unicidade pela Marca Temporal: Como o ID contém a hora, minuto e 
+segundo da geração (HHMMSS), se o seu sistema gerar eventos em 
+
+===== PÁGINA 17 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 17 de 33
+segundos diferentes, o campo ID já será naturalmente único. Nestes casos, 
+o sequencial pode ser mantido fixo como 00001.
+▪ Unicidade pelo Sequencial: O incremento do campo QQQQQ (de 00001 a 
+99999) torna-se obrigatório apenas se o seu sistema gerar e transmitir mais 
+de um arquivo para o mesmo contribuinte dentro do exatíssimo mesmo 
+segundo.
+ Processamento Individual: Mesmo que o lote seja enviado em uma única 
+requisição, o sistema processará os eventos individualmente, gerando recibos ou 
+mensagens de erro para cada um deles no retorno da consulta.
+3.1.3 Fluxo de Utilização da API de Transmissão de Lote
+A transmissão de um lote é composta pelas seguintes etapas:
+1. Obter um token de acesso junto ao sistema Receita Integra;
+2. Gerar os eventos XML conforme os leiautes oficiais da DeRE;
+3. Assinar digitalmente os eventos;
+4. Agrupar os eventos em um lote XML;
+5. Enviar o lote utilizando a API de transmissão;
+6. Armazenar o protocolo retornado para posterior consulta do resultado do 
+processamento.
+Obtenção do Token de Acesso
+Antes de transmitir qualquer lote, a aplicação deve obter um token de acesso 
+utilizando suas credenciais cadastradas no Receita Integra.
+Exemplo utilizando curl:
+curl --location 'https://api.receitafederal.gov.br/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--user "CLIENT_ID:CLIENT_SECRET" \
+--data-urlencode 'grant_type=client_credentials'
+Exemplo de resposta:
+{
+  "expires_in": 3600,
+  "token_type": "bearer",
+  "access_token": "TOKEN_RETORNADO"
+}
+Onde:
+
+===== PÁGINA 18 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 18 de 33
+Campo Descrição
+expires_in Tempo de validade do token em segundos
+token_type Tipo do token retornado
+access_token Token de acesso utilizado nas chamadas às APIs da DeRE
+Exemplo de Transmissão
+Após a obtenção do token, o lote poderá ser transmitido utilizando o endpoint de 
+transmissão.
+Exemplo simplificado:
+curl -X POST 'URLBASE/v1/recepcao/lotes' \
+-H 'Content-Type: application/xml' \
+-H 'Authorization: Bearer TOKEN_RETORNADO' \
+-d '@lote.xml'
+Onde:
+ URLBASE corresponde ao endereço do ambiente utilizado (produção restrita ou 
+produção);
+ TOKEN_RETORNADO corresponde ao token obtido junto ao Receita Integra;
+ lote.xml corresponde ao conteúdo do arquivo XML contendo o lote de eventos da 
+DeRE.
+Resposta da Transmissão
+Após a recepção da requisição, o sistema da DeRE realizará validações iniciais de 
+autenticação, integridade da mensagem e estrutura do lote.
+Caso a transmissão seja aceita, será retornado um protocolo de recebimento do 
+lote.
+O protocolo deve ser armazenado pela aplicação, pois será utilizado 
+posteriormente para consulta da situação do processamento.
+Importante: O protocolo confirma apenas o recebimento do lote pelo ambiente da 
+DeRE. O resultado definitivo do processamento dos eventos deverá ser obtido 
+posteriormente por meio da API de Consulta do Resultado do Processamento.
+
+===== PÁGINA 19 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 19 de 33
+3.2 API DE CONSULTA DO RESULTADO DO PROCESSAMENTO
+A API de Consulta do Resultado do Processamento permite acompanhar a situação 
+dos lotes transmitidos para a DeRE e obter o resultado do processamento dos eventos 
+neles contidos.
+A consulta é realizada a partir do número do protocolo retornado pela API de 
+transmissão de lotes.
+Assim como nas demais APIs da DeRE, a autenticação é realizada por meio de 
+token de acesso obtido junto ao sistema Receita Integra, detalhado na Seção 1.3 e no 
+manual específico do Receita Integra.
+Endpoint
+GET URLBASE/v1/consulta/lotes/{protocolo}
+Em Produção Restrita:
+GET 
+https://api.receitafederal.gov.br/prr-dere/v1/consulta/lotes/{prot
+ocolo}
+Cabeçalhos da Requisição
+Cabeçalho Valor
+Authorization Bearer TOKEN_RECEITA_INTEGRA
+Parâmetros da Requisição
+Parâmetro Descrição
+protocolo Número do protocolo obtido na transmissão do lote.
+Fluxo de Utilização
+A consulta do resultado do processamento é composta pelas seguintes etapas:
+1. Obter um token de acesso válido junto ao Receita Integra;
+2. Informar o protocolo retornado pela transmissão do lote;
+3. Executar a consulta da situação do processamento;
+4. Interpretar o resultado retornado para cada evento do lote;
+5. Armazenar os recibos dos eventos processados com sucesso.
+Obtenção do Token de Acesso: 
+
+===== PÁGINA 20 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 20 de 33
+Para obter um token de acesso, consulte o procedimento descrito na seção API de 
+Transmissão de Lotes.
+Exemplo de Consulta
+curl -X GET 'URLBASE/v1/consulta/lotes/{protocolo}' \
+-H 'Authorization: Bearer TOKEN_RETORNADO'
+Onde:
+ URLBASE corresponde ao endereço do ambiente utilizado (produção restrita ou 
+produção);
+ protocolo corresponde ao identificador retornado pela API de transmissão de 
+Lotes;
+ TOKEN_RETORNADO corresponde ao token obtido junto ao Receita Integra.
+Resultado da Consulta
+A consulta retorna a situação atual do lote e dos eventos nele contidos.
+Como a DeRE utiliza processamento assíncrono, o resultado da consulta poderá 
+variar de acordo com o estágio de processamento do lote.
+De forma geral, poderão ocorrer as seguintes situações:
+Situação Descrição
+Em processamento O lote foi recebido, porém o processamento ainda não foi 
+concluído.
+Processado com 
+sucesso Todos os eventos do lote foram validados e aceitos pela DeRE.
+Processado com erros
+O lote foi processado, porém foram identificados erros em um 
+ou mais eventos do lote. Verifique as ocorrências de erro no 
+arquivo de retorno.
+Rejeitado Foram identificados erros que impediram o processamento do 
+evento. Verifique as ocorrências de erro.
+Tratamento dos Resultados
+O sistema consumidor deve analisar individualmente o resultado do processamento 
+de cada evento retornado pela consulta.
+Lote processado com sucesso
+
+===== PÁGINA 21 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 21 de 33
+Quando um evento for processado com sucesso, será disponibilizado o respectivo 
+recibo de processamento.
+O recibo constitui a comprovação da aceitação do evento pelo ambiente da DeRE e 
+deverá ser armazenado pelo sistema transmissor para utilização em consultas futuras, 
+retificações e demais operações previstas nos leiautes.
+Lote processado com erros
+O lote foi processado, porém foram identificados erros em um ou mais eventos do 
+lote. É necessário verificar no arquivo de retorno quais eventos foram processados e 
+quais possuem erros. 
+Quando um evento for rejeitado, o retorno apresentará as ocorrências identificadas 
+durante as validações.
+As ocorrências são compostas por códigos e descrições que permitem identificar a 
+regra violada e a causa da rejeição.
+Nessa situação, o sistema deverá:
+1. Identificar os erros informados;
+2. Corrigir as informações do evento;
+3. Gerar novo evento com nova numeração para o campo id, observando as regras 
+aplicáveis;
+4. Realizar nova transmissão.
+Lote rejeitado
+Quando o lote for rejeitado, nenhum evento foi tratado. No arquivo de retorno 
+haverá a descrição do erro que precisará ser corrigido. Então deverá ser gerado um novo 
+lote e transmitido para o ambiente da DeRE.
+Boas Práticas
+Recomenda-se que os sistemas integrados:
+ Armazenem o protocolo retornado na transmissão do lote;
+ Armazenem os recibos dos eventos processados com sucesso;
+ Implementem mecanismo de consulta periódica para lotes em processamento;
+ Registrem as mensagens de erro e advertência retornadas pela DeRE;
+ Mantenham rastreabilidade entre eventos transmitidos, protocolos e recibos 
+recebidos.
+Importante: 
+
+===== PÁGINA 22 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 22 de 33
+O protocolo retornado na transmissão apenas confirma o recebimento do lote pelo 
+ambiente da DeRE.
+3.3 BOAS PRÁTICAS NA CONSULTA DO RESULTADO DO PROCESSAMENTO
+A confirmação definitiva do processamento dos eventos somente ocorre após a 
+consulta do resultado e a emissão dos respectivos recibos.
+Como a DeRE utiliza processamento assíncrono, recomenda-se que a aplicação 
+aguarde um intervalo mínimo antes de realizar a primeira consulta do resultado de 
+processamento após a transmissão do lote.
+Consultas realizadas imediatamente após o envio possuem maior probabilidade de 
+retornar o status "Em processamento", não agregando valor ao fluxo da aplicação e 
+gerando consumo desnecessário dos recursos computacionais do ambiente da DeRE.
+Além disso, as APIs da DeRE poderão adotar mecanismos de limitação de 
+requisições (rate limit) para garantir a disponibilidade e estabilidade dos serviços. Em 
+função disso, as aplicações consumidoras devem evitar consultas repetitivas em 
+intervalos muito curtos.
+Recomenda-se que:
+ Seja aguardado um intervalo mínimo entre a transmissão do lote e a primeira 
+consulta de processamento;
+ Seja adotado um intervalo entre consultas sucessivas para lotes ainda em 
+processamento;
+ Não sejam implementados ciclos contínuos de consulta (busy waiting);
+ Seja utilizado mecanismo de retentativa gradual (backoff) para consultas repetidas;
+ Sejam respeitados os limites de utilização eventualmente definidos para cada 
+ambiente.
+Exemplo de estratégia recomendada:
+1. Transmitir o lote;
+2. Aguardar um período inicial antes da primeira consulta;
+3. Caso o lote permaneça em processamento, aguardar novo intervalo antes da 
+próxima consulta;
+4. Repetir o procedimento até a conclusão do processamento ou até atingir o limite de 
+tentativas definido pela aplicação.
+Essa abordagem contribui para uma utilização mais eficiente das APIs e reduz a 
+probabilidade de bloqueios decorrentes da aplicação de políticas de controle de tráfego.
+
+===== PÁGINA 23 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 23 de 33
+4. REGRAS GERAIS DE INTEGRAÇÃO
+4.1 VALIDAÇÃO DOS XMLS (SCHEMAS XSD)
+Os eventos transmitidos para a DeRE devem ser gerados em formato XML e seguir 
+rigorosamente a estrutura definida pelos esquemas XML (XML Schema Definition – XSD) 
+vigentes. Os esquemas oficiais da DeRE serão disponibilizados nos portais abaixo e 
+deverão ser utilizados pelas aplicações na validação prévia dos eventos antes da 
+transmissão:
+I - Portal do Sistema Público de Escrituração Digital - SPED, no sítio eletrônico da 
+Secretaria Especial da Receita Federal do Brasil (https://www.gov.br/sped) e
+II - Portal Nacional do IBS e da CBS, no sítio eletrônico do Comitê Gestor do IBS 
+(https://cgibs.gov.br/).
+Os arquivos XSD constituem a especificação técnica oficial da estrutura dos 
+eventos e são utilizados para validar elementos, atributos, tipos de dados, cardinalidade, 
+obrigatoriedade dos campos e demais restrições estruturais dos documentos XML.
+Objetivo da Validação
+A validação dos eventos contra os esquemas oficiais permite identificar 
+inconsistências estruturais antes da transmissão ao ambiente da DeRE, reduzindo 
+rejeições e melhorando a qualidade das informações enviadas.
+A validação contra os esquemas XSD verifica exclusivamente a conformidade 
+estrutural do XML. A aprovação na validação estrutural não garante a aceitação do evento 
+pela DeRE, uma vez que o processamento também contempla validações de assinatura 
+digital, consistência cadastral, dependências entre eventos e regras de negócio previstas 
+nos leiautes da declaração.
+Recomenda-se que toda aplicação realize a validação dos arquivos XML 
+localmente antes da assinatura digital e da transmissão dos eventos.
+Versionamento dos Esquemas XML
+As alterações na estrutura dos eventos são controladas por meio do versionamento 
+dos esquemas XML. A versão de cada leiaute é identificada no namespace do XML e no 
+nome do arquivo XSD correspondente.
+Exemplo de namespace:
+http://www.dere.gov.br/schemas/evtInfoContrib/v1_0_1
+Onde:
+
+===== PÁGINA 24 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 24 de 33
+Componente Descrição
+http://www.dere.gov.br/schemas/ Identifica  a  base  dos  esquemas  da 
+DeRE
+evtInfoContrib Identifica o tipo de evento
+v1_0_1 Identifica a versão do leiaute
+O arquivo XSD correspondente ao exemplo acima seria evtInfoContrib-
+v1_0_1.xsd.
+Utilização do Namespace
+Todo evento XML deve declarar o namespace correspondente à versão do leiaute 
+utilizada.
+Exemplo:
+<DeRE xmlns="http://www.dere.gov.br/schemas/evtInfoContrib/v1_0_1">
+    ...
+</DeRE>
+A utilização de namespace incompatível com a versão esperada pelo ambiente 
+resultará na rejeição do evento durante o processamento.
+Evolução dos Leiautes
+Os leiautes da DeRE poderão sofrer alterações em decorrência de:
+ Mudanças na legislação aplicável; 
+ Necessidades técnicas identificadas durante a evolução da plataforma; 
+ Correções ou aperfeiçoamentos dos modelos de dados. 
+Quando as alterações decorrerem de modificações legislativas, sua implementação 
+observará os prazos estabelecidos nos respectivos atos normativos.
+As alterações de natureza técnica serão divulgadas previamente por meio dos 
+canais oficiais (Portal SPED e Portal Nacional do IBS e da CBS) e disponibilizadas com 
+as novas versões dos esquemas XSD.
+
+===== PÁGINA 25 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 25 de 33
+4.2 CERTIFICADOS DIGITAIS ACEITOS (ICP-BRASIL)
+Os eventos transmitidos para a DeRE devem ser assinados digitalmente utilizando 
+certificado digital emitido por Autoridade Certificadora credenciada pela Infraestrutura de 
+Chaves Públicas Brasileira (ICP-Brasil).
+A assinatura digital tem por objetivo garantir a autenticidade, a integridade e o não 
+repúdio das informações transmitidas.
+Durante o processamento dos eventos, o ambiente da DeRE realizará validações 
+relacionadas à cadeia de certificação e à validade do certificado utilizado na assinatura.
+Requisitos do Certificado Digital
+O certificado digital utilizado para assinatura dos eventos deverá atender aos 
+seguintes requisitos:
+ Possuir cadeia de certificação válida e confiável;
+ Possuir cadeia certificadora vinculada à Autoridade Certificadora Raiz da ICP-
+Brasil;
+ Não estar revogado no momento da validação;
+ Não estar expirado na data da verificação da assinatura;
+ Ser do tipo e-CNPJ, e-PJ, e-CPF, e-PF ou e-Aplicação;
+ Possuir os atributos digitalSignature e nonRepudiation definidos na extensão 
+Key Usage do certificado.
+Tipos de Certificados Aceitos
+A DeRE aceita certificados digitais dos tipos:
+ ICP-Brasil;
+ A1;
+ A3;
+ certificado do contribuinte;
+ certificado do representante legal;
+ certificado do procurador eletrônico (se aplicável).
+A utilização de certificados emitidos fora da cadeia ICP-Brasil ou que não atendam 
+aos requisitos definidos neste manual resultará na rejeição do evento durante o 
+processamento.
+
+===== PÁGINA 26 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 26 de 33
+Identificação do Assinante
+As informações necessárias para identificação do assinante são obtidas 
+diretamente a partir do certificado digital utilizado na assinatura do evento.
+Por esse motivo, não é necessária a inclusão de informações adicionais de 
+identificação do signatário no conteúdo do evento além daquelas previstas pelo padrão 
+XML Digital Signature.
+4.3 ASSINATURA DIGITAL DOS EVENTOS (XMLDSIG)
+A assinatura digital dos eventos deverá seguir o padrão XML Digital Signature 
+(XMLDSig), conforme especificação definida pelo World Wide Web Consortium (W3C).
+A assinatura é aplicada diretamente ao evento XML e permite verificar a autoria, 
+integridade e autenticidade das informações transmitidas.
+Elemento Assinado
+A assinatura digital deve ser aplicada ao elemento do XML que contém o atributo 
+Id.
+Cada evento possui um identificador único e a assinatura deve referenciar 
+explicitamente esse identificador por meio do atributo Reference URI.
+Exemplo:
+<evtInfoContrib id="DeRE10011000000123456782026012809000000311">
+Padrão de Assinatura
+A DeRE adota um subconjunto do padrão XML Digital Signature (XMLDSig), 
+utilizando assinatura do tipo Enveloped Signature, na qual o elemento de assinatura é 
+incorporado ao próprio documento XML assinado.
+Requisitos Técnicos da Assinatura
+A assinatura digital deverá observar os seguintes padrões:
+Item Padrão Adotado
+Padrão de assinatura XML Digital Signature (XMLDSig)
+Formato da assinatura Enveloped Signature
+Certificado digital ICP-Brasil
+Cadeia de certificação EndCertOnly
+
+===== PÁGINA 27 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 27 de 33
+Item Padrão Adotado
+Tipo de certificado A1 ou A3
+Algoritmo de assinatura RSA-SHA256
+Algoritmo  de  resumo  criptográfico  
+(Digest) SHA-256
+Codificação Base64
+Tamanho da chave Compatível com certificados A1 e A3 (1024 e 2048 
+bits)
+Cadeia de Certificação
+A assinatura deverá conter apenas o certificado do assinante final.
+Não devem ser incluídos certificados intermediários ou certificados da autoridade 
+certificadora na estrutura XML da assinatura.
+Transformações Obrigatórias
+Para garantir a correta validação da assinatura digital, deverão ser utilizadas as 
+seguintes transformações:
+Transformação Identificador
+Enveloped Signature http://www.w3.org/2000/09/xmldsig#enveloped-signature
+Canonicalização XML (C14N) http://www.w3.org/TR/2001/REC-xml-c14n-20010315
+Essas transformações são utilizadas para normalizar o conteúdo XML antes do 
+cálculo dos resumos criptográficos e da validação da assinatura.
+Estrutura do Certificado na Assinatura
+As informações do certificado digital devem ser representadas por meio do 
+elemento X509Certificate, conforme previsto pelo padrão XMLDSig.
+Importante
+Os algoritmos criptográficos adotados pela DeRE poderão ser atualizados 
+futuramente em decorrência de evolução dos padrões de segurança, recomendações dos 
+
+===== PÁGINA 28 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 28 de 33
+órgãos responsáveis pela ICP-Brasil e necessidades técnicas ou regulatórias. Essas 
+atualizações serão divulgadas no Portal SPED e no Portal Nacional do IBS e da CBS.
+As bibliotecas utilizadas para geração da assinatura digital devem implementar 
+integralmente o padrão XML Digital Signature (XMLDSig) e suportar os algoritmos 
+definidos neste manual.
+4.4 TRATAMENTO DE ERROS E RETENTATIVAS
+As aplicações integradas à DeRE devem estar preparadas para tratar 
+adequadamente falhas de comunicação, erros de autenticação, indisponibilidades 
+temporárias dos serviços e rejeições decorrentes de validações técnicas ou de negócio.
+Em situações de timeout, interrupção de rede ou falha de comunicação durante a 
+transmissão de um lote, a aplicação não deve presumir automaticamente que o lote não 
+foi recebido pelo ambiente da DeRE.
+Nesses casos, recomenda-se que o sistema registre a ocorrência e realize 
+verificações adicionais antes de efetuar uma nova transmissão, evitando o envio indevido 
+de informações em duplicidade.
+Retentativas
+As retentativas devem ser utilizadas apenas para falhas temporárias de 
+comunicação ou indisponibilidades dos serviços.
+Recomenda-se que:
+ As retentativas sejam realizadas de forma controlada;
+ Seja adotado intervalo crescente entre tentativas sucessivas (backoff);
+ Não sejam executadas tentativas contínuas em intervalos muito curtos;
+ As falhas sejam registradas para fins de auditoria e suporte.
+Erros decorrentes de inconsistências nos dados transmitidos ou violações de 
+regras de negócio devem ser corrigidos antes da realização de nova transmissão.
+Tratamento dos Códigos de Respostas HTTP
+As APIs da DeRE utilizam códigos de status HTTP para indicar o resultado das 
+requisições realizadas. As aplicações integradas devem interpretar esses códigos e 
+adotar o tratamento adequado para cada situação.
+Código HTTP Descrição Tratamento Recomendado
+200 (OK) Requisição processada com 
+sucesso.
+Processar normalmente a resposta 
+retornada pela API.
+
+===== PÁGINA 29 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 29 de 33
+Código HTTP Descrição Tratamento Recomendado
+202 (Accepted)
+Requisição recebida e aceita 
+para processamento 
+assíncrono.
+Armazenar o protocolo retornado e 
+realizar consulta posterior do resultado 
+do processamento.
+400 (Bad 
+Request)
+Requisição inválida ou 
+malformada.
+Corrigir os dados da requisição antes 
+de realizar novo envio.
+401 
+(Unauthorized)
+Token ausente, inválido ou 
+expirado.
+Obter novo token junto ao Receita 
+Integra e repetir a operação.
+403 (Forbidden) Acesso não autorizado para a 
+operação solicitada.
+Verificar credenciais, permissões e 
+configurações de acesso.
+404 (Not Found) Recurso não encontrado.
+Verificar os parâmetros informados, 
+como número de protocolo ou URL 
+utilizada.
+429 (Too Many 
+Requests)
+Limite de utilização da API 
+excedido.
+Aguardar antes de realizar novas 
+chamadas e reduzir a frequência das 
+requisições.
+500 (Internal 
+Server Error) Erro interno da aplicação. Registrar a ocorrência e realizar nova 
+tentativa após intervalo adequado.
+502 (Bad 
+Gateway)
+Falha temporária de 
+comunicação entre serviços.
+Realizar retentativa controlada após 
+aguardar alguns instantes.
+503 (Service 
+Unavailable)
+Serviço temporariamente 
+indisponível.
+Aguardar a normalização do serviço 
+antes de realizar nova tentativa.
+504 (Gateway 
+Timeout)
+Tempo limite excedido durante 
+o processamento.
+Realizar nova tentativa observando as 
+recomendações de retentativa da 
+aplicação.
+Importante: Nas operações de transmissão de lotes, o código HTTP indica apenas 
+o resultado da comunicação com a API. A confirmação definitiva do processamento dos 
+eventos deve ser obtida posteriormente por meio da API de Consulta do Resultado do 
+Processamento.
+
+===== PÁGINA 30 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 30 de 33
+Códigos de Erros de Negócio
+Além dos códigos de status HTTP, a DeRE poderá retornar códigos de ocorrência 
+específicos relacionados às validações realizadas durante o processamento dos eventos. 
+Esses códigos permitem identificar de forma detalhada a causa de rejeições, advertências 
+ou outras situações encontradas durante a análise das informações transmitidas.
+A relação completa dos códigos de ocorrência, suas descrições e orientações de 
+tratamento será disponibilizada em documento específico, publicado como anexo deste 
+manual do desenvolvedor. Esse documento poderá ser atualizado independentemente 
+deste manual, acompanhando a evolução das regras de validação da DeRE.
+4.5 LIMITES OPERACIONAIS
+Com o objetivo de garantir a disponibilidade, estabilidade e desempenho dos 
+serviços, os ambientes da DeRE adotarão limites operacionais para utilização das APIs, 
+abrangendo, entre outros aspectos:
+ Quantidade de requisições realizadas em determinado período;
+ Frequência de consultas aos serviços;
+ Quantidade de eventos por lote;
+ Tamanho máximo das mensagens transmitidas;
+ Tempo máximo de processamento das requisições.
+As aplicações integradas devem ser desenvolvidas considerando a possibilidade 
+de rejeição ou bloqueio temporário de requisições que excedam os limites estabelecidos.
+Quando aplicável, os limites vigentes serão divulgados pelos canais oficiais (Portal 
+SPED e Portal Nacional do IBS e da CBS).
+As aplicações devem evitar comportamentos que possam gerar consumo 
+excessivo dos recursos computacionais disponibilizados pela DeRE, tais como:
+ Consultas repetitivas em intervalos reduzidos;
+ Retentativas contínuas sem controle;
+ Transmissões redundantes do mesmo conteúdo;
+ Processos automatizados que realizem chamadas em volume incompatível com a 
+finalidade da integração.
+A observância dos limites operacionais contribui para a manutenção da 
+disponibilidade do serviço para todos os usuários.
+
+===== PÁGINA 31 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 31 de 33
+4.6 AMBIENTE DE PRODUÇÃO RESTRITA
+A DeRE disponibilizará um ambiente de Produção Restrita destinado à realização 
+de testes e validações das integrações antes da utilização do ambiente de produção.
+Esse ambiente permite que os desenvolvedores validem a geração dos eventos, a 
+assinatura digital, a transmissão dos lotes, a consulta dos resultados e o tratamento dos 
+retornos disponibilizados pelas APIs.
+As informações transmitidas nesse ambiente não produzem efeitos legais ou 
+fiscais.
+Limitações do Ambiente de Produção Restrita
+O ambiente de Produção Restrita destina-se exclusivamente à validação funcional 
+e técnica das integrações com a DeRE.
+Esse ambiente não foi projetado para execução de testes de carga, testes de 
+estresse, testes de desempenho ou qualquer outra modalidade de teste que tenha como 
+objetivo avaliar a capacidade operacional da infraestrutura disponibilizada.
+Em razão disso, as aplicações não devem realizar transmissões massivas de 
+eventos ou consultas em volume incompatível com as atividades normais de 
+homologação.
+Para preservar a disponibilidade e a estabilidade do ambiente de Produção 
+Restrita, poderão ser estabelecidos limites para a quantidade de eventos transmitidos por 
+contribuinte, aplicação ou período.
+Os limites operacionais vigentes serão divulgados pelos canais oficiais (Portal 
+SPED e Portal Nacional do IBS e da CBS) e poderão ser alterados conforme as 
+necessidades de administração do ambiente.
+Limpeza Periódica dos Dados do Ambiente
+Os eventos transmitidos para o ambiente de Produção Restrita não possuem 
+caráter permanente.
+Com o objetivo de preservar a capacidade operacional do ambiente e garantir 
+condições adequadas para realização de testes por todos os usuários, poderão ser 
+realizadas rotinas periódicas de limpeza dos dados armazenados.
+Essas rotinas poderão remover eventos, lotes, protocolos, recibos e demais 
+informações registradas no ambiente de homologação.
+As limpezas programadas serão comunicadas previamente pelos canais oficiais 
+(Portal SPED e Portal Nacional do IBS e da CBS), permitindo que os usuários adotem as 
+providências necessárias para seus processos de teste.
+
+===== PÁGINA 32 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 32 de 33
+Em razão dessa característica, as aplicações não devem considerar as 
+informações armazenadas no ambiente de Produção Restrita como base permanente 
+para testes de longa duração ou validações históricas.
+4.7 API PARA LIMPEZA DOS DADOS EM PRODUÇÃO RESTRITA [V1.0.2]
+A API para Limpeza dos Dados em Produção Restrita permite às empresas apagar 
+a qualquer momento todas as informações transmitidas para o ambiente de produção 
+restrita, permitindo reiniciar os testes a partir de uma base de dados vazia, sem nenhum 
+evento.
+A limpeza é realizada informando o número do CNPJ base dos dados a serem 
+excluídos da base. É necessário que seja feita autenticação por meio de token de acesso 
+obtido junto ao sistema Receita Integra, detalhado na Seção 1.3 e no manual específico 
+do Receita Integra.
+Endpoint em Produção Restrita:
+DELETE URLBASE/v1/recepcao/limpezaDadosContribuinte/{cnpjDeclarante}
+Cabeçalhos da Requisição
+Cabeçalho Valor
+Authorization Bearer TOKEN_RECEITA_INTEGRA
+Parâmetros da Requisição
+Parâmetro Descrição
+cnpjDeclarante Número do CNPJ base (8 posições) cujos dados devem ser  
+excluídos da produção restrita.
+Exemplo 
+curl -X DELETE 
+'https://api.receitafederal.gov.br/prr-dere/v1/recepcao/limpezaDad
+osContribuinte/12345678' \
+-H 'Authorization: Bearer TOKEN_RETORNADO'
+Tabela de Retornos Esperados (HTTP Status)
+Código Descrição do Retorno
+200 Sucesso na limpeza dos dados
+400 CNPJ do declarante inválido
+401 Falha na autenticação do token do Receita Integra
+403
+Tentativa de limpeza de CNPJ sem permissão na credencial 
+autenticada
+405 Não foi utilizado o método HTTP DELETE
+500 Erro interno não esperado
+
+===== PÁGINA 33 =====
+DERE - Manual de Orientação ao Desenvolvedor Versão 1.0.2
+Página 33 de 33
+Fluxo de Utilização
+ Obter um token de acesso junto ao sistema Receita Integra com o escopo 
+necessário para a DeRE;
+ Identificar o CNPJ base (8 dígitos) que deseja "zerar" no ambiente de Produção 
+Restrita;
+ Executar a requisição utilizando o método DELETE;
+ Interpretar a resposta do servidor para confirmar se a base foi limpa com sucesso.
+Observações Importantes:
+ A execução deste comando remove integralmente da base de dados todos os  
+eventos (tabela e periódicos), lotes, protocolos  e recibos  vinculados ao CNPJ  
+informado, exclusivamente no ambiente de Produção Restrita.
+  ⚠️Atenção: Esta operação é irreversível. Uma vez executada, todos os dados de  
+testes anteriores serão perdidos, sendo necessário retransmitir os eventos de  
+tabela (D-1001 e D-1011) para iniciar novos fluxos de validação. 

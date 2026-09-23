@@ -189,11 +189,12 @@ const FechamentoReinfPanel: React.FC<Props> = ({ onShowToast }) => {
                             GILRAT {brl(base.apurado?.gilrat)} · SENAR {brl(base.apurado?.senar)} ·
                             <strong> total {brl(base.apurado?.total)}</strong>
                         </p>
-                        {!base.temPastaSharePoint && (
+                        {/* A causa vem do backend, com a ação dela — repeti-la aqui
+                            faria a tela e o rito dizerem coisas diferentes no mesmo caso. */}
+                        {!base.pastaSharePoint?.ok && (
                             <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
-                                ⚠️ Esta empresa não tem pasta configurada (grupo + pasta) na Central de XMLs →
-                                Integrações → SharePoint. O extrato é montado e enviado, mas <strong>não há onde
-                                arquivar</strong> o recibo.
+                                ⚠️ {base.pastaSharePoint?.motivo || 'Não foi possível resolver a pasta desta empresa no SharePoint.'}
+                                {' '}O extrato é montado e enviado, mas <strong>não há onde arquivar</strong> o recibo.
                             </p>
                         )}
                         {base.lotesSemCompetencia > 0 && (

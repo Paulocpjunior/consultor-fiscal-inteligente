@@ -10,6 +10,8 @@
 // ============================================================================
 import React, { useEffect, useState } from 'react';
 import { carregarAuditoria, RelatorioAuditoria, EventoAuditoria } from '../../services/auditoriaDonoService';
+import Desempenho from './Desempenho';
+import ForaDoEscopo from './ForaDoEscopo';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
 
 const TOM_PESO: Record<string, string> = {
@@ -23,6 +25,9 @@ const dataHora = (iso: string | null) =>
     (iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: FUSO }) : 'sem data gravada');
 
 const AuditoriaDono: React.FC = () => {
+    // 📊 22/09 (Paulo): "auditoria completa … desempenho por colaborador x
+    // empresas". É a segunda aba do MESMO painel (mesma trava do dono).
+    const [aba, setAba] = useState<'linha-do-tempo' | 'desempenho'>('desempenho');
     const [dados, setDados] = useState<RelatorioAuditoria | null>(null);
     const [carregando, setCarregando] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
@@ -74,12 +79,23 @@ const AuditoriaDono: React.FC = () => {
 
     return (
         <div className="max-w-[1400px] mx-auto animate-fade-in space-y-3">
+            <div className="flex gap-2">
+                {([['desempenho', '📊 Desempenho por colaborador × empresa'], ['linha-do-tempo', '🔐 Linha do tempo — ações sensíveis']] as const).map(([id, txt]) => (
+                    <button key={id} onClick={() => setAba(id)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${aba === id ? 'bg-[#0e3bfa] text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {txt}
+                    </button>
+                ))}
+            </div>
+            {aba === 'desempenho' && <Desempenho />}
+            {aba === 'linha-do-tempo' && (<>
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">🔐 Auditoria — ações sensíveis</h2>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             Quem fez o quê: guias enviadas, declarações transmitidas e permissões alteradas.
+                            Só o Consultor Fiscal — o que é de outro app do escritório fica de fora, contado.
                             Painel restrito ao dono do escritório.
                         </p>
                     </div>
@@ -125,6 +141,7 @@ const AuditoriaDono: React.FC = () => {
                             ))}
                         </div>
                     )}
+                    <ForaDoEscopo fora={dados.foraDoEscopo} rotulo="evento" />
 
                     <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
                         <div className="space-y-3">
@@ -139,7 +156,10 @@ const AuditoriaDono: React.FC = () => {
                                 {dados.porPessoa.map((p) => (
                                     <button key={p.quem} onClick={() => { setQuem(p.quem === '(não registrado)' ? '' : p.quem); }}
                                         className="w-full flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 hover:text-[#0e3bfa] py-0.5">
-                                        <span className="truncate">{p.quem.split('@')[0]}</span>
+                                        <span className="truncate" title={p.porque ? `CFI por: ${p.porque}` : undefined}>
+                                            {p.quem.split('@')[0]}
+                                            {p.porque && <span className="block text-[9px] text-slate-400 truncate">{p.porque}</span>}
+                                        </span>
                                         <span className="font-bold shrink-0">{p.quantidade}</span>
                                     </button>
                                 ))}
@@ -187,6 +207,7 @@ const AuditoriaDono: React.FC = () => {
                     </div>
                 </>
             )}
+            </>)}
         </div>
     );
 };

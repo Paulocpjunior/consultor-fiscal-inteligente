@@ -24,6 +24,7 @@ import { loginHeadlessPortalSp } from './nfse-sp-headless-login.js';
 import { registrarRunEmAndamento, concluirRunEmAndamento } from './cron-heartbeat.js';
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000;
 const THROTTLE_MS = 1500; // 1.5s entre prestadores (anti-WAF do portal SP)
@@ -124,11 +125,14 @@ async function listarEmpresasComCcm() {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
             const d = doc.data();
-            // Cadastro unico: CCM canonico em dadosFiscais.ccmSp (mesmo caminho
-            // do nfse-sp-orchestrator API). Fallback ao top-level legado.
-            // Sem isso, CCM gravada pelo modal Dados Fiscais (que so grava em
-            // dadosFiscais.ccmSp) nao era vista pelo caminho do portal headless.
-            const ccm = (d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().replace(/\D/g, '');
+            // 🚨 O CCM vem do DONO (`ccm-sp.js`): duas formas E os SÓ-ZEROS
+            // como vazio. Até 29/08 a leitura era crua, e `'00000000'` (o
+            // contorno da equipe) é **truthy**: a empresa entrava no mapa sob a
+            // chave `00000000`, nunca casava com prestador nenhum do dropdown,
+            // e era pulada **sem gerar uma linha em `detalhes`** — não é
+            // "falhou", é como se ela não existisse. Foi assim que a LAV ficou
+            // sem as NFS-e tomadas sem nada acusar (caso 29/08).
+            const ccm = ccmSpDaEmpresa(d);
             const cnpj = (d.cnpj || '').replace(/\D/g, '');
             if (!ccm || cnpj.length !== 14) return;
             if (mapa.has(ccm)) return;

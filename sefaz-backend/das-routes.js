@@ -16,6 +16,7 @@ import { getDasMode, getDasProvider } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
 import { podeAcessarEmpresaId, podeAcessarCnpj } from './carteira-auth.js';
 import { secretsMatch } from './cron-secret.js';
+import { requireEmpresaEmissao } from './emissao-empresa-auth.js';
 import {
     validarIdAtividadeSup, lerCodigoAtividadeSup, gravarCodigoAtividadeSup,
 } from './pgdas-atividade-config.js';
@@ -155,7 +156,7 @@ router.put('/atividade-iss-fixo', requireAuth, express.json(), async (req, res) 
     }
 });
 
-router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir-regular', requireEmissao, express.json(), requireEmpresaEmissao, async (req, res) => {
     try { res.json(await emitirDasRegular(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
@@ -164,7 +165,7 @@ router.post('/emitir-regular', requireEmissao, express.json(), async (req, res) 
 // A declaração vence todo mês (MAED de R$ 50,00 se não entregar); a guia só
 // existe se houver o que pagar. Antes disto, mês sem faturamento não tinha
 // caminho no app e ia pro e-CAC à mão.
-router.post('/declarar-sem-movimento', requireEmissao, express.json(), async (req, res) => {
+router.post('/declarar-sem-movimento', requireEmissao, express.json(), requireEmpresaEmissao, async (req, res) => {
     try {
         res.json(await declararPgdasSemMovimento({
             ...req.body,
@@ -189,7 +190,7 @@ router.post('/sondar-sem-movimento', requireAdmin, express.json(), async (req, r
     } catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
 
-router.post('/emitir-avulso', requireEmissao, express.json(), async (req, res) => {
+router.post('/emitir-avulso', requireEmissao, express.json(), requireEmpresaEmissao, async (req, res) => {
     try { res.json(await emitirDasAvulso(req.body)); }
     catch (err) { res.status(err.httpStatus || 400).json(errorPayload(err)); }
 });
@@ -198,6 +199,10 @@ router.post('/marcar-pago', requireEmissao, express.json(), async (req, res) => 
     try {
         const { docId, dataPagamento } = req.body;
         if (!docId) return res.status(400).json({ error: 'docId obrigatorio' });
+        const doc = await getDasPdf(docId);
+        if (!doc) return res.status(404).json({ error: 'Guia não encontrada.' });
+        const acesso = await podeAcessarEmpresaId(req.user, doc.empresaId);
+        if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
         res.json(await marcarPago(docId, dataPagamento));
     } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -177,7 +177,7 @@ describe('o SPED honra o CST escriturado', () => {
         // de duas respostas divergentes — a lição de 18/08.
         const chamadas = blocoC.match(/(?<!function )cstDoItemNoArquivo\(item, /g) || [];
         expect(chamadas).toHaveLength(2);
-        expect(blocoC).toContain("import { cstDoLancamento } from './cst-correlacao.js'");
+        expect(blocoC).toMatch(/import \{ cstDoLancamento, cstInformadoDoItem \} from '\.\/cst-correlacao\.js'/);
     });
 
     it('e as duas recebem o DOCUMENTO — sem ele o CST informado na NF não seria honrado', () => {
@@ -186,7 +186,12 @@ describe('o SPED honra o CST escriturado', () => {
         // A definição casa com o mesmo texto — o lookbehind deixa só as CHAMADAS.
         const chamadas = blocoC.match(/(?<!function )cstDoItemNoArquivo\(item, [^)]*, nota\)/g) || [];
         expect(chamadas).toHaveLength(2);
-        expect(blocoC).toMatch(/cstDoLancamento\(cru, cfopLancado, nota\?\.cstEscriturado\)/);
+        // ✂️ 11/09 (Sandra): a 3ª posição passa pelo dono que resolve ITEM > NOTA.
+        // Ler `nota?.cstEscriturado` direto voltaria a ignorar o CST por item.
+        expect(blocoC).toMatch(/cstDoLancamento\(cru, cfopLancado, cstInformadoDoItem\(nota, item\)\)/);
+        expect(blocoC).not.toMatch(/cstDoLancamento\([^)]*nota\?\.cstEscriturado/);
+        const contrib = fs.readFileSync(path.resolve(__dirname, '../sefaz-backend/sped-contrib-blocos.js'), 'utf8');
+        expect(contrib).toMatch(/cstDoLancamento\(cru, cfopLancado, cstInformadoDoItem\(nota, item\)\)/);
     });
 
     it('nenhum dos dois volta a formatar o CST cru por conta própria', () => {

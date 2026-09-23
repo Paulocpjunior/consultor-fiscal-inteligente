@@ -9,18 +9,25 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 // 🚨 O CONTABILISTA DO 0100 TEM DONO. Este arquivo tinha a SEGUNDA CÓPIA da
 // função — sem o e-mail padrão e sem o `codMunIBGE` sequer existir —, e por
 // isso o EFD-Contribuições da PWR saiu com o 0100 vazio depois do CRC, que é
 // a MESMA recusa que o PVA já tinha dado no EFD ICMS/IPI dela (19/08).
-import { getContadorPadrao } from './contador-escrituracao.js';
+import { getContadorPadrao, conferirContador } from './contador-escrituracao.js';
 import {
     buildBlocoA, buildBlocoC_Contrib, buildBlocoD_Contrib,
     buildBlocoF, buildBlocoM, buildBloco1_Contrib, buildBloco9_Contrib,
     filtrarNotasBlocoA, COD_ITEM_SERVICO_GENERICO,
 } from './sped-contrib-blocos.js';
+import { separarDeclaraveisNoBlocoA } from './sped-a100-declaravel.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+// O 0150 é da PESSOA, não da primeira nota: ausência num documento não apaga
+// presença no outro (18/09, VINATEX — o 'primeiro vence' deixava sem endereço
+// o cliente cujo primeiro documento do mês não tinha sido relido).
+import { mesclarParticipante } from './sped-bloco0-cadastros.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
 import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
@@ -30,15 +37,28 @@ import { receitaFinanceiraDaFicha } from './receita-aplicacao-financeira.js';
 // MM/YYYY) — igualdade estrita perderia a ficha em silêncio, e uma segunda
 // cópia da normalização é o começo de duas respostas divergentes.
 import { acharFichaCompetencia } from './ipi-varredura.js';
-import { direcaoEfetivaDoc } from './xml-metadata-helper.js';
+// 🚨 A retenção da FICHA é a fonte do F600 quando ela existe (28/08, MONICA
+// MOROMIZATO): o arquivo declarava a recolher MAIOR que o devido porque o F600
+// só via a retenção GRAVADA NO DOCUMENTO. A ficha é a mesma fonte da guia que
+// o cliente paga — calcular aqui faria o DARF e o SPED discordarem.
+import { montarF600DaFicha } from './retencao-f600-da-ficha.js';
+import { direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
-    tipoItemDoDocumento, TIPO_ITEM_SERVICO, codItemDoItem, unidadeDoItem, descreverUnidade,
+    tipoItemDoDocumento, TIPO_ITEM_SERVICO, conferirColisaoDeItem, avisoDeColisaoDeItem, avisoDeTipoItemPresumido, unidadeDoItem, descreverUnidade,
+    unidadesPorCodItem, codItemNoArquivo, codigosComDuasUnidades, avisoDeItemComDuasUnidades,
     levaC170NoContribuicoes, ehNfce,
 } from './sped-selecao-documentos.js';
 // O participante do 0150 é o MESMO que o C100/A100 referenciam — dono único.
 import { participanteDoDocumento } from './participante-doc-helper.js';
+// 🔒 O acervo que o fim de mês congelou — MESMO dono do EFD ICMS/IPI: dois
+// recortes diferentes fariam os dois arquivos do mesmo mês discordarem.
+import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+// 🧠 O cérebro do CFOP entra no ARQUIVO (07/09) — o C170 deste arquivo lê a
+// MESMA `convertCfopParaEntrada` do EFD ICMS/IPI, e ela precisa do contexto.
+import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametros-store.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -73,6 +93,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         throw err;
     }
     const empresa = { id: empresaId, ...empresaSnap.data(), _regime: regime };
+    // 🧠 Parâmetros de CFOP por fornecedor — ver o orquestrador do EFD ICMS/IPI.
+    const { parametros: parametrosCfop, erro: erroParametrosCfop } = await lerParametrosCfopDaEmpresa(db, empresaId);
 
     // Validacao critica
     if (!empresa.dadosFiscais || !empresa.dadosFiscais.uf || !empresa.dadosFiscais.codMunIBGE) {
@@ -93,6 +115,32 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         .where('competencia', '==', competencia);
     const snap = await notasQuery.get();
     let notas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 🚨 ELE NÃO FILTRAVA NEM A LÁPIDE NEM O PERDEDOR DE MERGE (10/09): a nota
+    // tirada do livro continuava saindo no bloco A/C e na apuração de
+    // PIS/COFINS. É a régua da LEITURA — quem responde é o dono.
+    const totalAntesDaLapide = notas.length;
+    notas = notas.filter(docContaNoLivro);
+    const retiradasDoAcervo = totalAntesDaLapide - notas.length;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
+    //
+    // Paulo: o fim de mês *"deve ser usada como régua para nos nortear, usar
+    // como base p impostos, livros, ficha financeira"*. Sem este recorte, o
+    // arquivo de agosto REGERADO em dezembro sairia DIFERENTE se uma nota de
+    // agosto chegou em novembro — e o Contábil já teria importado o outro
+    // número. É a divergência que o ato existe para matar.
+    //
+    // ⚠️ Sem fechamento (ou com a competência REABERTA) nada muda: quem não
+    // usar o ato gera exatamente como antes.
+    // ═══════════════════════════════════════════════════════════════════════
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, competencia);
+    const recorte = recortarPeloFechamento(notas, fechamento);
+    notas = recorte.docs;
+    // ⚠️ Os avisos ficam guardados: `warnings` só nasce mais abaixo, e um
+    // `push` aqui seria ReferenceError — a MESMA classe que derrubou a
+    // geração do SPED em 20/08, e que a trava de nomes do backend pega.
+    const avisosDoFechamento = avisosDoRecorte(recorte);
 
     // ─── 3b. A RECEITA SEM DOCUMENTO decide o PERFIL — e o perfil decide quem
     //         entra (por isso ela é lida AQUI, antes de coletar participante e
@@ -161,7 +209,9 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 
         const docLimpo = String(cnpjBruto).replace(/\D/g, '');
         if (!docLimpo) continue;
-        if (participantesMap.has(docLimpo)) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
 
         let cnpjFinal = '';
         let cpfFinal = '';
@@ -173,7 +223,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             continue;
         }
 
-        participantesMap.set(docLimpo, {
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
             codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjFinal,
@@ -184,7 +234,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             numero: participanteRaw.numero || '',
             complemento: participanteRaw.complemento || '',
             bairro: participanteRaw.bairro || '',
-        });
+        }));
     }
     const participantes = Array.from(participantesMap.values());
 
@@ -212,13 +262,34 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const itensMap = new Map();
     const unidadesMap = new Map();
     let itensSoEmNfce = 0;
+    // Mesma colisão do EFD ICMS/IPI, e ela entra nas DUAS famílias no mesmo PR:
+    // deixar numa só é a "meia trava" do COD_MUN do 0150 (22/08).
+    const colisoesDeItem = [];
+    // Mesmo código com duas unidades: sufixo nos dois lados (0200 aqui, C170 e
+    // A170 nos blocos), com o MESMO mapa — a régua do ICMS/IPI (ELS, 11/09).
+    const unidadesPorCodigo = unidadesPorCodItem(notas, levaC170NoContribuicoes);
     for (const nota of notas) {
         if (!levaC170NoContribuicoes(nota)) {
             itensSoEmNfce += (nota.itens || []).length;
             continue;
         }
         for (const item of (nota.itens || [])) {
-            const codItem = codItemDoItem(item);
+            // `codItemDoItem` é a chave; `codItemNoArquivo` soma a unidade quando preciso.
+            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
+            const jaCadastrado = itensMap.get(codItem);
+            if (jaCadastrado) {
+                const campo = conferirColisaoDeItem(jaCadastrado, {
+                    descricao: item.xProd || item.descricao || '',
+                    ncm: item.NCM || item.ncm || '',
+                });
+                if (campo) {
+                    colisoesDeItem.push({
+                        codItem,
+                        de: jaCadastrado[campo],
+                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
+                    });
+                }
+            }
             if (!itensMap.has(codItem)) {
                 itensMap.set(codItem, {
                     codItem,
@@ -242,8 +313,15 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // `valorTotal` em vez de `itens[]`) vira UM item sintético no A170 — cod
     // `COD_ITEM_SERVICO_GENERICO` — e ele precisa constar do 0200, senão o
     // A170 aponta pra um item que a Tabela de Identificação não cadastrou.
+    // 🚨 E ELE CONCORDA COM O BLOCO A PELO DONO (03/09, INSTITUTO HAYAY): a nota
+    // de serviço TOMADO sem COD_PART não sai no A100 (o PVA recusa o arquivo
+    // inteiro), então o A170 dela também não — e se este coletor continuasse a
+    // declarar o `SERV-GENERICO`, o arquivo trocaria aquela recusa pela do item
+    // ÓRFÃO. Duas leituras de "quais notas o bloco A declara" divergiriam no
+    // primeiro caso novo; é a régua de 24/08 (medir o que o registro SUSTENTA).
     if (!itensMap.has(COD_ITEM_SERVICO_GENERICO)
-        && filtrarNotasBlocoA(notas).some(n => !(n.itens || []).length)) {
+        && separarDeclaraveisNoBlocoA(filtrarNotasBlocoA(notas), empresa?.cnpj)
+            .declaraveis.some(n => !(n.itens || []).length)) {
         itensMap.set(COD_ITEM_SERVICO_GENERICO, {
             codItem: COD_ITEM_SERVICO_GENERICO,
             descricao: 'Prestação de serviços sem discriminação de itens no documento',
@@ -279,6 +357,76 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 
     // ─── 6. Warnings ───
     const warnings = [];
+    warnings.push(...avisosDoFechamento);
+    if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
+    if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
+    const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
+    if (codigosComSufixo.length) warnings.push(avisoDeItemComDuasUnidades(codigosComSufixo));
+    // O TIPO_ITEM "00" é o padrão do app e é CERTO num comércio — só a indústria
+    // (contribuinte de IPI, pelo cadastro) recebe o aviso. O app não deduz a
+    // destinação: ela não está no XML.
+    const avisoTipoItem = avisoDeTipoItemPresumido(itens, {
+        contribuinteIpi: empresa?.dadosFiscais?.contribuinteIpi,
+    });
+    if (avisoTipoItem) warnings.push(avisoTipoItem);
+    // O que sai do arquivo sai DITO — mas só quando houve retirada: aviso em
+    // arquivo normal é o que ensina a equipe a ignorar os avisos que importam.
+    if (retiradasDoAcervo > 0) {
+        warnings.push(
+            `${retiradasDoAcervo} documento(s) NAO entraram no arquivo porque foram tirados do livro `
+            + `(nota importada na empresa errada, numero corrigido ou perdedor de merge). `
+            + `O documento continua guardado com o motivo e com quem tirou — confira na Central de `
+            + `Documentos Fiscais se algum deles deveria estar aqui.`,
+        );
+    }
+
+    // ⚠️ AQUI, e não antes: `warnings` só nasce nesta linha, e empilhar aviso
+    // acima dela seria `ReferenceError` — a classe que derrubou a geração do
+    // SPED em 20/08.
+    const retencaoDaFicha = montarF600DaFicha({ notas, ficha: fichaDaComp });
+    warnings.push(...retencaoDaFicha.avisos);
+
+    // 🚨 OS AJUSTES DECLARADOS VIAJAM ATÉ O F600 (04/09, caso FRONTINI).
+    //
+    // Gerador que lê um campo que NENHUM orquestrador passa foi o defeito do
+    // `saldoCredorIpiAnterior` (19/08, PWR): o E520 saía 0,00 para sempre e
+    // nada acusava. O `coletarRetencoesF600` passou a aceitar os ajustes — é
+    // AQUI que eles chegam.
+    //
+    // ⚠️ Falha de leitura NÃO vira "não há ajuste": isso devolveria o valor do
+    // documento, que é justamente o número errado que o ajuste corrigiu, e o
+    // arquivo sairia declarando a recolher A MAIOR sem ninguém saber. Ela vira
+    // AVISO, e o número fica DITO como o do documento.
+    let retencoesAjustadas = {};
+    try {
+        const snapAj = await db.collection('reinf_retencoes_ajustadas')
+            .doc(`${String(empresa?.cnpj || '').replace(/\D/g, '')}_${String(competencia).replace(/\D/g, '')}`)
+            .get();
+        retencoesAjustadas = snapAj.exists ? (snapAj.data()?.ajustes || {}) : {};
+    } catch (e) {
+        console.error('[sped-contrib] leitura dos ajustes de retenção falhou', e);
+        warnings.push(
+            'Não consegui ler os ajustes de retenção desta competência — o F600 saiu com a retenção do '
+            + 'DOCUMENTO. Se alguma nota teve a retenção informada à mão, o abatimento do M200/M600 está '
+            + 'a MENOR neste arquivo: gere de novo antes de transmitir.',
+        );
+    }
+
+    // 🚨 A FICHA E O AJUSTE NÃO SE MISTURAM, e o app NÃO escolhe entre eles.
+    //
+    // A ficha declara o TOTAL da competência (é dela que sai a GUIA) e o F600
+    // rateia esse total pelas notas; o ajuste é POR NOTA, com autor e motivo.
+    // Aplicar os dois faria a soma do arquivo não fechar com a guia paga — dois
+    // números para o mesmo fato, que é o pior defeito de um arquivo fiscal.
+    // Então a ficha continua mandando (é o dinheiro que saiu) e o ajuste sai
+    // DITO, para uma pessoa decidir.
+    if (retencaoDaFicha.aplicou && Object.keys(retencoesAjustadas).length) {
+        warnings.push(
+            `F600: esta competência tem ${Object.keys(retencoesAjustadas).length} nota(s) com retenção `
+            + 'AJUSTADA à mão, mas o F600 saiu da FICHA (que declara o total e é a base da guia). Os dois '
+            + 'não se somam — confira qual dos dois está certo antes de transmitir.',
+        );
+    }
     if (entradasForaDaConsolidada > 0) {
         warnings.push(
             `${entradasForaDaConsolidada} documento(s) de ENTRADA (serviço tomado/aquisição) ficaram FORA da `
@@ -297,11 +445,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const nfceNoArquivo = notas.filter(ehNfce).length;
     if (nfceNoArquivo > 0 && itensSoEmNfce > 0) {
         warnings.push(
-            `${nfceNoArquivo} NFC-e (modelo 65) foram escrituradas SEM C170, e os ${itensSoEmNfce} item(ns) `
-            + 'delas ficaram fora do 0200/0190. É o leiaute: o PVA recusa o C170 de cupom com "O registro não '
-            + 'deve ser informado para o modelo de documento do Registro Pai", e item declarado sem ninguém '
-            + 'referenciá-lo vira item órfão — a recusa seguinte. A receita das NFC-e continua declarada no '
-            + 'C100 (VL_DOC/VL_PIS/VL_COFINS) e no bloco M: nada deixa de ser apurado.',
+            `${nfceNoArquivo} NFC-e (modelo 65) foram escrituradas com C100 + C175 (analítico por CFOP, CST e `
+            + `alíquota), SEM C170, e os ${itensSoEmNfce} item(ns) delas ficaram fora do 0200/0190. É o leiaute `
+            + '(Guia 1.35: "deve a pessoa jurídica apresentar somente os registros C100 e C175"): o PVA recusa '
+            + 'o C170 de cupom com "O registro não deve ser informado para o modelo de documento do Registro '
+            + 'Pai" e, sem o C175, recusa cada NFC-e e regera o M200/M210 ZERADO (HYPE 08/2026). Item declarado '
+            + 'sem ninguém referenciá-lo vira item órfão — o C175 não referencia item. A receita das NFC-e é a '
+            + 'soma dos VL_OPR dos C175 e entra no bloco M: nada deixa de ser apurado.',
         );
     }
     // 🚨 PERÍODO SEM RECEITA NENHUMA NÃO PASSA CALADO (21/08, AFFITTARE: o
@@ -346,9 +496,22 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         warnings.push('Empresas do Simples Nacional geralmente NAO entregam EFD Contribuicoes. Verifique a obrigatoriedade.');
     }
 
+    // O contabilista é conferido ANTES de virar linha: campo obrigatório do
+    // 0100 que sai vazio é recusa do PVA, e campo INVENTADO é pior — ele passa.
+    const contadorDoArquivo = getContadorPadrao();
+    const conf = conferirContador(contadorDoArquivo);
+    if (conf.aviso) warnings.push(conf.aviso);
+
     return {
         empresa,
-        contador: getContadorPadrao(),
+        // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
+        // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
+        // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —
+        // some calado seria o arquivo declarando um profissional que não
+        // existe, num campo que a fiscalização lê.
+        contador: contadorDoArquivo,
+        // 🧠 Lido pelo C170 do bloco C (`convertCfopParaEntrada`).
+        parametrosCfop,
         competencia,
         competenciaInicio: competencia,
         competenciaFim: competencia,
@@ -357,6 +520,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         itens,
         participantes,
         unidades,
+        unidadesPorCodItem: unidadesPorCodigo,
         receitaSemDocumento,
         receitaAplicacaoFinanceira,
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
@@ -370,6 +534,22 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         // `saldoCredorIpiAnterior` (19/08, PWR): os dois viajam aqui.
         contrib1900CodMod: empresa?.dadosFiscais?.contrib1900CodMod || '',
         contrib1900CodSit: empresa?.dadosFiscais?.contrib1900CodSit || '',
+        // 🚨 O F600 SAI DA FICHA QUANDO ELA DECLARA RETENÇÃO (28/08, autorizado
+        // pelo Paulo). Sem isso o M200/M600 declarava a recolher A MAIOR: a
+        // MONICA MOROMIZATO 07/2026 tinha PIS retido 64,11 na ficha e 0,00 no
+        // arquivo. Ausente na ficha, o caminho antigo (ler o documento) segue
+        // valendo — `retencoesF600` só é preenchido quando há o que aplicar.
+        retencoesF600: retencaoDaFicha.aplicou
+            ? {
+                eventos: retencaoDaFicha.eventos,
+                totalPis: retencaoDaFicha.totalPis,
+                totalCofins: retencaoDaFicha.totalCofins,
+            }
+            : null,
+        // Sem a ficha, quem responde é o documento — e o AJUSTE declarado vence
+        // o documento (o caso FRONTINI: a nota foi capturada com retenção zero
+        // porque o cliente esqueceu de informá-la ao emitir).
+        retencoesAjustadas,
         warnings,
     };
 }
@@ -378,6 +558,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
  * Monta o arquivo .txt completo do SPED Contribuicoes.
  */
 export async function montarBlocosContribuicoes({ dados }) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
     const linhasBloco0 = buildBloco0Contrib(dados);
     const linhasBlocoA = buildBlocoA(dados);
     const linhasBlocoC = buildBlocoC_Contrib(dados);
@@ -420,5 +601,3 @@ function determinarRegimeApuracao(empresa) {
     if (empresa._regime === 'lucro') return '2';
     return '2';
 }
-
-

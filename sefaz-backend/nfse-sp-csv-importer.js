@@ -9,6 +9,10 @@
 
 import admin from 'firebase-admin';
 import { idDocumentoNfseSp, patchSubstituiuDigitada } from './nfse-identidade.js';
+// 🚨 A competência da NFS-e de SP é a INCIDÊNCIA (fato gerador), não a emissão
+// — mesmo dono do trilho do WS/XML: duas leituras do mês fariam os dois
+// trilhos gravarem a MESMA nota em competências diferentes.
+import { competenciaDaNfse } from './competencia-da-nfse.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -48,6 +52,12 @@ export async function salvarNotaCsv(nota, ctx = {}) {
     else if (ctxCnpj && ctxCnpj === cnpjT) direcao = 'entrada';
     else direcao = ctx.direcao || 'entrada';
 
+    // A que MÊS a nota pertence — pelo DONO. Em SP a nota de 31/08 pode ser
+    // emitida até 10/09 (05/09 com retenção), e quem recorta é a INCIDÊNCIA.
+    const incidencia = competenciaDaNfse({
+        dataFatoGerador: nota.dataFatoGerador, dataEmissao: nota.dataHoraEmissao,
+    });
+
     const empresaCnpjFinal = direcao === 'saida' ? cnpjP : cnpjT;
     const empresaNomeFinal = direcao === 'saida'
         ? nota.razaoSocialPrestador
@@ -68,7 +78,13 @@ export async function salvarNotaCsv(nota, ctx = {}) {
 
         dhEmi: nota.dataHoraEmissao,
         dataFatoGerador: nota.dataFatoGerador,
-        competencia: nota.dataHoraEmissao ? nota.dataHoraEmissao.slice(0, 7) : null,
+        // 🚨 Era `dataHoraEmissao.slice(0, 7)` com o `dataFatoGerador` (coluna 8
+        // do layout do portal) parseado e ignorado: a nota de 31/08 emitida em
+        // setembro caía em 09/2026 e saía de TODO recorte de agosto, sem erro
+        // nenhum na tela. É o campo que RECORTA O MÊS lido da data errada.
+        competencia: incidencia.competencia,
+        competenciaOrigem: incidencia.origem,
+        competenciaDivergeDaEmissao: incidencia.diverge,
 
         direcao,
         status: nota.situacao === 'cancelada' ? 'cancelado' : 'autorizado',

@@ -34,17 +34,24 @@ describe('zero declarado é dito, não engolido', () => {
         expect(a).toMatch(/AFIRMAÇÃO/);
         expect(a).toMatch(/recolhendo a MAIOR/);
         // A ação tem que estar na frase — alarme sem ação vira alarme ignorado.
-        expect(a).toMatch(/Lance o saldo na ficha da competência anterior/);
+        // 11/09: o campo é o da ficha DESTA competência (o mesmo que abate a guia).
+        expect(a).toMatch(/"Saldo Credor ICMS \(Mês Anterior\)" da ficha DESTA/);
+        expect(a).not.toMatch(/ficha da competência anterior/);
     });
 
-    it('ICMS COM saldo: sai carimbado com a ORIGEM e com a ressalva da defasagem', () => {
+    it('ICMS COM saldo: sai carimbado com a ORIGEM que o leitor passou e com a ação de conferência', () => {
         const a = juntou(avisosDeSaldoAnterior({
-            icmsAnterior: 12345.67, origemIcms: 'ficha da competência anterior',
+            icmsAnterior: 12345.67, origemIcms: 'campo "Saldo Credor ICMS (Mês Anterior)" da ficha desta competência',
         }));
         expect(a).toMatch(/12345\.67/);
-        expect(a).toMatch(/origem: ficha da competência anterior/);
-        // O ponto que evita confiar no número: ele NÃO é o saldo que sobrou.
-        expect(a).toMatch(/não o saldo que sobrou dela/);
+        expect(a).toMatch(/origem: campo "Saldo Credor ICMS \(Mês Anterior\)" da ficha desta competência/);
+        // 11/09: a frase antiga AFIRMAVA "da ficha da competência anterior, não
+        // o saldo que sobrou dela" — e mentiria depois que a origem virou o
+        // campo desta competência. Quem diz a fonte é a ORIGEM; a frase diz que
+        // foi digitado e onde conferir.
+        expect(a).toMatch(/digitado na ficha, não calculado/);
+        expect(a).toMatch(/E110 c\.14/);
+        expect(a).not.toMatch(/não o saldo que sobrou dela/);
         // 21/08: a frase deixou de mandar "conferir contra o E110 c.14 na mão"
         // e passou a apontar a aba 🧮, onde a conferência virou mecanismo.
         expect(a).toMatch(/🧮 Saldo de abertura/);

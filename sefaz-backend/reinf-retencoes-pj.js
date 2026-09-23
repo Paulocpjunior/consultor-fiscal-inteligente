@@ -32,6 +32,18 @@
 // ============================================================================
 
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
+// 🚨 A data do fato gerador atravessa o túnel na forma que o R-4020 aceita
+// (`AAAA-MM-DD`) — quem a lê das três formas do documento é o DONO.
+import { dataDeclaradaDoDocumento, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+// 🚨 31/08: o app DENUNCIAVA a retenção errada e não entregava a certa. Quem
+// responde "quanto esta nota reteve, de verdade" é este dono — ajuste
+// declarado > CSRF decomposta > documento —, e ele é ÚNICO de propósito: um
+// ajuste que valesse só para o R-4020 faria o SPED e o REINF declararem
+// números diferentes sobre a mesma nota.
+import { retencaoEfetivaDaNota, chaveDoAjuste, resumirRetencoesEfetivas } from './retencao-pj-ajuste.js';
+// Espécie do documento: quem responde é o dono, nunca um regex de `tipo` aqui
+// dentro — foi um `/NFSe/i` escrito à mão que escondeu o CT-e OS do R-4020.
+import { ehNotaDeServico, ehConhecimentoDeTransporte } from './sped-selecao-documentos.js';
 
 const num = (v) => {
     if (v === undefined || v === null || v === '') return undefined;
@@ -86,18 +98,43 @@ export function lerRetencoesFederaisDoDoc(d) {
  */
 export function normalizarNotaTomada(d) {
     const v = d?.valores || {};
-    const base = primeiro(d?.valorServicos, v.valorServicos, d?.valorTotal);
+    // 🚨 O BRUTO TEM UMA QUARTA FORMA (08/09, PREVERMED × LEGACY): a NFS-e
+    // importada de PDF grava `valores.servicos` e `totais.vProd`, e nenhuma
+    // das três lidas aqui — a nota chegava ao Contábil com BRUTO 0,00 e a
+    // Receita recusava o evento (MS1042 ×3, "o valor informado deve ser
+    // maior que zero"), com as retenções certas do lado. Ler só as formas
+    // que se lembra é a armadilha de sempre; o acervo já gravado lê daqui.
+    const base = primeiro(
+        d?.valorServicos, v.valorServicos, v.servicos,
+        d?.totais?.vServ, d?.totais?.vProd, d?.valorTotal,
+    );
     const fed = lerRetencoesFederaisDoDoc(d);
     return {
         numero: texto(d?.numero) || null,
         chave: texto(d?.chave) || null,
-        dataFatoGerador: texto(d?.dataFatoGerador || d?.dhEmi) || null,
+        // 🚨 A DATA ATRAVESSAVA CRUA — e o R-4020 recusava do outro lado
+        // (02/09: *"R-4020 inválido: pagamentos[0].dtFG deve ser AAAA-MM-DD"*).
+        //
+        // O `dhEmi` chega em TRÊS formas neste app: `2026-08-14T08:35:36-03:00`
+        // (XML ABRASF), `11/05/2026 14:31:31` (portal de SP) e Timestamp do
+        // Firestore. Mandar o texto cru fazia o outro lado receber uma data que
+        // o leiaute não aceita — e o comentário no topo desta função já dizia
+        // que ler as DUAS formas do documento **é o serviço que este túnel
+        // presta**, porque é o CFI que conhece a forma do documento.
+        //
+        // ⚠️ Quem responde é o DONO (`dataDeclaradaDoDocumento`): a data é lida
+        // do TEXTO, sem conversão de fuso — `new Date('11/05/2026')` é 5 de
+        // NOVEMBRO, e um dia trocado aqui declara o fato gerador no mês errado.
+        // ⚠️ E ilegível continua **null**, nunca a data de hoje: campo de data
+        // não recebe default (a régua de 06/08), e fato gerador chutado é
+        // evento aceito declarando outra competência.
+        dataFatoGerador: dataDeclaradaDoDocumento(d?.dataFatoGerador || d?.dhEmi) || null,
         competencia: texto(d?.competencia) || null,
 
-        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
-        prestadorNome: texto(d?.prestadorNome || d?.xNomeEmit || d?.emitente?.nome) || null,
+        prestadorCnpj: soDigitos(d?.prestadorCnpj || d?.prestador?.cnpjCpf || d?.prestador?.cnpj || d?.cnpjEmit || d?.emitente?.cnpjCpf),
+        prestadorNome: texto(d?.prestadorNome || d?.prestador?.nome || d?.prestador?.razaoSocial || d?.xNomeEmit || d?.emitente?.nome) || null,
         // O tomador é o CLIENTE do escritório — é ele quem declara o R-4020.
-        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
+        tomadorCnpj: soDigitos(d?.tomadorCnpj || d?.tomador?.cnpjCpf || d?.tomador?.cnpj || d?.cnpjDest || d?.destinatario?.cnpjCpf || d?.empresaCnpj),
 
         base: base === undefined ? null : r2(base),
         ir: r2(fed.ir ?? 0),
@@ -107,6 +144,10 @@ export function normalizarNotaTomada(d) {
         // contribuições, não a CSLL. Chamar de `csll` faria o outro lado
         // declarar o total como CSLL — e ninguém veria.
         csllOuTotal: r2(fed.csllOuTotal ?? 0),
+        // ⚠️ PRESENÇA ≠ ZERO: o `?? 0` acima colapsa ausência em zero, e é
+        // justamente essa diferença que decide se o documento DIZ "não houve
+        // retenção" ou se ele simplesmente não trouxe o campo.
+        csllOuTotalPresente: fed.csllOuTotal !== undefined,
         inss: r2(fed.inss ?? 0),
 
         // Código MUNICIPAL de serviço (SP), não item da LC 116. O de-para não
@@ -123,42 +164,142 @@ export function normalizarNotaTomada(d) {
 const temRetencao = (n) => !!(n.ir || n.pis || n.cofins || n.csllOuTotal);
 
 /**
+ * O documento tem retenção federal GRAVADA? (ausente ≠ zero)
+ *
+ * Ela responde sobre a PRESENÇA do campo, nunca sobre o valor: zero DIGITADO
+ * é uma afirmação ("conferi e não houve") e conta; campo que nunca existiu,
+ * não.
+ */
+export function temRetencaoFederalGravada(d) {
+    const fed = lerRetencoesFederaisDoDoc(d);
+    return fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined
+        || fed.pis !== undefined || fed.cofins !== undefined;
+}
+
+/**
+ * 🚨 QUE ESPÉCIE DE DOCUMENTO PODE CARREGAR RETENÇÃO FEDERAL?
+ *
+ * O CASO (04/09, J.P. PISSATO LOTERIAS): o CT-e OS 114.924 da PROTEGE foi
+ * lançado com o modelo CERTO (67) e a retenção do papel (IRRF 39,02, art. 55
+ * da Lei 7.713/88) — apareceu no Relatório de Retenções e **o Consultor
+ * Contábil continuou dizendo "Nenhum beneficiário PJ com retenção nesta
+ * competência"**.
+ *
+ * A causa era UMA LINHA nesta rota: `if (!/NFSe/i.test(tipoDoc||tipo)) continue`.
+ * O CT-e é `tipo: 'CTe'` e caía fora. Ou seja: em 04/09 eu corrigi o RELATÓRIO
+ * e deixei a rota que alimenta o R-4020 com a régua antiga — instância fechada,
+ * classe aberta, que é o vício que este projeto persegue desde 12/08.
+ *
+ * ⚠️ E o custo era o pior: a tela do Contábil **manda procurar no lugar
+ * errado** — *"o problema é de CAPTURA no Consultor Fiscal"* — sobre um
+ * documento que estava capturado, com a retenção gravada, visível no relatório
+ * ao lado.
+ *
+ * ⚠️ **FRETE SEM RETENÇÃO É O CASO NORMAL**, e por isso o conhecimento de
+ * transporte só entra quando TEM retenção (ou ajuste declarado): trazer todos
+ * encheria a contagem de "sem retenção" com documento correto, que é o jeito
+ * conhecido de a equipe parar de ler a lista. A NFS-e continua entrando mesmo
+ * sem os campos — lá a ausência é suspeita de captura incompleta.
+ *
+ * ⚠️ **O AJUSTE TRAZ A NOTA DE VOLTA**, aqui igual ao resto: quem tem prova de
+ * que houve retenção declara, e a declaração vence o documento.
+ */
+export function documentoEntraEmRetencoes(d, { temAjuste = false } = {}) {
+    if (ehNotaDeServico(d)) return true;
+    if (!ehConhecimentoDeTransporte(d)) return false;
+    return temRetencaoFederalGravada(d) || !!temAjuste;
+}
+
+/**
  * Payload do R-4020 para UMA empresa numa competência.
  *
  * @param {object} p
  * @param {string} p.cnpjTomador  o cliente que declara
  * @param {string} p.competencia  'AAAA-MM'
  * @param {Array}  p.documentos   NFS-e da competência (qualquer direção)
+ * @param {object} [p.ajustes]    chave da NOTA → ajuste declarado
  */
-export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = {}) {
+export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos, ajustes = {} } = {}) {
     const alvo = soDigitos(cnpjTomador);
     const notas = [];
     let semRetencao = 0;
+    let semRetencaoDeclarada = 0;
+    const forasSemRetencao = [];
     let dePessoaFisica = 0;
 
     for (const d of documentos || []) {
-        if (!/NFSe/i.test(texto(d?.tipoDoc || d?.tipo))) continue;
         if (CANCELADOS.has(texto(d?.status).toLowerCase())) continue;
         // TOMADAS: o cliente é o tomador, não o prestador.
-        if (d?.direcao !== 'entrada') continue;
+        // 🚨 A DIREÇÃO SAI DA RÉGUA: o campo gravado mente na nota própria de
+        // entrada (art. 136), que fica como 'saida' até o backfill passar.
+        // Lendo o campo cru, documento de entrada legítimo ficaria FORA do
+        // evento — retenção que a empresa sofreu e não declara.
+        if (direcaoEfetivaDoc(d) !== 'entrada') continue;
 
         const n = normalizarNotaTomada(d);
         if (alvo && n.tomadorCnpj && n.tomadorCnpj !== alvo) continue;
-        if (!temRetencao(n)) { semRetencao += 1; continue; }
+        // ⚠️ O AJUSTE TRAZ A NOTA DE VOLTA. Sem isto, a nota cujo documento não
+        // traz retenção nenhuma sairia em `semRetencao` ANTES de alguém poder
+        // declarar que houve — e o ajuste ficaria gravado sem efeito, que é a
+        // "flag que ninguém lê" na pior forma possível (a retenção some).
+        const ajuste = ajustes?.[chaveDoAjuste(n)] || null;
+
+        // A ESPÉCIE DECIDE DEPOIS DO AJUSTE, de propósito: um conhecimento de
+        // transporte cujo documento não trouxe retenção mas que alguém DECLAROU
+        // precisa entrar, e a régua da espécie precisa saber disso para não
+        // barrá-lo antes. Ler `tipo` com regex aqui foi o que escondeu o CT-e
+        // OS da J.P. PISSATO do R-4020 em 04/09.
+        if (!documentoEntraEmRetencoes(d, { temAjuste: !!ajuste })) continue;
+
+        if (!temRetencao(n) && !ajuste) { semRetencao += 1; continue; }
         // Prestador PESSOA FÍSICA é R-4010, outro evento. Não some em silêncio:
         // vira contagem, porque some da lista é o que faz alguém achar que
         // declarou tudo.
         if (n.prestadorCnpj.length !== 14) { dePessoaFisica += 1; continue; }
 
-        notas.push({ ...n, coerencia: conferirRetencaoFederal({
+        const coerencia = conferirRetencaoFederal({
             base: n.base, pis: n.pis, cofins: n.cofins, csll: n.csllOuTotal,
-        }) });
+            csllPresente: n.csllOuTotalPresente,
+        });
+
+        // 🚨 NOTA QUE O DOCUMENTO DECLARA SEM RETENÇÃO NÃO VIRA EVENTO (02/09,
+        // HS PROJETOS · nota 22243 da EMBRATOP GEO): os campos de PIS/COFINS
+        // trazem o tributo da OPERAÇÃO e o campo de contribuições RETIDAS está
+        // zerado, com a nota dizendo "PIS/COFINS/CSLL Não Retidos". O R-4020
+        // declara RETENÇÃO — sem retenção não há evento, e o beneficiário
+        // deixa de ficar pendente esperando um ajuste que não existe.
+        //
+        // ⚠️ IRRF é OUTRA retenção: havendo IR retido a nota FICA, mesmo com a
+        // CSRF zerada — tirá-la deixaria de declarar o IR que houve.
+        // ⚠️ E o AJUSTE continua trazendo a nota de volta: quem tem prova de
+        // que houve retenção declara, e a declaração vence o documento.
+        if (coerencia.situacao === 'sem-retencao-declarada' && !n.ir && !ajuste) {
+            semRetencaoDeclarada += 1;
+            // ⚠️ NÃO SOME CALADA: sumir da lista é o que faz alguém achar que
+            // declarou tudo. Ela sai NOMEADA, com o prestador e a nota.
+            forasSemRetencao.push({
+                prestadorCnpj: n.prestadorCnpj,
+                prestadorNome: n.prestadorNome,
+                numero: n.numero,
+                base: n.base,
+                motivo: coerencia.motivo,
+            });
+            continue;
+        }
+        notas.push({
+            ...n,
+            coerencia,
+            // 🚨 O QUE SE DECLARA — com a ORIGEM carimbada. O outro lado usa
+            // ESTE bloco; os campos crus continuam ao lado, para conferência.
+            retencao: retencaoEfetivaDaNota({ nota: n, coerencia, ajuste }),
+        });
     }
 
     notas.sort((a, b) => String(a.prestadorNome).localeCompare(String(b.prestadorNome), 'pt-BR'));
 
     const comProblema = notas.filter((n) => n.coerencia.exigeAcao).length;
     const camposDaOperacao = notas.filter((n) => n.coerencia.situacao === 'campos-sao-totais-da-operacao').length;
+    const efetivas = resumirRetencoesEfetivas(notas);
     return {
         cnpjTomador: alvo || null,
         competencia: competencia || null,
@@ -167,17 +308,44 @@ export function montarPayloadReinfPJ({ cnpjTomador, competencia, documentos } = 
             notas: notas.length,
             prestadores: new Set(notas.map((n) => n.prestadorCnpj)).size,
             semRetencao,
+            // Contado À PARTE de `semRetencao`: lá o documento não trouxe campo
+            // nenhum; aqui ele trouxe e DECLAROU que não houve retenção. São
+            // fatos diferentes, e o segundo é o que responde "por que esta nota
+            // sumiu da lista".
+            semRetencaoDeclarada,
+            forasSemRetencao,
             dePessoaFisica,
             comIncoerencia: comProblema,
             camposDaOperacao,
             totalBase: r2(notas.reduce((t, n) => t + (n.base || 0), 0)),
-            totalIr: r2(notas.reduce((t, n) => t + n.ir, 0)),
+            // 🚨 O IR TAMBÉM SAI DO BLOCO EFETIVO (09/09, J.N. VINATEX ·
+            // BOA VISTA SERVIÇOS): somar `n.ir` aqui é somar o DOCUMENTO,
+            // enquanto as linhas ao lado já dizem o valor DECLARADO — o mesmo
+            // resumo desmentia as linhas que ele resume. O Relatório de
+            // Retenções do CFI mostrava 24,24 e este total dizia 0,00.
+            totalIr: r2(notas.reduce((t, n) => t + n.retencao.ir, 0)),
+            // O que o DOCUMENTO traz continua saindo, à parte: é contra ele
+            // que se confere o que foi informado à mão.
+            totalIrDoDocumento: r2(notas.reduce((t, n) => t + n.ir, 0)),
+            // 🚨 O TOTAL QUE SE DECLARA sai do bloco EFETIVO, nunca dos campos
+            // crus — senão o resumo desmente as linhas que ele resume.
+            totalRetencaoDeclarada: r2(notas.reduce(
+                (t, n) => t + n.retencao.pis + n.retencao.cofins + n.retencao.csll, 0,
+            )),
+            ...efetivas,
         },
-        ressalvas: ressalvasDoPayload({ notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao }),
+        ressalvas: ressalvasDoPayload({
+            notas: notas.length, dePessoaFisica, comProblema, camposDaOperacao,
+            semRetencaoDeclarada, forasSemRetencao, ...efetivas,
+        }),
     };
 }
 
-function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperacao }) {
+function ressalvasDoPayload({
+    notas, dePessoaFisica, comProblema, camposDaOperacao,
+    semRetencaoDeclarada = 0, forasSemRetencao = [],
+    ajustadas = 0, csrfDecomposta = 0, csllDerivada = 0, exigemAjuste = 0,
+}) {
     const out = [
         'O campo `csllOuTotal` é o que o portal de SP entrega — e nele a CSLL individual NÃO vem: '
         + 'o valor é o TOTAL das três contribuições. Quem separa é o EFD-Reinf, e só quando as '
@@ -199,6 +367,29 @@ function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperac
             + 'prestadores preenchem assim e avisam em "Outras Informações". Declarar esses valores como '
             + 'retidos infla a retenção; a retenção real é a CSRF de 4,65%.');
     }
+    // 🚨 NÚMERO DERIVADO SAI DITO, sempre. O bloco `retencao` de cada linha é o
+    // que se declara, e quando ele não foi LIDO do documento quem lê precisa
+    // saber — número derivado que se apresenta como fato é o começo de uma
+    // divergência que só a fiscalização acha.
+    if (csrfDecomposta) {
+        out.push(`✅ ${csrfDecomposta} nota(s) tiveram a retenção DERIVADA da CSRF: os campos de PIS e `
+            + 'COFINS traziam o tributo da operação, e o valor retido (4,65% da base) foi decomposto '
+            + 'pelas alíquotas legais da Lei 10.833/2003 art. 30 (PIS 0,65% · COFINS 3% · CSLL 1%). '
+            + 'A soma fecha ao centavo com o que a nota declara — mas o número é DERIVADO: confira.');
+    }
+    if (csllDerivada) {
+        out.push(`${csllDerivada} nota(s) com a CSLL derivada em 1% da base — no documento aquele campo `
+            + 'era o TOTAL das três contribuições. PIS e COFINS vieram do documento.');
+    }
+    if (ajustadas) {
+        out.push(`✍️ ${ajustadas} nota(s) com a retenção AJUSTADA à mão — o valor declarado é o do ajuste, `
+            + 'não o do documento. Cada linha diz quem ajustou, quando e por quê.');
+    }
+    if (exigemAjuste) {
+        out.push(`🚨 ${exigemAjuste} nota(s) SEM valor confiável de retenção — o documento traz um número `
+            + 'que a régua desmente e o app NÃO tem como derivar o certo. Ajuste a retenção antes de '
+            + 'transmitir: declarar assim vai errado para a EFD-Reinf e para o DARF.');
+    }
     const outrasIncoerencias = comProblema - camposDaOperacao;
     if (outrasIncoerencias > 0) {
         out.push(`${outrasIncoerencias} nota(s) com retenção que não bate com a alíquota legal — confira antes de declarar.`);
@@ -207,6 +398,21 @@ function ressalvasDoPayload({ notas, dePessoaFisica, comProblema, camposDaOperac
         // Zero nunca é sucesso: pode ser mês sem retenção OU captura faltando.
         out.push('NENHUMA nota tomada com retenção nesta competência. Se o cliente contrata serviços com '
             + 'retenção, o problema é de CAPTURA — não é ausência de obrigação.');
+    }
+    // 🚨 NOTA QUE O DOCUMENTO DECLARA SEM RETENÇÃO NÃO SOME CALADA (02/09, HS
+    // PROJETOS): ela não vira evento — o R-4020 declara RETENÇÃO —, mas sumir
+    // da lista é o que faz alguém achar que declarou tudo.
+    if (semRetencaoDeclarada) {
+        const quais = forasSemRetencao
+            .map((f) => `${f.prestadorNome || f.prestadorCnpj}${f.numero ? ` (nota ${f.numero})` : ''}`)
+            .join('; ');
+        out.push(
+            `${semRetencaoDeclarada} nota(s) FORA do R-4020 porque o próprio documento declara que NÃO houve `
+            + `retenção: os campos de PIS e COFINS trazem o tributo da OPERAÇÃO do prestador `
+            + '(não-cumulativo 1,65% e 7,60%) e o campo de contribuições sociais RETIDAS está ZERADO — a '
+            + `NFS-e paulistana imprime "PIS/COFINS/CSLL Não Retidos". Não há ajuste a fazer nelas${quais ? `: ${quais}` : ''}. `
+            + 'Se houve retenção e o documento está errado, declare o ajuste — a declaração vence o documento.',
+        );
     }
     return out;
 }

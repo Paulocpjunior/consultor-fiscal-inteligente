@@ -68,8 +68,16 @@ const HTMLS = readdirSync(PUBLIC)
     .filter((f) => f.endsWith('.html'))
     .filter((f) => /^guia-/.test(f) || /<meta\s+name="guia-id"/i.test(readFileSync(join(PUBLIC, f), 'utf8')))
     .map(lerHtml);
+// 🚨 E O MESMO BURACO EXISTIA DESTE LADO — achado em 11/09, ao publicar a
+// página de pendências. O filtro do HTML foi alargado em 17/08 (por causa da
+// página de privacidade) e o do `docs/` ficou preso a `guia-colaborador-*`:
+// uma fonte com o marcador e outro nome era INVISÍVEL para a trava, ou seja
+// exatamente a metade órfã que ela existe para pegar. Agora vale a mesma regra
+// dos dois lados: o nome OU o marcador declarado.
 const MDS = readdirSync(DOCS)
-    .filter((f) => /^guia-colaborador-.*\.md$/.test(f))
+    .filter((f) => f.endsWith('.md'))
+    .filter((f) => /^guia-colaborador-/.test(f)
+        || /guia-id:\s*[a-z0-9-]+/i.test(readFileSync(join(DOCS, f), 'utf8')))
     .map(lerMd);
 
 describe('MATA-BURRO: guia do colaborador anda em par', () => {

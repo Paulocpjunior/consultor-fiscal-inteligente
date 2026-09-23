@@ -16,15 +16,26 @@ import { auditarSaidaSped, resumoAuditoria } from './sped-auditoria-saida.js';
 // sobre o arquivo, antes de alguém abrir o PVA (Paulo, 20/08: o gargalo é o
 // vai-e-vem). Cada regra carrega a recusa LITERAL como fonte.
 import { prevalidarSpedFiscal, resumoPrevalidacao } from './sped-prevalidacao.js';
+import { conferirContagemDeCamposFiscal } from './sped-fiscal-campos.js';
 // 🧮 A abertura do saldo credor vem do SPED ENTREGUE colado — nunca digitada.
 import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
+// 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 (14/09, HYPE).
+import { apurarIcmsProprio, montarRaicms } from './apuracao-icms-raicms.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
+import { IND_EST_VALIDOS, quantidadeInformada } from './sped-bloco-k.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+// 🧭 DIFAL na apuração (art. 117) — a tela lê pelo MESMO dono que o gerador,
+// senão a aba prometeria um número e o E110 sairia com outro (a lição da
+// réplica de CFOP no modal, 12/08).
+import { consolidarDifalArt117, ALIQ_INTERNA_PADRAO } from './difal-art117-apuracao.js';
+import { detalharDifalPorUf } from './difal-ec87-saida.js';
+import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
+import { lerParametrosCfopDaEmpresa } from './cfop-parametros-store.js';
 
 // Valor do documento em TODAS as formas (o import pelo navegador grava só
 // `totais.vNF`) — régua única.
-import { valorDoDocumento } from './xml-metadata-helper.js';
+import { valorDoDocumento, docContaNoLivro } from './xml-metadata-helper.js';
 // O nome carrega a HORA da geração — dono ÚNICO nas duas famílias, senão o
 // EFD ICMS/IPI continuaria produzindo arquivos indistinguíveis (PWR, 25/08).
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
@@ -162,12 +173,325 @@ router.post('/inventario', requireAuth, express.json({ limit: '4mb' }), async (r
     }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// 🏭 Bloco K — o APONTAMENTO de produção e estoque.
+//
+// Mesma natureza do inventário: não sai das notas, não se estima do histórico,
+// não se deduz. É o controle de produção do cliente. Sem ele o bloco K sai
+// VAZIO de propósito — nunca zerado, que declararia ao Fisco que a empresa não
+// produziu e não tem estoque.
+//
+// 1 doc por EMPRESA × COMPETÊNCIA: o K200 é a foto do último dia do período.
+// ────────────────────────────────────────────────────────────────────────────
+const idBlocoK = (empresaId, competencia) => `${empresaId}_${String(competencia || '').replace(/\D/g, '')}`;
+
+router.get('/bloco-k', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, competencia } = req.query || {};
+        if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a competência (AAAA-MM).' });
+        }
+        const snap = await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).get();
+        return res.json({
+            ok: true, existe: snap.exists,
+            ...(snap.exists ? snap.data() : { estoques: [], producao: [], movimentacoes: [] }),
+        });
+    } catch (e) {
+        console.error('[sped/bloco-k GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/bloco-k', requireAuth, express.json({ limit: '4mb' }), async (req, res) => {
+    try {
+        const { empresaId, competencia, estoques, producao, movimentacoes } = req.body || {};
+        if (!empresaId || !/^\d{4}-\d{2}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a empresa e a competência (AAAA-MM).' });
+        }
+        // 🚨 Só grava o que foi APONTADO. Linha sem quantidade não vira zero
+        // aqui — ela não entra, e o gerador dirá quantas ficaram de fora.
+        const est = (Array.isArray(estoques) ? estoques : [])
+            .filter((e) => e && e.codItem && quantidadeInformada(e.qtd))
+            .map((e) => ({
+                codItem: String(e.codItem).slice(0, 60),
+                qtd: Number(e.qtd),
+                indEst: IND_EST_VALIDOS.includes(String(e.indEst)) ? String(e.indEst) : '0',
+                codPart: String(e.codPart || '').slice(0, 60),
+            }));
+        const prod = (Array.isArray(producao) ? producao : [])
+            .filter((p) => p && p.codItem && quantidadeInformada(p.qtdEnc))
+            .map((p) => ({
+                dtIniOp: String(p.dtIniOp || '').slice(0, 10),
+                dtFinOp: String(p.dtFinOp || '').slice(0, 10),
+                codDocOp: String(p.codDocOp || '').slice(0, 30),
+                codItem: String(p.codItem).slice(0, 60),
+                qtdEnc: Number(p.qtdEnc),
+                insumos: (Array.isArray(p.insumos) ? p.insumos : [])
+                    .filter((i) => i && i.codItem && quantidadeInformada(i.qtd))
+                    .map((i) => ({
+                        dtSaida: String(i.dtSaida || '').slice(0, 10),
+                        codItem: String(i.codItem).slice(0, 60),
+                        qtd: Number(i.qtd),
+                        codInsSubst: String(i.codInsSubst || '').slice(0, 60),
+                    })),
+            }));
+        // 🚨 K220 — a BAIXA de estoque (30/08). Mesma régua das outras duas:
+        // só grava o que foi APONTADO, e as DUAS quantidades têm de ser > 0
+        // (Guia, campos 05 e 06). Origem igual a destino não é movimentação.
+        // ⚠️ A DATA é exigida aqui porque o GERADOR a exige (DT_MOV tem de cair
+        // dentro do período do K100): gravar sem ela diria "gravada" na tela
+        // sobre uma linha que o arquivo nunca emite — a divergência entre o que
+        // a tela afirma e o que sai, que é a que esta casa mais paga.
+        const mov = (Array.isArray(movimentacoes) ? movimentacoes : [])
+            .filter((m) => m && m.codItemOri && m.codItemDest && String(m.dtMov || '').trim()
+                && String(m.codItemOri).trim() !== String(m.codItemDest).trim()
+                && quantidadeInformada(m.qtdOri) && Number(m.qtdOri) > 0
+                && quantidadeInformada(m.qtdDest) && Number(m.qtdDest) > 0)
+            .map((m) => ({
+                dtMov: String(m.dtMov || '').slice(0, 10),
+                codItemOri: String(m.codItemOri).slice(0, 60),
+                codItemDest: String(m.codItemDest).slice(0, 60),
+                qtdOri: Number(m.qtdOri),
+                qtdDest: Number(m.qtdDest),
+            }));
+        await fa().firestore().collection('sped_bloco_k').doc(idBlocoK(empresaId, competencia)).set({
+            empresaId, competencia: String(competencia), estoques: est, producao: prod, movimentacoes: mov,
+            atualizadoEm: new Date().toISOString(),
+            atualizadoPor: req.user?.email || null,
+        }, { merge: true });
+        return res.json({
+            ok: true,
+            estoquesGravados: est.length, estoquesRecebidos: (estoques || []).length,
+            producaoGravada: prod.length, producaoRecebida: (producao || []).length,
+            movimentacoesGravadas: mov.length, movimentacoesRecebidas: (movimentacoes || []).length,
+        });
+    } catch (e) {
+        console.error('[sped/bloco-k POST]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // ─── 🧮 SALDO DE ABERTURA — a cronologia do saldo credor ───────────────────
 //
 // A fonte é o SPED ENTREGUE colado (E110 c.14 / E520 c.7), nunca digitação —
 // saldo digitado é a ficha de novo, com outro nome. O POST extrai, confere o
 // CNPJ contra a empresa e grava com carimbo; quem decide o saldo anterior de
 // cada geração é `resolverSaldoAnterior` no orquestrador.
+/**
+ * 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117) — a leitura da
+ * aba: por nota (proposta × informado), totais, os dois códigos conferidos e
+ * o par de E111 que o próximo arquivo vai carregar.
+ *
+ * Paulo, 14/09 (HYPE CAFÉ, Lucro Presumido): *"o diferencial de alíquota nas
+ * aquisições dela é dentro da apuração… no EFISCAL lançamos dentro da nota,
+ * depois fazemos esse ajuste para sair na apuração"*.
+ *
+ * Só LÊ: quem grava o informado por nota e os códigos é a tela, no doc de
+ * ajustes (`sped_ajustes_apuracao`, merge por caminho). O CFOP entregue ao
+ * dono é o ESCRITURADO — a mesma régua do bloco C.
+ */
+router.get('/difal-art117', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        const competencia = periodo.competencia;
+        if (!competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+
+        const db = fa().firestore();
+        const lucro = await db.collection('lucro_empresas').doc(String(empresaId)).get();
+        if (!lucro.exists) {
+            return res.status(400).json({
+                ok: false,
+                error: 'O DIFAL na apuração (art. 117) é do Lucro (RPA). Optante do Simples recolhe o DIFAL por guia — use a aba 🧭 DIFAL aquisição da Central de XMLs.',
+            });
+        }
+        const empresa = { id: String(empresaId), ...lucro.data(), _regime: 'lucro' };
+        const ufEmpresa = String(empresa.dadosFiscais?.uf || '').toUpperCase();
+
+        const snap = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', String(empresaId))
+            .where('competencia', '==', competencia)
+            .get();
+        const notas = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(docContaNoLivro);
+
+        const { parametros: parametrosCfop, erro: erroParametros } = await lerParametrosCfopDaEmpresa(db, String(empresaId));
+        const cfgSnap = await db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${competencia}`).get();
+        const cfg = cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+        const a117 = cfg.difalArt117 || {};
+        const dadosCfop = { empresa, parametrosCfop };
+
+        const consolidado = consolidarDifalArt117({
+            notas,
+            ufEmpresa,
+            aliqInternaPadrao: Number(cfg.difalAliqInternaPadrao) || undefined,
+            cfopDoItem: (nota, item) => convertCfopParaEntrada(item?.cfop, 'entrada', dadosCfop, nota, item),
+            informadoPorChave: a117.porChave || {},
+            codigoDebito: a117.codigoDebito || '',
+            codigoCredito: a117.codigoCredito || '',
+            codigoC197: cfg.difalCodigoAjusteC197 || '',
+        });
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            competencia,
+            ufEmpresa,
+            aliqInternaPadrao: Number(cfg.difalAliqInternaPadrao) || ALIQ_INTERNA_PADRAO,
+            codigoDebito: a117.codigoDebito || '',
+            codigoCredito: a117.codigoCredito || '',
+            documentosLidos: notas.length,
+            // Falha ao ler o cérebro do CFOP NÃO vira "sem parâmetro" calado: a
+            // proposta pode estar lendo o CFOP errado, e a pessoa precisa saber.
+            avisoParametrosCfop: erroParametros
+                ? `Não consegui ler os parâmetros de CFOP (${erroParametros}) — a proposta usou só o CFOP da nota/item e a régua automática.`
+                : null,
+            ...consolidado,
+        });
+    } catch (e) {
+        console.error('[sped/difal-art117 GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /difal-ec87?empresaId=X&competencia=YYYY-MM
+ *
+ * O DIFAL de SAÍDA (EC 87/15) da competência, por UF de DESTINO e nota a
+ * nota, com o cadastro do E316 que já existe. Serve à aba Ajustes E111 para
+ * PUXAR as UFs em vez de digitá-las (21/09, Paulo, WALDESA: *"não tem uma
+ * forma de puxar as informações? … 13 páginas de DIFAL para lançar"*).
+ *
+ * O que vem das notas vem daqui; o que NÃO está nas notas (vencimento e código
+ * de receita) continua sendo cadastro — a rota só diz para quais UFs ele é
+ * preciso, e quais têm FCP (a segunda guia).
+ */
+router.get('/difal-ec87', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        const competencia = periodo.competencia;
+        if (!competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+
+        const db = fa().firestore();
+        const lucro = await db.collection('lucro_empresas').doc(String(empresaId)).get();
+        if (!lucro.exists) {
+            return res.status(400).json({ ok: false, error: 'O E300/E310/E316 é do EFD ICMS/IPI (Lucro). A empresa não está no módulo Lucro.' });
+        }
+        const empresa = { id: String(empresaId), ...lucro.data() };
+        const ufEmpresa = String(empresa.dadosFiscais?.uf || '').toUpperCase();
+
+        const snap = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', String(empresaId))
+            .where('competencia', '==', competencia)
+            .get();
+        const notas = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter(docContaNoLivro);
+        const detalhe = detalharDifalPorUf(notas, ufEmpresa, String(empresa.cnpj || ''));
+
+        const cfgSnap = await db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${competencia}`).get();
+        const cfg = cfgSnap.exists ? (cfgSnap.data() || {}) : {};
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            competencia,
+            ufEmpresa,
+            documentosLidos: notas.length,
+            // Só o resumo por UF vai (a tela de cadastro não precisa das notas;
+            // o detalhamento nota a nota é o relatório da aba Relatórios).
+            ufs: detalhe.grupos.map((g) => ({ uf: g.uf, difal: g.difal, fcp: g.fcp, documentos: g.documentos })),
+            totais: detalhe.totais,
+            semUf: detalhe.semUf,
+            mesmaUf: detalhe.mesmaUf,
+            obrigacoesDifalEc87PorUf: cfg.obrigacoesDifalEc87PorUf || {},
+        });
+    } catch (e) {
+        console.error('[sped/difal-ec87 GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /apuracao-icms?empresaId=X&competencia=YYYY-MM
+ *   (ou competenciaInicio + competenciaFim, no trimestral)
+ *
+ * 📒 O REGISTRO DE APURAÇÃO DO ICMS (modelo do e-Fiscal) SEM GERAR O ARQUIVO.
+ *
+ * 14/09, Paulo, HYPE CAFÉ: *"o valor de difal só aparece lá no ajuste E111, ou
+ * eu tenho que gerar o SPED para conferir o valor do ICMS a pagar ou credor"*.
+ * A apuração só existia a caminho do E110. Esta rota passa pelo MESMO
+ * `coletarDadosEmpresa` do /gerar (notas, E111 lançados, par do DIFAL art.
+ * 117, saldo anterior pela cronologia ou pela ficha) e pelo MESMO dono da
+ * conta (`apurarIcmsProprio`) — e NÃO grava arquivo nem carimba nada.
+ *
+ * Só LÊ. Quem tem acesso é quem tem acesso à empresa (carteira), como o
+ * /difal-art117 — o relatório é do colaborador que fecha o mês.
+ */
+router.get('/apuracao-icms', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        if (!periodo.competencia && !(periodo.competenciaInicio && periodo.competenciaFim)) {
+            return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+        }
+
+        const dados = await coletarDadosEmpresa({
+            empresaId: String(empresaId),
+            competencia: periodo.competencia,
+            competenciaInicio: periodo.competenciaInicio,
+            competenciaFim: periodo.competenciaFim,
+        });
+        if (dados.empresa?._regime !== 'lucro') {
+            return res.status(400).json({
+                ok: false,
+                error: 'O Registro de Apuração do ICMS é do Lucro (RPA). Optante do Simples não apura ICMS próprio — '
+                    + 'o imposto dele sai no DAS.',
+            });
+        }
+
+        const apuracao = apurarIcmsProprio(dados);
+        const raicms = montarRaicms(apuracao, { origemSaldoAnterior: dados.origemSaldoIcms || '' });
+        const df = dados.empresa.dadosFiscais || {};
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            empresaNome: dados.empresa.nome || '',
+            cnpj: dados.empresa.cnpj || '',
+            inscricaoEstadual: df.inscricaoEstadual || '',
+            uf: apuracao.uf,
+            competenciaInicio: dados.competenciaInicio,
+            competenciaFim: dados.competenciaFim,
+            periodicidade: dados.competenciaInicio === dados.competenciaFim ? 'Mensal' : 'Trimestral',
+            documentosLidos: (dados.notas || []).length,
+            // Só o que o bloco de identificação do PDF imprime — nunca o cadastro inteiro.
+            identificacao: {
+                respLegalNome: df.respLegalNome || null, respLegalCpf: df.respLegalCpf || null,
+                respLegalCargo: df.respLegalCargo || null, responsaveisLegais: df.responsaveisLegais || null,
+                contadorNome: df.contadorNome || null, contadorCrc: df.contadorCrc || null, contadorCpf: df.contadorCpf || null,
+            },
+            ...raicms,
+            // O que a COLETA avisou (E111 ignorado, DIFAL sem código, saldo pela
+            // cronologia…) vai junto: é o mesmo aviso que sairia na geração.
+            avisosDaColeta: dados.warnings || [],
+        });
+    } catch (e) {
+        if (e?.code === 'EMPRESA_NAO_ENCONTRADA' || e?.code === 'DADOS_FISCAIS_INCOMPLETOS') {
+            return res.status(400).json({ ok: false, error: e.message });
+        }
+        console.error('[sped/apuracao-icms GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.get('/saldo-abertura', requireAdmin, async (req, res) => {
     try {
         const { empresaId } = req.query || {};
@@ -266,8 +590,37 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // modelo 55 e chave 65 sem nenhum teste acusar.
         const prevalidacao = prevalidarSpedFiscal(linhasDoArquivo, {
             contribuinteIpi: dados.empresa?.dadosFiscais?.contribuinteIpi || '',
+            // O regime decide a R44 (crédito de ICMS na entrada do optante).
+            regime: dados.regimeEscrituracao || '',
         });
         for (const linha of resumoPrevalidacao(prevalidacao)) dados.warnings.push(linha);
+
+        // 🚨 O QUE A TRAVA DE CONTAGEM NÃO CONFERIU VAI NOS **WARNINGS**, não só
+        // num header.
+        //
+        // A tela lê `X-SPED-Warnings` e `X-SPED-Auditoria` — e **não lê** o
+        // `X-SPED-Prevalidacao`. Pôr a lista só no header seria repetir, um
+        // nível acima, a classe que ela existe para fechar: flag que ninguém lê
+        // (o `coberturaIncompleta`, o E510 "pronto"). Ela sai nos dois.
+        //
+        // ⚠️ E ela NASCE MUDA: hoje os 45 registros que o gerador emite estão
+        // cobertos, então nenhum arquivo ganha linha nova. Ela fala no dia em
+        // que um registro NOVO entrar sem tabela — que é exatamente quando
+        // importa, e é o dia em que o 0500 saiu com o leiaute do vizinho.
+        // ⚠️ SÓ O `naoConferidos` SAI DAQUI — os ERROS de contagem já vêm pela
+        // R42 da pré-validação, e dois alarmes para o mesmo defeito é o
+        // caminho conhecido para a equipe ignorar os dois (a decisão de 17/09
+        // sobre o D001). O que estava quebrado não era a ligação: era a lista
+        // do aviso cortar em 12 e mandar o resto para um header que a tela não
+        // lê — ver `resumoPrevalidacao`.
+        const semContagem = conferirContagemDeCamposFiscal(linhasDoArquivo).naoConferidos;
+        if (semContagem.length) {
+            dados.warnings.push(
+                `⚠️ A contagem de campos NÃO conferiu ${semContagem.length} registro(s): `
+                + `${semContagem.join(', ')}. Silêncio aqui não é aprovação — o leiaute deles não `
+                + 'está no Guia extraído, então nada garante que saíram com o número certo de campos.',
+            );
+        }
 
         // Encoding Windows-1252 (legado SPED)
         const buffer = Buffer.from(txt, 'latin1');
@@ -311,6 +664,12 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             ok: prevalidacao.erros.length === 0,
             resumo: prevalidacao.resumo,
             erros: prevalidacao.erros,
+            // 🚨 O QUE A TRAVA DE CONTAGEM **NÃO** CONFERIU sai junto — silêncio
+            // não é aprovação. Foi o silêncio da trava do EFD-Contribuições,
+            // que só cobria os onze registros provados por recibo, que deixou o
+            // 0500 sair com o leiaute do arquivo VIZINHO por meses (24/08). O
+            // header do outro arquivo já leva esta lista; este não levava.
+            naoConferidos: semContagem,
         })));
         return res.send(buffer);
     } catch (e) {
@@ -357,9 +716,17 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
         const nfes = [];
         let descartadas = 0;
         let perdedoresMerge = 0;
+        let retiradasDoAcervo = 0;
         for (const d of snap) {
             const doc = d.data();
             if (doc._merged_into) { perdedoresMerge++; continue; }
+            // 🚨 AQUI A LÁPIDE EVITA O ALARME FALSO, não o número errado: nota
+            // TIRADA do livro não está no arquivo — e é isso que se espera. Sem
+            // este filtro ela voltaria como "capturada e NÃO ENCONTRADA na
+            // escrituração", severidade ERRO, a mensagem mais grave da tela,
+            // com os dois lados CERTOS. Alarme sobre arquivo correto é o jeito
+            // conhecido de a equipe desligar a conferência (22/08).
+            if (!docContaNoLivro(doc)) { retiradasDoAcervo++; continue; }
             const chave = String(doc.chave || doc.chaveAcesso || '').replace(/\D/g, '');
             if (chave.length !== 44) { descartadas++; continue; }
             nfes.push({
@@ -372,7 +739,13 @@ router.get('/nfes-capturadas', requireAuth, async (req, res) => {
                 dataEmissao: doc.dataEmissao || doc.dhEmi || null,
             });
         }
-        return res.json({ empresaId, competencia, total: nfes.length, descartadas, perdedoresMerge, nfes });
+        // Contado À PARTE: "não conferi porque foi tirada do livro" e "não
+        // conferi porque o documento está torto" pedem ações opostas, e um
+        // número só faz as duas parecerem a mesma coisa.
+        return res.json({
+            empresaId, competencia, total: nfes.length,
+            descartadas, perdedoresMerge, retiradasDoAcervo, nfes,
+        });
     } catch (e) {
         return tratarErro(e, res);
     }

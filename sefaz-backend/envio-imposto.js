@@ -6,7 +6,8 @@
 //
 //   1. CÓPIA NO SHAREPOINT — pasta do cliente no padrão já existente do
 //      sync/arquivo, sub-pasta IMPOSTOS do período:
-//        Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/{empresaPasta}/IMPOSTOS
+//        Empresas/{código}_{nome}/Departamento Fiscal/{ano}/{Mês}/IMPOSTOS
+//      (a pasta da empresa é ACHADA pelo código — ver caminho-sharepoint.js)
 //      (empresaPasta = "CNPJ NOME" configurada em sharePointConfig; empresa
 //      sem config não bloqueia o envio — o gap aparece no resultado).
 //   2. CÓPIA AUTOMÁTICA AO GESTOR — alexandre@spassessoriacontabil.com.br em
@@ -24,6 +25,12 @@
 
 import admin from 'firebase-admin';
 import { normalizarCompetencia, competenciaTarefa } from './competencia.js';
+// 🚨 O caminho MUDOU em 02/09 (medido na árvore real): não há nível de GRUPO,
+// a empresa vem ANTES do departamento e o nome da pasta dela é HUMANO — tem de
+// ser ACHADO pelo código. A régua é única; ver caminho-sharepoint.js.
+import { caminhoImpostos } from './caminho-sharepoint.js';
+// Dono único de "qual é a pasta desta empresa?" — ver sharepoint-pastas.js.
+import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 
 export const GESTOR_EMAIL = process.env.ENVIO_IMPOSTO_GESTOR
     || 'alexandre@spassessoriacontabil.com.br';
@@ -54,15 +61,20 @@ export { competenciaTarefa };
 
 
 /**
- * Pasta IMPOSTOS do período no SharePoint — MESMA árvore do sync/arquivo de
- * XMLs (buildFolderPathArquivo), trocando a folha por IMPOSTOS.
+ * Pasta IMPOSTOS do período — MESMA árvore do sync de XMLs, trocando a folha.
+ *
+ * 🚨 A assinatura MUDOU em 02/09: ela recebia `grupo` + `empresaPasta` do
+ * cadastro e MONTAVA o caminho. A árvore real não tem grupo, e o nome da pasta
+ * da empresa é humano (`0004 – AÇOUGUE YOKOAMA`) — montar criaria uma pasta
+ * NOVA ao lado da que existe. Agora recebe a pasta REAL, já lida do SharePoint.
  */
-export function buildFolderPathImpostos(grupo, empresaPasta, competencia) {
+export function buildFolderPathImpostos(pastaEmpresa, competencia) {
     const n = normalizarCompetencia(competencia);
-    if (!grupo || !empresaPasta || !n) return null;
+    if (!pastaEmpresa || !n) return null;
     const [ano, mes] = n.split('-');
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresaPasta}/IMPOSTOS`;
+    return caminhoImpostos({ pastaEmpresa, ano, mes });
 }
+
 
 /**
  * Tipo de imposto/guia → obrigação da coleção tarefas (a pendência que o
@@ -70,11 +82,24 @@ export function buildFolderPathImpostos(grupo, empresaPasta, competencia) {
  * (o rito registra 'sem-tarefa' e segue — não é erro).
  */
 export function obrigacaoDoTipo(tipo) {
-    const t = String(tipo || '').toUpperCase();
-    if (t === 'DAS') return 'DAS';
-    if (t === 'DARF' || t === 'DCTFWEB') return 'DCTFWEB';
-    if (t === 'FGTS') return 'FGTS';
-    if (t === 'SPED') return 'SPED';
+    const t = String(tipo || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (!t) return null;
+    // O tipo é TEXTO LIVRE no registro por fora ("DARF PIS, COFINS", "ISS
+    // PMSP"…). Até 22/09 só DAS/DARF/FGTS/SPED viravam obrigação, e o resto
+    // caía em "sem tarefa" — pendência sem saída, travando a etapa 5 (MANTOAN
+    // 08/2026). A régua: o TRIBUTO nomeado no texto decide, na ordem do mais
+    // específico para o mais genérico; "DARF" sozinho continua DCTFWEB.
+    if (/\bPIS\b|\bCOFINS\b/.test(t)) return 'PIS_COFINS';
+    // FGTS e INSS patronal são do DP (22/09): não há tarefa do Fiscal a
+    // baixar — o envio fecha como `sem-obrigacao`, dito.
+    if (/\bINSS\b|\bCPP\b|\bGPS\b|\bFGTS\b/.test(t)) return null;
+    if (/\bIRPJ\b/.test(t)) return 'IRPJ_TRIM';
+    if (/\bCSLL\b/.test(t)) return 'CSLL_TRIM';
+    if (/\bISS(QN)?\b/.test(t)) return 'ISS';
+    if (/\bEFD[\s_-]*CONTRIB/.test(t)) return 'EFD_CONTRIB';
+    if (/\bSPED\b|\bEFD\b/.test(t)) return 'SPED';
+    if (/\bDCTF/.test(t) || /\bDARF\b/.test(t)) return 'DCTFWEB';
+    if (/\bDAS\b/.test(t)) return 'DAS';
     return null;
 }
 
@@ -117,7 +142,7 @@ async function uploadProxy(folderPath, filename, contentBase64, mimeType) {
 }
 
 // Resolve a empresa (por id OU por CNPJ) nas duas coleções, pulando zumbis.
-async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
+export async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
     const cnpjAlvo = String(empresaCnpj || '').replace(/\D/g, '');
     for (const col of ['simples_empresas', 'lucro_empresas']) {
         if (empresaId) {
@@ -154,6 +179,11 @@ async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
  * @param {string} p.tipo         'DAS' | 'DARF' | 'DCTFWEB' | 'DARE' | 'FGTS' | 'SPED' | ...
  * @param {string} p.competencia  'AAAA-MM' | 'MM/AAAA'
  * @param {string} [p.canal]      'email-graph' (servidor) | 'email-app' (mailto) | 'whatsapp'
+ *                                | 'fora-do-app' (DECLARADO — o app não enviou)
+ * @param {object} [p.declaracao] quando o canal é 'fora-do-app': a declaração
+ *   já CONFERIDA por `conferirDeclaracao` (meio, comoFoi, quando, declaradoPor).
+ *   Ela é o que substitui a prova do servidor — e `canalComprovaEnvio` continua
+ *   devolvendo false, então o envio entra em `semProvaDeEnvio`.
  * @param {string} [p.para]       destinatário
  * @param {string[]} [p.copiaPara]
  * @param {string} [p.pdfBase64]  arquivo enviado (cópia pro SharePoint)
@@ -161,6 +191,114 @@ async function resolverEmpresa(db, { empresaId, empresaCnpj }) {
  * @param {string} [p.enviadoPor] e-mail/uid do colaborador
  * @param {number} [p.valor]
  */
+/**
+ * 🔒 ARQUIVAR A GUIA NA PASTA IMPOSTOS — dono único.
+ *
+ * Extraído do rito em 28/08 para que o **♻️ refazer** use exatamente esta
+ * gravação, e não uma segunda cópia dela: duas implementações do mesmo upload
+ * divergiriam no primeiro ajuste de caminho, e a divergência apareceria como
+ * "no envio funcionou e no refazer não".
+ */
+export async function arquivarGuiaNoSharePoint({ empresa, pdf, competencia, tipo, empresaCnpj, pdfFileName }) {
+    // 🚨 A PASTA DA EMPRESA É ACHADA, NÃO MONTADA (02/09). Cada situação tem
+    // ação PRÓPRIA — "não achei", "achei duas" e "o cadastro não tem código"
+    // pedem coisas diferentes, e um balde só faria as três parecerem a mesma.
+    const achado = await resolverPastaDaEmpresa(empresa?.data);
+    if (!achado.ok) {
+        return { status: 'sem-config', motivo: achado.motivo };
+    }
+    const folder = buildFolderPathImpostos(achado.pasta, competencia);
+    if (!folder) {
+        return { status: 'sem-config', motivo: 'Competência ilegível — não dá para saber em qual mês arquivar.' };
+    }
+    const nome = pdfFileName
+        || `${String(tipo || 'imposto').toLowerCase()}_${String(empresaCnpj).replace(/\D/g, '')}_${normalizarCompetencia(competencia) || 'competencia'}.pdf`;
+    try {
+        await uploadProxy(folder, nome, pdf, 'application/pdf');
+        return { status: 'arquivado', folder, filename: nome };
+    } catch (e) {
+        return { status: 'erro', motivo: e.message, folder };
+    }
+}
+
+/**
+ * 🔒 BAIXA DA OBRIGAÇÃO — dono único, pela mesma razão do arquivamento.
+ *
+ * ⚠️ Ela é IDEMPOTENTE por construção: só conclui tarefa que ainda está
+ * aberta, e tarefa já concluída volta como `ja-baixada` (desfecho legítimo).
+ * É isso que permite refazê-la sem medo de "baixar duas vezes".
+ */
+export async function darBaixaDaObrigacao(db, p) {
+    const empresa = p.empresa;
+    const obrigacao = obrigacaoDoTipo(p.tipo);
+    const compTarefa = competenciaTarefa(p.competencia);
+    if (obrigacao && compTarefa) {
+        try {
+            const snap = await db.collection('tarefas')
+                .where('obrigacao', '==', obrigacao)
+                .where('competencia', '==', compTarefa)
+                .get();
+            const cnpjAlvo = String(p.empresaCnpj || '').replace(/\D/g, '');
+            // A empresa PRIMEIRO, o status depois — a ordem importa: sem isso
+            // "a tarefa já estava concluída" e "não existe tarefa" viram o
+            // mesmo `sem-tarefa`, e são fatos com ações opostas.
+            const daEmpresa = snap.docs.filter((d) => {
+                const t = d.data();
+                if (p.empresaId && t.empresaId === p.empresaId) return true;
+                if (empresa && t.empresaId === empresa.id) return true;
+                return cnpjAlvo && String(t.empresaCnpj || '').replace(/\D/g, '') === cnpjAlvo;
+            });
+            const alvos = daEmpresa.filter((d) => {
+                const st = d.data().status;
+                return st !== 'concluida' && st !== 'cancelada';
+            });
+            for (const d of alvos) {
+                await d.ref.update({
+                    status: 'concluida',
+                    concluidaEm: admin.firestore.FieldValue.serverTimestamp(),
+                    concluidaPor: p.enviadoPor || 'envio-imposto',
+                    baixaOrigem: 'envio-imposto',
+                    baixaCanal: p.canal || null,
+                });
+            }
+            // 🚨 "JÁ BAIXADA" NÃO É "SEM TAREFA" (27/08, achado ao ligar o envio
+            // DECLARADO). A pessoa que entregou a obrigação por fora dá baixa
+            // em Vencimentos e SÓ DEPOIS registra o envio — fazendo na ordem
+            // certa, ela caía em `sem-tarefa`, que é PENDÊNCIA, e a etapa 5
+            // ficava em âmbar travando o fim de mês. Ou seja: o caminho certo
+            // punia quem o seguia.
+            //
+            // A tarefa EXISTE e está concluída: o rito não tem o que fazer, e
+            // isso é desfecho legítimo — não é o cron que faltou.
+            return alvos.length > 0
+                ? { status: 'baixada', obrigacao, competencia: compTarefa, tarefas: alvos.length }
+                : daEmpresa.length > 0
+                    ? {
+                        status: 'ja-baixada', obrigacao, competencia: compTarefa, tarefas: daEmpresa.length,
+                        motivo: 'A obrigação já estava concluída (ou cancelada) em Vencimentos quando o envio foi registrado.',
+                    }
+                    : {
+                        status: 'sem-tarefa', obrigacao, competencia: compTarefa,
+                        motivo: 'Nenhuma tarefa desta obrigação/competência para esta empresa — o cron mensal não gerou.',
+                    };
+        } catch (e) {
+            return { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
+        }
+    }
+    // Competência ilegível: não dá para achar a tarefa — pendência de verdade.
+    if (obrigacao && !compTarefa) {
+        return { status: 'sem-tarefa', obrigacao, motivo: `Competência "${p.competencia}" ilegível — não dá para localizar a tarefa.` };
+    }
+    // Tipo que NÃO nomeia nenhuma obrigação do catálogo (ex.: DARE de ICMS):
+    // não há tarefa a baixar por aqui, e isso é FATO, não falha — cobrar
+    // tarefa inexistente travava a etapa 5 para sempre (MANTOAN, 22/09).
+    return {
+        status: 'sem-obrigacao',
+        motivo: `Tipo "${p.tipo}" não corresponde a nenhuma obrigação do catálogo — nada a baixar por aqui. `
+            + 'Se esta guia é de uma obrigação do mês, dê baixa nela em Vencimentos.',
+    };
+}
+
 export async function executarRitoEnvioImposto(p) {
     const db = getDb();
     const resultado = {
@@ -173,65 +311,10 @@ export async function executarRitoEnvioImposto(p) {
 
     // 1. Cópia no SharePoint (pasta IMPOSTOS do período do cliente).
     const pdf = limparBase64(p.pdfBase64);
-    if (pdf) {
-        const cfg = empresa?.data?.sharePointConfig;
-        const folder = cfg ? buildFolderPathImpostos(cfg.grupo, cfg.empresaPasta, p.competencia) : null;
-        if (!folder) {
-            resultado.sharePoint = {
-                status: 'sem-config',
-                motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → Integrações → SharePoint.',
-            };
-        } else {
-            const nome = p.pdfFileName
-                || `${String(p.tipo || 'imposto').toLowerCase()}_${String(p.empresaCnpj).replace(/\D/g, '')}_${normalizarCompetencia(p.competencia) || 'competencia'}.pdf`;
-            try {
-                await uploadProxy(folder, nome, pdf, 'application/pdf');
-                resultado.sharePoint = { status: 'arquivado', folder, filename: nome };
-            } catch (e) {
-                resultado.sharePoint = { status: 'erro', motivo: e.message, folder };
-            }
-        }
-    }
+    if (pdf) resultado.sharePoint = await arquivarGuiaNoSharePoint({ empresa, pdf, ...p });
 
-    // 2. Baixa da obrigação na aba Vencimentos e Obrigações (reverso da
-    //    pendência do cron mensal). Sem tarefa correspondente → segue em paz.
-    const obrigacao = obrigacaoDoTipo(p.tipo);
-    const compTarefa = competenciaTarefa(p.competencia);
-    if (obrigacao && compTarefa) {
-        try {
-            const snap = await db.collection('tarefas')
-                .where('obrigacao', '==', obrigacao)
-                .where('competencia', '==', compTarefa)
-                .get();
-            const cnpjAlvo = String(p.empresaCnpj || '').replace(/\D/g, '');
-            const alvos = snap.docs.filter((d) => {
-                const t = d.data();
-                if (t.status === 'concluida' || t.status === 'cancelada') return false;
-                if (p.empresaId && t.empresaId === p.empresaId) return true;
-                if (empresa && t.empresaId === empresa.id) return true;
-                return cnpjAlvo && String(t.empresaCnpj || '').replace(/\D/g, '') === cnpjAlvo;
-            });
-            for (const d of alvos) {
-                await d.ref.update({
-                    status: 'concluida',
-                    concluidaEm: admin.firestore.FieldValue.serverTimestamp(),
-                    concluidaPor: p.enviadoPor || 'envio-imposto',
-                    baixaOrigem: 'envio-imposto',
-                    baixaCanal: p.canal || null,
-                });
-            }
-            resultado.baixa = alvos.length > 0
-                ? { status: 'baixada', obrigacao, competencia: compTarefa, tarefas: alvos.length }
-                : {
-                    status: 'sem-tarefa', obrigacao, competencia: compTarefa,
-                    motivo: 'Nenhuma tarefa pendente desta obrigação/competência (já concluída ou ainda não gerada pelo cron).',
-                };
-        } catch (e) {
-            resultado.baixa = { status: 'erro', motivo: e.message, obrigacao, competencia: compTarefa };
-        }
-    } else if (!obrigacao) {
-        resultado.baixa = { status: 'sem-tarefa', motivo: `Tipo ${p.tipo} não tem obrigação mensal correspondente na aba de tarefas.` };
-    }
+    // 2. Baixa da obrigação na aba Vencimentos e Obrigações.
+    resultado.baixa = await darBaixaDaObrigacao(db, { empresa, ...p });
 
     // 3. Auditoria central.
     try {
@@ -242,6 +325,11 @@ export async function executarRitoEnvioImposto(p) {
             tipo: String(p.tipo || '').toUpperCase(),
             competencia: normalizarCompetencia(p.competencia),
             canal: p.canal || null,
+            // 📋 A DECLARAÇÃO, quando o envio aconteceu FORA do app. Ela é o
+            // motivo escrito com autor e data — o desenho da T3 da DCTFWeb e da
+            // reabertura do fim de mês. Sem ela o canal 'fora-do-app' seria um
+            // clique, e clique fácil transforma exceção em rotina.
+            declaracao: p.declaracao || null,
             para: p.para || null,
             copiaPara: [...new Set([GESTOR_EMAIL, ...(p.copiaPara || [])])],
             valor: Number.isFinite(Number(p.valor)) ? Number(p.valor) : null,

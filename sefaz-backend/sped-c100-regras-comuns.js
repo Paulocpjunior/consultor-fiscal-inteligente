@@ -33,6 +33,8 @@
 // jeito mais rápido de a equipe desligar a prevalidação.
 // ============================================================================
 
+import { validarCpf } from './documento-dv.js';
+
 const campos = (linha) => String(linha || '').split('|');
 const registroDe = (linha) => campos(linha)[1] || '';
 
@@ -65,6 +67,69 @@ export function conferirCodModContraChave(linhas) {
             fonte: 'PVA: "O modelo da chave do documento eletrônico não confere com o modelo do documento" '
                 + '(PS VIDROS 0896 · 07/2026, 19/08).',
         });
+    }
+    return erros;
+}
+
+/**
+ * NUM_DOC × o número que a CHAVE carrega — C100 (campo 08) e D100 (campo 09).
+ *
+ * 🚨 O CT-e CAPTURADO NÃO TINHA NÚMERO NENHUM (18/09, EDUARDO GUERRA · 08/2026).
+ * A captura lia a tag `nNF` (da NF-e) e o conhecimento traz `nCT`, então TODO
+ * D100 saiu com o campo 09 VAZIO. O PVA importou o arquivo (a contagem fechava)
+ * e quebrou ao gerar o relatório de entradas — *"Ocorreu um erro ao gerar o
+ * relatório"* — só nesta empresa, a única com CT-e no livro. Nada acusava
+ * antes: a contagem (R42) e o tamanho (R43) estavam certos.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, D100 campo 09 e C100 campo 08: *"Validação:
+ * o valor informado no campo deve ser maior que '0' (zero)"*; e no campo da
+ * chave: *"Será verificada a consistência da informação dos campos NUM_DOC e
+ * SER com o número do documento e série contidos na chave"*. A chave carrega
+ * o número nas posições **26-34**, e é contra ele que se confere.
+ *
+ * ⚠️ Cancelada/denegada/inutilizada (COD_SIT 02/03/04/05) MANTÉM o NUM_DOC
+ * (Exceção 1 dos dois registros), então a regra vale nelas também — só o
+ * inutilizado (05), que não tem chave, fica sem a segunda metade.
+ *
+ * Os dez primeiros campos do C100 e do D100 são idênticos nas DUAS famílias
+ * (o D100 tem o SUB no 8, então NUM_DOC é 9 e CHV_CTE é 10).
+ */
+export function conferirNumDocContraChave(linhas) {
+    const POS = { C100: { num: 8, chave: 9 }, D100: { num: 9, chave: 10 } };
+    const erros = [];
+    for (const l of (linhas || []).map(String)) {
+        const reg = registroDe(l);
+        const pos = POS[reg];
+        if (!pos) continue;
+        const f = campos(l);
+        const numTxt = String(f[pos.num] || '').replace(/\D/g, '');
+        const chave = String(f[pos.chave] || '').replace(/\D/g, '');
+        const daChave = chave.length === 44 ? chave.slice(25, 34).replace(/^0+/, '') : '';
+        const comum = {
+            registro: reg, campo: `${pos.num} - NUM_DOC`, linha: l,
+            fonte: `Guia Prático 3.2.3, ${reg} campo ${String(pos.num).padStart(2, '0')} (NUM_DOC): "o valor `
+                + 'informado no campo deve ser maior que zero"; e "será verificada a consistência da '
+                + 'informação dos campos NUM_DOC e SER com o número do documento e série contidos na chave" '
+                + '(EDUARDO GUERRA · 08/2026, 18/09: o PVA quebrou o relatório de entradas com o D100 sem número).',
+        };
+        if (!numTxt || Number(numTxt) === 0) {
+            erros.push({
+                ...comum, regra: 'num-doc-vazio', valor: '', esperado: daChave || 'maior que zero',
+                mensagem: `${reg === 'D100' ? 'O CT-e' : 'A nota'} de chave ${chave || '(sem chave)'} saiu SEM número (NUM_DOC vazio).`,
+                acao: 'O PVA exige número maior que zero e o relatório de entradas quebra sem ele. '
+                    + (daChave ? `A chave carrega o número ${daChave}: ` : '')
+                    + 'é defeito de GERAÇÃO/captura — reporte com o print; para CT-e rode o 🚚 Reler cabeçalho dos CT-e.',
+            });
+            continue;
+        }
+        if (daChave && numTxt.replace(/^0+/, '') !== daChave) {
+            erros.push({
+                ...comum, regra: 'num-doc-x-chave', valor: numTxt, esperado: daChave,
+                mensagem: `O ${reg === 'D100' ? 'CT-e' : 'documento'} declara NUM_DOC ${numTxt} e o número contido na chave é ${daChave}.`,
+                acao: 'O PVA confere o número contra a chave. Se o número gravado foi digitado, corrija-o pelo '
+                    + '✏️ Corrigir o número; se veio de captura, reimporte o XML.',
+            });
+        }
     }
     return erros;
 }
@@ -196,4 +261,236 @@ export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
             + 'tem. Nos dois casos o PVA recusa — é contra este campo que ele confere o DT_DOC.');
     }
     return erros;
+}
+
+/**
+ * O 0100 (contabilista) tem NOME, CPF e CRC — e o CPF passa no DV.
+ *
+ * 📖 FONTE — Guia Prático da EFD-Contribuições 1.35, registro 0100: os campos
+ * **02 NOME**, **03 CPF** e **04 CRC** são **Obrig. `S`**, e o campo 03 traz a
+ * validação literal *"será conferido o dígito verificador (DV) do CPF
+ * informado"*.
+ *
+ * 🚨 **POR QUE ELA NASCEU (29/08)**: os dois geradores tinham DEFAULT
+ * INVENTADO — `'CONTADOR SP CONTABIL'` e `'1SP123456/O-7'`. Sem a env, o
+ * arquivo declarava um contabilista que não existe com um CRC que não é de
+ * ninguém, e o **PVA aceita**, porque a forma está certa. É a família do
+ * `1405`, do `PARTSEM` e do `5352`: erro que só aparece na fiscalização.
+ * Apagado o default, o campo passa a sair VAZIO — e vazio o PVA acusa, que é
+ * o lado certo do erro.
+ *
+ * ⚠️ **EMAIL e COD_MUN ficam de FORA, de propósito.** No EFD-Contribuições
+ * eles são **Obrig. `N`** (o Guia é explícito), e no EFD ICMS/IPI o PVA os
+ * recusou como obrigatórios (PWR 19/08) — lá quem cobra é a R13, que é da
+ * família certa. Cobrá-los aqui acusaria arquivo CORRETO do
+ * EFD-Contribuições, que é o jeito conhecido de a equipe desligar a trava.
+ *
+ * ⚠️ E o **DV é FATO sobre o número**: um CPF que não fecha está errado em
+ * qualquer família, então essa metade roda nas duas.
+ */
+export function conferirContador0100(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        if (registroDe(l) !== '0100') continue;
+        const f = campos(l);
+        const faltando = [];
+        if (!String(f[2] || '').trim()) faltando.push('2 - NOME');
+        if (!String(f[3] || '').trim()) faltando.push('3 - CPF');
+        if (!String(f[4] || '').trim()) faltando.push('4 - CRC');
+        if (faltando.length) {
+            erros.push({
+                regra: '0100-contabilista', registro: '0100', campo: faltando.join(', '),
+                valor: '', esperado: 'preenchido', linha: l,
+                mensagem: `O registro do contabilista está sem ${faltando.join(' e ')}.`,
+                acao: 'São campos OBRIGATÓRIOS do 0100. O app não os inventa: preencha as variáveis '
+                    + 'CONTADOR_NOME / CONTADOR_CPF / CONTADOR_CRC no Cloud Run.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, registro 0100: campos 02 (NOME), 03 (CPF) '
+                    + 'e 04 (CRC) são Obrigatórios (S).',
+            });
+            continue;
+        }
+        const cpf = String(f[3]);
+        if (!validarCpf(cpf)) {
+            erros.push({
+                regra: '0100-contabilista', registro: '0100', campo: '3 - CPF', linha: l,
+                valor: cpf, esperado: 'CPF com DV válido',
+                mensagem: `O CPF do contabilista (${cpf}) não passa no dígito verificador.`,
+                acao: 'Confira a variável CONTADOR_CPF no Cloud Run — o PVA confere o DV.',
+                fonte: 'Guia Prático da EFD-Contribuições 1.35, 0100 campo 03, Validação: "será conferido '
+                    + 'o dígito verificador (DV) do CPF informado".',
+            });
+        }
+    }
+    return erros;
+}
+
+/**
+ * C100 de TERCEIRO sem COD_PART, ou com COD_PART que o 0150 não declara.
+ *
+ * 🚨 FONTE — Guia Prático 3.2.3, registro C100: *"Campo 04 (COD_PART) -
+ * Validação: o valor informado deve existir no campo COD_PART do registro
+ * 0150. Quando se tratar de NFC-e (modelo 65), o campo não deve ser
+ * preenchido"*; e a chave do registro *"para documentos com campo IND_EMIT
+ * igual a '1-Terceiros': campo IND_OPER, campo IND_EMIT, campo COD_PART, …"*.
+ * O Guia 1.35 do EFD-Contribuições referencia o 0150 pelo mesmo campo.
+ *
+ * O CASO (11/09, Paulo, testando o SPED de uma distribuidora): *"deu erros de
+ * cod de participante nas entradas … 493 só de código de participante"*. A
+ * causa está medida no dono (`participanteDoDocumento`): a entrada capturada
+ * pela SEFAZ chega ACHATADA e o C100 saía `|C100|0|1||55|…|` — um erro por
+ * nota de entrada, 493 notas. Esta regra é a REDE: se o caminho voltar a
+ * perder o lado, o arquivo acusa aqui em vez de no PVA.
+ *
+ * ⚠️ NFC-e (COD_MOD 65) fica de FORA: nela o campo não PODE ser preenchido
+ * (Exceção 9), e quem cobra isso é a R2 da prevalidação. Emissão própria
+ * (IND_EMIT 0) também não é acusada pelo vazio — o COD_PART ali é facultativo
+ * na chave do registro; só o "COD_PART preenchido e fora do 0150" vale para
+ * ela.
+ */
+/** COD_SIT em que o C100 sai sem COD_PART (Exceção 1: 02, 03, 04 e 05). */
+export const C100_SEM_PARTICIPANTE = new Set(['02', '03', '04', '05']);
+
+/**
+ * C100 cancelado/denegado só com os campos que a Exceção 1 permite.
+ *
+ * 📖 FONTE — PVA (ELS · 08/2026, 11/09, 19×): *"Para documento fiscal
+ * cancelado (código da situação = 02 ou 03) ou NF-e denegada (04), somente
+ * informar os campos código da situação, indicador de operação, código do
+ * modelo e a chave"*; Guia 3.2.3, C100, Exceção 1: *"preencher somente os
+ * campos REG, IND_OPER, IND_EMIT, COD_MOD, COD_SIT, SER, NUM_DOC e CHV_NF-e …
+ * Demais campos deverão ser apresentados com conteúdo VAZIO"*.
+ *
+ * @param {string[]} linhas
+ * @param {{permitidas?: number[]}} [opts] posições (REG = 1) que PODEM vir
+ *   preenchidas — o padrão é o do EFD ICMS/IPI. Inutilizada (05) leva tudo
+ *   menos a chave e fica FORA desta conferência.
+ */
+export function conferirCanceladaSoCampos(linhas, opts = {}) {
+    const permitidas = new Set(opts.permitidas || [1, 2, 3, 5, 6, 7, 8, 9]);
+    const erros = [];
+    for (const l of (linhas || []).map(String)) {
+        if (registroDe(l) !== 'C100') continue;
+        const f = campos(l);
+        const codSit = String(f[6] || '').trim();
+        if (!['02', '03', '04'].includes(codSit)) continue;
+        const preenchidas = [];
+        for (let pos = 1; pos < f.length - 1; pos += 1) {
+            if (permitidas.has(pos)) continue;
+            if (String(f[pos] ?? '').trim() !== '') preenchidas.push(pos === 4 ? '4 - COD_PART' : String(pos));
+        }
+        if (!preenchidas.length) continue;
+        erros.push({
+            regra: 'c100-cancelada-com-campos', registro: 'C100', campo: preenchidas.join(', '),
+            valor: '', esperado: 'em branco', linha: l,
+            mensagem: `A nota nº ${f[8] || '?'} está ${codSit === '04' ? 'DENEGADA' : 'CANCELADA'} (COD_SIT ${codSit}) `
+                + `e saiu com campo(s) preenchido(s) que o leiaute manda deixar VAZIOS: ${preenchidas.join(', ')}.`,
+            acao: 'Defeito de GERAÇÃO — reporte com o print. Cancelada leva só IND_OPER, IND_EMIT, COD_MOD, '
+                + 'COD_SIT, SER, NUM_DOC e a chave; sem COD_PART e sem filhos.',
+            fonte: 'PVA: "Para documento fiscal cancelado (código da situação = 02 ou 03) ou NF-e denegada (04), '
+                + 'somente informar os campos código da situação, indicador de operação, código do modelo e a '
+                + 'chave" (ELS · 08/2026, 11/09, 19×); Guia 3.2.3, C100, Exceção 1.',
+        });
+    }
+    return erros;
+}
+
+export function conferirCodPartDoC100(linhas) {
+    const erros = [];
+    const lista = (linhas || []).map(String);
+    const no0150 = new Set(
+        lista.filter((l) => registroDe(l) === '0150').map((l) => String(campos(l)[2] || '').trim()).filter(Boolean),
+    );
+    for (const l of lista) {
+        if (registroDe(l) !== 'C100') continue;
+        const f = campos(l);
+        const indEmit = String(f[3] || '').trim();
+        const codPart = String(f[4] || '').trim();
+        const codMod = String(f[5] || '').trim();
+        const codSit = String(f[6] || '').trim();
+        const num = f[8] || '?';
+        if (codMod === '65') continue;
+        // 🚨 CANCELADA/DENEGADA/INUTILIZADA NÃO LEVA COD_PART — Exceção 1 do
+        // C100 nas DUAS famílias. Cobrá-lo aqui mandaria preencher o campo que
+        // o PVA recusa preenchido (ELS · 08/2026, 11/09, 19 recusas).
+        if (C100_SEM_PARTICIPANTE.has(codSit)) continue;
+        if (!codPart) {
+            if (indEmit !== '1') continue;
+            erros.push({
+                regra: 'c100-sem-cod-part', registro: 'C100', campo: '4 - COD_PART',
+                valor: '', esperado: 'CNPJ/CPF do participante, cadastrado no 0150', linha: l,
+                mensagem: `A nota nº ${num} (emitida por TERCEIRO) está sem COD_PART — o PVA recusa cada C100 assim.`,
+                acao: 'O documento entrou sem o lado da contraparte legível (emitente da compra). Rode o ♻️ Reler '
+                    + 'participante dos XMLs (XMLs → 🌾 DIPAM / Produtor rural) para recuperar da fonte; se o XML '
+                    + 'não trouxer o CNPJ, é captura incompleta — reimporte o XML completo.',
+                fonte: 'Guia Prático 3.2.3, C100 campo 04 (COD_PART) — chave do registro para IND_EMIT=1 inclui '
+                    + 'COD_PART; Validação: "o valor informado deve existir no campo COD_PART do registro 0150" '
+                    + '(caso 11/09, 493 recusas numa distribuidora).',
+            });
+            continue;
+        }
+        if (!no0150.has(codPart)) {
+            erros.push({
+                regra: 'c100-cod-part-fora-do-0150', registro: 'C100', campo: '4 - COD_PART',
+                valor: codPart, esperado: 'um COD_PART declarado no 0150', linha: l,
+                mensagem: `A nota nº ${num} referencia o participante ${codPart}, que o 0150 não declara.`,
+                acao: 'O C100 e o 0150 têm que sair do MESMO dono (participanteDoDocumento). Se o participante tem '
+                    + 'documento com tamanho inválido (nem CPF nem CNPJ), o 0150 o pula — confira o cadastro na nota.',
+                fonte: 'Guia Prático 3.2.3, C100 campo 04: "o valor informado deve existir no campo COD_PART do '
+                    + 'registro 0150".',
+            });
+        }
+    }
+    return erros;
+}
+
+
+/**
+ * 🚨 O **ENDERECO** do 0150 — campo 10, obrigatório SEM condição.
+ *
+ * PVA (J.N. VINATEX · 08/2026, 18/09, **732 recusas em 123 páginas**):
+ * *"Campo obrigatório"*, registro **0150**, campo **10 - ENDERECO**.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, registro 0150, tabela de leiaute: o campo 10
+ * (END, *"Logradouro e endereço do imóvel"*) é **Obrig. `O`**. Ao contrário do
+ * COD_MUN (campo 08, `OC`, obrigatório só para o Brasil), este não tem
+ * condição nenhuma — e o registro é IDÊNTICO nas duas famílias, por isso a
+ * regra nasce no módulo comum (a "meia trava" do COD_MUN, 22/08, na mesma
+ * linha do mesmo registro).
+ *
+ * ⚠️ A AÇÃO APONTA O ♻️, não o cadastro: a causa medida é de LEITURA — o
+ * extrator lia do `<enderDest>` só a UF e o município e descartava o `xLgr`
+ * que vem no mesmo bloco. Mandar digitar 732 endereços seria pedir trabalho
+ * por um dado que está no arquivo (regra de 06/08).
+ */
+export function conferirEnderecoDo0150(linhas) {
+    const sem = [];
+    let primeira = null;
+    for (const l of (linhas || []).map(String)) {
+        if (registroDe(l) !== '0150') continue;
+        const f = campos(l);
+        if (String(f[10] || '').trim()) continue;
+        if (!primeira) primeira = l;
+        sem.push(String(f[3] || f[2] || '(sem nome)').trim());
+    }
+    if (!sem.length) return [];
+    // ⚠️ UMA ENTRADA, NÃO UMA POR PARTICIPANTE. Foram **732** num arquivo só, e
+    // a ação é a MESMA para todos (rodar o ♻️): 732 linhas idênticas no aviso
+    // é o jeito conhecido de ninguém ler as que importam (03/09). A contagem e
+    // os primeiros nomes é o que dá para agir.
+    return [{
+        regra: '0150-sem-endereco', registro: '0150', campo: '10 - ENDERECO',
+        valor: '', esperado: 'logradouro e endereço do imóvel', linha: primeira,
+        ocorrencias: sem.length,
+        mensagem: `${sem.length} participante(s) estão no 0150 sem ENDERECO e o PVA recusa cada um: `
+            + `${sem.slice(0, 5).join(', ')}${sem.length > 5 ? ` e mais ${sem.length - 5}` : ''}.`,
+        // ⚠️ A AÇÃO NOMEIA A ABA — e o botão só passou a existir nela em 18/09.
+        // Até então esta frase mandava rodar uma ferramenta que morava atrás de
+        // uma pendência de produtor rural, invisível para quem não compra de
+        // produtor: aviso que aponta ferramenta se prova contra a ferramenta.
+        acao: 'O logradouro vem do próprio XML (<enderEmit>/<enderDest>) e a captura antiga o '
+            + 'descartava. Rode o ♻️ Reler participante e município dos XMLs em Relatórios → '
+            + '✏️ CFOP por nota e regere; o que sobrar é participante cujo XML não trouxe o dado.',
+        fonte: 'Guia Prático 3.2.3, registro 0150, campo 10 (END) — Obrig. "O", sem condição; '
+            + 'PVA: "Campo obrigatório" (J.N. VINATEX · 08/2026, 18/09, 732 ocorrências).',
+    }];
 }

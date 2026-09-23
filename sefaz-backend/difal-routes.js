@@ -87,7 +87,7 @@ router.get('/varredura', requireAuth, async (req, res) => {
                 // cancelamento chega por EVENTO com o `status` ainda
                 // 'autorizado'. Sem eles, o DIFAL de aquisição é apurado sobre
                 // compra que não existiu — imposto A PAGAR, a direção cara.
-                .select('empresaId', 'empresaCnpj', 'status', 'cStat', 'eventos', 'modelo', 'tpNF', 'valorTotal', 'chave',
+                .select('empresaId', 'empresaCnpj', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado', 'modelo', 'tpNF', 'valorTotal', 'chave',
                     'emitente.cnpjCpf', 'emitente.uf', 'cnpjEmit', 'ufEmit', 'codMunEmit',
                     'totais.vST', 'totais.vBCST'),
             { label: `difal varredura ${competencia}`, maxDocs: 80000 },

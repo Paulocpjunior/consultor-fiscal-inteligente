@@ -15,9 +15,13 @@ const emp = (over: any = {}) => ({ id: 'e1', nome: 'CLIENTE LTDA', cnpj: '111111
 const capturaOk = { farol: 'ok', codigo: 'em-dia-na-fonte', motivo: 'Lemos tudo que a SEFAZ tem.', acao: null };
 const saidaOk = { status: 'apto-ativo', apto: true, acao: 'Nada a fazer.' };
 const blocosOk = { entregaEfdIcms: true, bloqueios: [], atencoes: [] };
+// A rota SEMPRE calcula o cadastro (ela tem o doc inteiro), então a fixture
+// tem de refletir isso — fixture que não é a forma real é teste verde sobre
+// defeito vivo. O caso "não conferido" tem teste PRÓPRIO abaixo.
+const cadastroOk = { gravidade: 'ok', pendencias: [] };
 
 const pronta = (over: any = {}) => montarFilaEmpresa({
-    empresa: emp(), veredito: capturaOk, aptidao: saidaOk, prontidao: blocosOk, ...over,
+    empresa: emp(), veredito: capturaOk, aptidao: saidaOk, prontidao: blocosOk, cadastro: cadastroOk, ...over,
 });
 
 describe('veredito de UMA empresa', () => {
@@ -168,5 +172,92 @@ describe('a fila é ordenada por ESFORÇO — quem está a um passo vem antes', 
             prontidoes: new Map([['a', blocosOk]]),
         });
         expect(r.linhas[0].pronta).toBe(true);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚦 O CADASTRO ENTRA NA CONTA DE QUEM MIGRA
+//
+// A fila media captura de entrada, captura de saída e blocos — e nenhum deles
+// vê o cadastro. Um cliente com a captura fechada e sem a classificação do
+// estabelecimento industrial (0002) aparecia no TOPO da fila, migrava, e a
+// recusa do PVA chegava depois: é o gargalo de 20/08 entrando pela porta de
+// trás. Aqui a régua é a mesma do diagnóstico — ALTO/CRÍTICO bloqueia, MÉDIO
+// vira ressalva.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚦 cadastro na fila de migração', () => {
+    const cad = (gravidade: string, ...descricoes: string[]) => ({
+        gravidade,
+        pendencias: descricoes.map((d) => ({ campo: 'dadosFiscais.x', descricao: d, impacto: 'y' })),
+    });
+
+    it('cadastro ALTO bloqueia — o PVA recusaria o arquivo desta empresa', () => {
+        const r = pronta({ cadastro: cad('alto', 'Contribuinte de IPI sem a classificação (0002)') });
+        expect(r.pronta).toBe(false);
+        expect(r.proximoPasso.area).toBe('cadastro');
+        expect(r.proximoPasso.motivo).toMatch(/classificação/);
+        expect(r.proximoPasso.onde).toMatch(/Cadastros incompletos/);
+    });
+
+    it('CRÍTICO também bloqueia', () => {
+        expect(pronta({ cadastro: cad('critico', 'UF não cadastrada') }).pronta).toBe(false);
+    });
+
+    // ⚠️ MÉDIO é o arquivo saindo com um padrão que pode não ser o desta
+    // empresa. Bloquear pararia a onda por algo que a entrega suporta.
+    it('MÉDIO não bloqueia, mas NÃO some — vai como ressalva', () => {
+        const r = pronta({ cadastro: cad('medio', 'Sem o dia de vencimento do ICMS') });
+        expect(r.pronta).toBe(true);
+        expect(r.ressalvas.join(' ')).toMatch(/Sem o dia de vencimento do ICMS/);
+    });
+
+    it('cadastro em dia não gera bloqueio nem ressalva', () => {
+        const r = pronta();
+        expect(r.pronta).toBe(true);
+        expect(r.ressalvas).toEqual([]);
+    });
+
+    // ⚠️ REGRA 1 DA FILA: ausência de sinal nunca é prontidão. Conferência que
+    // não aconteceu não pode ser indistinguível de "cadastro em dia".
+    it('cadastro NÃO conferido vira ressalva nomeada, não silêncio verde', () => {
+        const r = pronta({ cadastro: null });
+        expect(r.ressalvas.join(' ')).toMatch(/não conferido nesta leitura/);
+    });
+
+    // 🚦 O cadastro é o único bloqueio que depende SÓ de nós, e o mais barato:
+    // numa fila ordenada por esforço, ele vem antes do que espera terceiro.
+    it('entre dois bloqueios, o cadastro é o próximo passo', () => {
+        const r = pronta({
+            cadastro: cad('alto', 'Falta o 0002'),
+            veredito: { farol: 'atencao', motivo: 'Resumo sem a completa.', acao: 'Manifeste.' },
+        });
+        expect(r.esforco).toBe(2);
+        expect(r.proximoPasso.area).toBe('cadastro');
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔒 QUEM CARREGA O INSUMO DA RÉGUA É DONO TAMBÉM (a lição de 27/08: a Rotina
+// dizia "pronto" e o botão recusava porque a rota montava a empresa à mão).
+//
+// A rota da fila monta uma PROJEÇÃO da empresa — e projeção feita à mão
+// envelhece em SILÊNCIO no primeiro campo novo. Se ela parar de calcular o
+// cadastro, a fila volta a dizer "pronta" sobre empresa que o PVA recusa, e
+// nada acusa.
+// ════════════════════════════════════════════════════════════════════════════
+describe('a rota calcula o cadastro', () => {
+    it('a projeção da fila passa pelo dono do diagnóstico', () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fs = require('fs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const path = require('path');
+        const src = fs.readFileSync(
+            path.resolve(__dirname, '..', 'sefaz-backend/fila-migracao-routes.js'), 'utf8',
+        );
+        expect(src).toMatch(/pendenciasCadastro/);
+        expect(src).toMatch(/gravidadeCadastro/);
+        // E o resultado tem de chegar à empresa — importar sem pendurar seria
+        // o import decorativo, que passa em varredura e não faz nada.
+        expect(src).toMatch(/cadastro:\s*\(/);
     });
 });

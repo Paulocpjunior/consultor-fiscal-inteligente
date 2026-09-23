@@ -9,7 +9,9 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
-import { pendenciasCadastro, gravidadeCadastro } from './diagnostico-cadastros-helper.js';
+import {
+    pendenciasCadastro, gravidadeCadastro, resumirPendenciasPorCampo,
+} from './diagnostico-cadastros-helper.js';
 
 const router = express.Router();
 
@@ -62,7 +64,11 @@ router.get('/', requireAuth, async (req, res) => {
             ok: empresas.filter((e) => e.gravidade === 'ok').length,
         };
 
-        return res.json({ resumo, empresas, geradoEm: new Date().toISOString() });
+        // 🚦 A equipe ataca por CAUSA: "12 empresas sem a classificação de IPI"
+        // é UMA tarefa, e uma lista de 400 linhas não é fila de trabalho.
+        const porCampo = resumirPendenciasPorCampo(empresas);
+
+        return res.json({ resumo, porCampo, empresas, geradoEm: new Date().toISOString() });
     } catch (e) {
         console.error('[diagnostico-cadastros]', e);
         return res.status(500).json({ error: 'Falha interna' });

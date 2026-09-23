@@ -5,23 +5,23 @@
  * Uma empresa pode ter vários colaboradores (vários docs). O admin atribui;
  * o colaborador apenas lê os vínculos dele.
  *
- * Regras Firestore: leitura para qualquer logado, escrita só admin.
- * O isolamento "colaborador vê só os seus" é feito AQUI no código.
+ * A leitura e limitada por UID no banco. Escritas passam pelo backend para
+ * atualizar o vinculo e o indice de autorizacao na mesma transacao.
  */
 import {
     collection,
-    addDoc,
-    deleteDoc,
     getDocs,
-    doc,
     query,
     where,
-    serverTimestamp,
     limit as fbLimit,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import type { User } from '../types';
 import { vinculoPertenceAoUsuario } from './visibilidadeCarteira';
+// 🚨 Dono ÚNICO da leitura dos vínculos — eram duas cópias do mesmo teto
+// mudo de 500, e a segunda decidia o ESCOPO da Central de XMLs.
+import { lerTodosOsVinculos } from './carteiraVinculos';
+import { carteiraApi } from './carteiraAcessos';
 
 const COLLECTION = 'carteiras';
 
@@ -55,16 +55,21 @@ export interface NovoVinculo {
 /**
  * Lista todos os vínculos da carteira.
  * Admin recebe todos; colaborador recebe só os vínculos com o uid dele.
- * O filtro é feito em memória (a regra Firestore libera a leitura).
+ * O paginador aplica o recorte por UID antes da leitura.
  */
 export async function listarCarteiras(user: User | null): Promise<VinculoCarteira[]> {
     if (!user || !isFirebaseConfigured || !db) return [];
     try {
-        const snap = await getDocs(query(collection(db, COLLECTION), fbLimit(500)));
-        const todos: VinculoCarteira[] = snap.docs.map(d => ({
-            id: d.id,
-            ...(d.data() as Omit<VinculoCarteira, 'id'>),
+        // 🚨 ERA `fbLimit(500)` — teto MUDO. Com 420 empresas e principal +
+        // backup a carteira passou de 500 vínculos, e os que ficaram fora da
+        // página viravam "Sem responsável" na tela (Paulo, 27/08: 21 empresas).
+        // E atribuir respondia "já atende" porque a conferência de duplicata
+        // consulta por empresaId+colaboradorUid, que NÃO passa pela página
+        // cortada: o vínculo existia, quem não o via era a lista.
+        const leitura = await lerTodosOsVinculos<VinculoCarteira>((id, dados) => ({
+            id, ...(dados as Omit<VinculoCarteira, 'id'>),
         }));
+        const todos = leitura.vinculos;
 
         const isAdmin = user.role === 'admin';
         const uid = auth?.currentUser?.uid;
@@ -85,27 +90,7 @@ export async function atribuir(novo: NovoVinculo): Promise<{ ok: boolean; jaExis
     const uid = auth?.currentUser?.uid;
     if (!uid) return { ok: false, error: 'Usuário não autenticado' };
     try {
-        const existentes = await getDocs(query(
-            collection(db, COLLECTION),
-            where('empresaId', '==', novo.empresaId),
-            where('colaboradorUid', '==', novo.colaboradorUid),
-            fbLimit(1),
-        ));
-        if (!existentes.empty) {
-            return { ok: true, jaExistia: true };
-        }
-        await addDoc(collection(db, COLLECTION), {
-            empresaId: novo.empresaId,
-            empresaColecao: novo.empresaColecao,
-            empresaNome: novo.empresaNome,
-            empresaCnpj: novo.empresaCnpj,
-            colaboradorUid: novo.colaboradorUid,
-            colaboradorNome: novo.colaboradorNome,
-            papel: novo.papel,
-            atribuidoPor: uid,
-            atribuidoEm: serverTimestamp(),
-        });
-        return { ok: true };
+        return await carteiraApi('/vinculos', 'POST', novo);
     } catch (err: any) {
         console.warn('atribuir:', err?.message);
         return { ok: false, error: err?.message || 'Falha ao atribuir' };
@@ -116,8 +101,7 @@ export async function atribuir(novo: NovoVinculo): Promise<{ ok: boolean; jaExis
 export async function removerVinculo(vinculoId: string): Promise<{ ok: boolean; error?: string }> {
     if (!isFirebaseConfigured || !db) return { ok: false, error: 'Firebase não configurado' };
     try {
-        await deleteDoc(doc(db, COLLECTION, vinculoId));
-        return { ok: true };
+        return await carteiraApi(`/vinculos/${encodeURIComponent(vinculoId)}`, 'DELETE');
     } catch (err: any) {
         console.warn('removerVinculo:', err?.message);
         return { ok: false, error: err?.message || 'Falha ao remover' };

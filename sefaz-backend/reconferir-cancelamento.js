@@ -246,6 +246,21 @@ export function lerRespostaCancelamento(resp) {
         };
     }
 
+    // 🚨 EVENTO DE CANCELAMENTO QUE VEIO E NÃO FOI CONFIRMADO NÃO É "A NOTA
+    // VALE" (02/09, print do Paulo na NFC-e 1194 da ARMAZEM DE BICHOS).
+    //
+    // A tela mostrou `eventos: 1` — ou seja, o órgão MANDOU um evento — e o
+    // veredito saiu **🟢 Vigente · "nenhum evento de cancelamento. A nota
+    // vale."**. As duas coisas não podem conviver: ou o evento não é 110111,
+    // ou é e o protocolo não foi lido/homologado. Nos dois casos a frase
+    // afirmava demais, e ela afirmava na direção CARA — devolver ao
+    // faturamento uma nota que a SEFAZ pode ter cancelado.
+    //
+    // A causa: o laço abaixo só concluía quando `cStat ∈ {135,155}` e, não
+    // concluindo, CAÍA no `nao-cancelada` do fim, que fala em "nenhum evento".
+    // Agora o fato de ter vindo um 110111 é GUARDADO e vence o fallback.
+    let cancelamentoSemConfirmacao = null;
+
     for (const x of xmls) {
         const xml = String(x?.xml || '');
         if (!xml) continue;
@@ -268,6 +283,60 @@ export function lerRespostaCancelamento(resp) {
                         : 'Cancelamento registrado na SEFAZ (cStat 135).',
                 };
             }
+            // 🚨 O PROTOCOLO É A PROVA QUANDO O cStat NÃO VEM (02/09, 2ª rodada
+            // do print do Paulo na NFC-e 1194):
+            //
+            //   `tpEvento 110111 (cancelamento) · cStat — · (sem xMotivo) ·
+            //    prot 135265738206956 · 2026-08-22T16:50:16-03:00`
+            //
+            // O SAE-NFC-e devolveu o evento COM número de protocolo e COM data
+            // de registro, e SEM o `cStat`. Segurar a nota ali seria ficar
+            // parado sobre a resposta que o órgão de fato deu.
+            //
+            // 📖 A RÉGUA: `nProt` mora em `retEvento` e a SEFAZ só o emite para
+            // evento **REGISTRADO** — evento RECUSADO volta sem protocolo. Logo
+            // um 110111 com protocolo é cancelamento registrado.
+            //
+            // ⚠️ E ELA SÓ VALE QUANDO O cStat ESTÁ AUSENTE: com cStat presente
+            // quem manda é ele (573 é recusa e a nota continua válida). Ausência
+            // é silêncio; recusa é resposta — a mesma fronteira de sempre.
+            //
+            // 🚩 O que isto NÃO é: medição contra uma resposta de evento
+            // RECUSADO — não tenho uma. Por isso a confirmação sai CARIMBADA
+            // (`origemDaConfirmacao: 'protocolo'`) e a frase diz que o cStat não
+            // veio, para quem conferir saber sobre o que está olhando.
+            if (!cStatEvento) {
+                const nProtEv = (xml.match(/<(?:\w+:)?nProt[^>]*>\s*(\d+)/) || [])[1] || null;
+                if (nProtEv) {
+                    const dhReg = (xml.match(/<(?:\w+:)?dhRegEvento[^>]*>\s*([^<]+)/) || [])[1] || null;
+                    const just = (xml.match(/<(?:\w+:)?xJust[^>]*>\s*([^<]*)/) || [])[1] || null;
+                    return {
+                        situacao: 'cancelada',
+                        cStat: null,
+                        evento: {
+                            tpEvento: '110111', tipo: 'cancelamento', cStat: null,
+                            dhEvento: dhReg, nProt: nProtEv, xJust: just,
+                            origemDaConfirmacao: 'protocolo',
+                        },
+                        motivo: `Evento de cancelamento REGISTRADO na SEFAZ — protocolo ${nProtEv}`
+                            + `${dhReg ? ` em ${dhReg}` : ''}. O cStat do evento não veio nesta resposta; `
+                            + 'quem confirma aqui é o PROTOCOLO, que a SEFAZ só emite para evento '
+                            + 'registrado (evento recusado volta sem protocolo).',
+                    };
+                }
+            }
+
+            // ⚠️ SÓ QUANDO O PROTOCOLO NÃO VEIO — e a fronteira é a régua da
+            // casa: RECUSA é RESPOSTA (a SEFAZ disse "não registrei", e a nota
+            // continua válida — é o caso do cStat 573, coberto por teste
+            // próprio); AUSÊNCIA é SILÊNCIO, e silêncio sobre cancelamento não
+            // pode virar "a nota vale". Acender no evento recusado seria alarme
+            // sobre resposta correta, que é o jeito conhecido de a equipe
+            // desligar a trava.
+            //
+            // O caso real (`retEvento` é IRMÃO de `evento`): um recorte que
+            // pegue só o evento assinado fica sem o cStat.
+            if (!cStatEvento) cancelamentoSemConfirmacao = '';
         }
     }
 
@@ -286,6 +355,20 @@ export function lerRespostaCancelamento(resp) {
         }
     }
 
+    // ⚠️ VENCE O FALLBACK: dizer "nenhum evento de cancelamento" com um 110111
+    // na resposta é a afirmação errada na direção mais cara. Não grava (não há
+    // confirmação) e não libera (há evento) — é indeterminado COM o fato dito.
+    if (cancelamentoSemConfirmacao !== null) {
+        return {
+            situacao: 'cancelamento-nao-confirmado',
+            cStat,
+            motivo: 'A SEFAZ devolveu um EVENTO DE CANCELAMENTO (tpEvento 110111) para esta nota, mas o '
+                + `protocolo não confirma a homologação${cancelamentoSemConfirmacao ? ` (cStat do evento: ${cancelamentoSemConfirmacao})` : ' (o cStat do evento não veio nesta resposta)'}. `
+                + 'A nota NÃO é liberada como válida: existe pedido de cancelamento. Confira o evento no '
+                + 'portal da SEFAZ antes de contar esta nota no faturamento.',
+        };
+    }
+
     return {
         situacao: 'nao-cancelada',
         cStat,
@@ -298,7 +381,14 @@ export function lerRespostaCancelamento(resp) {
  *
  * Contagem sem leitura é meio farol: "12 consultadas" não diz se o mês mudou.
  */
-export function resumirReconferencia({ selecao, resultados, simulado = false, modo = 'distdfe' }) {
+export function resumirReconferencia({
+    selecao, resultados, simulado = false, modo = 'distdfe',
+    // 🚨 A SEFAZ PODE TER PARADO A RODADA ANTES DE ELA CONSULTAR (cStat 656).
+    // Sem este fato, a frase abaixo AFIRMA que a rodada perguntou o que ela
+    // apenas ia perguntar — foi o que produziu, no print de 02/09, "0
+    // consultada(s)" ao lado de "Esta rodada perguntou 60 de 126 notas".
+    abortou656 = false,
+}) {
     const r = resultados || [];
     const canceladas = r.filter((x) => x.situacao === 'cancelada');
     const indeterminadas = r.filter((x) => x.situacao === 'indeterminado');
@@ -306,6 +396,10 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
     // cancelamento (653). Conta à parte da prova positiva — ver
     // `lerRespostaCancelamento`.
     const porRecusa = r.filter((x) => x.situacao === 'nao-cancelada-por-recusa');
+    // Evento 110111 veio e o protocolo não confirma — nem cancelada, nem
+    // liberada. Contada à PARTE porque a ação é outra (olhar o evento no
+    // portal), e somá-la a `indeterminadas` esconderia o fato de ter vindo.
+    const semConfirmacao = r.filter((x) => x.situacao === 'cancelamento-nao-confirmado');
     const valorRemovido = canceladas.reduce((t, x) => t + (Number(x.valorTotal) || 0), 0);
 
     const avisos = [];
@@ -323,6 +417,13 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
             + 'nota válida da qual o escritório não é parte, recusa a entrega por permissão (cStat 640) — '
             + 'que é resposta, não silêncio: se houvesse cancelamento, ela teria dito 653. O que este '
             + 'caminho NÃO dá é o conteúdo do documento.',
+        );
+    }
+    if (semConfirmacao.length) {
+        avisos.push(
+            `${semConfirmacao.length} nota(s) voltaram COM evento de cancelamento (110111) e SEM protocolo `
+            + 'que o confirme. Elas não foram marcadas como canceladas (não há confirmação) e também não '
+            + 'contam como válidas — confira o evento no portal da SEFAZ antes de fechar o faturamento.',
         );
     }
     if (canceladas.length) {
@@ -362,9 +463,20 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         // Quem lê conclui que a ferramenta já tentou e não achou nada, e para
         // ali. É a família das "duas leituras do mesmo fato discordando na
         // mesma tela", agora entre o que o app FEZ e o que ele diz ter feito.
+        // 🚨 O NÚMERO DA FRASE É O QUE A RODADA FEZ, NÃO O QUE ELA IA FAZER
+        // (02/09, print do Paulo na MV LIDER): `aConsultar.length` é a SELEÇÃO
+        // — quantas caberiam nesta rodada. Com a SEFAZ pedindo pausa no 656, a
+        // rodada consulta ZERO e a frase dizia "perguntou 60", enquanto o
+        // resumo ao lado, correto, dizia "0 consultada(s)". Duas leituras do
+        // mesmo fato na mesma tela, e a errada era a que fala em voz alta.
         const porRodada = Math.max(1, Number(selecao.aConsultar?.length) || 1);
+        const perguntadas = simulado ? 0 : r.length;
         const rodadas = Math.ceil((Number(selecao.total) || 0) / porRodada);
-        const quantas = rodadas > 1 ? ` São ${rodadas} rodadas para cobrir as ${selecao.total}.` : '';
+        // ⚠️ E o "São N rodadas para cobrir as N" SAIU da rodada REAL — foi
+        // essa frase que o dono circulou em vermelho no print de 02/09. Desde
+        // que a tela ENCADEIA sozinha, dizer o número de rodadas ali soa como
+        // tarefa dele; na PRÉVIA ela FICA, porque lá ela informa o tamanho do
+        // trabalho ANTES do clique, que é justamente o que se quer saber.
         // Quantas NUNCA foram perguntadas — é este número que mede o que falta.
         // "Rodadas" sozinho já prometeu progresso que não acontecia (MV LIDER).
         // ⚠️ E o número é o de DEPOIS da rodada (21/08, MV LIDER de novo): a
@@ -373,20 +485,35 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         // "102" com o cabeçalho da tela mostrando "82", duas leituras do mesmo
         // fato discordando na mesma tela.
         const nuncaAntes = Number(selecao.nuncaConferidas) || 0;
-        const consumidas = simulado ? 0 : Math.min(r.length, nuncaAntes);
+        const consumidas = Math.min(perguntadas, nuncaAntes);
         const faltam = Math.max(0, nuncaAntes - consumidas);
         const nunca = faltam ? ` Depois desta rodada, ${faltam} nota(s) ainda nunca foram perguntadas — são `
             + 'elas que a próxima rodada pega primeiro.' : ' Todas já foram perguntadas ao menos uma vez; a '
             + 'rodada volta nas mais antigas, porque nota válida hoje pode ser cancelada amanhã.';
         avisos.push(
+            // 🚨 A FRASE MANDAVA CLICAR DE NOVO — e desde 02/09 a tela ENCADEIA
+            // as rodadas sozinha (Paulo, MV LIDER: *"pede para eu reconferir 3
+            // vezes de 1 em 1 … já imaginou uma NOVA ERA da vida?"*). Manter o
+            // "rode de novo" faria a pessoa clicar um quarto clique inútil e
+            // duvidar do que a tela acabou de fazer: duas leituras do mesmo
+            // fato de novo, agora entre o app e a instrução dele.
+            //
+            // ⚠️ O TETO POR RODADA CONTINUA — ele é a proteção contra o cStat
+            // 656. O que mudou é de quem é o trabalho de repetir.
             simulado
                 ? `Ainda NÃO consultamos nada — isto é só a prévia. Ao clicar em "Reconferir na SEFAZ", `
-                  + `${porRodada} das ${selecao.total} notas serão perguntadas à SEFAZ nesta rodada.${quantas} `
+                  + `o app pergunta ${porRodada} nota(s) por rodada e ENCADEIA as rodadas sozinho até `
+                  + `cobrir as ${selecao.total}${rodadas > 1 ? ` (${rodadas} rodadas)` : ''} — você clica uma vez só. `
                   + 'O teto por rodada existe porque cada consulta é uma chamada com o certificado do '
                   + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).'
-                : `A rodada parou em ${porRodada} de ${selecao.total} notas. Rode de novo para `
-                  + `continuar.${quantas}${nunca} Cada consulta é uma chamada à SEFAZ com o certificado do `
-                  + 'cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
+                // ⚠️ Rodada interrompida pelo 656 NÃO promete a próxima: ela
+                // não vai começar sozinha, e a frase do 656 (que a rota põe
+                // acima) já diz o que fazer. Prometer aqui é a contradição de
+                // novo, um parágrafo abaixo.
+                : `Esta rodada perguntou ${perguntadas} de ${selecao.total} notas`
+                  + (abortou656 ? '.' : ' e a próxima começa automaticamente.')
+                  + `${nunca} Cada consulta é uma chamada à SEFAZ com o certificado `
+                  + 'do cliente, e varrer centenas de uma vez arrisca o bloqueio por excesso (cStat 656).',
         );
     }
 
@@ -419,6 +546,7 @@ export function resumirReconferencia({ selecao, resultados, simulado = false, mo
         canceladas: canceladas.length,
         naoCanceladas: r.filter((x) => x.situacao === 'nao-cancelada').length,
         naoCanceladasPorRecusa: porRecusa.length,
+        cancelamentoNaoConfirmado: semConfirmacao.length,
         indeterminadas: indeterminadas.length,
         valorRemovido: Math.round(valorRemovido * 100) / 100,
         avisos,

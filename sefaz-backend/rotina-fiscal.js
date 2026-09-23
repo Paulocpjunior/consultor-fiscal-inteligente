@@ -20,10 +20,24 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
-import { docCancelado } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
+// 🏠 A receita de LOCAÇÃO — ela não tem documento por natureza (é o caso
+// AFFITTARE, e foi dele que o F550 nasceu). Sem ela a etapa de captura cobra
+// uma nota de saída que NUNCA vai existir.
+import { receitaDeLocacao } from './receita-sem-documento-f550.js';
+// 🔒 O carimbo do fim de mês — quem responde "esta competência foi fechada?".
+import { competenciaFechada } from './fim-de-mes.js';
+// 🔒 Duas perguntas, dois donos: "este envio fechou o RITO?" e "o canal PROVA
+// a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
+import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
+import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+import { OBRIGACOES_DO_DP } from './catalogo-obrigacoes.js';
+// 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
+// sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
+import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -53,6 +67,35 @@ const FECHADAS = new Set(['concluida', 'na']);
  */
 export function etapaFechada(e) {
     return FECHADAS.has(String(e?.status || ''));
+}
+
+/**
+ * 🏠 A RECEITA DESTA COMPETÊNCIA É INTEIRAMENTE DE LOCAÇÃO?
+ *
+ * Nasce do caso **AC MASON** (Paulo, 27/08: *"essa empresa é só aluguel, a
+ * obrigação já foi entregue e as guias enviadas para o cliente — como atualizar
+ * para ficar verde?"*). A Rotina cobrava dela uma **nota de SAÍDA** que nunca
+ * vai existir: aluguel não gera documento, é por isso que o **F550** existe.
+ *
+ * ⚠️ A COMPARAÇÃO É COM O TOTAL, e isso é a trava: empresa que aluga E vende
+ * TEM documento a capturar, e exemplá-la silenciaria livro a menor — o erro
+ * caro. `faturamentoMesTotal` inclui a locação da matriz (conferido em
+ * `handleSaveFicha`), então "locação ≥ total" significa "não há outra receita".
+ *
+ * ⚠️ E receita ILEGÍVEL não exime: ausência não é prova, e aqui a dúvida cai
+ * para o lado de continuar acendendo.
+ */
+export function receitaSoDeLocacao(apuracao) {
+    const locacao = Number(apuracao?.receitaDeLocacao || 0);
+    if (!(locacao > 0)) return false;
+    // 🐛 `Number(null)` é **0** e `Number.isFinite(0)` é **true** — a 1ª versão
+    // deste `if` deixava a receita AUSENTE passar por "receita zero", e aí
+    // "locação ≥ 0" eximia a empresa inteira. É a MESMA pegadinha do farol de
+    // lastro (15/08) e do regime do catálogo. O `== null` vem SEMPRE primeiro.
+    if (apuracao?.receita == null) return false;
+    const receita = Number(apuracao.receita);
+    if (!Number.isFinite(receita)) return false;
+    return locacao >= receita - 0.01;
 }
 
 const etapa = (id, status, resumo, acao = null, extra = {}) => {
@@ -110,6 +153,11 @@ export function acharApuracaoDaCompetencia(empresa, competencia) {
             fonte: 'lucro',
             totalImpostos: Number.isFinite(Number(ficha.totalImpostos)) ? Number(ficha.totalImpostos) : null,
             receita: Number.isFinite(Number(ficha.faturamentoMesTotal)) ? Number(ficha.faturamentoMesTotal) : null,
+            // 🏠 A RECEITA DE LOCAÇÃO viaja junto (27/08, caso AC MASON): ela é
+            // receita SEM DOCUMENTO, então a etapa de captura não pode cobrar
+            // nota de saída de quem só tem aluguel. Sem este campo a Rotina não
+            // tinha como saber — ela só via `faturamentoMesTotal`.
+            receitaDeLocacao: receitaDeLocacao(ficha) || 0,
         };
     }
 
@@ -158,14 +206,41 @@ export function montarRotinaFiscal({
     // captura e conferir o Diagnóstico" é mandar procurar defeito onde não há.
     // Muda a CAUSA e a primeira parada; a etapa continua acendendo igual.
     capturaPorAgenteLocal = false,
+    // 🔒 O CARIMBO DO FIM DE MÊS (`fechamentos_competencia`). Quando ele existe
+    // e está 'fechada', o mês é FATO fechado — a página virou. Ver o bloco no
+    // fim desta função.
+    fechamento = null,
+    // 📋 A declaração de que as obrigações FORA DO CATÁLOGO foram entregues por
+    // fora (empresa + competência). Ausente, nada muda.
+    declaracaoCobertura = null,
 }) {
     const docs = documentos || [];
-    const entradas = docs.filter((d) => d.direcao === 'entrada').length;
-    const saidas = docs.filter((d) => d.direcao === 'saida').length;
+    // 🚨 A DIREÇÃO SAI DA RÉGUA, NUNCA DO CAMPO GRAVADO. A nota PRÓPRIA de
+    // entrada (art. 136 — compra de produtor rural, importação) fica gravada
+    // como 'saida' até o backfill passar, e quem responde é `direcaoEfetivaDoc`
+    // pelo `tpNF`. Lendo o campo cru, a etapa de CAPTURA contava a compra como
+    // venda — e é esta contagem que decide se a empresa aparece com movimento.
+    const entradas = docs.filter((d) => direcaoEfetivaDoc(d) === 'entrada').length;
+    const saidas = docs.filter((d) => direcaoEfetivaDoc(d) === 'saida').length;
+    // 🏠 Aluguel puro: a receita não tem documento por natureza.
+    const soLocacao = receitaSoDeLocacao(apuracao);
+    const locacao = Number(apuracao?.receitaDeLocacao || 0);
 
     // ── 1. CAPTURA ──────────────────────────────────────────────────────────
     let eCaptura;
-    if (docs.length === 0) {
+    if (soLocacao && saidas === 0) {
+        // 🏠 NÃO HÁ NOTA DE SAÍDA A CAPTURAR — e dizer o contrário é o alarme
+        // que a pessoa não tem como apagar (a família do `tipoTributacao`).
+        // 'na' quando não entrou NADA (não se afirma captura que não houve) e
+        // 'concluida' quando as entradas vieram — ali a captura de fato rodou.
+        const frase = `Receita de LOCAÇÃO de ${fmtBRL(locacao)} — aluguel não gera nota fiscal `
+            + '(é a receita que vai ao F550), então não há saída a capturar.';
+        eCaptura = docs.length === 0
+            ? etapa('captura', 'na', frase, null,
+                { entradas: 0, saidas: 0, total: 0, receitaSemDocumento: locacao })
+            : etapa('captura', 'concluida', `${entradas} entrada(s) capturada(s) · ${frase}`, null,
+                { entradas, saidas: 0, total: docs.length, receitaSemDocumento: locacao });
+    } else if (docs.length === 0) {
         eCaptura = etapa('captura', 'pendente',
             capturaPorAgenteLocal
                 ? 'Nenhuma nota capturada nesta competência — e esta empresa captura por certificado A3.'
@@ -196,7 +271,13 @@ export function montarRotinaFiscal({
     // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
     const cce = varrerCcesDoPeriodo(docs).resumo;
     let eValidacao;
-    if (docs.length === 0) {
+    if (docs.length === 0 && soLocacao) {
+        // 🏠 Sem documento porque não há documento — não é "falta validar",
+        // é "não há o que validar". Vermelho aqui seria o mesmo alarme sem
+        // ação um degrau abaixo.
+        eValidacao = etapa('validacao', 'na', 'Não há nota nesta competência — a receita é de locação.',
+            null, { resumos: 0, canceladas: 0, cce });
+    } else if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
             'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
     } else if (resumos > 0) {
@@ -260,6 +341,11 @@ export function montarRotinaFiscal({
             documentos: docs.length,
             rotulo: temImposto ? 'Imposto apurado' : 'Receita lançada',
             capturaPorAgenteLocal,
+            // 🏠 O lastro do aluguel é a PRÓPRIA ficha: ele não tem documento
+            // por natureza. Sem isto a empresa de locação pura acende "sem
+            // lastro" todo mês sobre um número certo — e quem decide se a
+            // receita é TODA de locação é a régua acima, nunca o farol.
+            receitaSemDocumento: soLocacao ? locacao : 0,
         });
         // ⚠️ AS DUAS situações de ausência acendem. A do A3 (`-agente-local`)
         // só muda a CAUSA e a primeira parada — deixá-la de fora silenciaria
@@ -272,8 +358,13 @@ export function montarRotinaFiscal({
     }
 
     // ── 4. OBRIGAÇÕES ───────────────────────────────────────────────────────
-    const concluidas = tarefas.filter((t) => t.status === 'concluida').length;
-    const abertas = tarefas.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
+    // 👥 FGTS e INSS patronal são do DP (Paulo, 22/09): tarefa dessas
+    // obrigações não entra na conta do Fiscal — nem como entregue, nem como
+    // falta. Ela sai CONTADA, com a ação (cancelar em lote em Tarefas).
+    const tarefasDoDp = tarefas.filter((t) => OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
+    const tarefasCfi = tarefas.filter((t) => !OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
+    const concluidas = tarefasCfi.filter((t) => t.status === 'concluida').length;
+    const abertas = tarefasCfi.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
     // PRAZO das que estão abertas. A rotina já lia as tarefas e jogava a DATA
     // fora — só contava quantas. Sem prazo, "2/5 entregues" não diz se sobra
     // uma semana ou se venceu ontem, e é justamente o prazo que decide por
@@ -297,7 +388,7 @@ export function montarRotinaFiscal({
         : null;
     const atrasadas = comData.filter((p) => p.urgencia === 'atrasada').length;
     let eObrigacoes;
-    if (tarefas.length === 0) {
+    if (tarefasCfi.length === 0) {
         // Sem tarefa NÃO é "tudo certo" — é sinal de que o cron mensal não gerou.
         eObrigacoes = etapa('obrigacoes', 'atencao',
             'Nenhuma obrigação cadastrada nesta competência.',
@@ -310,17 +401,26 @@ export function montarRotinaFiscal({
             ? ` · ${atrasadas} ATRASADA(S)`
             : (proximo ? ` · próxima ${URGENCIA_LABEL[proximo.urgencia]} (${proximo.obrigacao})` : '');
         eObrigacoes = etapa('obrigacoes', 'pendente',
-            `${concluidas}/${tarefas.length} obrigação(ões) entregue(s)${selo}.`,
+            `${concluidas}/${tarefasCfi.length} obrigação(ões) entregue(s)${selo}.`,
             `Falta: ${abertas.map((t) => t.obrigacao || t.titulo || '—').join(', ')}.`,
             {
-                concluidas, total: tarefas.length,
+                concluidas, total: tarefasCfi.length,
                 abertas: abertas.map((t) => t.obrigacao || t.titulo || '—'),
                 prazo: proximo ? { ...proximo, dominante } : null,
                 atrasadas, semData,
             });
     } else {
-        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
-            { concluidas, total: tarefas.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefasCfi.length} obrigação(ões) entregue(s).`, null,
+            { concluidas, total: tarefasCfi.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+    }
+    if (tarefasDoDp.length) {
+        const abertasDp = tarefasDoDp.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada').length;
+        eObrigacoes = { ...eObrigacoes,
+            resumo: `${eObrigacoes.resumo} · ${tarefasDoDp.length} tarefa(s) do DP (FGTS/INSS) fora da conta`,
+            acao: abertasDp
+                ? `${eObrigacoes.acao ? `${eObrigacoes.acao} ` : ''}${abertasDp} tarefa(s) de FGTS/INSS ainda aberta(s) são do DP, não do Fiscal — cancele-as em Vencimentos e Obrigações → Tarefas → "Cancelar tarefas do DP".`
+                : eObrigacoes.acao,
+            tarefasDoDp: tarefasDoDp.length };
     }
 
     // 🚨 TRAVA T1 DO ESCOPO: O CATÁLOGO ADMITE QUE NÃO COBRE ESTE CLIENTE.
@@ -343,6 +443,11 @@ export function montarRotinaFiscal({
     // obrigação que nunca foi listada. Âmbar, porque o que falta não é entrega:
     // é o app admitindo que não sabe o prazo — e quem entrega é a pessoa.
     if (cobertura?.coberturaIncompleta) {
+        // O estado ANTES da piora — é para ele que a etapa volta quando a
+        // entrega é declarada. Recalcular ali seria uma segunda montagem.
+        const statusAntesDaCobertura = eObrigacoes.status;
+        const resumoAntesDaCobertura = eObrigacoes.resumo;
+        const acaoAntesDaCobertura = eObrigacoes.acao;
         const props = (cobertura.propostas || [])
             .map((r) => `${r.label || r.obrigacao}${r.dependeDe ? ` (depende de ${r.dependeDe})` : ''}`);
         const indefinido = cobertura.regime === 'INDEFINIDO';
@@ -378,6 +483,35 @@ export function montarRotinaFiscal({
         eObrigacoes.regimeIndefinido = indefinido;
         eObrigacoes.propostas = props;
         eObrigacoes.prazoDeOutraUf = outraUf.map((r) => r.label || r.obrigacao);
+
+        // 📋 A ENTREGA DECLARADA TIRA A TRAVA — e a obrigação continua NOMEADA.
+        //
+        // 28/08 (MANTOAN): *"o catálogo NÃO cobre 1 obrigação: INSS Patronal
+        // (depende de folha)"* com a ação *"não dê o mês por fechado por causa
+        // da lista"*. Essa etapa NUNCA ia fechar: o INSS patronal depende da
+        // folha, que vive no módulo de DP. O app mandava, para sempre, não
+        // fechar o mês de quem já tinha feito o trabalho.
+        //
+        // ⚠️ A declaração só alcança a obrigação PROPOSTA (`podeDeclararCobertura`
+        // decide). Regime indefinido, prazo de outra UF e UF ausente TÊM
+        // conserto — declarar por cima deles apagaria o caminho.
+        eObrigacoes.podeDeclararCobertura = podeDeclararCobertura(eObrigacoes);
+        const dec = coberturaDeclarada(eObrigacoes, declaracaoCobertura);
+        if (dec.cobre) {
+            // Volta ao que a etapa era ANTES da piora, com a ressalva na frase:
+            // o mês fecha, e quem ler depois sabe que aquelas obrigações não
+            // viraram tarefa e não têm prova no app.
+            eObrigacoes = {
+                ...eObrigacoes,
+                status: statusAntesDaCobertura,
+                resumo: `${resumoAntesDaCobertura} · ${props.length} obrigação(ões) fora do catálogo `
+                    + `DECLARADA(S) como entregue(s) por ${declaracaoCobertura.declaradoPor}`,
+                acao: acaoAntesDaCobertura,
+                coberturaDeclarada: true,
+                declaracaoCobertura,
+                podeDeclararCobertura: false,
+            };
+        }
     }
 
     // DIPAM: a compra de produtor rural entra na GIA e no Registro 1400 da EFD
@@ -407,8 +541,45 @@ export function montarRotinaFiscal({
     }
 
     // ── 5. GUIAS ────────────────────────────────────────────────────────────
-    // Completo = enviada COM o rito (arquivada no SharePoint e com baixa).
-    const enviosOk = envios.filter((e) => e.sharePoint?.status === 'arquivado' && e.baixa?.status === 'baixada').length;
+    // 🔒 QUEM DIZ SE O RITO FECHOU É O DONO (`envioCompletoPeloRito`), nunca
+    // uma segunda leitura aqui.
+    //
+    // Até 27/08 esta linha era `sharePoint === 'arquivado' && baixa ===
+    // 'baixada'` — e o PAINEL do rito, ao lado, já tratava `sem-pdf` e
+    // `sem-tarefa` como desfechos LEGÍTIMOS (envio sem anexo não tem o que
+    // arquivar; tipo sem obrigação mensal não tem o que baixar). Resultado:
+    // o painel dava o envio por completo e a Rotina o deixava em ÂMBAR para
+    // sempre, travando o fim de mês de uma empresa cujo rito fechou.
+    //
+    // 🚨 E A BAIXA É DA OBRIGAÇÃO, NÃO DO ENVIO (27/08, VINCENZO GUERRA):
+    // `3 envio(s), 1 completo(s)` sobre um DAS que o app ENVIOU e o cliente
+    // PAGOU. Os outros dois são o MESMO DAS indo de novo, e na segunda vez a
+    // baixa não acha tarefa PENDENTE — a primeira já concluiu. Quem responde
+    // pelo conjunto é `conferirRitoDosEnvios`.
+    const rito = conferirRitoDosEnvios(envios);
+    const enviosOk = rito.filter((r) => r.completo).length;
+    const reenvios = rito.filter((r) => r.baixaJaFeitaNaObrigacao).length;
+    // 📁 Cópia DECLARADA à mão fecha o rito, mas vai dita — não é prova do app.
+    const arquivadosDeclarados = rito.filter((r) => r.arquivadoDeclarado).length;
+    // ⚠️ CAUSA JUNTO DO NÚMERO: *"veja em Envios (rito) o que ficou sem cópia
+    // ou sem baixa"* é "vá procurar" — e quem lê a Rotina está justamente
+    // tentando saber o que falta. As causas já vêm nomeadas pelo dono.
+    const causas = [...new Set(rito.flatMap((r) => r.pendencias.map((p) => p.causa)))];
+    // ⚠️ E A AÇÃO VIAJA JUNTO DA CAUSA (28/08, VINCENZO). O dono já devolve as
+    // duas — *"Preencha grupo + pasta em Central de XMLs → Integrações →
+    // SharePoint"*, *"Gere as tarefas da competência e dê baixa manual"* — e a
+    // Rotina jogava a ação FORA, ficando com um genérico *"Resolva em Envios
+    // (rito)"*. Só que em Envios (rito) não se cria pasta de SharePoint nem se
+    // gera tarefa: era "vá procurar" com mais passos, na tela de quem está
+    // justamente tentando saber o que fazer.
+    const acoesDoRito = [...new Set(rito.flatMap((r) => r.pendencias.map((p) => p.acao)))];
+    const naoConferidos = rito.filter((r) => !r.completo && r.naoConferido).length;
+    // ⚠️ O QUE O APP NÃO PODE AFIRMAR sai CONTADO, nunca escondido: mailto,
+    // WhatsApp e o envio DECLARADO só provam que a composição abriu (ou que
+    // alguém disse que enviou). Isso NÃO trava — a etapa nunca exigiu prova de
+    // ENTREGA, ela exige o RITO —, mas vai dito na linha e viaja no carimbo.
+    const semProva = envios.filter((e) => !canalComprovaEnvio(e.canal)).length;
+    const declarados = envios.filter((e) => String(e.canal || '') === CANAL_FORA_DO_APP).length;
     // Apuração fechada em ZERO não gera guia — cobrar envio aqui seria pendência
     // falsa (empresa sem movimento no mês).
     const semImpostoAPagar = !!apuracao && Number(apuracao.totalImpostos) === 0;
@@ -421,13 +592,34 @@ export function montarRotinaFiscal({
             'Envie a guia pelo app — a cópia na pasta IMPOSTOS, o gestor em cópia e a baixa da obrigação saem automáticos.',
             { envios: 0, completos: 0 });
     } else if (enviosOk < envios.length) {
+        const oQueFalta = [
+            ...causas,
+            naoConferidos > 0
+                ? `${naoConferidos} envio(s) sem registro das etapas do rito (auditoria anterior ao rito #293)`
+                : null,
+        ].filter(Boolean);
         eGuias = etapa('guias', 'atencao',
             `${envios.length} envio(s), ${enviosOk} completo(s) pelo rito.`,
-            'Veja em Envios (rito) o que ficou sem cópia no SharePoint ou sem baixa da obrigação.',
-            { envios: envios.length, completos: enviosOk });
+            // CAUSA **e** AÇÃO. A causa junto do número é regra da casa; o que
+            // faltava era a ação de CADA causa — antes vinha um genérico
+            // "Resolva em Envios (rito)", e em Envios (rito) não se cria pasta
+            // de SharePoint nem se gera tarefa.
+            `${oQueFalta.join(' · ')}.`
+            + (acoesDoRito.length
+                ? ` → ${acoesDoRito.join(' · ')}`
+                : ' Resolva em Vencimentos e Obrigações → Envios (rito).'),
+            { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
     } else {
-        eGuias = etapa('guias', 'concluida', `${envios.length} guia(s) enviada(s) com o rito completo.`, null,
-            { envios: envios.length, completos: enviosOk });
+        eGuias = etapa('guias', 'concluida',
+            `${envios.length} guia(s) enviada(s) com o rito completo`
+            // O reenvio vai DITO: sem ele, quem contou 3 envios não entende
+            // por que a linha fala de 1 obrigação.
+            + (reenvios > 0 ? ` · ${reenvios} reenvio(s) da mesma guia` : '')
+            + (declarados > 0 ? ` · ${declarados} DECLARADA(S) como enviada(s) por fora do app` : '')
+            + (arquivadosDeclarados > 0 ? ` · ${arquivadosDeclarados} cópia(s) na pasta DECLARADA(S) à mão` : '')
+            + '.',
+            null,
+            { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
     }
 
     // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
@@ -436,6 +628,21 @@ export function montarRotinaFiscal({
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
 
+    // 📋 DECLARAR ENVIO POR FORA só faz sentido para guia que o app NÃO enviou.
+    //
+    // A saída nasce onde a trava aparece — mas quando o registro do envio EXISTE
+    // e o que falta é o RITO (a cópia na pasta), declarar OUTRO envio não fecha
+    // nada e convida a declarar o que o app já fez. É a mesma família da
+    // recusa que o Paulo apontou na VINCENZO: o app enviou, e a tela oferecia
+    // "já enviei por fora".
+    //
+    // Continua valendo onde a guia de fato não saiu pelo app: nenhum envio na
+    // competência, ou ISS do município pendente (o app não emite guia da PMSP).
+    eGuias = {
+        ...eGuias,
+        podeDeclararEnvio: envios.length === 0 || (ajusteIss.iss?.pendencias?.length || 0) > 0,
+    };
+
     const etapas = [eCaptura, eValidacao, eApuracao, eObrigacoes, eGuias];
 
     // PRÓXIMO PASSO = a primeira etapa não fechada, na ordem. É a "linha" que
@@ -443,18 +650,46 @@ export function montarRotinaFiscal({
     const proxima = etapas.find((e) => !etapaFechada(e)) || null;
     const fechadas = etapas.filter(etapaFechada).length;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 PÁGINA VIRADA — o carimbo VENCE as etapas (Paulo, 27/08: *"empresa
+    // fechada, imposto enviado, página virada! Não pode ficar em vermelho"*).
+    //
+    // As cinco etapas são a PRÉ-CONDIÇÃO do fim de mês, e o ato só passa com
+    // todas fechadas (a decisão de BLOQUEAR, 26/08). Depois do carimbo elas
+    // continuam sendo RECALCULADAS a cada abertura da tela — e qualquer coisa
+    // que mude depois (uma tarefa reaberta, uma nota que chegou atrasada) fazia
+    // a empresa voltar ao vermelho num mês que a pessoa já entregou.
+    //
+    // O carimbo é FATO — quem fechou, quando, com qual acervo e quais valores.
+    // Uma etapa recalculada é DEDUÇÃO. Fato vence dedução: sem `proximoPasso`
+    // (não há próximo passo num mês fechado) e farol próprio, que não é
+    // 'pendente' nem 'atencao'.
+    //
+    // ⚠️ 'reaberta' NÃO conta como fechada (`competenciaFechada`): a reabertura
+    // existe justamente para permitir a edição, e tratá-la como fechada
+    // esconderia o retrabalho que ela abre.
+    //
+    // ⚠️ E as etapas CONTINUAM sendo entregues como estão — o mês fechado não
+    // apaga o que mudou depois, ele só para de COBRAR. Quem quiser ver o que
+    // mudou abre o card; quem reabrir volta a receber o próximo passo.
+    // ═══════════════════════════════════════════════════════════════════════
+    const mesFechado = competenciaFechada(fechamento);
+
     return {
         empresa: empresa || null,
         competencia,
         iss: ajusteIss.iss,
         etapas,
-        proximoPasso: proxima
-            ? { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo }
-            : null,
+        fechamento: fechamento || null,
+        proximoPasso: (mesFechado || !proxima) ? null
+            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo },
         progresso: { concluidas: fechadas, total: etapas.length },
-        // Só é 'ok' quando as CINCO fecham — mês pela metade não é mês fechado.
-        farol: fechadas === etapas.length ? 'ok'
-            : etapas.some((e) => e.status === 'pendente') ? 'pendente' : 'atencao',
+        // 'fechado' é FATO (o carimbo). 'ok' passou a querer dizer **pronto
+        // para fechar** desde 26/08 — as cinco etapas fecharam e ninguém deu o
+        // fim de mês ainda.
+        farol: mesFechado ? 'fechado'
+            : fechadas === etapas.length ? 'ok'
+                : etapas.some((e) => e.status === 'pendente') ? 'pendente' : 'atencao',
     };
 }
 
@@ -575,21 +810,41 @@ function fmtBRL(v) {
  */
 export function resumirFunil(rotinas) {
     const funil = ETAPAS_ROTINA.map((e) => ({ id: e.id, ordem: e.ordem, nome: e.nome, empresas: [] }));
-    let completos = 0;
+    // 🚨 "MÊS FECHADO" ERA DEDUÇÃO AQUI — e era leitura MINHA deixada para trás.
+    //
+    // O contador antigo era `if (!r.proximoPasso) completos++`, ou seja "as
+    // cinco etapas fecharam ⇒ o mês fechou". Em 26/08 o card parou de deduzir
+    // isso (`✓ Mês fechado` virou o ato) e o FUNIL continuou deduzindo: a MESMA
+    // tela com duas leituras do mesmo fato, que é o defeito que esta casa mais
+    // paga. É a régua de 23/08 outra vez — **quando um booleano muda de
+    // significado, os LEITORES dele entram no mesmo PR**, e este eu esqueci.
+    //
+    // Agora são DOIS números, porque pedem ações OPOSTAS: `fechados` é fato
+    // (nada a fazer) e `prontos` é um CLIQUE que ninguém deu — fundir os dois
+    // faria N empresas prontas passarem por entregues.
+    let fechados = 0;
+    let prontos = 0;
     for (const r of rotinas || []) {
-        if (!r?.proximoPasso) { completos++; continue; }
+        if (competenciaFechada(r?.fechamento)) { fechados++; continue; }
+        if (!r?.proximoPasso) { prontos++; continue; }
         const alvo = funil.find((f) => f.id === r.proximoPasso.id);
         if (alvo) alvo.empresas.push(r.empresa?.nome || r.empresa?.cnpj || '—');
     }
     const total = (rotinas || []).length;
+    const parados = total - fechados - prontos;
     return {
         total,
-        completos,
+        fechados,
+        prontos,
+        // Compatibilidade do payload: `completos` era "não tem próximo passo",
+        // e é isso que ele continua sendo — fechados + prontos.
+        completos: fechados + prontos,
         etapas: funil.map((f) => ({ ...f, qtd: f.empresas.length, empresas: f.empresas.slice(0, 100) })),
         resumo: total === 0
             ? 'Nenhuma empresa na seleção.'
-            : completos === total
-                ? `${total} empresa(s) com o mês fechado.`
-                : `${completos} de ${total} empresa(s) com o mês fechado — ${total - completos} paradas em alguma etapa.`,
+            : `${fechados} de ${total} empresa(s) com o mês FECHADO`
+                + (prontos > 0 ? ` · ${prontos} pronta(s) para dar fim de mês` : '')
+                + (parados > 0 ? ` · ${parados} parada(s) em alguma etapa` : '')
+                + '.',
     };
 }

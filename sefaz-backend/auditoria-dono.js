@@ -23,6 +23,8 @@
 //   régua dos Relatórios — relatório nunca tem conta própria).
 // ============================================================================
 
+import { conjuntoCfi, filtrarEscopoCfi, ressalvaEscopoCfi, motivoWhatsappForaDoCfi, motivoInclusaoCfi } from './escopo-cfi.js';
+
 /** Quem pode abrir. Sem env, valem os donos do escritório (default). */
 export const DONOS_PADRAO = ['junior@spassessoriacontabil.com.br', 'p.c.pereira@me.com'];
 
@@ -64,6 +66,8 @@ export const TRILHAS = [
     {
         id: 'reinf-lote', colecao: 'reinf_gateway_lotes', rotulo: 'Evento EFD-Reinf transmitido',
         peso: 'critico', desde: '2026-08-08', campoData: 'em', campoQuem: 'por',
+        // O Consultor Contábil transmite pelo mesmo gateway (túnel) — `projetoOrigem` diz de quem é.
+        compartilhada: true,
     },
     {
         id: 'pgdas-sem-movimento', colecao: 'pgdas_sem_movimento', rotulo: 'PGDAS-D sem movimento declarado',
@@ -76,6 +80,8 @@ export const TRILHAS = [
     {
         id: 'whatsapp-envio', colecao: 'whatsapp_envios', rotulo: 'Mensagem/guia por WhatsApp',
         peso: 'medio', desde: '2026-08-09', campoData: 'em', campoQuem: 'por',
+        // O SP Connect e os apps irmãos iniciam conversa pela mesma porta.
+        compartilhada: true,
     },
     {
         id: 'permissao', colecao: 'auditoria_permissoes', rotulo: 'Permissão alterada',
@@ -120,6 +126,9 @@ export function normalizarEvento(trilha, id, dados = {}) {
         quem: dados[trilha.campoQuem] || dados.por || dados.enviadoPor || null,
         empresa: dados.empresaNome || dados.empresaCnpj || dados.cnpj || dados.empresaId || null,
         descricao: descreverEvento(trilha.id, dados),
+        projetoOrigem: dados.projetoOrigem ? String(dados.projetoOrigem) : null,
+        // Conversa iniciada / template de outra fila: atendimento, não CFI.
+        motivoForaDoCfi: trilha.id === 'whatsapp-envio' ? motivoWhatsappForaDoCfi(dados) : null,
     };
 }
 
@@ -127,15 +136,18 @@ export function normalizarEvento(trilha, id, dados = {}) {
  * Monta o relatório. `leituras` = [{trilha, docs}] ou [{trilha, erro}] — a
  * trilha que FALHOU entra em `naoLidas` e NÃO vira zero.
  */
-export function montarAuditoria({ leituras = [], de = null, ate = null, quemFiltro = null }) {
-    const eventos = [];
+export function montarAuditoria({ leituras = [], de = null, ate = null, quemFiltro = null, escopo = {} }) {
+    const todos = [];
     const naoLidas = [];
     for (const l of leituras) {
         if (l.erro) { naoLidas.push({ trilha: l.trilha.id, rotulo: l.trilha.rotulo, motivo: l.erro }); continue; }
         for (const doc of l.docs || []) {
-            eventos.push(normalizarEvento(l.trilha, doc.id, doc.dados));
+            todos.push(normalizarEvento(l.trilha, doc.id, doc.dados));
         }
     }
+    // SÓ O CFI (Paulo, 22/09): o que é de app irmão sai daqui, contado e nomeado.
+    const conjunto = conjuntoCfi({ usuarios: escopo?.usuarios || [], vinculos: escopo?.vinculos || [] });
+    const { dentro: eventos, foraDoEscopo } = filtrarEscopoCfi(todos, conjunto, (e) => TRILHAS.find((t) => t.id === e.trilha) || {});
     const dentro = eventos.filter((e) => {
         if (!e.em) return true;                        // sem data NÃO some: aparece e é contado
         if (de && e.em < de) return false;
@@ -147,24 +159,27 @@ export function montarAuditoria({ leituras = [], de = null, ate = null, quemFilt
 
     const porPessoa = new Map();
     const porTrilha = new Map();
+    const porqueDe = new Map();
     for (const e of dentro) {
         const p = e.quem || '(não registrado)';
         porPessoa.set(p, (porPessoa.get(p) || 0) + 1);
         porTrilha.set(e.trilha, (porTrilha.get(e.trilha) || 0) + 1);
+        if (!porqueDe.has(p)) porqueDe.set(p, motivoInclusaoCfi(e.quem, conjunto, TRILHAS.find((t) => t.id === e.trilha) || {}));
     }
 
     return {
         total: dentro.length,
         semAutor: dentro.filter((e) => !e.quem).length,
         semData: dentro.filter((e) => !e.em).length,
-        porPessoa: [...porPessoa.entries()].map(([quem, quantidade]) => ({ quem, quantidade }))
+        porPessoa: [...porPessoa.entries()].map(([quem, quantidade]) => ({ quem, quantidade, porque: porqueDe.get(quem) || null }))
             .sort((a, b) => b.quantidade - a.quantidade),
         porTrilha: [...porTrilha.entries()].map(([trilha, quantidade]) => ({
             trilha, quantidade, rotulo: (TRILHAS.find((t) => t.id === trilha) || {}).rotulo || trilha,
         })).sort((a, b) => b.quantidade - a.quantidade),
         eventos: dentro,
         naoLidas,
-        ressalvas: ressalvasDoPeriodo({ de, naoLidas, semAutor: dentro.filter((e) => !e.quem).length }),
+        foraDoEscopo,
+        ressalvas: ressalvasDoPeriodo({ de, naoLidas, semAutor: dentro.filter((e) => !e.quem).length, foraDoEscopo }),
     };
 }
 
@@ -172,7 +187,7 @@ export function montarAuditoria({ leituras = [], de = null, ate = null, quemFilt
  * As ressalvas que impedem a leitura errada do silêncio. Elas são o produto
  * tanto quanto os números.
  */
-export function ressalvasDoPeriodo({ de, naoLidas = [], semAutor = 0 }) {
+export function ressalvasDoPeriodo({ de, naoLidas = [], semAutor = 0, foraDoEscopo = null }) {
     const r = [];
     if (naoLidas.length) {
         r.push(`⚠️ ${naoLidas.length} trilha(s) NÃO foram lidas (${naoLidas.map((n) => n.rotulo).join(', ')}) — o total abaixo está INCOMPLETO, e ausência aqui não é prova de que nada aconteceu.`);
@@ -186,6 +201,7 @@ export function ressalvasDoPeriodo({ de, naoLidas = [], semAutor = 0 }) {
     if (semAutor > 0) {
         r.push(`${semAutor} evento(s) sem autor gravado — registro antigo, de antes de a trilha carimbar quem fez.`);
     }
+    r.push(ressalvaEscopoCfi(foraDoEscopo, { rotuloEvento: 'evento' }));
     r.push('Este relatório LÊ as trilhas que as telas já gravam; ele não recalcula nada e não prova ausência de ação fora delas.');
     return r;
 }

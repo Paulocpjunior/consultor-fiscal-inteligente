@@ -22,8 +22,12 @@ import {
     type QueryConstraint,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured, isFirebaseStorageConfigured } from './firebaseConfig';
+import { lerTodosOsVinculos } from './carteiraVinculos';
 import { fetchAllDocs } from './firestorePaginate';
 import { listarEmpresasPerfilBackend } from './empresasPerfilService';
+// 🚨 O app TEM o arquivo — então ele responde "onde está o CNPJ desta empresa
+// neste XML?" em vez de pedir que alguém o envie (02/09, caso do Ivan).
+import { procurarCnpjNoXml, explicarProcura } from './xmlOndeEstaOCnpj';
 import {
     parseNFeXml,
     matchCompanyAndDirection,
@@ -34,6 +38,20 @@ import {
 } from './xmlParserService';
 import { uploadXml, deleteXml } from './xmlStorageService';
 import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './importDuplicadoMotivo';
+// 🚨 O OUTRO LADO DA MESMA CHAVE (11/09, LEGACY × FEDERAÇÃO): a NF-e que é
+// saída de uma cliente e entrada de outra ganha um documento por lado. O id
+// sai do DONO — montá-lo aqui seria a segunda cópia da identidade.
+import { idDoDocumentoDoLado, carimboDoLado } from '../sefaz-backend/documento-lado.js';
+// A decisão de tirar uma nota da empresa (motivo, autor, lápide) é PURA e mora
+// no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
+// jest não carrega, que é régua sem prova.
+import { retirarDocumentoDaEmpresa } from './documentoRetirada';
+// 🚨 A SAÍDA PARA A NOTA DIGITADA COM O NÚMERO ERRADO (10/09, Paulo, HANAMI:
+// *"O correto seria 9792, oq eu posso fazer nesse caso?"*). Relançar pelo ✍️
+// NÃO corrige: número, série e competência formam o id, então o relançamento
+// cria um SEGUNDO documento e a mesma venda conta duas vezes.
+import { corrigirNumeroDaNotaDigitada, idComOutroNumero } from './documentoCorrecaoNumero';
+import { declararNotaCancelada, removerCancelamentoDeclarado } from './cancelamentoDeclarado';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
 // fica gravada como 'saida' até o backfill passar, e este painel é o número
@@ -42,7 +60,10 @@ import { direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
 
 const direcaoDoDocumento = (d: any): string => (direcaoEfetivaDoc(d) as string) || '';
 import { valorDoDocumento } from '../sefaz-backend/xml-metadata-helper.js';
+import { docContaNoLivro } from '../sefaz-backend/xml-metadata-helper.js';
 import { applyDocumentosFilters, getCompetenciaDocumento } from './xmlDocumentosFilter';
+import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
+import { formasDaCompetencia } from '../sefaz-backend/competencia.js';
 import {
     podeVerDocumentoPorCarteira,
     podeVerEmpresaPorCarteira,
@@ -83,10 +104,14 @@ async function getCarteiraScope(user: User): Promise<CarteiraScope | null> {
     if (!uid || !db) return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
 
     try {
-        const snap = await getDocs(query(collection(db, 'carteiras'), fbLimit(500)));
-        const todosVinculos: CarteiraVinculoLike[] = snap.docs.map(d => d.data() as any);
-        const meusVinculos = todosVinculos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
-        return montaCarteiraScope(uid, meusVinculos, !snap.empty);
+        // 🚨 AQUI O TETO MUDO ERA PIOR QUE NA TELA DA CARTEIRA: este escopo
+        // decide QUAIS EMPRESAS O COLABORADOR ENXERGA na Central de XMLs. O
+        // vínculo que caía fora do `fbLimit(500)` fazia a empresa SUMIR da
+        // visão dele — parecendo falha de captura, que manda procurar defeito
+        // onde não há. Escopo truncado não se resolve avisando: não se trunca.
+        const leitura = await lerTodosOsVinculos<CarteiraVinculoLike>((_id, dados) => dados as any);
+        const meusVinculos = leitura.vinculos.filter(v => vinculoPertenceAoUsuario(v, user, uid));
+        return montaCarteiraScope(uid, meusVinculos, leitura.total > 0);
     } catch (err: any) {
         console.warn('getCarteiraScope:', err?.message);
         return { uid, empresaIds: new Set(), empresaCnpjs: new Set() };
@@ -132,6 +157,48 @@ export interface EmpresaXmlOption {
  * direta do doc (dadosFiscais); null quando indisponível — o PDF imprime
  * "não cadastrado" no lugar, nunca esconde o buraco.
  */
+export interface TrilhoSaida {
+    ok?: boolean;
+    certificado?: { tipoCert: string; certUploaded: boolean; certValido: boolean; temA1MesmaRaizValido: boolean };
+    nfce?: { via: string; rodaNaNuvem: boolean; titulo: string; motivo: string; acao: string | null };
+    /** Frase pronta da linha do modelo 65 — `null` quando a captura roda sozinha. */
+    avisoNfce?: string | null;
+    error?: string;
+}
+
+/**
+ * "Por qual trilho a NFC-e (mod 65) desta empresa chega?"
+ *
+ * 🚨 O painel de Canceladas/Faltantes mostrava o buraco da numeração do modelo
+ * 65 sem dizer POR QUE ele existe (02/09, MV LIDER: *"não puxou todas as
+ * NFC-E, só puxou 1"*) — e com certificado A3 a captura simplesmente não roda
+ * no servidor: quem traz é o Agente A3.
+ *
+ * 🔒 Vem do backend porque `empresas_certificados` é fechado ao navegador de
+ * propósito (guarda `storagePath` e `passwordEnc`). Sai só o METADADO.
+ */
+export async function getTrilhoSaida(opt: EmpresaXmlOption): Promise<TrilhoSaida | null> {
+    if (!opt?.id && !opt?.cnpj) return null;
+    try {
+        const u = auth?.currentUser;
+        if (!u) return null;
+        const token = await u.getIdToken();
+        const qs = new URLSearchParams();
+        if (opt.id) qs.set('empresaId', opt.id);
+        if (opt.cnpj) qs.set('cnpj', String(opt.cnpj).replace(/\D/g, ''));
+        const res = await fetch(`/api/admin/sefaz/trilho-saida?${qs.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        // ⚠️ Falha aqui NÃO vira "a captura está quebrada": sem a resposta o
+        // painel simplesmente não explica nada, como antes.
+        if (!res.ok) return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
 export async function getIdentificacaoEmpresa(opt: EmpresaXmlOption): Promise<import('../types').EmpresaDadosFiscais | null> {
     if (!isFirebaseConfigured || !db || !opt?.id) return null;
     const colecoes = opt.fonte === 'lucro'
@@ -295,7 +362,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: 'SIMPLES' as RegimeSugerido,
                 uf: df.uf,
                 inscricaoEstadual: df.inscricaoEstadual,
-                ccmSp: df.ccmSp || (data as any).ccmSp,
+                ccmSp: ccmSpDaEmpresa(data) || undefined,
                 createdBy: data.createdBy,
                 // Campos da conferência de cadastro — sem eles o FALLBACK fazia
                 // toda empresa parecer pendente quando o backend caía (03/08).
@@ -323,7 +390,7 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
                 regimeSugerido: inferirRegimeLucro(data),
                 uf: df.uf,
                 inscricaoEstadual: df.inscricaoEstadual,
-                ccmSp: df.ccmSp || data.ccmSp,
+                ccmSp: ccmSpDaEmpresa(data) || undefined,
                 createdBy: data.createdBy,
                 codMunIBGE: df.codMunIBGE || (data as any).codMunIBGE,
                 email: (data as any).email || df.email,
@@ -371,6 +438,12 @@ export interface ImportXmlSuccess {
     substituiu?: boolean;
     /** true quando COMPLETOU um resumo/incompleto com a NF-e inteira (upgrade). */
     completou?: boolean;
+    /**
+     * Preenchido quando o documento entrou como o OUTRO LADO de uma chave que
+     * já tem dono na carteira (a contraparte também é cliente). A tela DIZ
+     * isso — um documento a mais na base sem explicação é susto.
+     */
+    outroLado?: { chave: string; outroLadoCnpj: string | null };
 }
 
 export interface ImportXmlSkipped {
@@ -418,13 +491,27 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
 
         const match = matchCompanyAndDirection(parsed, empresa.cnpj);
         if (!match.ok) {
-            throw new Error(match.motivo || 'XML não pertence à empresa selecionada.');
+            // 🚨 O APP TEM O ARQUIVO — então ele RESPONDE, em vez de pedir que
+            // alguém o envie (02/09, caso do Ivan na 0530; Paulo: *"como vou
+            // enviar um arquivo se você diz que não posso capturar?"*). A régua
+            // de 24/08: quando o app tem como saber a resposta, avisar não é
+            // entrega, é passar o problema adiante.
+            //
+            // A procura responde as DUAS coisas de uma vez: se o CNPJ da
+            // empresa está no XML, o defeito é do LEITOR e o caminho da tag é a
+            // correção; se não está, a recusa estava certa e a tela diz de quem
+            // é o arquivo.
+            const procura = procurarCnpjNoXml(xmlText, empresa.cnpj);
+            const e = new Error(match.motivo || 'XML não pertence à empresa selecionada.');
+            (e as any).acao = explicarProcura(procura, empresa.cnpj);
+            throw e;
         }
 
         const xmlHash = await sha256Hex(xmlText);
 
-        // Duplicidade — id determinístico pela chave.
-        const docId = chave || xmlHash;
+        // Duplicidade — id determinístico pela chave (ou o id do OUTRO LADO,
+        // quando a chave já tem dono e as duas empresas são partes dela).
+        let docId = chave || xmlHash;
 
         // Para colaboradores nao-admin, regras Firestore retornam permission-denied
         // ao ler doc inexistente (comportamento padrao do Firestore para evitar
@@ -444,10 +531,46 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
         // lápide de exclusão reimportar é justamente a ação certa (o documento
         // está invisível na lista E bloqueando a reentrada, o pior dos dois
         // mundos). Chamar tudo de "duplicado" era o que fechava o beco.
-        const leitura = lerDuplicado(
+        // As partes do ARQUIVO viajam junto: o que está gravado pode ser um
+        // RESUMO só com o emitente, e é a NF-e completa que prova que a
+        // empresa escolhida é a contraparte (o print da LEGACY, 11/09).
+        const partesDoArquivo = {
+            cnpjEmit: parsed.emitente?.cnpjCpf ?? null,
+            cnpjDest: parsed.destinatario?.cnpjCpf ?? null,
+        };
+        let leitura = lerDuplicado(
             existing && existing.exists() ? (existing.data() as DocumentoExistente) : null,
             empresa,
+            partesDoArquivo,
         );
+        // ═══ O OUTRO LADO ═══════════════════════════════════════════════════
+        // A chave já tem dono e a empresa escolhida TAMBÉM é parte (saída de
+        // uma, entrada da outra): o documento desta empresa é OUTRO, com id
+        // derivado. Se ele já existe, a leitura recomeça sobre ELE — e daí em
+        // diante vale o fluxo normal (já está aqui / substituir / completar).
+        let ladoDe: ReturnType<typeof carimboDoLado> = null;
+        if (leitura.gravaOutroLado && existing && existing.exists()) {
+            const idLado = idDoDocumentoDoLado(chave, empresa.cnpj);
+            if (idLado) {
+                const outroLado = existing.data() as DocumentoExistente;
+                ladoDe = carimboDoLado({
+                    chave,
+                    outroLadoCnpj: outroLado.empresaCnpj,
+                    outroLadoEmpresaId: outroLado.empresaId,
+                });
+                docId = idLado;
+                let existingLado: Awaited<ReturnType<typeof getDoc>> | null = null;
+                try {
+                    existingLado = await getDoc(doc(db, COLLECTIONS.DOCUMENTOS, idLado));
+                } catch (err: any) {
+                    if (err?.code !== 'permission-denied') throw err;
+                }
+                existing = existingLado && existingLado.exists() ? existingLado : null;
+                if (existing) {
+                    leitura = lerDuplicado(existing.data() as DocumentoExistente, empresa, partesDoArquivo);
+                }
+            }
+        }
         // SUBSTITUIÇÃO: só quando alguém PEDIU, e só na MESMA empresa.
         //
         // Sobrescrever documento de outra empresa seria mover a nota de dona
@@ -502,6 +625,9 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // — e o dia em que alguém trocar por `{ merge: true }` o documento
             // volta invisível, sem nada apontando para cá.
             const paraGravar: Record<string, unknown> = { ...sanitize(documento) };
+            // O carimbo do lado é o que a propagação de eventos (cancelamento,
+            // CC-e, manifestação) usa para achar ESTE documento pela chave.
+            if (ladoDe) paraGravar.ladoDe = ladoDe;
             if (podeSubstituir && !leitura.permiteReincluir) {
                 // O rastro fica NO documento: substituição é reescrita de dado
                 // fiscal, e sem quem/quando ninguém reconstrói o que mudou.
@@ -543,6 +669,7 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             status: 'ok', documento,
             substituiu: podeSubstituir && !leitura.permiteReincluir && !podeCompletar,
             completou: podeCompletar,
+            outroLado: ladoDe ? { chave, outroLadoCnpj: ladoDe.outroLadoCnpj } : undefined,
         };
     } catch (err: any) {
         await registrarErro({
@@ -629,6 +756,12 @@ export async function registrarErro(input: ErroInput): Promise<void> {
 // ─── Listagens ──────────────────────────────────────────────────────────────
 
 export interface ListDocumentosFilters {
+    /**
+     * Traz também os documentos RETIRADOS do livro (`_deleted` / `_merged_into`).
+     * Só para quem pergunta sobre o ACERVO (diagnóstico) — livro, relatório e
+     * faturamento NUNCA passam isto (12/09, GOLDLOG).
+     */
+    incluirRetirados?: boolean;
     empresaId?: string;
     /** Vários ids (matriz + filiais da mesma raiz) — vira `in` no servidor. */
     empresaIds?: string[];
@@ -657,7 +790,7 @@ export async function listDocumentos(
     // Out-param opcional: preenchido com truncado=true quando a leitura bateu no
     // teto de páginas (pode haver mais docs). Callers que exportam/agregam devem
     // avisar o usuário — senão o recorte fica silenciosamente incompleto.
-    meta?: { truncado?: boolean },
+    meta?: { truncado?: boolean; retirados?: number },
 ): Promise<DocumentoFiscal[]> {
     if (meta) meta.truncado = false;
     if (!user || !isFirebaseConfigured || !db) return [];
@@ -676,10 +809,23 @@ export async function listDocumentos(
     else if (filters.empresaIds && filters.empresaIds.length > 0) {
         constraints.push(where('empresaId', 'in', filters.empresaIds.slice(0, 30)));
     }
-    // Competência exata vai ao SERVIDOR: corta a busca de dezenas de milhares
-    // de docs para o mês pedido (igualdade simples — não exige índice composto;
-    // range competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
-    if (filters.competencia) constraints.push(where('competencia', '==', filters.competencia));
+    // Competência vai ao SERVIDOR: corta a busca de dezenas de milhares de docs
+    // para o mês pedido (igualdade — não exige índice composto; o range
+    // competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
+    //
+    // 🚨 E ELA PERGUNTA PELAS FORMAS, não por uma só. A competência é gravada
+    // em `AAAA-MM` pela captura, e trilhos que leem PAPEL trazem o que o papel
+    // escreve (`08/2026`). Perguntando só pela normalizada, a nota FICA no
+    // banco e some de todo recorte — foi o relato de 01/09 (0257, importação de
+    // PDF de NFS-e: "diz que importou e não tem nenhuma nota"). É a irmã da
+    // regra do CNPJ: **nunca consultar por igualdade de um campo que tem duas
+    // formas**.
+    if (filters.competencia) {
+        const formas = formasDaCompetencia(filters.competencia);
+        constraints.push(formas.length > 1
+            ? where('competencia', 'in', formas.slice(0, 30))
+            : where('competencia', '==', filters.competencia));
+    }
     // NÃO usamos orderBy aqui: Firestore exclui docs que não têm o campo.
     // Ordenação fica em memória com fallbacks (ver abaixo).
     // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500) que
@@ -704,7 +850,15 @@ export async function listDocumentos(
         const cnpjFiltro = String(filters.empresaCnpj || '').replace(/\D/g, '');
         if (cnpjFiltro.length === 14 && (filters.empresaId || filters.empresaIds?.length)) {
             const porCnpj: QueryConstraint[] = [where('empresaCnpj', '==', cnpjFiltro)];
-            if (filters.competencia) porCnpj.push(where('competencia', '==', filters.competencia));
+            if (filters.competencia) {
+                // ⚠️ As MESMAS formas da consulta acima — uma metade tolerante e
+                // a outra estrita faria o documento aparecer ou sumir conforme o
+                // caminho que o achou.
+                const formas = formasDaCompetencia(filters.competencia);
+                porCnpj.push(formas.length > 1
+                    ? where('competencia', 'in', formas.slice(0, 30))
+                    : where('competencia', '==', filters.competencia));
+            }
             const metaCnpj = { truncated: false, count: 0, maxDocs: 0 };
             const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, meta: metaCnpj });
             if (meta && metaCnpj.truncated) meta.truncado = true;
@@ -717,6 +871,22 @@ export async function listDocumentos(
         }
 
         if (scope) docs = docs.filter(d => podeVerDocumentoPorCarteira(d, scope));
+
+        // 🚨 A LÁPIDE NUNCA VALEU NESTA LISTAGEM (12/09, GOLDLOG · nota 781
+        // duplicada). O mata-burro de 03/09 dizia que "`_deleted` já é filtrado
+        // por toda a listagem" — era verdade para EMPRESAS (24/07), nunca para
+        // documentos: quem monta o Livro de Serviços, o faturamento, o Resumo por
+        // CFOP e a Central de XMLs lê daqui, e a nota tirada pelo 🚫 continuava
+        // contando em tudo que o navegador mostra (o SPED já a tirava desde
+        // 10/09). Quem responde é o DONO (`docContaNoLivro`, as DUAS lápides),
+        // e o que sai vai CONTADO em `meta.retirados` — sumir calado seria a
+        // ausência plausível que manda procurar buraco de captura.
+        // `incluirRetirados` é a porta de quem PRECISA vê-las (diagnóstico).
+        if (!filters.incluirRetirados) {
+            const antes = docs.length;
+            docs = docs.filter(docContaNoLivro);
+            if (meta) meta.retirados = antes - docs.length;
+        }
     } catch (err: any) {
         console.warn('listDocumentos:', err?.message);
         // Leitura falhou (rules/rede/índice) — sinaliza incompletude pra o caller
@@ -776,13 +946,8 @@ export async function getDocumentosByChaves(chaves: string[]): Promise<Documento
     const results: DocumentoFiscal[] = [];
     await Promise.all(batches.map(async batch => {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
-                where('chave', 'in', batch),
-                fbLimit(30),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [where('chave', 'in', batch)]);
+            snaps.forEach(d => {
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
             });
         } catch (err: any) {
@@ -813,15 +978,12 @@ export async function getDocumentosByCnpjPeriodo(
 
     async function buscar(campo: string) {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [
                 where(campo, '==', cnpjLimpo),
                 where('dhEmi', '>=', dtIniIso),
                 where('dhEmi', '<=', dtFimIso),
-                fbLimit(2000),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            ]);
+            snaps.forEach(d => {
                 if (visto.has(d.id)) return;
                 visto.add(d.id);
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
@@ -881,6 +1043,151 @@ export async function deleteDocumento(id: string): Promise<void> {
         await deleteXml(existing.storagePath).catch(() => {});
     }
     await deleteDoc(doc(db, COLLECTIONS.DOCUMENTOS, id));
+}
+
+/**
+ * Tira da empresa uma nota que entrou na empresa ERRADA.
+ *
+ * 🚨 03/09, Paulo: *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE
+ * … como resolver?"*. A resposta era **não tinha como** — `deleteDocumento`
+ * (logo acima) existe desde sempre e NENHUMA tela a chama: a "rota sem botão"
+ * de 13/08, código morto com cara de entrega.
+ *
+ * ⚠️ E ELA NÃO SERVE PARA ISTO: ela apaga de VERDADE (`deleteDoc` + o arquivo
+ * no Storage), levando junto a prova de que a nota esteve ali, quem a pôs e
+ * quando. Aqui é **LÁPIDE** (a régua do WALDESA, 24/07): o documento fica,
+ * some das listas e dos recortes, e volta com `_deleted: false`.
+ *
+ * A decisão (motivo, autor, o que a frase precisa dizer depois) mora no dono
+ * PURO `documentoRetirada.ts` — aqui é só o I/O.
+ */
+export async function tirarDocumentoDaEmpresa(
+    id: string,
+    motivo: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = retirarDocumentoDaEmpresa(
+        existing as any,
+        motivo,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    // MERGE: a lápide não substitui o documento.
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
+}
+
+/**
+ * CORRIGIR O NÚMERO DE UMA NOTA DIGITADA — num ato só.
+ *
+ * A decisão inteira (o que pode, o que recusa, o que se grava) mora no dono
+ * PURO `documentoCorrecaoNumero.ts`; aqui é só o I/O.
+ *
+ * 🚨 A ORDEM DAS DUAS GRAVAÇÕES É REGRA, não detalhe: **a nota certa entra
+ * PRIMEIRO, a lápide da errada depois.** Se a segunda falhar, sobra uma
+ * duplicata — que aparece na lista e alguém tira. Na ordem inversa, uma falha
+ * deixaria a nota SUMIDA das duas pontas, que é livro a MENOS: o erro que não
+ * se confere depois.
+ */
+export async function corrigirNumeroDaNota(
+    id: string,
+    numeroNovo: string,
+    serieNova: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string; idNovo?: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    // O destino se consulta ANTES de decidir: gravar por cima de documento que
+    // já existe apagaria uma nota legítima.
+    const idAlvo = idComOutroNumero(existing as any, String(numeroNovo || '').trim(),
+        String(serieNova || '').trim() || String((existing as any).serie || '1').trim());
+    const destino = idAlvo && idAlvo !== id ? await getDocumento(idAlvo) : null;
+
+    const decisao = corrigirNumeroDaNotaDigitada(
+        existing as any,
+        numeroNovo,
+        serieNova,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+        destino as any,
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    if (decisao.modo === 'patch') {
+        await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchNovo, { merge: true });
+        return { ok: true, mensagem: decisao.avisoDepois, idNovo: id };
+    }
+
+    // O documento inteiro viaja para o id novo — é a MESMA nota, com o número
+    // certo. Copiar campo a campo aqui faria a nota corrigida nascer diferente
+    // da digitada (a segunda cópia da montagem); o que muda vem do dono.
+    // ⚠️ O CONTEÚDO VAI COMO VEIO DO FIRESTORE, sem passar por JSON: um
+    // `JSON.parse(JSON.stringify(...))` transformaria Timestamp em
+    // `{seconds, nanoseconds}` — um MAPA —, e o Firestore ordena por TIPO.
+    // A partir daí um `where('createdAt','<=', ts)` deixaria o documento
+    // corrigido de fora EM SILÊNCIO (é a armadilha que o corte do fechamento
+    // documenta). O que vem do banco não tem `undefined`, então não há o que
+    // limpar.
+    const { id: _idAntigo, ...conteudo } = existing as any;
+    await setDoc(
+        doc(db, COLLECTIONS.DOCUMENTOS, decisao.idNovo),
+        { ...conteudo, ...decisao.patchNovo },
+    );
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchAntigo!, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois, idNovo: decisao.idNovo };
+}
+
+/**
+ * "ESTA NOTA ESTÁ CANCELADA" — quando só o papel diz (10/09, Barueri).
+ *
+ * O documento capturado pelo Padrão Nacional veio `autorizado` porque o
+ * cancelamento aconteceu DEPOIS, no portal da prefeitura — e o CFI não fala com
+ * aquele portal. A nota cancelada continuava somando no faturamento.
+ *
+ * A decisão (motivo, autor, o que a frase diz depois) mora no dono PURO
+ * `cancelamentoDeclarado.ts`; aqui é só o I/O. E quem faz a declaração VALER no
+ * app inteiro é `docCancelado`, no dono da leitura — uma declaração que só esta
+ * camada honrasse seria a "régua que só escreve".
+ */
+export async function marcarNotaCancelada(
+    id: string,
+    motivo: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = declararNotaCancelada(
+        existing as any,
+        motivo,
+        { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email },
+    );
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
+}
+
+/** O ↩ que nasce junto: botão que tira do total nasce com o que desfaz (14/08). */
+export async function desmarcarNotaCancelada(
+    id: string,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+
+    const decisao = removerCancelamentoDeclarado(existing as any);
+    if (!decisao.ok) return { ok: false, mensagem: decisao.motivo };
+
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patch, { merge: true });
+    return { ok: true, mensagem: decisao.avisoDepois };
 }
 
 // ─── Agregações para Dashboard / Relatórios ─────────────────────────────────

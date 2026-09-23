@@ -40,6 +40,14 @@ describe('a lista leve traz o cadastro e NÃO traz a ficha', () => {
             cnpj: '11222333000181',   // dígitos: o cadastro guarda nas DUAS formas
             uf: 'SP',
             regimePadrao: null,
+            // 🚨 CAMPO NOVO EM 28/08 e a asserção muda com ele: a coluna
+            // escrevia "Presumido" quando `regimePadrao` estava vazio — uma
+            // AFIRMAÇÃO que ninguém fez, e que aparecia sobre entidade IMUNE.
+            // Quem responde agora é o dono, e a origem viaja junto.
+            regime: {
+                codigo: 'INDEFINIDO', rotulo: 'Indefinido',
+                origem: 'colecao', apuracaoDefinida: false,
+            },
             codCliente: '1154',
             fichas: 0,
             capturarSefaz: true,

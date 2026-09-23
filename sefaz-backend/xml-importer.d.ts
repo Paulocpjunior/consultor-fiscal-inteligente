@@ -6,6 +6,7 @@ export interface MetadadosXml {
     dhEmi: string | null;
     vNF: number | null;
     tpNF: string | null;
+    modFrete: string | null;
     tipoDoc: string | null;
     tipoNormalizado: string | null;
     schema: string | null;
@@ -38,6 +39,24 @@ export interface MetadadosXml {
     ieDest: string | null;
     ufEmit: string | null;
     codMunEmit: string | null;
+    /**
+     * Logradouro/nº/complemento/bairro dos dois lados — o campo 10 (ENDERECO)
+     * do 0150 é **obrigatório sem condição**, e o extrator os descartava.
+     */
+    logradouroEmit: string | null;
+    nroEmit: string | null;
+    complementoEmit: string | null;
+    bairroEmit: string | null;
+    logradouroDest: string | null;
+    nroDest: string | null;
+    complementoDest: string | null;
+    bairroDest: string | null;
+    /**
+     * Municípios da PRESTAÇÃO do CT-e (`cMunIni`/`cMunFim`) — campos 24 e 25
+     * do D100 do EFD ICMS/IPI. `null` fora do CT-e.
+     */
+    codMunIniCte: string | null;
+    codMunFimCte: string | null;
 }
 
 export function extrairMetadados(xml: string, schema?: string): MetadadosXml;
@@ -53,9 +72,45 @@ export function corrigirDirecaoEntradaPropria(p?: { limit?: number }): Promise<{
     examinadas: number; corrigidas: number; erro?: string;
 }>;
 
+/** Resultado dos dois backfills de participante — contado POR CAUSA. */
+export interface ResultadoReleituraParticipantes {
+    examinadas: number;
+    preenchidas: number;
+    semXml: number;
+    jaTinham: number;
+    ganharamMunicipio: number;
+    ganharamFornecedor: number;
+    /** Quantos ganharam o LOGRADOURO — a recusa 0150.10 do PVA (VINATEX). */
+    ganharamEndereco: number;
+    semDadoNoXml: number;
+    /**
+     * Documentos da fila que a rodada NÃO viu (o orçamento é de 1000
+     * downloads por direção; o já-relido é pulado de graça, por cursor, e por
+     * isso a rodada seguinte AVANÇA). `0` = fila esgotada (resposta, nunca
+     * default); `-1` = há mais e a contagem falhou.
+     */
+    restaram: number;
+    erro?: string;
+}
+
 export function preencherEnderecoDestinatario(p?: {
     limit?: number; empresaId?: string | null; competencia?: string | null;
-}): Promise<{ examinadas: number; preenchidas: number; semXml: number; jaTinham: number; erro?: string }>;
+}): Promise<ResultadoReleituraParticipantes>;
+
+/** O MESMO backfill nas DUAS direções (a compra de produtor rural é entrada). */
+export function preencherEnderecoParticipantes(p?: {
+    limit?: number; empresaId?: string | null; competencia?: string | null;
+    direcao?: 'entrada' | 'saida';
+}): Promise<ResultadoReleituraParticipantes>;
+
+/** Versão do extrator de PARTICIPANTES — subir recoloca a base na fila. */
+export const VERSAO_RELEITURA_PARTICIPANTES: number;
+
+/**
+ * Extrai os itens (`<det>`) de uma NF-e completa — `[]` para resumo (resNFe)
+ * ou XML sem `<det>`. É o MESMO extrator que a captura e o backfill usam.
+ */
+export function extrairItens(xml: string): Array<Record<string, unknown>>;
 
 /** Versão do extrator de ITENS — subir recoloca a base na fila do backfill. */
 export const VERSAO_RELEITURA_ITENS: number;
@@ -79,6 +134,8 @@ export function relerItensFiscais(p?: {
     semDadoNoXml: number;
     porCampo: Record<string, number>;
     naoPareadasDetalhe: Array<{ chave: string; numero: string | null; motivo: string }>;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
     erro?: string;
 }>;
 
@@ -101,4 +158,30 @@ export function relerNotasVazias(p?: {
     jaCompletas: number;
     semItemNoXml: number;
     falhas: number;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
+}>;
+
+/**
+ * 🚚 Releitura do CABEÇALHO dos CT-e (CFOP, CST, alíquota e ICMS) a partir do
+ * XML guardado. Os outros dois ♻️ não alcançam conhecimento de transporte: um
+ * só mexe em campos de ITEM (o CT-e não tem) e o outro o trata como fora do
+ * escopo. Quem classifica é a régua pura `cte-cabecalho.js`.
+ */
+export function relerCabecalhoCtes(p?: {
+    empresaId?: string | null;
+    competencia?: string | null;
+    limit?: number;
+}): Promise<{
+    examinados: number;
+    recuperados: number;
+    jaCompletos: number;
+    jaRelidos: number;
+    semArquivo: number;
+    xmlSemCfop: number;
+    semMudanca: number;
+    falhas: number;
+    campos: Record<string, number>;
+    /** O que a rodada NÃO viu: 0 = fila esgotada, -1 = há mais e a contagem falhou. */
+    restaram: number;
 }>;

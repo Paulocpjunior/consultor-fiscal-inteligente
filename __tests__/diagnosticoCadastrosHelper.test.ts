@@ -3,7 +3,7 @@
  * Errar aqui = bloquear geração SPED ou cálculo DAS sem aviso claro.
  */
 // @ts-expect-error — módulo .js puro
-import { pendenciasCadastro, gravidadeCadastro } from '../sefaz-backend/diagnostico-cadastros-helper.js';
+import { pendenciasCadastro, gravidadeCadastro, resumirPendenciasPorCampo } from '../sefaz-backend/diagnostico-cadastros-helper.js';
 
 describe('pendenciasCadastro — campos críticos', () => {
     it('empresa SIMPLES completa → zero pendências', () => {
@@ -52,7 +52,12 @@ describe('pendenciasCadastro — campos críticos', () => {
             cnpj: '12345678000190', nome: 'X', regimePadrao: 'lucro_real',
             dadosFiscais: { uf: 'SP', codMunIBGE: '3550308' },
         }, 'lucro');
-        expect(r).toHaveLength(0);
+        // ⚠️ A ASSERÇÃO ESTREITOU EM 27/08, e a troca é o certo: ela dizia
+        // `toHaveLength(0)`, que descrevia o mundo em que o diagnóstico só
+        // conhecia seis campos. O que este teste protege é a PRECEDÊNCIA do
+        // regime — e o Lucro Real ganhou uma pendência PRÓPRIA e legítima
+        // (IND_APRO_CRED do 0110), que nada tem a ver com ela.
+        expect(r.map((p: any) => p.campo)).not.toContain('dadosFiscais.regimeTributario');
     });
 
     // ⚠️ E IMUNE/ISENTA não são "regime indefinido": são regimes próprios
@@ -159,5 +164,231 @@ describe('gravidadeCadastro — classificação', () => {
             { campo: 'cnae', descricao: 'x', impacto: 'y' },
         ]);
         expect(g).toBe('critico');
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚦 OS CAMPOS QUE TRAVAM O ARQUIVO DO SPED
+//
+// O diagnóstico cobria seis campos e NENHUM deles é o que faz o PVA recusar.
+// Os que fazem são de tabela oficial, o app se recusa a deduzi-los, e a falta
+// só aparecia na hora de gerar — uma volta de validador por vez, que é o
+// gargalo nomeado em 20/08.
+//
+// 🚨 A TRAVA QUE MANDA É "SÓ ACUSA QUEM PRECISA": cobrar classificação de
+// estabelecimento industrial de um comércio faria a carteira inteira nascer em
+// âmbar por campo que ninguém daquele grupo vai preencher — é o `tipoTributacao`
+// de 26/08, em que 234 das 236 acusações eram falsas.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚦 pendências que travam o SPED', () => {
+    const lucro = (df: any = {}, over: any = {}) => ({
+        cnpj: '12345678000190', nome: 'Acme', regimePadrao: 'LUCRO_PRESUMIDO',
+        dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', ...df },
+        ...over,
+    });
+    const campos = (e: any, reg = 'lucro') => pendenciasCadastro(e, reg).map((p: any) => p.campo);
+
+    // 🔒 O caso comum NASCE VERDE — é isto que separa esta régua do fantasma.
+    it('empresa comum do Lucro em SP não ganha NENHUMA pendência nova', () => {
+        expect(pendenciasCadastro(lucro(), 'lucro')).toHaveLength(0);
+    });
+
+    it('e a empresa do Simples também não — nada disto é do regime dela', () => {
+        expect(pendenciasCadastro({
+            cnpj: '12345678000190', nome: 'Acme', anexo: 'III',
+            dadosFiscais: { uf: 'PR', codMunIBGE: '4106902', cnae: '6201500', inscricaoEstadual: '123' },
+        }, 'simples')).toHaveLength(0);
+    });
+
+    describe('0002 — classificação do estabelecimento industrial', () => {
+        it('contribuinte de IPI sem a classificação é ALTO: o PVA RECUSA o arquivo', () => {
+            const p = pendenciasCadastro(lucro({ contribuinteIpi: 'sim' }), 'lucro');
+            expect(p.map((x: any) => x.campo)).toEqual(['dadosFiscais.classEstabIpi']);
+            expect(p[0].impacto).toMatch(/RECUSA/);
+            expect(gravidadeCadastro(p)).toBe('alto');
+        });
+
+        it('⚠️ mas o comércio NÃO é cobrado — ele não tem esse registro', () => {
+            expect(campos(lucro({ contribuinteIpi: 'nao' }))).toEqual([]);
+            expect(campos(lucro())).toEqual([]);
+        });
+
+        it('e some quando o campo é preenchido', () => {
+            expect(campos(lucro({ contribuinteIpi: 'sim', classEstabIpi: '01' }))).toEqual([]);
+        });
+    });
+
+    describe('0000 — natureza da PJ (IND_NAT_PJ)', () => {
+        it('entidade IMUNE sem o código é ALTO: o arquivo declara "sociedade empresária em geral"', () => {
+            const p = pendenciasCadastro(lucro({ regimeTributario: 'IMUNE' }, { regimePadrao: null }), 'lucro');
+            expect(p.map((x: any) => x.campo)).toContain('dadosFiscais.indNatPJ');
+            expect(gravidadeCadastro(p)).toBe('alto');
+        });
+
+        it('vale também para a ISENTA e para quem é sem fins lucrativos', () => {
+            expect(campos(lucro({ regimeTributario: 'ISENTA' }, { regimePadrao: null })))
+                .toContain('dadosFiscais.indNatPJ');
+            expect(campos(lucro({ semFinsLucrativos: true })))
+                .toContain('dadosFiscais.indNatPJ');
+        });
+
+        // ⚠️ São EIXOS SEPARADOS: sociedade empresária comum declara '00' e o
+        // '00' está CERTO nela — cobrar seria alarme sem ação na carteira toda.
+        it('⚠️ a LTDA comum não é cobrada — nela o "00" é a resposta certa', () => {
+            expect(campos(lucro())).toEqual([]);
+        });
+    });
+
+    describe('0110 — apropriação de crédito de PIS/COFINS', () => {
+        it('Lucro Real sem o método é MÉDIO: o arquivo sai, mas com "2" cravado', () => {
+            const p = pendenciasCadastro(lucro({}, { regimePadrao: 'LUCRO_REAL' }), 'lucro');
+            expect(p.map((x: any) => x.campo)).toEqual(['dadosFiscais.indAproCredPisCofins']);
+            expect(gravidadeCadastro(p)).toBe('medio');
+        });
+
+        it('⚠️ o Presumido não é cobrado — no cumulativo não há crédito a apropriar', () => {
+            expect(campos(lucro())).toEqual([]);
+        });
+    });
+
+    describe('0500 — a conta contábil é TUDO OU NADA', () => {
+        it('conta cadastrada sem nome e sem nível cobra os dois', () => {
+            expect(campos(lucro({ contaContabilReceitaFinanceira: '30106030012' })))
+                .toEqual([
+                    'dadosFiscais.contaContabilReceitaFinanceiraNome',
+                    'dadosFiscais.contaContabilReceitaFinanceiraNivel',
+                ]);
+        });
+
+        // ⚠️ Quem NÃO cadastrou conta nenhuma não tem receita financeira a
+        // declarar — cobrar dela seria inventar uma obrigação.
+        it('⚠️ quem não cadastrou conta não é cobrado', () => {
+            expect(campos(lucro())).toEqual([]);
+        });
+
+        it('conta inteira não gera pendência', () => {
+            expect(campos(lucro({
+                contaContabilReceitaFinanceira: '30106030012',
+                contaContabilReceitaFinanceiraNome: 'RENDIMENTOS FINANCEIROS',
+                contaContabilReceitaFinanceiraNivel: '5',
+            }))).toEqual([]);
+        });
+    });
+
+    describe('E116 — o ICMS a recolher tem prazo e código ESTADUAIS', () => {
+        it('contribuinte fora de SP é cobrado, e a frase NOMEIA a UF', () => {
+            const p = pendenciasCadastro(lucro({ uf: 'PR', inscricaoEstadual: '123' }), 'lucro');
+            expect(p.map((x: any) => x.campo)).toEqual([
+                'dadosFiscais.icmsDiaVencimento', 'dadosFiscais.icmsCodRec',
+            ]);
+            expect(p[0].descricao).toMatch(/em PR/);
+            expect(p[0].impacto).toMatch(/dia 20/);
+        });
+
+        // ⚠️ Em SP o padrão do gerador está certo no caso comum.
+        it('⚠️ dentro de SP não é cobrado — o padrão do app é o prazo de lá', () => {
+            expect(campos(lucro({ inscricaoEstadual: '123' }))).toEqual([]);
+        });
+
+        // ⚠️ Sem inscrição estadual a empresa não apura ICMS (serviço puro) —
+        // o E116 nunca sai, e cobrar ali seria alarme sem ação.
+        it('⚠️ empresa de serviço (sem IE) fora de SP não é cobrada', () => {
+            expect(campos(lucro({ uf: 'PR' }))).toEqual([]);
+        });
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚦 A EQUIPE ATACA POR CAUSA, NÃO POR EMPRESA
+//
+// Com 400 clientes, uma lista de empresas não é fila de trabalho — é um muro.
+// "12 empresas sem a classificação de IPI" é UMA tarefa; doze linhas soltas
+// são doze mistérios. Mesmo desenho do painel de envios do rito (#293).
+// ════════════════════════════════════════════════════════════════════════════
+describe('resumirPendenciasPorCampo', () => {
+    const pend = (campo: string) => ({ campo, descricao: `falta ${campo}`, impacto: 'x' });
+
+    it('agrupa por campo e conta as empresas', () => {
+        const r = resumirPendenciasPorCampo([
+            { nome: 'A', pendencias: [pend('dadosFiscais.classEstabIpi')] },
+            { nome: 'B', pendencias: [pend('dadosFiscais.classEstabIpi'), pend('cnae')] },
+        ]);
+        expect(r.map((x: any) => [x.campo, x.qtd])).toEqual([
+            ['dadosFiscais.classEstabIpi', 2],
+            ['cnae', 1],
+        ]);
+        expect(r[0].empresas).toEqual(['A', 'B']);
+    });
+
+    // 📌 Ordena por quantidade porque é assim que se escolhe o que fazer
+    // primeiro — alfabético aqui seria uma lista, não uma fila.
+    it('a mais frequente vem primeiro', () => {
+        const r = resumirPendenciasPorCampo([
+            { nome: 'A', pendencias: [pend('z')] },
+            { nome: 'B', pendencias: [pend('a')] },
+            { nome: 'C', pendencias: [pend('a')] },
+        ]);
+        expect(r[0].campo).toBe('a');
+    });
+
+    it('carteira sem pendência devolve lista vazia — não inventa causa', () => {
+        expect(resumirPendenciasPorCampo([{ nome: 'A', pendencias: [] }])).toEqual([]);
+        expect(resumirPendenciasPorCampo([])).toEqual([]);
+    });
+
+    // ⚠️ O teto corta a AMOSTRA, nunca a contagem: quem lê o número precisa do
+    // total, e o filtro por campo mostra todas.
+    it('a lista de empresas tem teto, a contagem não', () => {
+        const muitas = Array.from({ length: 60 }, (_, i) => ({ nome: `E${i}`, pendencias: [pend('a')] }));
+        const r = resumirPendenciasPorCampo(muitas);
+        expect(r[0].qtd).toBe(60);
+        expect(r[0].empresas).toHaveLength(50);
+    });
+
+    it('empresa sem nome cai no CNPJ, e nunca em branco', () => {
+        const r = resumirPendenciasPorCampo([{ cnpj: '11111111000191', pendencias: [pend('a')] }]);
+        expect(r[0].empresas).toEqual(['11111111000191']);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🏛️ TER INSCRIÇÃO ESTADUAL NÃO É APURAR ICMS
+//
+// 28/08, Paulo: *"as empresas de SERVIÇOS de Brasília, nós entregamos o SPED,
+// mas elas não recolhem ICMS, como fazer para não ficar constando como
+// pendência"*. A régua usava a IE como prova, e a RADIO E TV IBIRAPUERA (DF)
+// acendeu o E116 sem ter o registro. Mesmo desenho do IPI: o cadastro responde,
+// o app não deduz.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🏛️ contribuinte de ICMS decide o E116', () => {
+    const df = (extra: any = {}) => ({
+        cnpj: '12345678000190', nome: 'RADIO E TV', regimePadrao: 'LUCRO_PRESUMIDO',
+        dadosFiscais: { uf: 'DF', codMunIBGE: '5300108', ...extra },
+    });
+    const campos = (e: any) => pendenciasCadastro(e, 'lucro').map((p: any) => p.campo);
+
+    it('marcada "não", o E116 deixa de ser cobrado — serviço em Brasília', () => {
+        expect(campos(df({ inscricaoEstadual: '123', contribuinteIcms: 'nao' }))).toEqual([]);
+    });
+
+    // ⚠️ Sem marcação nada muda: a IE segue respondendo, então quem não
+    // preencheu não vê comportamento novo.
+    it('sem marcação, a inscrição estadual continua respondendo', () => {
+        expect(campos(df({ inscricaoEstadual: '123' })))
+            .toEqual(['dadosFiscais.icmsDiaVencimento', 'dadosFiscais.icmsCodRec']);
+    });
+
+    // ⚠️ E o cadastro VENCE a dedução nos dois sentidos: quem se declara
+    // contribuinte é cobrado mesmo sem IE gravada.
+    it('marcada "sim" sem IE, o E116 volta a ser cobrado', () => {
+        expect(campos(df({ contribuinteIcms: 'sim' })))
+            .toEqual(['dadosFiscais.icmsDiaVencimento', 'dadosFiscais.icmsCodRec']);
+    });
+
+    it('em SP continua fora — o padrão do gerador é o prazo de lá', () => {
+        expect(pendenciasCadastro({
+            cnpj: '12345678000190', nome: 'X', regimePadrao: 'LUCRO_PRESUMIDO',
+            dadosFiscais: { uf: 'SP', codMunIBGE: '3550308', contribuinteIcms: 'sim' },
+        }, 'lucro')).toEqual([]);
     });
 });

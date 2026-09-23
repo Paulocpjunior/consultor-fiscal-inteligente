@@ -19,5 +19,11 @@ export interface ConferenciaBaseInss {
  * é 5.755,54 e a base é 4.604,43.
  */
 export function conferirBaseRetencaoInss(p: { bruto?: number; retido?: number }): ConferenciaBaseInss;
-export function normalizarServicoTomado(d: unknown): any;
-export function montarPayloadR2010(p: { cnpjTomador?: string; competencia?: string; documentos?: unknown[] }): any;
+export function normalizarServicoTomado(d: unknown, ajuste?: unknown): any;
+export function montarPayloadR2010(p: {
+    cnpjTomador?: string;
+    competencia?: string;
+    documentos?: unknown[];
+    /** chave da NOTA → ajuste declarado (o INSS informado à mão vence o documento) */
+    ajustes?: Record<string, any>;
+}): any;

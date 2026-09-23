@@ -21,6 +21,28 @@ export interface BloqueioFimDeMes {
     resumo: string | null;
     acao: string | null;
     onde: string | null;
+    /**
+     * Declarar um envio feito por fora resolve ESTE bloqueio? É false quando o
+     * app JÁ enviou a guia e o que falta é o rito (a cópia na pasta) — ali
+     * declarar outro envio não fecha nada e convida a declarar o que o app fez.
+     * `null` em bloqueio que não é de guia.
+     */
+    podeDeclararEnvio?: boolean | null;
+    /**
+     * Declarar a entrega por fora resolve ESTE bloqueio? Só é true quando o que
+     * trava é obrigação que o catálogo admite não cobrir (o INSS patronal da
+     * MANTOAN, que depende da folha e vive no módulo de DP). Regime indefinido,
+     * prazo de outra UF e UF ausente TÊM conserto — ali a porta não aparece.
+     */
+    podeDeclararCobertura?: boolean | null;
+    /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
+    propostas?: string[] | null;
+    /**
+     * As causas do rito, nomeadas pelo dono do painel de envios ("Empresa sem
+     * pasta do SharePoint", "Sem obrigação correspondente na aba Vencimentos").
+     * `null` fora da etapa 5.
+     */
+    causas?: string[] | null;
 }
 
 export interface FechamentoCompetencia {

@@ -243,9 +243,8 @@ function extrairRetornoXml(soapResposta, metodo = 'ConsultaNFeRecebidas') {
         const retornoMatch = soapResposta.match(/<(?:\w+:)?RetornoXML[^>]*>([\s\S]*?)<\/(?:\w+:)?RetornoXML>/);
         if (retornoMatch) return retornoMatch[1];
 
-        console.error(`[nfse-sp-client] resposta sem ${resultTag} — corpo (primeiros 3000 chars):`, (soapResposta || '').slice(0, 3000));
-        const corpoCurto = (soapResposta || '').slice(0, 200).replace(/\s+/g, ' ').trim();
-        throw new Error(`NFS-e SP: ${resultTag} não localizado. Resposta recebida (início): ${corpoCurto}`);
+        console.error(`[nfse-sp-client] resposta sem ${resultTag}; bytes=${soapResposta?.length || 0}`);
+        throw new Error(`NFS-e SP: ${resultTag} não localizado. O conteúdo fiscal foi omitido do log.`);
     }
     return resultMatch[1]
         .replace(/&lt;/g, '<')
@@ -342,20 +341,19 @@ export async function consultarNfseRecebidas({
     // erro 1102 e 'MensagemXML sem conteúdo'.
     // Usa console.error pra garantir que apareça nos logs do Cloud Run
     // (INFO pode ser filtrado dependendo do nível configurado).
-    console.error(`[nfse-sp] REQUEST cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalTomador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
+    console.error(`[nfse-sp] REQUEST xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
     if (xmlAssinado.includes(']]>')) {
         console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
     if (process.env.SEFAZ_DEBUG === '1') {
-        const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
-        console.error('[nfse-sp-DIAG2] SOAP-COMPLETO len=' + (soap||'').length + ' :: ' + _flat(soap));
+        console.error('[nfse-sp-DIAG2] SOAP-COMPLETO len=' + (soap || '').length);
     }
 
     const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password);
 
     if (statusCode >= 500) {
-        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo da resposta:`, (body || '').slice(0, 2000));
-        throw new Error(`NFS-e SP: HTTP ${statusCode} — ${(body || '').replace(/\s+/g, ' ').slice(0, 300) || 'sem corpo'}`);
+        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo omitido; bytes=${body?.length || 0}`);
+        throw new Error(`NFS-e SP: HTTP ${statusCode} — conteúdo fiscal omitido; bytes=${body?.length || 0}`);
     }
     if (statusCode === 401 || statusCode === 403) {
         return {
@@ -489,30 +487,26 @@ export async function consultarNfseEmitidas({
     const metodo = 'ConsultaNFeEmitidas';
     const soap = envelopeSoap(xmlAssinado, metodo);
 
-    // Log diagnóstico SEMPRE (não precisa SEFAZ_DEBUG=1).
-    console.error(`[nfse-sp] REQUEST-EMITIDAS cnpjRemetente=${cnpjRemetente} CCM=${inscricaoMunicipalPrestador} xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
-    console.error(`[nfse-sp] xmlInterno-EMITIDAS: ${xmlInterno}`);
-    console.error(`[nfse-sp] xmlAssinado-EMITIDAS-head-1500: ${xmlAssinado.slice(0, 1500)}`);
-    console.error(`[nfse-sp] xmlAssinado-EMITIDAS-tail-500: ${xmlAssinado.slice(-500)}`);
+    // Diagnóstico estrutural sem gravar CNPJ, CCM, XML fiscal ou assinatura
+    // nos logs persistentes do Cloud Run. O payload completo continua disponível
+    // somente no retorno interno protegido usado pela tela administrativa.
+    console.error(`[nfse-sp] REQUEST-EMITIDAS xmlInterno.len=${xmlInterno.length} xmlAssinado.len=${xmlAssinado.length} soap.len=${soap.length}`);
     // Test 1.1: o envelope SOAP 1.1 usa text/xml + SOAPAction header.
     // Test 1.2: o envelope SOAP 1.2 usa application/soap+xml + action no Content-Type.
     // Hoje usamos 1.2. Se SP rejeitar 1.1 também, problema é no XML interno.
-    console.error(`[nfse-sp] soap-envelope-FULL: ${soap.replace(/[\r\n]+/g, ' ').slice(0, 5000)}`);
     if (xmlAssinado.includes(']]>')) {
         console.error('[nfse-sp] xmlAssinado contém "]]>" — vai QUEBRAR o CDATA do envelope!');
     }
     if (process.env.SEFAZ_DEBUG === '1') {
-        const _flat = (x) => (x || '').replace(/[\r\n]+/g, ' ');
-        console.error('[nfse-sp-DIAG2] SOAP-EMITIDAS len=' + (soap||'').length + ' :: ' + _flat(soap));
+        console.error('[nfse-sp-DIAG2] SOAP-EMITIDAS len=' + (soap || '').length);
     }
 
     const { statusCode, body } = await postSoap(soap, certs.pfxBuffer, certs.password, SOAP_ACTION_EMITIDAS);
     console.error(`[nfse-sp] RESPONSE-EMITIDAS statusCode=${statusCode} body.len=${body?.length || 0}`);
-    console.error(`[nfse-sp] RESPONSE-EMITIDAS body-head-1500: ${(body || '').replace(/[\r\n]+/g, ' ').slice(0, 1500)}`);
 
     if (statusCode >= 500) {
-        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo da resposta:`, (body || '').slice(0, 2000));
-        throw new Error(`NFS-e SP: HTTP ${statusCode} — ${(body || '').replace(/\s+/g, ' ').slice(0, 300) || 'sem corpo'}`);
+        console.error(`[nfse-sp-client] HTTP ${statusCode} — corpo omitido; bytes=${body?.length || 0}`);
+        throw new Error(`NFS-e SP: HTTP ${statusCode} — conteúdo fiscal omitido; bytes=${body?.length || 0}`);
     }
     if (statusCode === 401 || statusCode === 403) {
         return {

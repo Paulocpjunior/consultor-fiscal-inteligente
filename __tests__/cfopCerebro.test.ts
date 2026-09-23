@@ -86,31 +86,31 @@ describe('🚨 VIGÊNCIA NÃO RETROAGE — mês já entregue não muda de CFOP s
 
 describe('🚨 a PRECEDÊNCIA: a NF vence o cérebro', () => {
     it('sem parâmetro, vale a régua automática', () => {
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([]))).toBe('1403');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([]), null)).toBe('1403');
     });
 
     it('com parâmetro, ele vence a régua', () => {
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]))).toBe('1407');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]), null)).toBe('1407');
     });
 
     it('mas a decisão NAQUELA NF vence o parâmetro — quem corrigiu olhou a nota', () => {
         const doc = { ...nota('2026-07'), cfopEscriturado: '1949' };
-        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx([param()]))).toBe('1949');
+        expect(cfopDoLancamento(doc, '5405', 'entrada', ctx([param()]), null)).toBe('1949');
     });
 
     it('e a competência anterior continua na régua, mesmo com parâmetro criado', () => {
-        expect(cfopDoLancamento(nota('2026-06'), '5405', 'entrada', ctx([param()]))).toBe('1403');
+        expect(cfopDoLancamento(nota('2026-06'), '5405', 'entrada', ctx([param()]), null)).toBe('1403');
     });
 
     it('🚨 SAÍDA não aprende — o CFOP da nota própria já é o certo', () => {
         // Aprender na saída seria reescrever o que o cliente emitiu.
-        expect(cfopDoLancamento(nota('2026-07'), '5405', 'saida', ctx([param()]))).toBe('5405');
+        expect(cfopDoLancamento(nota('2026-07'), '5405', 'saida', ctx([param()]), null)).toBe('5405');
     });
 });
 
 describe('a ORIGEM diz que veio do cérebro, e de quem', () => {
     it('nomeia o parâmetro, o escopo e a vigência', () => {
-        const o = origemDoCfopLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]));
+        const o = origemDoCfopLancamento(nota('2026-07'), '5405', 'entrada', ctx([param()]), null);
         expect(o.origem).toBe('cerebro');
         expect(o.rotulo).toMatch(/parâmetro do fornecedor \(CFOP 5405, desde 2026-07\)/);
         expect(o.por).toBe('colab@sp.com.br');
@@ -176,8 +176,21 @@ describe('🚨 a gravação valida e o desligar não apaga', () => {
         expect(fonte).not.toMatch(/deleteDoc\(/);
     });
 
-    it('falha de leitura devolve [] — o cérebro é palpite, não trava', () => {
-        expect(fonte).toMatch(/catch \{\s*\n\s*return \[\];/);
+    /**
+     * 📌 ASSERÇÃO TROCADA PELA INTENÇÃO (10/09). Ela prendia o TEXTO
+     * `catch { return []; }` — e essa forma VIROU o defeito: a recusa do banco
+     * (consulta sem `limit`, que a regra nega) saía como "esta empresa não tem
+     * parâmetro", e o Paulo leu "não grava" sobre parâmetro gravado.
+     *
+     * A intenção que ela protege continua de pé, e é a que importa: o cérebro é
+     * palpite, não trava — a leitura NÃO lança, e sem ela a régua automática
+     * segue valendo. O que mudou é o silêncio: o erro sai NOMEADO.
+     */
+    it('falha de leitura não derruba nada — devolve vazio com o erro NOMEADO', () => {
+        expect(fonte).toMatch(/catch \(e: any\) \{[\s\S]{0,200}?erro: e\?\.message/);
+        expect(fonte).toMatch(/parametros: \[\], erro: e\?\.message|erro: e\?\.message \|\| String\(e\)/);
+        // E o limite é o que impede a recusa de acontecer, para começar.
+        expect(fonte).toMatch(/batchSize: LIMITE_LIST_PARAMETROS/);
     });
 
     it('a coleção está no catálogo do banco e nas rules', () => {

@@ -26,6 +26,14 @@
 // cliente — igual ao G125 e ao bloco de ST. Os testes travam a estrutura.
 // ============================================================================
 
+// 🚨 29/08 — AS LINHAS SAÍAM SEM O `|` INICIAL E SEM O `\r\n`, montadas à mão
+// com `join('|')`. O orquestrador junta os blocos com `join('')`, então o
+// C195/C197 saía COLADO na linha anterior do bloco C. É a SEGUNDA instância
+// viva do caso REALITY (21/08) achada no mesmo dia — a primeira foi o bloco G —,
+// e ela nunca apareceu porque o C197 só sai com o COD_AJ da tabela 5.3
+// CADASTRADO, e ninguém cadastrou ainda. A lição de 21/08 estava escrita:
+// *"módulo novo que bypassar o buildLine cai na R15"*.
+import * as fmt from './sped-fiscal-format.js';
 import { ufEmitente, cfopNaOticaDeEntrada } from './participante-doc-helper.js';
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção.
 import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
@@ -169,9 +177,9 @@ export function montarC197Difal({
 
         const linhas = [];
         if (codObservacao) {
-            linhas.push(['C195', codObservacao, 'DIFAL aquisicao interestadual', ''].join('|'));
+            linhas.push(fmt.buildLine(['C195', codObservacao, TXT_OBS_DIFAL]));
         }
-        linhas.push([
+        linhas.push(fmt.buildLine([
             'C197',
             String(codigoAjuste).trim(),      // COD_AJ (tabela 5.3 do estado)
             'DIFAL aquisicao interestadual',  // DESCR_COMPL_AJ
@@ -180,8 +188,7 @@ export function montarC197Difal({
             dec(aliqInterna),                 // ALIQ_ICMS
             dec(calc.difal),                  // VL_ICMS
             dec(0),                           // VL_OUTROS
-            '',
-        ].join('|'));
+        ]));
         linhasPorChave[chave] = linhas;
     }
 
@@ -210,4 +217,41 @@ export function montarC197Difal({
     );
 
     return { porNota, linhasPorChave, avisos, totalDifal };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0460 — O CADASTRO QUE O C195 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 📖 Guia 3.2.3, 0460 campo 02, Validação: *"o valor informado neste campo deve
+// existir em pelo menos um registro dos demais blocos"*; e o C195 campo 02:
+// *"o código informado deve constar do registro 0460"*.
+//
+// 🔴 O app emitia o C195 com o `COD_OBS` do cadastro e **nenhum 0460**: a
+// anotação apontava para uma tabela que o arquivo não declara. É a MESMA classe
+// do bem do G125 sem 0300 (achada horas antes), do item órfão do 0200 (PWR,
+// 19/08) e do participante órfão do 0150.
+//
+// ⚠️ E A VALIDAÇÃO CORTA NOS DOIS SENTIDOS: um 0460 que NENHUM registro
+// referencia também é recusado. Por isso ele só sai quando o C195 de fato saiu —
+// e é o bloco C que sabe disso, não o cadastro.
+//
+// ⚠️ O `TXT` é `Obrig. O` e NÃO é inventado: ele leva a MESMA anotação que o
+// C195 já escreve no `TXT_COMPL`. Duas descrições para a mesma observação
+// fariam o arquivo se contradizer.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A anotação que o C195 e o 0460 compartilham — uma fonte, não duas. */
+export const TXT_OBS_DIFAL = 'DIFAL aquisicao interestadual';
+
+/**
+ * 0460 — Tabela de Observações do Lançamento Fiscal.
+ *
+ * @param {string} codObservacao COD_OBS cadastrado (o mesmo que vai no C195).
+ * @param {boolean} houveC195    O bloco C emitiu ao menos um C195?
+ * @returns {string[]} zero ou uma linha.
+ */
+export function montarRegistro0460(codObservacao, houveC195) {
+    const cod = String(codObservacao || '').trim();
+    if (!cod || !houveC195) return [];
+    return [fmt.buildLine(['0460', fmt.sanitizeString(cod, 6), TXT_OBS_DIFAL])];
 }

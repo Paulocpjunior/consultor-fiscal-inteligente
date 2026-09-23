@@ -35,6 +35,7 @@ import {
   LIMITE_CNPJS_DIRIGIDOS, RESPIRO_ENTRE_EMPRESAS_MS,
 } from './cnpjs-dirigidos.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+import { temCcmSp } from './ccm-sp.js';
 
 const router = express.Router();
 
@@ -1198,8 +1199,9 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           const snap = await db.collection(col).get();
           snap.forEach(doc => {
             const d = doc.data();
-            // Cadastro unico dadosFiscais.ccmSp (fallback top-level legado)
-            if ((d.dadosFiscais?.ccmSp || d.ccmSp || '').toString().trim() && d.nfseSpAutorizadoEm) total++;
+            // CCM pelo dono: só-zeros NÃO conta como elegível (a empresa não
+            // casa no dropdown do portal, então contá-la infla o KPI).
+            if (temCcmSp(d) && d.nfseSpAutorizadoEm) total++;
           });
         }
         return { total, travadas: null };

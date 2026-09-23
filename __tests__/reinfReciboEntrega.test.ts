@@ -219,9 +219,26 @@ describe('rota do fechamento da competência', () => {
         expect(rota).not.toMatch(/reinf_fechamentos[\s\S]{0,600}eventoXml|conteudo:/);
     });
 
+    // 🚨 FIXTURE TROCADA EM 02/09: ela exigia o TEXTO `DEPARTAMENTO FISCAL…
+    // RECIBOS` dentro da rota — ou seja, exigia que a rota montasse o caminho
+    // à mão, que é justamente o defeito. A árvore medida não tem grupo, e o
+    // caminho passou a ter DONO. Travar a forma antiga impediria a correção.
     it('RECIBOS é pasta irmã de IMPOSTOS — guia e prova de entrega não se misturam', () => {
-        expect(rota).toMatch(/DEPARTAMENTO FISCAL[\s\S]{0,80}RECIBOS/);
-        expect(rota).toMatch(/sem sharePointConfig/);
+        expect(rota).toMatch(/from '\.\/caminho-sharepoint\.js'/);
+        expect(rota).toMatch(/caminhoRecibos\(\{ pastaEmpresa/);
+    });
+
+    // ⚠️ A pasta é ACHADA pelo Cod.Cliente e a frase da recusa vem do DONO:
+    // uma cópia aqui divergiria da que o auto-sync mostra no MESMO caso, e o
+    // colaborador leria duas instruções diferentes para o mesmo problema.
+    it('a pasta da empresa vem do dono, não de um sharePointConfig do cadastro', () => {
+        expect(rota).toMatch(/from '\.\/sharepoint-pastas\.js'/);
+        expect(rota).toMatch(/resolverPastaDaEmpresa\(empresa\._doc\)/);
+        // ⚠️ Lê CÓDIGO, nunca a prosa: o comentário que EXPLICA a correção cita
+        // o campo morto, e a asserção sobre o arquivo inteiro reprovava a
+        // própria correção (a mordida do ISS, 22/08).
+        const codigo = rota.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+        expect(codigo).not.toMatch(/sharePointConfig/);
     });
 });
 

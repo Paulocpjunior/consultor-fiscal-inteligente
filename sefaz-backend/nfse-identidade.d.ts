@@ -9,6 +9,17 @@ export function idDocumentoNfseSp(p: {
     numero: string | number;
 }): string;
 
+/**
+ * Id do documento de NFS-e — a **chave nacional vence** a fórmula por partes.
+ * Sem chave, cai em `idDocumentoNfseSp` (que exige número).
+ */
+export function idDocumentoNfse(p: {
+    chave?: string | null;
+    prestadorCnpj?: string | null;
+    tomadorCnpj?: string | null;
+    numero?: string | number;
+}): string;
+
 export function ehDigitada(existente: { origem?: string } | null | undefined): boolean;
 
 /** `{}` quando não havia digitada — nada a limpar. */

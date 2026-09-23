@@ -36,7 +36,7 @@ describe('getFriendlyErrorMessage', () => {
 
     it('traduz API key faltando', () => {
         const r = getFriendlyErrorMessage(new Error('API Key must be set'));
-        expect(r).toContain('VITE_GEMINI_API_KEY');
+        expect(r).toContain('servidor');
     });
 
     it('traduz bloqueio do filtro de seguranca', () => {

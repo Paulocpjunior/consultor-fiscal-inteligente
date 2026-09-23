@@ -42,13 +42,13 @@ export function getFriendlyErrorMessage(error: unknown): string {
         return 'Erro de conexão. Verifique sua internet e tente novamente.';
     }
     if (message.includes('pattern') || message.includes('DOMException')) {
-        return 'Erro ao conectar com a API. Verifique se a chave da API (VITE_GEMINI_API_KEY) está configurada corretamente no arquivo .env.';
+        return 'Erro ao conectar com o serviço de IA. Avise o administrador para conferir a configuração segura do servidor.';
     }
     if (message.includes('invalid characters') || message.includes('API Key contains')) {
-        return 'A chave da API contém caracteres inválidos. Verifique o valor de VITE_GEMINI_API_KEY no arquivo .env.';
+        return 'Erro: a configuração da IA foi recusada. Avise o administrador para conferir a chave protegida no servidor.';
     }
     if (message.includes('process is not defined') || message.includes('GEMINI_API_KEY') || message.includes('API Key must be set')) {
-        return 'A chave da API do Gemini não foi configurada. Por favor, configure a variável VITE_GEMINI_API_KEY no arquivo .env.';
+        return 'Erro: o serviço de IA não está configurado no servidor. Avise o administrador.';
     }
     if (message.includes('filtro de segurança') || message.includes('SAFETY')) {
         return 'A consulta foi bloqueada pelo filtro de segurança da IA. Tente reformular sua pergunta.';

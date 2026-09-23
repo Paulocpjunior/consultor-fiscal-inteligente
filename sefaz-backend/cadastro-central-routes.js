@@ -9,6 +9,10 @@
 //   GET /api/admin/cadastro/responsaveis/:cnpj
 //   GET /api/admin/cadastro/certificados          (fase 3 — METADADO, nunca a chave)
 //   GET /api/admin/cadastro/certificados/:cnpj
+//   GET /api/admin/cadastro/fechamentos?competencia=      (fase 5 — o CCI importa)
+//   GET /api/admin/cadastro/fechamentos/:cnpj?competencia=
+//   GET /api/admin/cadastro/dere-carteira?competencia=      (🏦 DeRE — a fila)
+//   GET /api/admin/cadastro/dere-d1001-previa?cnpj=&tpAmb=  (🏦 DeRE — prévia do D-1001, sem transmitir)
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -31,6 +35,14 @@ import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { decidirAcessoHorario, travaArmada, validarHorarioAcesso } from './horario-acesso.js';
 import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { triarCarteira } from './triagem-terceiro-setor.js';
+import { triarCarteiraDere } from './dere.js';
+import { montarEventoD1001 } from './dere-evento-d1001.js';
+import { conferirXmlContraXsd } from './dere-xsd-bolso.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+import { regimeDaEmpresa } from './regime-tributario.js';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
@@ -38,6 +50,11 @@ import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-cert
 import {
     montarUsuariosCadastro, normalizarUsuarioCadastro, acessoAoModulo, validarDepartamentos,
 } from './cadastro-central-departamentos.js';
+// 🔒 FASE 5 — o Contábil importa o FECHAMENTO, nunca a ficha (a ficha é um
+// registro VIVO: alguém edita e o número muda depois da importação).
+import { linhaDoFechamento, resumirFechamentos } from './cadastro-central-fechamentos.js';
+import { lerFechamentoDaCompetencia, lerFechamentosDaCompetencia } from './fechamento-store.js';
+import { normalizarCompetencia } from './competencia.js';
 
 const router = Router();
 
@@ -89,6 +106,93 @@ router.get('/triagem-terceiro-setor', autorizar, async (req, res) => {
         return res.status(500).json({ error: e?.message || 'Falha na triagem.' });
     }
 });
+
+/**
+ * 🏦 DeRE — quem está, quem PARECE estar, e quando vence (02/09).
+ *
+ * Paulo: *"crie uma nova função capaz de atender esta obrigação chamada DERE"*.
+ * A resposta do app é a FILA: obrigadas (cadastro afirma regime específico de
+ * IBS/CBS), candidatas (o CNAE sugere e o cadastro não diz), regimes que a
+ * documentação lida não confirma, e o que ficou de fora — contado. Consulta
+ * PURA, como a triagem do terceiro setor: quem grava é o cadastro.
+ *
+ * `?competencia=` em 'AAAA-MM' ou 'MM/AAAA'; sem ela, o mês anterior ao atual.
+ */
+/**
+ * 🧾 PRÉVIA DO D-1001 — o primeiro evento da DeRE que o CFI monta (Paulo,
+ * 02/09: "Fiscal, tudo roda no Fiscal"). Lê o doc CRU da empresa (o insumo
+ * mora em `dadosFiscais`), monta o XML SEM assinatura e o confere contra o
+ * XSD oficial servido pelo próprio app. NÃO grava, NÃO assina, NÃO transmite.
+ *
+ * `?cnpj=` (14) · `?tpAmb=` 1 produção / 2 produção restrita (padrão 2).
+ * Pendência de cadastro volta 200 com `evento.ok=false` e a lista NOMEADA —
+ * é resposta, não erro: quem lê precisa saber o que preencher.
+ */
+router.get('/dere-d1001-previa', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.query.cnpj);
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        const db = getDb();
+        const ref = await acharEmpresaCadastrada(db, cnpj);
+        if (!ref) return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI.` });
+        const snap = await db.collection(ref.colecao).doc(ref.empresaId).get();
+        const doc = { id: snap.id, colecao: ref.colecao, ...(snap.data() || {}) };
+        const regime = regimeDaEmpresa(doc).regime;
+        const evento = montarEventoD1001(doc, { regimeCatalogo: regime, tpAmb: req.query.tpAmb === '1' ? 1 : 2 });
+        let conferenciaXsd = null;
+        if (evento.ok) {
+            const xsd = lerXsdServido(evento.resumo.xsd);
+            conferenciaXsd = xsd
+                ? conferirXmlContraXsd(evento.xml, xsd)
+                : { ok: false, erros: [`XSD ${evento.resumo.xsd} não encontrado no servidor — a prévia saiu SEM conferência de schema.`], avisos: [], raiz: null, namespace: null };
+        }
+        return res.json({ ok: evento.ok && !!conferenciaXsd?.ok, evento, conferenciaXsd, regimeCatalogo: regime });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao montar a prévia do D-1001.' });
+    }
+});
+
+/**
+ * O XSD é servido pelo app (public/ → dist/docs/dere/xsd). A imagem de runtime
+ * copia `dist` e `sefaz-backend`, NÃO `docs/` — ler de `docs/dere/xsd` aqui
+ * funcionaria no jest e quebraria no Cloud Run (a lição do `services/` de 27/08).
+ */
+function lerXsdServido(arquivo) {
+    const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
+    for (const dir of ['dist/docs/dere/xsd', 'public/docs/dere/xsd']) {
+        const p = join(raiz, dir, arquivo);
+        if (existsSync(p)) return readFileSync(p, 'utf8');
+    }
+    return null;
+}
+
+router.get('/dere-carteira', autorizar, async (req, res) => {
+    try {
+        const comp = competenciaDaConsulta(req.query.competencia);
+        if (!comp) {
+            return res.status(400).json({ error: 'Competência inválida — use AAAA-MM ou MM/AAAA.' });
+        }
+        const cadastro = await lerCadastro(getDb());
+        return res.json({ ok: true, ...triarCarteiraDere(cadastro.empresas, comp) });
+    } catch (e) {
+        return res.status(500).json({ error: e?.message || 'Falha ao levantar a DeRE da carteira.' });
+    }
+});
+
+/** 'AAAA-MM' | 'MM/AAAA' → 'MM/AAAA' (o formato do catálogo). Vazio = mês anterior. */
+function competenciaDaConsulta(bruto) {
+    const t = String(bruto || '').trim();
+    if (!t) {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() - 1);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+    const iso = normalizarCompetencia(t);
+    if (!iso) return null;
+    const [ano, mes] = iso.split('-');
+    return `${mes}/${ano}`;
+}
 
 router.get('/empresas', autorizar, async (req, res) => {
     try {
@@ -235,6 +339,82 @@ router.get('/certificados/:cnpj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[cadastro-central/certificados/cnpj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── FECHAMENTOS DA COMPETÊNCIA (fase 5, 26/08) ──────────────────────────────
+//
+// Paulo: *"o departamento contábil, através do CCI, deve fazer a importação
+// com a mesma exatidão dos valores apurados e o mês fechado"*.
+//
+// ⚠️ O QUE ATRAVESSA É O CARIMBO, NUNCA A FICHA. A ficha é um registro VIVO —
+// servi-la aqui faria o Contábil puxar um valor que pode mudar depois, e a
+// divergência voltaria pela porta de trás, calada.
+//
+// ⚠️ E O CCI NÃO RECALCULA: a `ressalva` vai em toda linha entregue. É a régua
+// já provada no R-2055 — dois números para o mesmo fato é o pior defeito de um
+// arquivo fiscal.
+
+/** A competência da consulta — sem ela não há o que responder. */
+function competenciaDaQuery(req) {
+    return normalizarCompetencia(req.query.competencia);
+}
+
+router.get('/fechamentos', autorizar, async (req, res) => {
+    try {
+        const competencia = competenciaDaQuery(req);
+        if (!competencia) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Informe a competência (?competencia=AAAA-MM). Sem ela não dá para dizer QUAL '
+                    + 'mês foi fechado — e importar o mês errado não volta atrás.',
+            });
+        }
+        const db = getDb();
+        const { empresas } = await lerCadastro(db);
+        // 🚨 UMA query para os carimbos da competência inteira. O laço que
+        // estava aqui fazia ~420 leituras por chamada — a MESMA classe que
+        // produziu o HTTP 429 na Rotina do Mês (27/08), e aqui num túnel que
+        // outro app chama.
+        const carimbos = await lerFechamentosDaCompetencia(db, competencia);
+        const linhas = empresas.map((empresa) => linhaDoFechamento({
+            empresa, competencia, fechamento: carimbos.get(String(empresa.id)) || null,
+        }));
+        return res.json({ ok: true, competencia, resumo: resumirFechamentos(linhas), fechamentos: linhas });
+    } catch (e) {
+        console.error('[cadastro-central/fechamentos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/fechamentos/:cnpj', autorizar, async (req, res) => {
+    try {
+        const cnpj = soDigitos(req.params.cnpj);
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        }
+        const competencia = competenciaDaQuery(req);
+        if (!competencia) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência (?competencia=AAAA-MM).' });
+        }
+        const db = getDb();
+        const { empresas } = await lerCadastro(db);
+        const empresa = acharEmpresaPorCnpj(empresas, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI. Confira o número; se estiver `
+                    + 'certo, a empresa precisa ser cadastrada.',
+            });
+        }
+        // Empresa cadastrada e com a competência ABERTA responde 200 com o
+        // motivo, não 404: ela existe, e "ainda não fechou" é a resposta, não a
+        // ausência dela — é o mesmo desenho do certificado.
+        const fechamento = await lerFechamentoDaCompetencia(db, empresa.id, competencia);
+        return res.json({ ok: true, ...linhaDoFechamento({ empresa, competencia, fechamento }) });
+    } catch (e) {
+        console.error('[cadastro-central/fechamentos/cnpj]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

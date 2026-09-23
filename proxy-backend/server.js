@@ -10,6 +10,9 @@ import {
     syncXmlsFromFolder,
     uploadXmlToFolder,
     checkCredentials,
+    checkAuth,
+    listarSites,
+    listarPastas,
 } from './sharepoint-sync.js';
 
 const app = express();
@@ -102,10 +105,18 @@ app.get('/health', (_req, res) => {
 app.use('/api/sharepoint', requireProxyAuth);
 
 // ─── SharePoint: Health check ────────────────────────────────────────────────
-app.get('/api/sharepoint/health', (_req, res) => {
-    const status = checkCredentials();
+// 🚦 O /health TENTA O TOKEN — validação por RESULTADO, não por status.
+//
+// Até 28/08 ele respondia `ok` sempre que CLIENT_ID e CLIENT_SECRET existiam,
+// SEM olhar o tenant. Com o tenant cravado errado no workflow, o proxy não
+// gravava NADA (nem XML, nem a cópia da guia do rito) e o card do CFI mostrava
+// "✓ Conectado" em verde. `configured` continua saindo — ele distingue "faltou
+// preencher" de "preencheram errado", e são ações diferentes —, mas o VEREDITO
+// agora é `tokenOk`.
+app.get('/api/sharepoint/health', async (_req, res) => {
+    const status = await checkAuth();
     res.json({
-        status: status.configured ? 'ok' : 'missing_credentials',
+        status: status.tokenOk ? 'ok' : (status.configured ? 'auth_failed' : 'missing_credentials'),
         ...status,
         timestamp: new Date().toISOString(),
     });
@@ -178,6 +189,38 @@ app.post('/api/sharepoint/sync', async (req, res) => {
     } catch (err) {
         console.error('Erro SharePoint (sync):', err?.message);
         return res.status(500).json({ error: err?.message || 'Erro ao sincronizar XMLs.' });
+    }
+});
+
+// ─── SharePoint: EXPLORAR — "a árvore está em qual site?" ───────────────────
+//
+// 🔎 02/09. O erro passou a dizer onde procurou e sobrou uma pergunta
+// factual: a pasta Empresas/…/XML SAÍDA existe em /sites/ClientesSP2 ou em
+// /sites/GRUPOFISCAL? Devolver essa pergunta para uma pessoa navegar no
+// SharePoint é o que este dia inteiro ensinou a não fazer — o token já
+// funciona, então quem responde é o app.
+//
+// ⚠️ Só LISTA nome de pasta. Não baixa, não grava, não lê conteúdo.
+app.post('/api/sharepoint/explorar', async (req, res) => {
+    const { caminho = '', sitePath = '' } = req.body || {};
+    try {
+        const token = await getAccessToken();
+        return res.json(await listarPastas(token, String(caminho), String(sitePath)));
+    } catch (err) {
+        console.error('Erro SharePoint (explorar):', err?.message);
+        return res.status(500).json({ error: err?.message || 'Erro ao explorar pasta.' });
+    }
+});
+
+// ─── SharePoint: os sites que esta credencial enxerga ───────────────────────
+app.post('/api/sharepoint/sites', async (req, res) => {
+    const { busca = '*' } = req.body || {};
+    try {
+        const token = await getAccessToken();
+        return res.json({ sites: await listarSites(token, String(busca)) });
+    } catch (err) {
+        console.error('Erro SharePoint (sites):', err?.message);
+        return res.status(500).json({ error: err?.message || 'Erro ao listar sites.' });
     }
 });
 

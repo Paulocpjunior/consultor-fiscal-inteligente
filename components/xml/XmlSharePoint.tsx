@@ -4,12 +4,20 @@ import {
     checkSharePointHealth,
     syncSharePointFolder,
     buildFolderPath,
+    explorarPasta,
+    listarSitesSharePoint,
     type SharePointHealthStatus,
     type SharePointSyncResult,
+    type SharePointNivel,
+    type SharePointSite,
 } from '../../services/sharePointXmlService';
 import { importXmlManual, getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { isFirebaseConfigured, auth } from '../../services/firebaseConfig';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
+// 🚨 O veredito da conexão sai do RESULTADO da última rodada, não de
+// `configured` (que só diz que as variáveis estão preenchidas). Ver o print de
+// 28/08: verde em cima, 57 erros de token embaixo.
+import { vereditoConexaoSharePoint } from '../../services/sharepointConexaoVeredito';
 
 interface SharePointLastSync {
     competencia?: string;
@@ -70,7 +78,10 @@ const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | nu
             )}
             {!temErroFatal && (lastSync.empresasComConfigIncompleta ?? 0) > 0 && (
                 <>
-                    {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) com grupo/pasta não preenchidos (nada sincronizado para elas)</span>
+                    {/* A causa não é mais "grupo/pasta em branco" (campo morto):
+                        é a pasta que não resolveu, e o motivo de cada uma sai na
+                        lista de empresas logo abaixo. */}
+                    {' '}— <span className="text-amber-700 dark:text-amber-300">{lastSync.empresasComConfigIncompleta} empresa(s) cuja pasta não foi encontrada no SharePoint (nada sincronizado para elas)</span>
                 </>
             )}
             {/* Motivo dominante dos erros JUNTO da contagem (farol honesto) —
@@ -113,12 +124,39 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     const [empresaId, setEmpresaId] = useState('');
 
-    const [grupo, setGrupo] = useState('');
     const [empresaPasta, setEmpresaPasta] = useState('');
     const [ano, setAno] = useState(String(new Date().getFullYear()));
     const [mes, setMes] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
     const [direcao, setDirecao] = useState<'SAÍDA' | 'ENTRADA'>('SAÍDA');
     const [customPath, setCustomPath] = useState('');
+    // 🔎 Explorador — responde "a árvore está em qual site?" sem ninguém navegar.
+    const [nivel, setNivel] = useState<SharePointNivel | null>(null);
+    const [sites, setSites] = useState<SharePointSite[] | null>(null);
+    const [explorando, setExplorando] = useState(false);
+    const [erroExplorar, setErroExplorar] = useState<string | null>(null);
+    const [buscaSite, setBuscaSite] = useState('');
+    const [buscaPasta, setBuscaPasta] = useState('');
+
+    // 🚨 A BUSCA DO GRAPH DEVOLVE TUDO — inclusive `/contentstorage/...`, que é
+    // armazenamento PESSOAL (OneDrive), e as entradas "Designer"/"Pages"/"My
+    // workspace" que a Microsoft cria sozinha. Numa lista de centenas, achar o
+    // site do escritório a olho é impossível: sobra ruído e a pessoa desiste.
+    // ⚠️ Filtrar é recorte, e recorte se DIZ — o contador abaixo mostra
+    // quantas ficaram de fora, senão isto vira "meu site não existe".
+    const sitesDeEquipe = (sites || []).filter(s => s.caminho.startsWith('/sites/'))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    // Filtro do nível aberto — um `/Empresas` tem uma pasta por cliente.
+    const pastasVisiveis = (() => {
+        const q = buscaPasta.trim().toLowerCase();
+        const todas = nivel?.pastas || [];
+        return q ? todas.filter(p => p.nome.toLowerCase().includes(q)) : todas;
+    })();
+
+    const sitesVisiveis = (() => {
+        const q = buscaSite.trim().toLowerCase();
+        const casam = q ? sitesDeEquipe.filter(s => `${s.nome} ${s.caminho}`.toLowerCase().includes(q)) : sitesDeEquipe;
+        return casam.slice(0, 60);
+    })();
     const [useCustom, setUseCustom] = useState(false);
 
     const empresaSelecionada = empresas.find(e => e.id === empresaId);
@@ -147,19 +185,69 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
 
     const folderPath = useCustom
         ? customPath
-        : buildFolderPath(grupo, ano, mes, empresaPasta, direcao);
+        : buildFolderPath(empresaPasta, ano, mes, direcao);
 
     // Campos obrigatorios faltando (so no modo guiado) — sinaliza ao colaborador
     // o que impede a pasta de ser encontrada.
+    // 🚨 O campo GRUPO SAIU (02/09): esse nível não existe na árvore real. O
+    // que resta é a pasta REAL da empresa (`0040_Clinica Mantoan`), que se
+    // descobre no explorador acima — ela é humana e não se monta.
     const faltando = useCustom ? [] : ([
-        !grupo.trim() && 'Grupo',
         !empresaPasta.trim() && 'Empresa (pasta)',
         !ano.trim() && 'Ano',
     ].filter(Boolean) as string[]);
 
+    // `sitePath` vazio = o site que o proxy resolve hoje. Passar outro deixa
+    // CONFERIR o vizinho sem mexer na configuração — que é justamente a dúvida
+    // de 02/09 (a árvore está em ClientesSP2 ou no site do link?).
+    const [siteExplorado, setSiteExplorado] = useState('');
+    const explorar = async (caminho: string, sitePath?: string) => {
+        const alvo = sitePath !== undefined ? sitePath : siteExplorado;
+        setExplorando(true);
+        setErroExplorar(null);
+        setSites(null);
+        setSiteExplorado(alvo);
+        // ⚠️ Filtro do nível ANTERIOR esconderia tudo no nível novo, e a pessoa
+        // leria "pasta vazia" sobre uma pasta cheia.
+        setBuscaPasta('');
+        try {
+            setNivel(await explorarPasta(caminho, alvo));
+        } catch (e: any) {
+            // ⚠️ A mensagem do Graph vai INTEIRA: ela já carrega o site em que
+            // procurou, e é esse o dado que responde a pergunta.
+            setErroExplorar(e?.message || 'Falha ao ler a pasta.');
+            setNivel(null);
+        } finally {
+            setExplorando(false);
+        }
+    };
+
+    const carregarSites = async () => {
+        setExplorando(true);
+        setErroExplorar(null);
+        setNivel(null);
+        try {
+            setSites(await listarSitesSharePoint());
+        } catch (e: any) {
+            setErroExplorar(e?.message || 'Falha ao listar sites.');
+            setSites(null);
+        } finally {
+            setExplorando(false);
+        }
+    };
+
     const handleSync = async () => {
         if (!folderPath.trim()) {
             setErro('Preencha o caminho da pasta.');
+            return;
+        }
+        // ⚠️ Rede E botão: o botão fica apagado, mas a recusa vive aqui porque
+        // é ela que NOMEIA o campo. Mandar o caminho com pedaço vazio produz
+        // um "a pasta não existe" do SharePoint sobre uma pasta que existe.
+        if (faltando.length > 0) {
+            setErro(`Falta preencher: ${faltando.join(', ')}. Sem isso o caminho sai com pedaços vazios `
+                + '(Empresas//DEPARTAMENTO FISCAL/…) e o SharePoint responde que a pasta não existe — '
+                + 'o problema não é a pasta.');
             return;
         }
         setLoading(true);
@@ -215,13 +303,38 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 <h3 className="text-sm font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
                     Conexão SharePoint
                 </h3>
-                {health === null ? (
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Verificando...</p>
-                ) : health.configured ? (
-                    <p className="text-xs" style={{ color: 'var(--success, #22c55e)' }}>
-                        ✓ Conectado · {health.sharepointHost} · {health.sitePath}
-                    </p>
-                ) : (
+                {/* 🚨 O VEREDITO SAI DO RESULTADO, NÃO DE `configured` (28/08).
+                    `configured` responde "as variáveis estão preenchidas?" — e
+                    no print do Paulo elas estavam, com 57 erros de
+                    `AADSTS90002: Tenant not found` logo abaixo. Verde em cima,
+                    verdade embaixo: duas leituras do mesmo fato no mesmo card,
+                    com a mentira na posição do veredito. */}
+                {(() => {
+                    const v = vereditoConexaoSharePoint({ health, lastSync: autoSyncLastSync });
+                    if (v.cor === 'erro' && health && !health.configured) return null;  // o bloco detalhado abaixo
+                    const cores: Record<string, string> = {
+                        ok: 'var(--success, #22c55e)',
+                        atencao: 'var(--warning, #f59e0b)',
+                        erro: 'var(--danger, #ef4444)',
+                        indeterminado: 'var(--text-muted)',
+                    };
+                    return (
+                        <div className="text-xs space-y-1" style={{ color: cores[v.cor] }}>
+                            <p className={v.cor === 'ok' ? '' : 'font-semibold'}>
+                                {v.titulo}
+                                {v.cor === 'ok' && health?.sharepointHost
+                                    && ` · ${health.sharepointHost} · ${health.sitePath}`}
+                            </p>
+                            {v.detalhe && (
+                                <p className="font-mono text-[11px] break-all" style={{ color: 'var(--text-muted)' }}>
+                                    {v.detalhe}
+                                </p>
+                            )}
+                            {v.acao && <p style={{ color: 'var(--text-muted)' }}>→ {v.acao}</p>}
+                        </div>
+                    );
+                })()}
+                {health === null ? null : health.configured ? null : (
                     <div className="text-xs space-y-1" style={{ color: 'var(--danger, #ef4444)' }}>
                         <p className="font-semibold">✗ Proxy SharePoint indisponível.</p>
                         <p style={{ color: 'var(--text-muted)' }}>
@@ -253,12 +366,165 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 </p>
                 <div className="text-xs font-mono p-2.5 rounded break-all"
                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-                    Empresas / <b style={{ color: 'var(--accent)' }}>GRUPO</b> / DEPARTAMENTO FISCAL / <b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>MÊS</b>-<b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>EMPRESA</b> / XML <b style={{ color: 'var(--accent)' }}>SAÍDA</b>
+                    Empresas / <b style={{ color: 'var(--accent)' }}>CÓDIGO_NOME DA EMPRESA</b> / Departamento Fiscal / <b style={{ color: 'var(--accent)' }}>ANO</b> / <b style={{ color: 'var(--accent)' }}>MÊS POR EXTENSO</b> / XML <b style={{ color: 'var(--accent)' }}>SAÍDA</b>
                 </div>
                 <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
-                    Exemplo: <code>Empresas/Grupo Flanacar/DEPARTAMENTO FISCAL/2026/07-2026/CMM/XML SAÍDA</code>
+                    Exemplo: <code>Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Setembro/XML SAÍDA</code>
                     {' '}— para notas recebidas, troque o fim por <code>XML ENTRADA</code>.
                 </p>
+
+                {/* 🔎 "A ÁRVORE ESTÁ EM QUAL SITE?" — o app responde, ninguém navega.
+                    02/09: o erro passou a dizer onde procurou (404 em /sites/ClientesSP2)
+                    e sobrou uma pergunta factual. Mandar uma pessoa navegar no SharePoint
+                    para responder é o que este dia inteiro ensinou a não fazer. */}
+                <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* 🐛 Ele ficava preso no ÚLTIMO site aberto: quem clicasse num site
+                            da lista e depois aqui via o MESMO site de novo, achando que
+                            estava vendo a biblioteca do proxy — e não havia caminho de
+                            volta. "Esta biblioteca" é a que o proxy usa; o `''` volta a ela. */}
+                        <button
+                            type="button"
+                            onClick={() => void explorar('', '')}
+                            disabled={explorando}
+                            className="px-3 py-1.5 text-[11px] font-bold rounded-lg btn-press whitespace-nowrap disabled:opacity-40"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            {explorando ? 'Lendo…' : '🔎 O que existe nesta biblioteca?'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void carregarSites()}
+                            disabled={explorando}
+                            className="px-3 py-1.5 text-[11px] font-bold rounded-lg btn-press whitespace-nowrap disabled:opacity-40"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            🏢 Quais sites o app enxerga?
+                        </button>
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                            Só lê nomes de pasta — não baixa, não grava.
+                        </span>
+                    </div>
+
+                    {erroExplorar && (
+                        <p className="text-[11px] mt-2 break-all" style={{ color: 'var(--danger, #ef4444)' }}>{erroExplorar}</p>
+                    )}
+
+                    {sites && (
+                        <div className="mt-2 text-[11px]" style={{ color: 'var(--text-primary)' }}>
+                            {sites.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)' }}>
+                                    Nenhum site retornado — pode ser falta da permissão Sites.Read.All no app do Azure.
+                                </p>
+                            ) : (
+                                <>
+                                    <p className="mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                                        Clique num site para abrir a árvore dele. O caminho <code>/sites/…</code> é o que
+                                        vai na variável <code>SHAREPOINT_SITE_PATH</code> do proxy.
+                                    </p>
+                                    <input
+                                        value={buscaSite}
+                                        onChange={e => setBuscaSite(e.target.value)}
+                                        placeholder="Filtrar por nome ou caminho — ex.: fiscal"
+                                        className="w-full mb-2 p-2 text-xs rounded-lg outline-none"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                    />
+                                    {/* ⚠️ RECORTE SEMPRE DIZ "X de N" (régua do farol honesto,
+                                        30/07): a busca do Graph devolve centenas de entradas e
+                                        cortar calado faria a pessoa concluir que o site dela não
+                                        existe. */}
+                                    <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                                        Mostrando {sitesVisiveis.length} de {sitesDeEquipe.length} site(s) de equipe
+                                        {sites.length > sitesDeEquipe.length
+                                            && ` — ${sites.length - sitesDeEquipe.length} entrada(s) de armazenamento pessoal ficaram de fora`}
+                                    </p>
+                                    <div className="flex flex-col gap-0.5" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                        {sitesVisiveis.map(s => {
+                                            const emUso = health?.sitePath && s.caminho.toLowerCase() === health.sitePath.toLowerCase();
+                                            return (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onClick={() => void explorar('', s.caminho)}
+                                                    className="text-left px-2 py-1 rounded btn-press font-mono"
+                                                    style={{
+                                                        background: 'var(--bg-card)',
+                                                        border: `1px solid ${emUso ? 'var(--accent)' : 'var(--border-default)'}`,
+                                                        color: 'var(--text-primary)',
+                                                    }}
+                                                >
+                                                    {s.nome} — <b style={{ color: 'var(--accent)' }}>{s.caminho}</b>
+                                                    {emUso && <span style={{ color: 'var(--accent)' }}> · é o que o proxy usa hoje</span>}
+                                                </button>
+                                            );
+                                        })}
+                                        {sitesVisiveis.length === 0 && (
+                                            <p style={{ color: 'var(--text-muted)' }}>Nenhum site com esse texto.</p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {nivel && (
+                        <div className="mt-2 text-[11px]">
+                            <p className="font-mono mb-1" style={{ color: 'var(--text-muted)' }}>
+                                {nivel.site} → /{nivel.caminho || '(raiz)'}
+                            </p>
+                            {nivel.pastas.length === 0 && nivel.arquivos === 0 && (
+                                <p style={{ color: 'var(--text-muted)' }}>Nada aqui dentro.</p>
+                            )}
+                            {/* 🚨 UM NÍVEL PODE TER CENTENAS DE PASTAS — a raiz de
+                                /Empresas tem uma por cliente. Sem filtro a lista quebra a
+                                tela e a resposta ("existe uma pasta que começa com X?")
+                                fica escondida no meio. */}
+                            {nivel.pastas.length > 20 && (
+                                <input
+                                    value={buscaPasta}
+                                    onChange={e => setBuscaPasta(e.target.value)}
+                                    placeholder="Filtrar pastas deste nível"
+                                    className="w-full mb-1.5 p-2 text-xs rounded-lg outline-none"
+                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                />
+                            )}
+                            {/* ⚠️ Recorte SEMPRE diz "X de N": com filtro ativo, sumir
+                                calado faria concluir que a pasta não existe. */}
+                            {nivel.pastas.length > 20 && (
+                                <p className="mb-1" style={{ color: 'var(--text-muted)' }}>
+                                    Mostrando {pastasVisiveis.length} de {nivel.pastas.length} pasta(s)
+                                </p>
+                            )}
+                            <div className="flex flex-wrap gap-1.5" style={{ maxHeight: 300, overflowY: 'auto' }}>
+                                {nivel.caminho && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void explorar(nivel.caminho.split('/').slice(0, -1).join('/'))}
+                                        className="px-2 py-1 rounded btn-press"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}
+                                    >↑ voltar</button>
+                                )}
+                                {pastasVisiveis.map(p => (
+                                    <button
+                                        key={p.nome}
+                                        type="button"
+                                        onClick={() => void explorar(nivel.caminho ? `${nivel.caminho}/${p.nome}` : p.nome)}
+                                        className="px-2 py-1 rounded btn-press font-mono"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                    >📁 {p.nome}</button>
+                                ))}
+                            </div>
+                            {/* ⚠️ A contagem de ARQUIVOS vai junto: pasta com 0 subpastas
+                                e 300 arquivos é o FIM da árvore, e sem esse número ela se
+                                lê como pasta vazia. */}
+                            {nivel.arquivos > 0 && (
+                                <p className="mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                                    …e {nivel.arquivos} arquivo(s) neste nível.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Formulário */}
@@ -283,15 +549,29 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                 {useCustom ? (
                     <div>
                         <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>
-                            Caminho no SharePoint
+                            Caminho ou link da pasta no SharePoint
                         </label>
                         <input
                             value={customPath}
                             onChange={e => setCustomPath(e.target.value)}
-                            placeholder="Empresas/Grupo X/DEPARTAMENTO FISCAL/2026/05-2026/EMPRESA/XML SAÍDA"
+                            /* 🚨 O placeholder ENSINAVA a árvore morta ("Empresas/Grupo
+                               X/…"): o nível de grupo não existe, e exemplo errado num
+                               campo é pior que exemplo nenhum — a pessoa digita o que
+                               está escrito e leva 404. */
+                            placeholder="Cole o link da pasta (Copiar link no SharePoint) ou digite Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Setembro/XML SAÍDA"
                             className="w-full mt-1 p-2.5 text-xs rounded-lg outline-none"
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                         />
+                        {/* 🚨 O link e o caminho procuram em lugares DIFERENTES, e a
+                            pessoa precisa saber disso ANTES de clicar: o caminho é
+                            resolvido no site que o proxy conhece, e o link carrega o
+                            site dele junto. Foi essa diferença que produziu "pasta não
+                            existe" sobre um link de outro site. */}
+                        <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                            {customPath.trim().startsWith('http')
+                                ? '🔗 É um LINK — ele leva o site e a biblioteca junto, então vale para qualquer site do SharePoint. Tem que ser o link da PASTA, não de um arquivo.'
+                                : '📁 É um CAMINHO — ele é procurado a partir da raiz da biblioteca do site que o proxy consulta. Se a pasta for de outro site, cole o LINK dela.'}
+                        </p>
                     </div>
                 ) : (
                     <>
@@ -313,17 +593,32 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                             )}
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <div>
-                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Grupo</label>
-                                <input value={grupo} onChange={e => setGrupo(e.target.value)} placeholder="Grupo Flanacar"
+                            {/* 🗑️ O campo GRUPO SAIU: esse nível não existe na
+                                árvore real (medido em 02/09; o dono confirmou:
+                                "não tem grupo"). Campo que alimenta um caminho
+                                inexistente é trabalho perdido de quem preenche. */}
+                            <div className="col-span-2">
+                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (pasta REAL no SharePoint)</label>
+                                {/* 🚨 PLACEHOLDER COM CARA DE VALOR — o defeito de
+                                    20/08 (o `1556` cinza do campo de CFOP, lido como
+                                    preenchido) repetido por mim. O campo nasce VAZIO,
+                                    o botão fica apagado dizendo "falta Empresa (pasta)",
+                                    e a pessoa vê um nome de pasta dentro dele: para
+                                    quem usa, "parece preenchido" e "está preenchido"
+                                    são a mesma coisa. O exemplo mora FORA do campo. */}
+                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="—"
                                     className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
-                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Empresa (pasta)</label>
-                                <input value={empresaPasta} onChange={e => setEmpresaPasta(e.target.value)} placeholder="CMM"
-                                    className="w-full mt-1 p-2 text-xs rounded-lg outline-none"
-                                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
+                                    style={{
+                                        background: 'var(--bg-card)', color: 'var(--text-primary)',
+                                        // Vazio se DESTACA: ele é a única coisa que separa
+                                        // este campo de uma célula de leitura.
+                                        border: empresaPasta.trim() ? '1px solid var(--border-default)' : '1px solid var(--accent)',
+                                        boxShadow: empresaPasta.trim() ? undefined : '0 0 0 2px rgba(99,102,241,0.25)',
+                                    }} />
+                                <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                                    O nome REAL da pasta, como está no SharePoint — descubra no
+                                    <strong> 🔎 O que existe nesta biblioteca?</strong> acima. Ex.: <code>0040_Clinica Mantoan</code>.
+                                </p>
                             </div>
                             <div>
                                 <label className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Ano</label>
@@ -361,9 +656,23 @@ const XmlSharePoint: React.FC<Props> = ({ currentUser, onShowToast, onImported }
                     </>
                 )}
 
+                {/* 🚨 O BOTÃO DISPARAVA COM CAMPO OBRIGATÓRIO VAZIO — e o app
+                    JÁ SABIA quais faltavam (o aviso vermelho logo acima). O
+                    caminho saía com segmentos vazios
+                    ("Empresas//DEPARTAMENTO FISCAL/…//XML SAÍDA") e o Graph
+                    respondia `itemNotFound`, que manda procurar a PASTA no
+                    SharePoint — a primeira parada errada, sobre uma pasta que
+                    pode estar perfeita. Botão apagado DIZ o que falta (a régua
+                    de 20/08: "parece desabilitado" e "está desabilitado" são a
+                    mesma coisa para quem usa). */}
                 <button
                     onClick={handleSync}
-                    disabled={loading || !health?.configured}
+                    disabled={loading || !health?.configured || faltando.length > 0}
+                    title={
+                        faltando.length > 0
+                            ? `Falta preencher: ${faltando.join(', ')} — sem isso o caminho sai com pedaços vazios e o SharePoint responde que a pasta não existe.`
+                            : !health?.configured ? 'O proxy do SharePoint não está configurado.' : undefined
+                    }
                     className="px-5 py-2.5 text-sm font-bold rounded-lg transition-colors disabled:opacity-40"
                     style={{ background: 'var(--accent)', color: '#fff' }}
                 >
@@ -430,10 +739,21 @@ interface AutoSyncStatus {
             erro?: string; errosDetalhe?: string[]; configIncompleta?: boolean;
         }[];
     } | null;
-    empresasAutoSync: { id: string; nome: string; cnpj: string; grupo: string; empresaPasta: string }[];
-    /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem ainda
-     *  não tem grupo+pasta preenchidos. */
-    empresasSemConfig?: { id: string; nome: string; cnpj: string; fonte: 'simples' | 'lucro' }[];
+    empresasAutoSync: {
+        id: string; nome: string; cnpj: string; codCliente: string;
+        /** A resolução da pasta REAL — `null` quando não deu para conferir
+         *  (a listagem do SharePoint falhou). Ausência ≠ "não resolve". */
+        pastaResolvida: { ok: boolean; pasta: string | null; motivo: string | null } | null;
+    }[];
+    /** Gap que trava a cópia no SharePoint (XMLs + IMPOSTOS): quem NÃO tem a
+     *  pasta resolvida — com a causa e a ação de cada uma, vindas do dono. */
+    empresasSemPasta?: {
+        id: string; nome: string; cnpj: string; fonte: 'simples' | 'lucro';
+        codCliente: string; motivo: string | null;
+    }[];
+    /** Preenchido quando NÃO deu para listar as pastas — a tela diz isso em
+     *  vez de afirmar que ninguém resolve. */
+    pastasErro?: string | null;
 }
 
 const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }) => {
@@ -443,9 +763,9 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
     const [triggerResult, setTriggerResult] = useState<string | null>(null);
 
     const [configEmpresaId, setConfigEmpresaId] = useState('');
-    const [configGrupo, setConfigGrupo] = useState('');
-    const [configPasta, setConfigPasta] = useState('');
+    // 🗑️ `configGrupo`/`configPasta` SAÍRAM: eram o cadastro do caminho morto.
     const [configEnabled, setConfigEnabled] = useState(true);
+    const [configErro, setConfigErro] = useState<string | null>(null);
     const [savingConfig, setSavingConfig] = useState(false);
 
     const getHeaders = async () => {
@@ -474,7 +794,12 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
             });
             const data = await resp.json();
             if (resp.ok) {
-                setTriggerResult(`Sync concluído: ${data.totalNovos} novos, ${data.totalDup} duplicados, ${data.totalErros} erros.`);
+                // 🚨 "0 novos, 0 duplicados, 879 erros" era uma MENTIRA sobre a
+                // saúde da captura: a maioria era pasta que ainda não existe
+                // (o auto-sync LÊ; quem cria pasta é a gravação) e recusa do
+                // próprio proxy por limite. A frase vem do backend, com a causa
+                // junto do número — escrevê-la aqui seria a segunda cópia.
+                setTriggerResult(`Sync concluído: ${data.resumo || `${data.totalNovos} novos, ${data.totalDup} duplicados, ${data.totalErros} erros`}.`);
                 const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
                 if (statusResp.ok) setStatus(await statusResp.json());
             } else {
@@ -495,25 +820,31 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
             // aparece lá também precisa salvar na coleção certa — Simples ia
             // parar em lucro_empresas sem este fallback).
             const empresa = empresas.find(e => e.id === configEmpresaId)
-                || status?.empresasSemConfig?.find(e => e.id === configEmpresaId);
+                || status?.empresasSemPasta?.find(e => e.id === configEmpresaId);
             const collection = empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas';
             const headers = await getHeaders();
             const resp = await fetch('/api/admin/sharepoint/config', {
                 method: 'POST', headers,
+                // ⚠️ `grupo`/`empresaPasta` saíram: a pasta é ACHADA pelo
+                // Cod.Cliente. O que se cadastra aqui é só a MATRÍCULA.
                 body: JSON.stringify({
                     empresaId: configEmpresaId,
                     collection,
-                    sharePointConfig: { grupo: configGrupo, empresaPasta: configPasta, autoSyncEnabled: configEnabled },
+                    sharePointConfig: { autoSyncEnabled: configEnabled },
                 }),
             });
             if (resp.ok) {
                 const statusResp = await fetch('/api/admin/sharepoint/status', { headers });
                 if (statusResp.ok) setStatus(await statusResp.json());
                 setConfigEmpresaId('');
-                setConfigGrupo('');
-                setConfigPasta('');
+                setConfigErro(null);
+            } else {
+                // A recusa DIZ o que falta (Cod.Cliente) — engolir aqui faria o
+                // clique não fazer nada, que é a família do "Já importado".
+                const d = await resp.json().catch(() => ({}));
+                setConfigErro(d.error || 'Não foi possível salvar.');
             }
-        } catch { /* ignore */ }
+        } catch (e: any) { setConfigErro(e?.message || 'Falha ao salvar.'); }
         setSavingConfig(false);
     };
 
@@ -573,17 +904,31 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                             <p className="text-[10px] font-bold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Empresas com auto-sync</p>
                             <div className="space-y-1">
                                 {status.empresasAutoSync.map(e => {
-                                    // Bolinha verde só com grupo E pasta preenchidos —
-                                    // sem eles o sync pula a empresa e nada é baixado.
-                                    const cfgOk = !!(e.grupo || '').trim() && !!(e.empresaPasta || '').trim();
+                                    // 🚨 A BOLINHA SAI DO RESULTADO, não do cadastro.
+                                    // Ela lia `grupo`+`empresaPasta` e dizia "nada é
+                                    // sincronizado" — campos do caminho MORTO, ou seja
+                                    // a afirmação ficou FALSA e mandava preencher o que
+                                    // não muda nada. Agora ela responde o que o trilho
+                                    // de fato faz: a pasta desta empresa RESOLVE?
+                                    const res = e.pastaResolvida;
+                                    // ⚠️ Três estados, não dois: sem a listagem o app
+                                    // NÃO SABE — e âmbar não é o vermelho de quem falha.
+                                    const cor = res === null ? 'bg-amber-500' : res.ok ? 'bg-emerald-500' : 'bg-red-500';
                                     return (
                                     <div key={e.id} className="flex items-center gap-2 text-xs py-0.5">
-                                        <span className={`w-2 h-2 rounded-full ${cfgOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                        <span className={`w-2 h-2 rounded-full ${cor}`} />
                                         <span style={{ color: 'var(--text-primary)' }}>{e.nome}</span>
-                                        <span style={{ color: 'var(--text-muted)' }}>({e.grupo}/{e.empresaPasta})</span>
-                                        {!cfgOk && (
+                                        {res?.ok && (
+                                            <span style={{ color: 'var(--text-muted)' }}>({res.pasta})</span>
+                                        )}
+                                        {res && !res.ok && (
                                             <span className="font-semibold" style={{ color: 'var(--danger, #ef4444)' }}>
-                                                ⚠ grupo/pasta não preenchidos — nada é sincronizado
+                                                ⚠ {res.motivo}
+                                            </span>
+                                        )}
+                                        {res === null && (
+                                            <span style={{ color: 'var(--text-muted)' }}>
+                                                não deu para conferir a pasta agora
                                             </span>
                                         )}
                                     </div>
@@ -610,32 +955,41 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                         )}
                     </div>
 
-                    {/* Pendentes de configuração — a lista de trabalho do gap
-                        semConfig: sem grupo+pasta nada sobe pro SharePoint
-                        (nem XML do arquivo, nem imposto da ordem técnica).
-                        "Preencher" pré-seleciona a empresa no formulário. */}
-                    {(status?.empresasSemConfig?.length || 0) > 0 && (
+                    {/* 🚨 A FILA MUDOU DE PERGUNTA EM 02/09.
+                        Ela listava quem não tinha `grupo`+`empresaPasta` — o
+                        cadastro do caminho MORTO —, ou seja mandava preencher o
+                        que não muda nada (achado 18, 21/08). Agora ela lista
+                        quem NÃO RESOLVE a pasta, com a causa e a ação de cada
+                        uma vindas do dono: sem Cod.Cliente, código duplicado no
+                        SharePoint, ou pasta que não existe lá. */}
+                    {status?.pastasErro && (
+                        <div className="border-t pt-3 mt-3 text-[11px]" style={{ borderColor: 'var(--border-subtle)', color: 'var(--warning, #d97706)' }}>
+                            ⚠ Não deu para listar as pastas de Empresas agora ({status.pastasErro}) — o app
+                            <strong> não afirma</strong> que as pastas estão faltando; ele não conseguiu conferir.
+                        </div>
+                    )}
+                    {(status?.empresasSemPasta?.length || 0) > 0 && (
                         <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
                             <div className="flex items-center justify-between mb-1">
                                 <p className="text-[10px] font-bold uppercase" style={{ color: 'var(--danger, #ef4444)' }}>
-                                    ⚠ {status!.empresasSemConfig!.length} empresa(s) SEM pasta configurada — nada sobe pro SharePoint
+                                    ⚠ {status!.empresasSemPasta!.length} empresa(s) cuja pasta NÃO foi encontrada — nada sobe pro SharePoint
                                 </p>
                                 <button
                                     onClick={() => {
-                                        const txt = status!.empresasSemConfig!
-                                            .map(e => `${e.cnpj}\t${e.nome}\t${e.fonte === 'simples' ? 'Simples' : 'Lucro'}`)
+                                        const txt = status!.empresasSemPasta!
+                                            .map(e => `${e.cnpj}\t${e.nome}\t${e.fonte === 'simples' ? 'Simples' : 'Lucro'}\t${e.codCliente || '—'}\t${e.motivo || ''}`)
                                             .join('\n');
-                                        navigator.clipboard.writeText(`CNPJ\tEmpresa\tRegime\n${txt}`);
+                                        navigator.clipboard.writeText(`CNPJ\tEmpresa\tRegime\tCod.Cliente\tMotivo\n${txt}`);
                                     }}
                                     className="text-[10px] underline"
                                     style={{ color: 'var(--text-muted)' }}
-                                    title="Copia a lista (CNPJ / nome / regime) pra colar no Excel"
+                                    title="Copia a lista (CNPJ / nome / regime / código / motivo) pra colar no Excel"
                                 >
                                     📋 Copiar lista
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto space-y-0.5">
-                                {status!.empresasSemConfig!.map(e => {
+                                {status!.empresasSemPasta!.map(e => {
                                     // Cadastro sem nome E sem CNPJ é lixo (não dá nem pra
                                     // achar a pasta no SharePoint) — em vez de "Preencher",
                                     // aponta a exclusão no painel do regime (25/07: a lista
@@ -654,13 +1008,15 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                                 ⚠ cadastro vazio — excluir no painel
                                             </span>
                                         ) : (
-                                            <button
-                                                onClick={() => { setConfigEmpresaId(e.id); setConfigGrupo(''); setConfigPasta(''); }}
-                                                className="ml-auto text-[10px] font-bold underline shrink-0"
-                                                style={{ color: 'var(--accent)' }}
-                                            >
-                                                Preencher ↓
-                                            </button>
+                                            // 🚨 O "Preencher ↓" SAIU: ele levava ao formulário
+                                            // dos campos mortos. A ação de cada causa é OUTRA —
+                                            // Cod.Cliente é no cadastro da empresa, pasta
+                                            // duplicada e pasta inexistente são no SharePoint —
+                                            // e ela vem escrita no motivo, do dono.
+                                            <span className="ml-auto text-[10px] shrink-0 max-w-[55%] truncate"
+                                                style={{ color: 'var(--text-muted)' }} title={e.motivo || undefined}>
+                                                {e.motivo}
+                                            </span>
                                         )}
                                     </div>
                                     );
@@ -672,19 +1028,19 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                     {/* Add empresa config */}
                     <div className="border-t pt-3 mt-3" style={{ borderColor: 'var(--border-subtle)' }}>
                         <p className="text-[10px] font-bold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Adicionar empresa ao auto-sync</p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {/* 🗑️ OS CAMPOS "Grupo (pasta)" E "Empresa (pasta)" SAÍRAM:
+                            a pasta REAL é achada pelo Cod.Cliente, e o nível de
+                            grupo não existe na árvore. Campo que alimenta um
+                            caminho inexistente é trabalho perdido de quem
+                            preenche — e aqui ele era pior: sem ele o app RECUSAVA
+                            ligar o auto-sync. O que se cadastra é a MATRÍCULA. */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             <EmpresaSearchSelect
                             empresas={empresas}
                             value={configEmpresaId}
                             onChange={setConfigEmpresaId}
                             placeholder="Empresa — código, nome ou CNPJ"
                         />
-                            <input value={configGrupo} onChange={e => setConfigGrupo(e.target.value)} placeholder="Grupo (pasta)"
-                                className="p-2 text-xs rounded-lg"
-                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
-                            <input value={configPasta} onChange={e => setConfigPasta(e.target.value)} placeholder="Empresa (pasta)"
-                                className="p-2 text-xs rounded-lg"
-                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
                             <div className="flex items-center gap-2">
                                 <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                                     <input type="checkbox" checked={configEnabled} onChange={e => setConfigEnabled(e.target.checked)} />
@@ -697,6 +1053,14 @@ const AutoSyncConfig: React.FC<{ empresas: EmpresaXmlOption[] }> = ({ empresas }
                                 </button>
                             </div>
                         </div>
+                        <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                            A pasta da empresa é encontrada pelo <strong>Cod.Cliente</strong> (Empresas → Dados
+                            Fiscais). O app cria as pastas do Departamento Fiscal para baixo — a da empresa, não.
+                        </p>
+                        {/* Recusa DITA: engolir faria o clique não fazer nada. */}
+                        {configErro && (
+                            <p className="text-[11px] mt-2" style={{ color: 'var(--danger, #ef4444)' }}>⛔ {configErro}</p>
+                        )}
                     </div>
                 </>
             )}

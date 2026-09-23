@@ -35,6 +35,7 @@ const DipamProdutorRuralPanel = lazy(() => import('./DipamProdutorRuralPanel'));
 const DifalPanel = lazy(() => import('./DifalPanel'));
 const NcmCadastroPanel = lazy(() => import('./NcmCadastroPanel'));
 const IssSpPanel = lazy(() => import('./IssSpPanel'));
+const CompetenciaAcervoPanel = lazy(() => import('./CompetenciaAcervoPanel'));
 
 type TabId =
     | 'dashboard'
@@ -46,6 +47,7 @@ type TabId =
     | 'dipam'
     | 'difal'
     | 'iss_sp'
+    | 'competencia-acervo'
     | 'ncm'
     | 'importacao'
     | 'empresas'
@@ -88,6 +90,7 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             { id: 'difal', label: '🧭 DIFAL aquisição' },
             { id: 'ncm', label: '🏷️ Cadastro NCM' },
             { id: 'iss_sp', label: '🏛️ ISS SP (guia)' },
+            { id: 'competencia-acervo', label: '📅 Competência do acervo' },
         ],
     },
     {
@@ -275,7 +278,18 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         />
                         {selectedDoc && (
                             <div className="mt-4">
-                                <XmlDocumentoDetalhe documento={selectedDoc} onClose={() => setSelectedDoc(null)} />
+                                {/* 🚨 A saída da nota que entrou na empresa errada
+                                    (03/09, caso J.P. PISSATO × SILVIO FREIRE) precisa
+                                    do USUÁRIO (a retirada grava quem tirou) e de
+                                    RECARREGAR a lista — senão a nota continua na tela
+                                    depois de sair do livro, e a pessoa clica de novo. */}
+                                <XmlDocumentoDetalhe
+                                    documento={selectedDoc}
+                                    currentUser={currentUser}
+                                    onShowToast={onShowToast}
+                                    onRetirado={() => setRefreshKey(k => k + 1)}
+                                    onClose={() => setSelectedDoc(null)}
+                                />
                             </div>
                         )}
                     </>
@@ -298,6 +312,11 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 {tab === 'iss_sp' && (
                     <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando ISS SP…</p>}>
                         <IssSpPanel currentUser={currentUser} onShowToast={onShowToast} />
+                    </Suspense>
+                )}
+                {tab === 'competencia-acervo' && (
+                    <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando competências…</p>}>
+                        <CompetenciaAcervoPanel currentUser={currentUser} onShowToast={onShowToast} />
                     </Suspense>
                 )}
                 {tab === 'importacao' && (

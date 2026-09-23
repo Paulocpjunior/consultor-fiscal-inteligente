@@ -18,9 +18,16 @@ export function lerRetencoesFederaisDoDoc(d: unknown): RetencoesFederaisDoDoc;
 // Retornos `any` de propósito: os consumidores existentes (testes e rotas)
 // acessam o payload livremente — o tipo forte aqui é só o do leitor novo.
 export function normalizarNotaTomada(d: unknown): any;
+export function temRetencaoFederalGravada(d: unknown): boolean;
+export function documentoEntraEmRetencoes(
+    d: unknown,
+    opts?: { temAjuste?: boolean },
+): boolean;
 
 export function montarPayloadReinfPJ(p?: {
     cnpjTomador?: string;
     competencia?: string;
     documentos?: unknown[];
+    /** Chave da NOTA → ajuste declarado de retenção (31/08). */
+    ajustes?: Record<string, Record<string, unknown>>;
 }): any;

@@ -107,8 +107,31 @@ export function montarRegistroProdutor(id, dados = {}, usuario = null) {
         // Só faz sentido no produtor inscrito por CNPJ — ver a validação acima.
         registro.cpfTitular = id.length === 14 ? (soDigitos(dados.cpfTitular) || null) : null;
     }
+    // 🚨 DECISÃO POR NOTA — o mesmo produtor tem nota que FICA e nota que SAI.
+    //
+    // 30/08, Paulo: *"Ao excluir as notas de produtor emitidas pelo fornecedor,
+    // o sistema apaga TODAS as notas vinculadas a esse produtor, incluindo a
+    // nota de entrada própria da Nova Era, que deveria ser mantida. Como
+    // consequência, não consigo conferir nem conciliar"*. Caso COSME QUEIROZ DE
+    // SANTANA: a nota própria de entrada (art. 136, CFOP 2102, R$ 49.500) tem de
+    // ficar, e as NF-e do produtor (CFOP 6101) tinham de sair — e o ✕ tirava as
+    // três, porque gravava `funrural: 'nao_aplica'` no PRODUTOR.
+    //
+    // 📌 O botão está na linha da NOTA e agia sobre o PRODUTOR — a promessa que
+    // a tela não cumpre, a família do ✕ de 14/08. São DUAS decisões diferentes:
+    // "este fornecedor não gera sub-rogação" (natureza — continua sendo
+    // `funrural`) e "esta nota não entra" (que é esta, e não existia).
+    if (veio('notasForaDoFunrural')) {
+        const lista = Array.isArray(dados.notasForaDoFunrural) ? dados.notasForaDoFunrural : [];
+        // Chave normalizada e sem repetição: a mesma nota tirada duas vezes é
+        // uma decisão só, e o teto evita o registro crescer sem limite.
+        registro.notasForaDoFunrural = [...new Set(
+            lista.map((c) => String(c || '').trim()).filter(Boolean),
+        )].slice(0, 5000);
+    }
     return registro;
 }
+
 
 /** Grava/atualiza o cadastro de um produtor (upsert com auditoria de quem). */
 /**

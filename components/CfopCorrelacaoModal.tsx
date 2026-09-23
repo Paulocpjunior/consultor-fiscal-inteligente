@@ -83,6 +83,7 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
     const [aba, setAba] = useState<'cfop' | 'cerebro'>('cfop');
     const [fornecedores, setFornecedores] = useState<FornecedorOpcao[]>([]);
     const [parametros, setParametros] = useState<ParametroCfopDoc[]>([]);
+    const [erroParametros, setErroParametros] = useState<string | null>(null);
 
     /**
      * A natureza QUE VAI VALER no arquivo, com a origem.
@@ -166,7 +167,13 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                     setFornecedores(Array.from(porForn.entries())
                         .map(([cnpj, f]) => ({ cnpj, nome: f.nome, cfops: Array.from(f.cfops).sort(), notas: f.notas }))
                         .sort((a, b) => b.notas - a.notas));
-                    setParametros(await lerParametrosCfop(empresaId));
+                    // A falha de LEITURA viaja: lista vazia por recusa do
+                    // banco é indistinguível de "esta empresa não tem
+                    // parâmetro", e foi isso que fez o painel dizer "(0)"
+                    // sobre parâmetro gravado (10/09, ELS).
+                    const leitura = await lerParametrosCfop(empresaId);
+                    setParametros(leitura.parametros);
+                    setErroParametros(leitura.erro);
                 }
             } catch (e: any) {
                 if (!cancelado) setErro(e?.message || 'Erro ao carregar CFOPs');
@@ -284,6 +291,7 @@ const CfopCorrelacaoModal: React.FC<Props> = ({
                             user={user}
                             fornecedores={fornecedores}
                             parametros={parametros}
+                            erroLeitura={erroParametros}
                             onMudou={setParametros}
                         />
                     ) : (<>

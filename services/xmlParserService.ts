@@ -7,7 +7,17 @@
  *
  * NFSe: parse de XML ABRASF (v1.0, 2.0, 2.04) com tags
  * <CompNfse>, <Nfse>, <InfNfse>, <Servico>, <PrestadorServico>, <TomadorServico>.
+ *
+ * ⚠️ NFS-e do padrão NACIONAL (ADN) é OUTRO leiaute — `<infNFSe>`, `<emit>`,
+ * `<toma>`, `<vServ>` — e quem responde por ele é `nfse-nacional-leitura.js`,
+ * o dono único que o backend da captura também lê. Duas leituras do mesmo
+ * arquivo foi exatamente o defeito de 01/09.
  */
+
+// 🚨 O front importa o dono do BACKEND de propósito: quem mais lê NFS-e
+// nacional é a captura do ADN, e uma segunda leitura aqui divergiria dela no
+// primeiro campo novo (a lição do CCM, 29/08).
+import { ehNfseNacional, lerNfseNacional } from '../sefaz-backend/nfse-nacional-leitura.js';
 
 import type {
     DocumentoFiscal,
@@ -81,6 +91,12 @@ export function competenciaFromIso(iso: string): string {
 import { classificarPorCfop } from './cfopClassifier';
 // Régua ÚNICA de direção (tpNF decide quando a empresa é a emitente).
 import { decidirDirecaoPorTpNF } from '../sefaz-backend/xml-metadata-helper.js';
+// 🚨 A que MÊS a NFS-e pertence: campo declarado > fato gerador > emissão.
+import { competenciaDaNfse } from '../sefaz-backend/competencia-da-nfse.js';
+// 🚨 Na NFS-e o cancelamento está DENTRO do documento (não há evento) — e a
+// régua lê o vocabulário dele, em vez de listar o nome da tag de cada
+// prefeitura. Caso ZAMBOLIN 08/2026: nota cancelada somando no faturamento.
+import { cancelamentoDeclarado } from './nfseCancelamento';
 export { classificarPorCfop };
 
 // ─── Tipos internos do parser ───────────────────────────────────────────────
@@ -101,7 +117,18 @@ export interface ParsedXml {
      * notas como saída e a DIPAM/FUNRURAL não as via.
      */
     tpNF?: string | null;
+    modFrete?: string | null;
     dhEmi: string;
+    /**
+     * A competência que o DOCUMENTO declara — `<Competencia>` no ABRASF,
+     * `dCompet` no padrão nacional.
+     *
+     * 🚨 É ELA que recorta o mês, não a data de emissão: em SP a nota de 31/08
+     * pode ser emitida até 10/09 (05/09 com retenção), e o portal filtra por
+     * "Incidência". Sem este campo a nota caía no mês da EMISSÃO e saía de todo
+     * recorte do mês a que pertence — sem erro nenhum na tela (03/09).
+     */
+    competenciaDeclarada?: string;
     status: XmlStatusDocumento;
     emitente: DocumentoFiscalParticipante;
     destinatario: DocumentoFiscalParticipante;
@@ -143,6 +170,17 @@ export function parseNFeXml(xmlText: string): ParsedXml {
 
     if (doc.querySelector('parsererror')) {
         throw new XmlParseError('Arquivo XML inválido ou corrompido.');
+    }
+
+    // 🚨 NFS-e do padrão NACIONAL (ADN) vem ANTES do ABRASF — são DOIS
+    // leiautes com o mesmo nome, e o nacional usa `<infNFSe>` (NFSe em
+    // MAIÚSCULAS), que `getElementsByTagName` NÃO casa com `infNfse`. Sem esta
+    // linha o arquivo caía lá embaixo e era recusado como "não é nota fiscal"
+    // — enquanto a tela de confirmação, que lê o `<emit>` do próprio leiaute
+    // nacional, já tinha dito "1 desta empresa" e oferecido o botão Importar
+    // (01/09, 4BZ CONSULTORIA — municípios de fora de SP caem todos aqui).
+    if (ehNfseNacional(xmlText)) {
+        return parseNFSeNacional(xmlText);
     }
 
     // NFSe (ABRASF): redireciona para parser específico
@@ -198,9 +236,13 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         let pRedBC = 0;
         let modBC = '';
         let orig = '';
+        // FCP-ST do item — entra no VL_OPR do C190 junto do ICMS-ST (Guia
+        // 3.2.3, campo 05). Paridade com o xml-importer.js (regra da casa).
+        let vFCPST = 0;
         if (icms) {
             const icmsInner = icms.children[0];
             if (icmsInner) {
+                vFCPST = num(getTextContent(icmsInner, 'vFCPST'));
                 cst = getTextContent(icmsInner, 'CST') || getTextContent(icmsInner, 'CSOSN');
                 vICMS = num(getTextContent(icmsInner, 'vICMS'));
                 vBC = num(getTextContent(icmsInner, 'vBC'));
@@ -265,6 +307,18 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             }
         }
 
+        // ── DIFAL DE SAÍDA (EC 87/2015) — grupo <ICMSUFDest> do ITEM ──────
+        // Paridade OBRIGATÓRIA com o xml-importer.js (regra da casa, provada
+        // campo a campo em `difalEc87Captura.test.ts`). Ausente = undefined,
+        // NUNCA 0: zero aqui vira débito zero num E310 que a SEFAZ lê como
+        // "esta empresa não deve DIFAL".
+        const icmsUfDest = det.getElementsByTagName('ICMSUFDest')[0];
+        const difal = (tag: string): number | undefined => {
+            if (!icmsUfDest) return undefined;
+            const v = getTextContent(icmsUfDest, tag);
+            return v === '' || v === undefined || v === null ? undefined : num(v);
+        };
+
         itens.push({
             nItem: det.getAttribute('nItem') || String(i + 1),
             cProd: getTextContent(prod, 'cProd'),
@@ -277,6 +331,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             vUnCom: num(getTextContent(prod, 'vUnCom')),
             vProd: num(getTextContent(prod, 'vProd')),
             vDesc: num(getTextContent(prod, 'vDesc')) || undefined,
+            // 🚨 12/09 (ELS · 08/2026): o importer do backend grava frete,
+            // seguro e outras despesas POR ITEM desde 04/08 e este parser não —
+            // a nota importada pelo navegador entrava no C190 sem eles, o
+            // VL_OPR saía a MENOR e o "Total da operação" do PVA não fechava com
+            // o Vlr. Contábil do Livro. Paridade OBRIGATÓRIA com o xml-importer.
+            vFrete: num(getTextContent(prod, 'vFrete')),
+            vSeg: num(getTextContent(prod, 'vSeg')),
+            vOutro: num(getTextContent(prod, 'vOutro')),
+            vFCPST,
             vBC,
             aliqIcms,
             vICMS,
@@ -290,6 +353,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             cstIpi,
             cEnqIpi,
             vBcIpi,
+            vBCUFDest: difal('vBCUFDest'),
+            vBCFCPUFDest: difal('vBCFCPUFDest'),
+            pFCPUFDest: difal('pFCPUFDest'),
+            pICMSUFDest: difal('pICMSUFDest'),
+            pICMSInter: difal('pICMSInter'),
+            pICMSInterPart: difal('pICMSInterPart'),
+            vFCPUFDest: difal('vFCPUFDest'),
+            vICMSUFDest: difal('vICMSUFDest'),
+            vICMSUFRemet: difal('vICMSUFRemet'),
             vPIS,
             cstPis,
             vBcPis,
@@ -347,6 +419,11 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         vBCST: num(getTextContent(icmsTot, 'vBCST')),
         vST: num(getTextContent(icmsTot, 'vST')),
         vFCPST: num(getTextContent(icmsTot, 'vFCPST')),
+        // DIFAL EC 87/15 no total — reserva do grupo por item. Paridade com o
+        // xml-importer.js; ausente = null, nunca 0.
+        vFCPUFDest: getTextContent(icmsTot, 'vFCPUFDest') ? num(getTextContent(icmsTot, 'vFCPUFDest')) : null,
+        vICMSUFDest: getTextContent(icmsTot, 'vICMSUFDest') ? num(getTextContent(icmsTot, 'vICMSUFDest')) : null,
+        vICMSUFRemet: getTextContent(icmsTot, 'vICMSUFRemet') ? num(getTextContent(icmsTot, 'vICMSUFRemet')) : null,
         vProd: num(getTextContent(icmsTot, 'vProd')),
         vFrete: num(getTextContent(icmsTot, 'vFrete')),
         vSeg: num(getTextContent(icmsTot, 'vSeg')),
@@ -380,6 +457,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         numero: getTextContent(ide, 'nNF'),
         natOp: getTextContent(ide, 'natOp'),
         tpNF: getTextContent(ide, 'tpNF') || null,
+        modFrete: getTextContent(infNFe, 'modFrete') || null,
         dhEmi: getTextContent(ide, 'dhEmi') || getTextContent(ide, 'dEmi'),
         status,
         emitente,
@@ -547,12 +625,16 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     const valorIss = num(getTextContent(valores, 'ValorIss'));
     const issRetido = getTextContent(valores, 'IssRetido');
     const valorIssRetido = num(getTextContent(valores, 'ValorIssRetido'));
-    const valorPis = num(getTextContent(valores, 'ValorPis'));
-    const valorCofins = num(getTextContent(valores, 'ValorCofins'));
+    // GISS/ABRASF com tribFed: campos proprios so entram como retencao
+    // quando o tipo declarado inclui aquele tributo; nao se presume aliquota.
+    const piscofins = valores?.getElementsByTagName('piscofins')[0] || null;
+    const tipoPisCofins = getTextContent(piscofins, 'tpRetPisCofins');
+    const valorPis = num(getTextContent(valores, 'ValorPis') || (['1','3','4','5','9'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vPis') : ''));
+    const valorCofins = num(getTextContent(valores, 'ValorCofins') || (['1','3','4','6','7'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vCofins') : ''));
     const valorInss = num(getTextContent(valores, 'ValorInss'));
     const valorIr = num(getTextContent(valores, 'ValorIr'));
     const valorCsll = num(getTextContent(valores, 'ValorCsll'));
-    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse'));
+    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse') || getTextContent(infNfse, 'ValorLiquidoNfse'));
     const descontoCondicionado = num(getTextContent(valores, 'DescontoCondicionado'));
     const descontoIncondicionado = num(getTextContent(valores, 'DescontoIncondicionado'));
 
@@ -562,9 +644,44 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     const codigoCnae = getTextContent(servico, 'CodigoCnae');
 
     // ── Prestador ──────────────────────────────────────────────────────────
-    const prestadorEl = infNfse.getElementsByTagName('PrestadorServico')[0]
+    // 🚨 O PRIMEIRO BLOCO QUE **EXISTE** NÃO É O PRIMEIRO QUE **TEM O
+    // DOCUMENTO** — e essa diferença custou a importação do Ivan (0530, 02/09).
+    //
+    // MEDIDO no XML real (318.xml, ABRASF v2 com o bloco IBS/CBS da reforma):
+    // `<PrestadorServico>` EXISTE e contém **só** RazaoSocial, Endereco e
+    // Contato — **nenhum CNPJ**. O documento do prestador mora em
+    // `DeclaracaoPrestacaoServico › InfDeclaracaoPrestacaoServico › Prestador ›
+    // CpfCnpj › Cnpj`. O leitor achava `PrestadorServico`, parava ali, e o
+    // `emit` saía VAZIO — a recusa dizia "não consta como emitente" sobre a
+    // própria prestadora.
+    //
+    // ⚠️ O tomador escapou por acidente: o bloco dele TEM
+    // `IdentificacaoTomador`. Era a mesma armadilha esperando a próxima
+    // prefeitura que aninhasse diferente.
+    const blocoComDocumento = (nomes: string[]): Element | null => {
+        let primeiro: Element | null = null;
+        for (const nome of nomes) {
+            const els = Array.from(infNfse!.getElementsByTagName(nome)) as Element[];
+            for (const el of els) {
+                if (!primeiro) primeiro = el;
+                const temDoc = getTextContent(el, 'Cnpj') || getTextContent(el, 'cnpj')
+                    || getTextContent(el, 'CNPJ') || getTextContent(el, 'Cpf')
+                    || getTextContent(el, 'cpf') || getTextContent(el, 'CPF');
+                if (temDoc) return el;
+            }
+        }
+        // ⚠️ Nenhum tem documento ⇒ devolve o primeiro que existe, porque ele
+        // ainda carrega NOME e ENDEREÇO — perdê-los seria trocar um buraco por
+        // dois.
+        return primeiro;
+    };
+
+    const prestadorEl = blocoComDocumento(['PrestadorServico', 'prestadorServico', 'Prestador', 'prestador']);
+    // O bloco do NOME nem sempre é o bloco do DOCUMENTO (é o caso deste
+    // leiaute): quem tem a razão social é `PrestadorServico`.
+    const prestadorNomeEl = infNfse.getElementsByTagName('PrestadorServico')[0]
         || infNfse.getElementsByTagName('prestadorServico')[0]
-        || infNfse.getElementsByTagName('Prestador')[0];
+        || prestadorEl;
     const identPrestador = prestadorEl
         ? (prestadorEl.getElementsByTagName('IdentificacaoPrestador')[0]
             || prestadorEl.getElementsByTagName('identificacaoPrestador')[0])
@@ -574,23 +691,26 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         getTextContent(identPrestador, 'Cnpj')
         || getTextContent(identPrestador, 'cnpj')
         || getTextContent(prestadorEl, 'Cnpj')
+        || getTextContent(prestadorEl, 'cnpj')
     );
     const prestadorCpf = onlyDigits(
         getTextContent(identPrestador, 'Cpf')
         || getTextContent(identPrestador, 'cpf')
+        || getTextContent(prestadorEl, 'Cpf')
+        || getTextContent(prestadorEl, 'cpf')
     );
 
-    const prestadorEnder = prestadorEl
-        ? (prestadorEl.getElementsByTagName('Endereco')[0]
-            || prestadorEl.getElementsByTagName('endereco')[0])
+    const prestadorEnder = prestadorNomeEl
+        ? (prestadorNomeEl.getElementsByTagName('Endereco')[0]
+            || prestadorNomeEl.getElementsByTagName('endereco')[0])
         : null;
 
     const emitente: DocumentoFiscalParticipante = {
         cnpjCpf: prestadorCnpj || prestadorCpf,
-        nome: getTextContent(prestadorEl, 'RazaoSocial')
-            || getTextContent(prestadorEl, 'razaoSocial')
-            || getTextContent(prestadorEl, 'NomeFantasia'),
-        fantasia: getTextContent(prestadorEl, 'NomeFantasia') || undefined,
+        nome: getTextContent(prestadorNomeEl, 'RazaoSocial')
+            || getTextContent(prestadorNomeEl, 'razaoSocial')
+            || getTextContent(prestadorNomeEl, 'NomeFantasia'),
+        fantasia: getTextContent(prestadorNomeEl, 'NomeFantasia') || undefined,
         ie: getTextContent(identPrestador, 'InscricaoMunicipal')
             || getTextContent(identPrestador, 'inscricaoMunicipal') || undefined,
         uf: getTextContent(prestadorEnder, 'Uf')
@@ -608,9 +728,10 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     };
 
     // ── Tomador ────────────────────────────────────────────────────────────
-    const tomadorEl = infNfse.getElementsByTagName('TomadorServico')[0]
-        || infNfse.getElementsByTagName('tomadorServico')[0]
-        || infNfse.getElementsByTagName('Tomador')[0];
+    // A MESMA régua do prestador: o tomador deste leiaute escapou por acidente
+    // (o bloco dele tem `IdentificacaoTomador`), e era a mesma armadilha
+    // esperando a próxima prefeitura que aninhasse diferente.
+    const tomadorEl = blocoComDocumento(['TomadorServico', 'tomadorServico', 'Tomador', 'tomador']);
     const identTomador = tomadorEl
         ? (tomadorEl.getElementsByTagName('IdentificacaoTomador')[0]
             || tomadorEl.getElementsByTagName('identificacaoTomador')[0])
@@ -715,12 +836,20 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         : 'Prestação de serviço';
 
     // ── Status ─────────────────────────────────────────────────────────────
-    // NFSe emitida e presente no XML é sempre autorizada.
-    // Cancelamento vem em XML separado (evento).
-    const cancelada = getTextContent(infNfse, 'NfseCancelamento')
-        || getTextContent(infNfse, 'DataHoraCancelamento')
-        || getTextContent(doc.documentElement, 'NfseCancelamento');
-    const status: XmlStatusDocumento = cancelada ? 'cancelado' : 'autorizado';
+    // 🚨 NA NFS-e O CANCELAMENTO ESTÁ DENTRO DO DOCUMENTO — não há evento (é a
+    // exceção declarada em `docCancelado`). Este trecho conhecia DUAS tags
+    // (`NfseCancelamento`, `DataHoraCancelamento`) e a NFS-e 205 de Santo André
+    // (MARCOS ANTONIO ZAMBOLIN, 08/2026) veio com o carimbo CANCELADA na cara
+    // do PDF e entrou como **Vigente**: o relatório somou 27.219,10 num mês de
+    // 13.609,55, porque a 206 SUBSTITUI a 205 e as duas foram contadas.
+    //
+    // ⚠️ Em vez de acrescentar o nome da tag daquela prefeitura — o que
+    // deixaria a PRÓXIMA no mesmo silêncio —, a régua lê o VOCABULÁRIO do
+    // documento inteiro. Listar nomes é a trava por LISTA (13/08).
+    const todasAsTags = Array.from(doc.getElementsByTagName('*'))
+        .map((el) => ({ tag: el.nodeName, texto: el.textContent || '' }));
+    const cancelamento = cancelamentoDeclarado(todasAsTags);
+    const status: XmlStatusDocumento = cancelamento.cancelada ? 'cancelado' : 'autorizado';
 
     return {
         chave,
@@ -730,6 +859,12 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
         numero,
         natOp,
         dhEmi,
+        // 🚨 A COMPETÊNCIA QUE O DOCUMENTO DECLARA — o `<Competencia>` do ABRASF
+        // era lido nesta função e a variável NUNCA usada em lugar nenhum
+        // (03/09): a competência gravada saía de `competenciaFromIso(dhEmi)`, e
+        // em SP a nota de 31/08 pode ser emitida no mês seguinte. Ela ia para
+        // o mês ERRADO, sem erro nenhum na tela.
+        competenciaDeclarada: competenciaTag || undefined,
         status,
         emitente,
         destinatario,
@@ -751,6 +886,140 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
             ir: valorIr,
             csll: valorCsll,
             aliquotaIss,
+        },
+    } as ParsedXml & { _nfseValores?: any };
+}
+
+// ─── Parser NFSe NACIONAL (ADN) ─────────────────────────────────────────────
+
+/**
+ * Traduz a leitura do dono (`nfse-nacional-leitura.js`) para o `ParsedXml` que
+ * o resto do app consome.
+ *
+ * ⚠️ AQUI NÃO SE LÊ TAG NENHUMA — quem conhece a forma do leiaute nacional é o
+ * dono. Este bloco só ENCAIXA a resposta dele no formato comum, exatamente
+ * como o bloco A do SPED faz com as réguas de documento.
+ */
+function parseNFSeNacional(xmlText: string): ParsedXml {
+    const lida = lerNfseNacional(xmlText);
+
+    // 🚨 VALOR AUSENTE **RECUSA**, nunca importa zero.
+    //
+    // Este é o único campo cuja ausência não pode virar documento: `vNF` = 0
+    // entra no Livro, no Resumo por CFOP e na apuração como se a nota não
+    // valesse nada — e ninguém confere valor a olho (é a família do `VL_OPR`
+    // sem o IPI: o erro que nenhum validador recusa e só aparece na
+    // fiscalização). A recusa NOMEIA a tag procurada, para quem lê o arquivo
+    // conseguir conferir em vez de "tentar de novo".
+    if (lida.valores.servico === null) {
+        throw new XmlParseError(
+            'NFS-e do padrão nacional sem valor de serviço legível: a tag <vServ> '
+            + '(dentro de <valores><vServPrest>) não foi encontrada. Importar assim '
+            + 'gravaria a nota valendo R$ 0,00 no livro. Confira o arquivo ou mande-o '
+            + 'ao time — o leiaute pode ser de uma versão que o app ainda não lê.',
+        );
+    }
+
+    const emitente: DocumentoFiscalParticipante = {
+        cnpjCpf: lida.prestador?.cnpjCpf || '',
+        nome: lida.prestador?.nome || '',
+        ie: lida.prestador?.im || undefined,
+        uf: lida.prestador?.uf || undefined,
+        codMunIBGE: lida.prestador?.codMunIBGE || undefined,
+        logradouro: lida.prestador?.logradouro || undefined,
+        numero: lida.prestador?.numero || undefined,
+        bairro: lida.prestador?.bairro || undefined,
+        cep: lida.prestador?.cep || undefined,
+    };
+
+    const destinatario: DocumentoFiscalParticipante = {
+        cnpjCpf: lida.tomador?.cnpjCpf || '',
+        nome: lida.tomador?.nome || '',
+        ie: lida.tomador?.im || undefined,
+        uf: lida.tomador?.uf || undefined,
+        codMunIBGE: lida.tomador?.codMunIBGE || undefined,
+        logradouro: lida.tomador?.logradouro || undefined,
+        numero: lida.tomador?.numero || undefined,
+        bairro: lida.tomador?.bairro || undefined,
+        cep: lida.tomador?.cep || undefined,
+    };
+
+    const valorServicos = lida.valores.servico;
+    const baseCalculo = lida.valores.baseCalculo ?? valorServicos;
+
+    const itens: DocumentoFiscalItem[] = [{
+        nItem: '1',
+        // ⚠️ O código de serviço nacional (`cTribNac`) NÃO é o item da LC 116 e
+        // NÃO é o código municipal — são três coisas, e carimbar uma no campo
+        // da outra é o de-para inventado que o R-4020 já pagou. Fica com a
+        // descrição, que é o que o documento afirma sem tradução.
+        cProd: '',
+        xProd: 'Serviço',
+        ncm: '',
+        cfop: '',
+        uCom: 'SV',
+        qCom: 1,
+        vUnCom: valorServicos,
+        vProd: valorServicos,
+        vICMS: 0,
+        vIPI: 0,
+        vPIS: 0,
+        vCOFINS: 0,
+        cst: '',
+        orig: '',
+    }];
+
+    const totais: DocumentoFiscalTotais = {
+        vBC: baseCalculo,
+        vICMS: 0,
+        vICMSDeson: 0,
+        vFCP: 0,
+        vBCST: 0,
+        vST: 0,
+        vFCPST: 0,
+        vProd: valorServicos,
+        vFrete: 0,
+        vSeg: 0,
+        vDesc: 0,
+        vII: 0,
+        vIPI: 0,
+        vIPIDevol: 0,
+        vPIS: 0,
+        vCOFINS: 0,
+        vOutro: 0,
+        vNF: valorServicos,
+    };
+
+    return {
+        // A chave nacional tem 50 caracteres (não são os 44 da NF-e); sem ela
+        // a identidade cai no par número+prestador, como no ABRASF.
+        chave: lida.chave || `NFSE-${lida.numero}-${emitente.cnpjCpf}`,
+        tipo: 'NFSe',
+        modelo: '99',
+        serie: '',
+        numero: lida.numero,
+        natOp: 'Prestação de serviço',
+        dhEmi: lida.dhEmi,
+        status: 'autorizado',
+        emitente,
+        destinatario,
+        itens,
+        totais,
+        _nfseValores: {
+            liquido: lida.valores.liquido ?? valorServicos,
+            iss: lida.valores.iss ?? 0,
+            issRetido: lida.valores.issRetido === true,
+            baseCalculo,
+            aliquotaIss: lida.valores.aliquotaIss ?? 0,
+            retencoesLidas: lida.valores.retencoesFederaisGravadas,
+            ...(lida.valores.retencoesFederaisGravadas ? {
+                ir: lida.valores.ir, inss: lida.valores.inss,
+                pis: lida.valores.pis, cofins: lida.valores.cofins,
+                csll: lida.valores.csll,
+                pccAgregadoDeclarado: lida.valores.pccAgregadoDeclarado,
+                tipoRetencaoContribuicoes: lida.valores.tipoRetencaoContribuicoes,
+            } : {}),
+            lacunas: lida.lacunas,
         },
     } as ParsedXml & { _nfseValores?: any };
 }
@@ -788,10 +1057,36 @@ export function matchCompanyAndDirection(
     const direcao = decidirDirecaoPorTpNF(emit, dest, emp, parsed.tpNF) as XmlDirecao;
     if (direcao !== 'desconhecida') return { ok: true, direcao };
 
+    // 🚨 "NÃO É DESTA EMPRESA" E "NÃO CONSEGUI LER" SÃO FATOS DIFERENTES — e a
+    // mensagem dizia o primeiro sobre o segundo (02/09, caso do Ivan na 0530:
+    // *"não consta como emitente nem destinatário (emit: -, dest: 05022073000106)"*
+    // em notas de serviço PRESTADO, onde a empresa é justamente a prestadora).
+    //
+    // O `emit: -` É A RESPOSTA: o app não leu o prestador daquele XML. Dizer
+    // "não consta" manda conferir o CADASTRO do cliente — que está certo — e o
+    // arquivo, que também está. É a lição de 31/08 (MARCOS ANTONIO ZAMBOLIN)
+    // aplicada ao leitor do BACKEND, que é quem de fato recusa a importação.
+    //
+    // ⚠️ A recusa CONTINUA: sem um dos lados não dá para decidir a DIREÇÃO, e
+    // direção chutada é a nota no livro errado. O que muda é a causa e a ação.
+    const ladosIlegiveis = [!emit && 'emitente/prestador', !dest && 'destinatário/tomador']
+        .filter(Boolean) as string[];
+    if (ladosIlegiveis.length > 0) {
+        const lido = emit ? `emitente ${emit}` : dest ? `destinatário ${dest}` : null;
+        return {
+            ok: false,
+            direcao: 'desconhecida',
+            motivo: `Não deu para LER o ${ladosIlegiveis.join(' nem o ')} deste XML`
+                + `${lido ? ` (só saiu o ${lido})` : ''} — então não dá para dizer de quem ele é `
+                + 'nem se é entrada ou saída. O cadastro da empresa pode estar certo: quem não foi '
+                + 'lido é o arquivo. Mande este XML ao time para o leiaute dele ser reconhecido.',
+        };
+    }
+
     return {
         ok: false,
         direcao: 'desconhecida',
-        motivo: `O CNPJ ${empresaCnpj} não consta como emitente nem destinatário deste XML (emit: ${emit || '-'}, dest: ${dest || '-'}).`,
+        motivo: `O CNPJ ${empresaCnpj} não consta como emitente nem destinatário deste XML (emit: ${emit}, dest: ${dest}).`,
     };
 }
 
@@ -837,8 +1132,15 @@ export function buildDocumentoFiscal(input: {
         // tem como reconhecer a nota própria de entrada e consertar o que já
         // está no banco. Campo que só existe em memória não conserta histórico.
         tpNF: parsed.tpNF ?? null,
+        modFrete: parsed.modFrete ?? null,
         dhEmi: parsed.dhEmi,
-        competencia: competenciaFromIso(parsed.dhEmi),
+        // 🚨 PELO DONO: campo declarado > fato gerador > emissão. Era
+        // `competenciaFromIso(parsed.dhEmi)` — a data de EMISSÃO —, e o
+        // `<Competencia>` do ABRASF era lido no parser e descartado.
+        competencia: competenciaDaNfse({
+            competenciaDeclarada: parsed.competenciaDeclarada,
+            dataEmissao: parsed.dhEmi,
+        }).competencia || competenciaFromIso(parsed.dhEmi),
         direcao: input.direcao,
         categoriaOperacao,
         status: parsed.status,
@@ -854,19 +1156,30 @@ export function buildDocumentoFiscal(input: {
         ...(isNFSe && nfseValores ? {
             valores: {
                 liquido: nfseValores.liquido,
-                pis: nfseValores.pis,
-                cofins: nfseValores.cofins,
                 iss: nfseValores.iss,
                 baseCalculo: nfseValores.baseCalculo,
                 deducoes: nfseValores.deducoes,
-                // Retenções federais + ISS retido: o parser sempre extraiu,
-                // mas eram descartados aqui — o relatório de Retenções (01/08)
-                // precisa deles gravados.
-                ir: nfseValores.ir,
-                inss: nfseValores.inss,
-                csll: nfseValores.csll,
                 issRetido: nfseValores.issRetido,
                 valorIssRetido: nfseValores.valorIssRetido,
+                // 🚨 OS CAMPOS FEDERAIS SÓ EXISTEM QUANDO FORAM LIDOS — e a
+                // diferença entre AUSENTE e ZERO é o produto aqui.
+                //
+                // `retencoesFederaisGravadas` (relatoriosAgregacoes) responde
+                // `fed.ir !== undefined`, e a gravação faz
+                // `undefined → null`: emitir a chave com valor ausente a
+                // transformaria em **null**, que passa nesse teste — ou seja, a
+                // NFS-e do padrão nacional (cujo <tribFed> este app ainda não
+                // lê) apareceria no Relatório de Retenções como "0,00", que é
+                // a AFIRMAÇÃO de que não houve retenção. Com a chave fora, ela
+                // imprime "?" — que é a verdade: ninguém conferiu.
+                ...(nfseValores.retencoesLidas === false ? {} : {
+                    pis: nfseValores.pis,
+                    cofins: nfseValores.cofins,
+                    ir: nfseValores.ir,
+                    inss: nfseValores.inss,
+                    csll: nfseValores.csll,
+                    ...(nfseValores.pccAgregadoDeclarado !== undefined ? { pccAgregadoDeclarado: nfseValores.pccAgregadoDeclarado, tipoRetencaoContribuicoes: nfseValores.tipoRetencaoContribuicoes } : {}),
+                }),
             },
         } : {}),
         itens: parsed.itens,
@@ -895,8 +1208,26 @@ export function formatCnpjCpf(val: string): string {
     return val;
 }
 
-export function formatCurrency(val: number | string): string {
+/**
+ * Dinheiro na tela. **AUSENTE ≠ ZERO** — campo que ninguém informou sai `—`,
+ * nunca `R$ 0,00`.
+ *
+ * 🚨 Ela é TOTAL de propósito (10/09, Paulo: *"sempre que eu clico em uma nota
+ * fiscal ele me força a recarregar a página"* — `Cannot read properties of
+ * undefined (reading 'toLocaleString')`). O item do ✍️ Lançar nota sem XML
+ * **não tem** `vUnCom`, `vPIS` nem `vCOFINS`, e deixa `vICMS`/`vIPI` de FORA
+ * do objeto quando ninguém preencheu — decisão CERTA do lado da gravação
+ * (04/09: zero num campo de valor é uma AFIRMAÇÃO). Quem lia é que assumia a
+ * forma, e o `undefined` derrubava a tela inteira.
+ *
+ * ⚠️ E o `—` não é enfeite: imprimir `R$ 0,00` aqui declararia na tela que a
+ * nota não teve ICMS/PIS/COFINS, que é exatamente o que ninguém informou.
+ * Zero DIGITADO continua saindo `R$ 0,00`, porque zero conferido é um fato.
+ */
+export function formatCurrency(val: number | string | null | undefined): string {
+    if (val === undefined || val === null || val === '') return '—';
     const n = typeof val === 'string' ? num(val) : val;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 

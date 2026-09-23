@@ -75,30 +75,42 @@ describe('dominante — a mais apertada manda', () => {
 });
 
 describe('dias até o vencimento contam DIA, não hora', () => {
-    const meiaNoite = new Date('2026-08-07T00:00:00Z').getTime();
-    const fimDoDia = new Date('2026-08-07T23:30:00Z').getTime();
+    // 07/08/2026 em São Paulo: meio-dia e 23h30, respectivamente.
+    const meioDoDia = new Date('2026-08-07T15:00:00Z').getTime();
+    const fimDoDia = new Date('2026-08-08T02:30:00Z').getTime();
 
     it('vencer hoje às 23h ainda é HOJE, não "0,04 dias"', () => {
-        expect(diasAteVencimento(new Date('2026-08-07T23:00:00Z'), meiaNoite)).toBe(0);
+        expect(diasAteVencimento(new Date('2026-08-08T01:00:00Z'), meioDoDia)).toBe(0);
     });
 
     it('a mesma tarefa não muda de faixa ao longo do dia', () => {
         const venc = new Date('2026-08-10T12:00:00Z');
-        expect(diasAteVencimento(venc, meiaNoite)).toBe(diasAteVencimento(venc, fimDoDia));
+        expect(diasAteVencimento(venc, meioDoDia)).toBe(diasAteVencimento(venc, fimDoDia));
     });
 
     it('ontem é -1', () => {
-        expect(diasAteVencimento(new Date('2026-08-06T10:00:00Z'), meiaNoite)).toBe(-1);
+        expect(diasAteVencimento(new Date('2026-08-06T10:00:00Z'), meioDoDia)).toBe(-1);
     });
 
     it('aceita Timestamp do Firestore', () => {
-        const ts = { toDate: () => new Date('2026-08-09T00:00:00Z') };
-        expect(diasAteVencimento(ts, meiaNoite)).toBe(2);
+        const ts = { toDate: () => new Date('2026-08-09T12:00:00Z') };
+        expect(diasAteVencimento(ts, meioDoDia)).toBe(2);
+    });
+
+    it('data pura preserva o dia fiscal mesmo perto da meia-noite UTC', () => {
+        // 00:30 UTC ainda é 21:30 do dia anterior em São Paulo.
+        const noiteAnteriorEmSp = new Date('2026-08-07T00:30:00Z').getTime();
+        expect(diasAteVencimento('2026-08-07', noiteAnteriorEmSp)).toBe(1);
+    });
+
+    it('instantes usam explicitamente o calendário de São Paulo', () => {
+        const noiteAnteriorEmSp = new Date('2026-08-07T00:30:00Z').getTime();
+        expect(diasAteVencimento(new Date('2026-08-07T01:00:00Z'), noiteAnteriorEmSp)).toBe(0);
     });
 
     it('sem data legível devolve null — ausente ≠ futura', () => {
-        expect(diasAteVencimento(null, meiaNoite)).toBeNull();
-        expect(diasAteVencimento('não é data', meiaNoite)).toBeNull();
-        expect(diasAteVencimento({ toDate: () => { throw new Error('x'); } }, meiaNoite)).toBeNull();
+        expect(diasAteVencimento(null, meioDoDia)).toBeNull();
+        expect(diasAteVencimento('não é data', meioDoDia)).toBeNull();
+        expect(diasAteVencimento({ toDate: () => { throw new Error('x'); } }, meioDoDia)).toBeNull();
     });
 });

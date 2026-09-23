@@ -21,6 +21,33 @@ import crypto from 'crypto';
 import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
 import { competenciasAutoSync } from './sharepoint-competencia-helper.js';
 import { secretsMatch } from './cron-secret.js';
+// 🚨 O corte de 200 caracteres decapitava o nome do app do Azure, que vem
+// DEPOIS na resposta da Microsoft — o card acusava "a resposta não nomeou o
+// aplicativo" sobre 416 respostas que nomeavam.
+import { recortarPreservandoApp } from './sharepoint-erro-credencial.js';
+import { decidirPosseDocumento } from './documento-posse.js';
+import { idDoDocumentoDoLado, carimboDoLado } from './documento-lado.js';
+// 🚨 O caminho MUDOU em 02/09: a árvore real não tem nível de GRUPO, a empresa
+// vem ANTES do departamento e o mês é por NOME. E o nome da pasta da empresa é
+// HUMANO — tem de ser ACHADO pelo código, nunca montado. Ver caminho-sharepoint.js.
+import { PASTA_RAIZ, caminhoFiscal } from './caminho-sharepoint.js';
+// Dono único de "qual é a pasta desta empresa?" — a frase de cada situação é
+// régua, e quatro cópias dela divergiriam no primeiro ajuste.
+import { listarPastasDeEmpresas, resolverPastaDaEmpresa, codClienteDoCadastro } from './sharepoint-pastas.js';
+// 🚨 "879 erros" e a maioria não era erro — a classificação separa o que pede
+// ações OPOSTAS: pasta que ainda não existe, limite do próprio proxy e
+// credencial recusada.
+import { classificarErroDeLeitura, intervaloEntreChamadasMs, resumoDaRodada } from './sharepoint-erro-leitura.js';
+
+/**
+ * O teto publicado pelo proxy (`proxy-backend/server.js`: 60/min por IP).
+ *
+ * ⚠️ Ele vive numa env com o valor de HOJE como padrão: cravar aqui o número
+ * do outro serviço é a família do tenant cravado (28/08) — mudou lá, o app
+ * continua batendo rápido demais e ninguém liga uma coisa à outra.
+ */
+const RESPIRO_PROXY_MS = intervaloEntreChamadasMs(process.env.SHAREPOINT_PROXY_POR_MINUTO || 60);
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const router = express.Router();
 router.use(express.json());
@@ -320,9 +347,11 @@ function classifyCfop(itens, direcao) {
     return 'outro';
 }
 
-function buildFolderPath(grupo, ano, mes, empresa, direcao) {
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${ano}/${mes}-${ano}/${empresa}/XML ${direcao}`;
-}
+// 🗑️ `buildFolderPath` foi DELETADO. Ele montava
+// `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mes}-{ano}/{empresa}/XML {dir}`
+// — um caminho que NÃO EXISTE no SharePoint (medido em 02/09). Código morto
+// aqui seria a isca para alguém reativar a régua velha.
+
 
 async function fetchFromProxy(path, body) {
     const resp = await fetch(`${PROXY_URL}${path}`, {
@@ -365,17 +394,21 @@ async function checarProxySharePoint() {
 
 // ─── Sync logic ─────────────────────────────────────────────────────────────
 
-async function syncEmpresa(db, empresa, competencias) {
+async function syncEmpresa(db, empresa, competencias, pastasDeEmpresas) {
     const cfg = empresa.sharePointConfig;
     if (!cfg || !cfg.autoSyncEnabled) return null;
     // Config incompleta NÃO pode ser pulada em silêncio: a empresa aparece na
     // lista de auto-sync, o run termina 0/0/0 verde e ninguém percebe que
     // nada foi sincronizado. Devolve resultado com erro pra contar e exibir.
-    if (!cfg.grupo || !cfg.empresaPasta) {
+    // 🚨 A PASTA DA EMPRESA É ACHADA, NÃO MONTADA (02/09). Os nomes são
+    // humanos — `0004 – AÇOUGUE YOKOAMA`, `0019 _3D PICTURES` — e montar
+    // criaria uma pasta NOVA ao lado da que existe, duplicando o cliente.
+    const achado = await resolverPastaDaEmpresa(empresa, pastasDeEmpresas);
+    if (!achado.ok) {
         return {
             empresaId: empresa.id,
             empresaNome: empresa.nome,
-            erro: 'Configuração incompleta: grupo/pasta do SharePoint não preenchidos',
+            erro: achado.motivo,
             configIncompleta: true,
         };
     }
@@ -393,7 +426,12 @@ async function syncEmpresa(db, empresa, competencias) {
     const directions = ['SAÍDA', 'ENTRADA'];
     const summary = {
         empresaId: empresa.id, empresaNome: empresa.nome,
-        novos: 0, duplicados: 0, erros: 0, total: 0,
+        // 🚨 TRÊS BALDES, não um (02/09): a rodada devolveu "879 erros" e a
+        // maioria não era erro. `semPasta` é 404 de LEITURA — a competência
+        // ainda não existe no SharePoint, e o auto-sync não cria pasta (quem
+        // cria é a gravação). `limite` é o 429 do NOSSO proxy, que não tem
+        // nada a ver com a empresa da linha.
+        novos: 0, duplicados: 0, erros: 0, semPasta: 0, limite: 0, total: 0,
         competencias: [...competencias],
         // Motivo das primeiras falhas por pasta — sem isso o log só dizia
         // "erros: 2" e era impossível saber se a pasta não existe, o proxy
@@ -405,15 +443,26 @@ async function syncEmpresa(db, empresa, competencias) {
         const [ano, mes] = competencia.split('-');
 
         for (const dir of directions) {
-            const folderPath = buildFolderPath(cfg.grupo, ano, mes, cfg.empresaPasta, dir);
+            const folderPath = caminhoFiscal({ pastaEmpresa: achado.pasta, ano, mes, direcao: dir });
             let syncResult;
             try {
+                // ⚠️ RESPIRO: o proxy publica 60/min e a rodada faz 4 chamadas
+                // por empresa. Sem isto, 1.664 chamadas viram ~880 recusas do
+                // próprio app — é o respiro de 90s da SEFAZ com outra roupa.
+                if (RESPIRO_PROXY_MS > 0) await esperar(RESPIRO_PROXY_MS);
                 syncResult = await fetchFromProxy('/api/sharepoint/sync', { folderPath });
             } catch (err) {
+                const cls = classificarErroDeLeitura(err.message);
+                // 🚨 404 de LEITURA não é falha: é "esta competência ainda não
+                // existe no SharePoint". Contá-lo como erro pintava a carteira
+                // inteira de vermelho todo dia sobre uma situação normal.
+                if (cls.causa === 'pasta-inexistente') { summary.semPasta++; continue; }
+                if (cls.causa === 'limite-do-proxy') summary.limite++;
                 console.warn(`[auto-sync] ${empresa.nome} ${competencia} ${dir}: ${err.message}`);
                 summary.erros++;
                 if (summary.errosDetalhe.length < 6) {
-                    summary.errosDetalhe.push(`${competencia} ${dir}: ${err.message}`.slice(0, 200));
+                    const acao = cls.acao ? ` — ${cls.acao}` : '';
+                    summary.errosDetalhe.push(recortarPreservandoApp(`${competencia} ${dir}: ${err.message}${acao}`));
                 }
                 continue;
             }
@@ -428,11 +477,27 @@ async function syncEmpresa(db, empresa, competencias) {
                     const parsed = parseXmlServer(file.content);
                     if (!parsed || !parsed.chave) { summary.erros++; continue; }
 
-                    const docId = parsed.chave;
+                    let docId = parsed.chave;
+                    let ladoDe = null;
                     const existingDoc = await db.collection('documentos_fiscais').doc(docId).get();
                     if (existingDoc.exists) {
-                        summary.duplicados++;
-                        continue;
+                        // A chave já tem dono. Se ESTA empresa também é parte
+                        // (saída de uma cliente, entrada da outra — 11/09), o
+                        // documento dela é o OUTRO LADO, com o id do dono;
+                        // senão continua sendo duplicado, como sempre.
+                        const ex = existingDoc.data() || {};
+                        const posse = decidirPosseDocumento({
+                            existente: ex,
+                            pretendente: { empresaId: empresa.id, empresaCnpj: cnpj },
+                            documento: { cnpjEmit: parsed.emitente?.cnpjCpf, cnpjDest: parsed.destinatario?.cnpjCpf },
+                        });
+                        const idLado = posse.situacao === 'contraparte-legitima'
+                            ? idDoDocumentoDoLado(parsed.chave, cnpj) : '';
+                        if (!idLado) { summary.duplicados++; continue; }
+                        const snapLado = await db.collection('documentos_fiscais').doc(idLado).get();
+                        if (snapLado.exists) { summary.duplicados++; continue; }
+                        ladoDe = carimboDoLado({ chave: parsed.chave, outroLadoCnpj: ex.empresaCnpj, outroLadoEmpresaId: ex.empresaId });
+                        docId = idLado;
                     }
 
                     const xmlHash = sha256Hex(file.content);
@@ -467,6 +532,7 @@ async function syncEmpresa(db, empresa, competencias) {
                         importadoEm: Date.now(),
                         createdBy: 'system:auto-sync',
                         createdByEmail: 'auto-sync@system',
+                        ...(ladoDe ? { ladoDe } : {}),
                     };
 
                     // Remove undefined values (Firestore rejects them)
@@ -477,7 +543,7 @@ async function syncEmpresa(db, empresa, competencias) {
                     console.warn(`[auto-sync] erro processando ${file.name}:`, err.message);
                     summary.erros++;
                     if (summary.errosDetalhe.length < 6) {
-                        summary.errosDetalhe.push(`${file.name}: ${err.message}`.slice(0, 200));
+                        summary.errosDetalhe.push(recortarPreservandoApp(`${file.name}: ${err.message}`));
                     }
                 }
             }
@@ -572,12 +638,37 @@ router.post('/auto-sync', async (req, res) => {
             return res.status(502).json({ error: saude.motivo, competencia, competencias });
         }
 
-        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), competencia(s) ${competencia}`);
+        // 🚨 AS PASTAS DAS EMPRESAS SÃO LIDAS UMA VEZ POR RODADA. O nome é
+        // humano e tem de ser ACHADO pelo código; ler por empresa seriam ~400
+        // idas ao Graph (o HTTP 429 de 27/08 com outra roupa).
+        // ⚠️ Falhar aqui é FATAL e vai DITO: sem a lista, NENHUMA empresa
+        // resolve o caminho, e 416 linhas de "pasta não encontrada" mandariam
+        // criar 416 pastas que talvez já existam.
+        let pastasDeEmpresas;
+        try {
+            pastasDeEmpresas = await listarPastasDeEmpresas();
+        } catch (e) {
+            const motivo = `Não foi possível listar as pastas de ${PASTA_RAIZ} no SharePoint: ${e.message}`;
+            console.error(`[auto-sync] abortado: ${motivo}`);
+            await db.collection('sharepoint_sync_log').add({
+                competencia,
+                competencias,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                empresasProcessadas: 0,
+                totalNovos: 0, totalDup: 0, totalErros: empresas.length,
+                erroFatal: motivo,
+                results: [],
+            }).catch(() => {});
+            return res.status(502).json({ error: motivo, competencia, competencias });
+        }
+
+        console.log(`[auto-sync] Iniciando sync de ${empresas.length} empresa(s), `
+            + `${pastasDeEmpresas.length} pasta(s) em ${PASTA_RAIZ}, competencia(s) ${competencia}`);
 
         const results = [];
         for (const empresa of empresas) {
             try {
-                const result = await syncEmpresa(db, empresa, competencias);
+                const result = await syncEmpresa(db, empresa, competencias, pastasDeEmpresas);
                 if (result) results.push(result);
             } catch (err) {
                 console.error(`[auto-sync] erro em ${empresa.nome}:`, err.message);
@@ -594,9 +685,16 @@ router.post('/auto-sync', async (req, res) => {
         // Empresa que falhou inteira (erro/config incompleta) também conta como
         // erro — antes só os erros por arquivo entravam e a falha sumia do total.
         const totalErros = results.reduce((s, r) => s + (r.erros || 0) + (r.erro ? 1 : 0), 0);
+        // 🚨 OS DOIS NÚMEROS QUE SAÍRAM DO BALDE DE "ERRO" (02/09) — porque
+        // pedem ações diferentes, e uma delas é NENHUMA.
+        const totalSemPasta = results.reduce((s, r) => s + (r.semPasta || 0), 0);
+        const totalLimite = results.reduce((s, r) => s + (r.limite || 0), 0);
         const empresasComConfigIncompleta = results.filter(r => r.configIncompleta).length;
 
-        console.log(`[auto-sync] Concluido: ${totalNovos} novos, ${totalDup} duplicados, ${totalErros} erros`);
+        console.log(`[auto-sync] Concluido: ${resumoDaRodada({
+            novos: totalNovos, duplicados: totalDup, erros: totalErros,
+            semPasta: totalSemPasta, limite: totalLimite,
+        })}`);
 
         // Log the sync run
         await db.collection('sharepoint_sync_log').add({
@@ -605,6 +703,7 @@ router.post('/auto-sync', async (req, res) => {
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             empresasProcessadas: empresas.length,
             totalNovos, totalDup, totalErros,
+            totalSemPasta, totalLimite,
             empresasComConfigIncompleta,
             erroFatal: null,
             results,
@@ -617,6 +716,13 @@ router.post('/auto-sync', async (req, res) => {
             totalNovos,
             totalDup,
             totalErros,
+            totalSemPasta,
+            totalLimite,
+            // A frase COM a causa sai daqui — a tela não a reescreve.
+            resumo: resumoDaRodada({
+                novos: totalNovos, duplicados: totalDup, erros: totalErros,
+                semPasta: totalSemPasta, limite: totalLimite,
+            }),
             empresasComConfigIncompleta,
             results,
         });
@@ -653,20 +759,29 @@ router.post('/config', async (req, res) => {
             return res.status(400).json({ error: 'collection invalida' });
         }
 
-        // Auto-sync ativo com grupo/pasta vazios sincroniza nada em silêncio
-        // (era a causa do run diário 0/0/0 "verde") — rejeita na origem.
-        const grupoCfg = String(sharePointConfig.grupo || '').trim();
-        const pastaCfg = String(sharePointConfig.empresaPasta || '').trim();
-        if (sharePointConfig.autoSyncEnabled && (!grupoCfg || !pastaCfg)) {
+        // 🚨 A TRAVA MUDOU DE CAMPO EM 02/09, e ela era a pior das duas: ela
+        // RECUSAVA ligar o auto-sync sem `grupo` + `empresaPasta` — cadastro
+        // do caminho MORTO. Ou seja, hoje era impossível ligar a captura sem
+        // preencher um campo que não faz mais nada (o achado 18, 21/08, na
+        // forma mais cara: não é aviso que aponta o lugar errado, é BLOQUEIO).
+        //
+        // O que a régua nova precisa é o **Cod.Cliente**: é por ele que a
+        // pasta REAL da empresa é achada em `Empresas`. Sem ele, o auto-sync
+        // sincroniza nada em silêncio, que era o run 0/0/0 "verde" de sempre.
+        const doc = await fa().firestore().collection(collection).doc(empresaId).get();
+        const codCliente = codClienteDoCadastro(doc.data());
+        if (Boolean(sharePointConfig.autoSyncEnabled) && !codCliente) {
             return res.status(400).json({
-                error: 'Preencha Grupo (pasta) e Empresa (pasta) para ativar o auto-sync.',
+                error: 'Esta empresa não tem Cod.Cliente no cadastro — é por ele que a pasta dela é '
+                    + 'encontrada no SharePoint. Preencha em Empresas → Dados Fiscais antes de ligar o auto-sync.',
             });
         }
 
+        // ⚠️ `grupo`/`empresaPasta` NÃO são mais gravados: campo de caminho que
+        // ninguém lê é o convite para alguém preenchê-lo de novo. O que fica é
+        // a MATRÍCULA (quem participa do auto-sync) e o carimbo de quem ligou.
         await fa().firestore().collection(collection).doc(empresaId).update({
             sharePointConfig: {
-                grupo: grupoCfg,
-                empresaPasta: pastaCfg,
                 autoSyncEnabled: Boolean(sharePointConfig.autoSyncEnabled),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedBy: decoded.email || decoded.uid,
@@ -701,40 +816,69 @@ router.get('/status', async (req, res) => {
 
         const lastSync = lastLogSnap.empty ? null : lastLogSnap.docs[0].data();
 
+        // 🚨 A PERGUNTA MUDOU EM 02/09 — de STATUS para RESULTADO.
+        //
+        // Isto respondia *"a empresa tem `grupo` + `empresaPasta` preenchidos?"*
+        // e pintava de vermelho quem não tinha, dizendo *"nada é sincronizado"*.
+        // Os dois campos são cadastro do caminho MORTO: a afirmação passou a
+        // ser FALSA, e a fila de trabalho que ela produzia mandava preencher um
+        // campo que não muda nada (achado 18, 21/08).
+        //
+        // A pergunta que vale é *"a pasta desta empresa RESOLVE?"*, e quem
+        // responde é o DONO — a mesma resolução que o auto-sync usa para
+        // gravar. Uma tela que perguntasse diferente do trilho diria "pronta"
+        // sobre empresa que o run pula.
+        //
+        // ⚠️ UMA listagem por REQUISIÇÃO, e a comparação é pura: leitura por
+        // empresa seria o HTTP 429 de 27/08 com outra roupa.
+        let pastas = null;
+        let pastasErro = null;
+        try {
+            pastas = await listarPastasDeEmpresas();
+        } catch (e) {
+            // ⚠️ Falhar a LEITURA não vira "nenhuma pasta resolve": pintaria a
+            // carteira inteira de vermelho por causa de uma rede que piscou.
+            pastasErro = e.message;
+        }
+
         const empresasAutoSync = [];
-        // Lista de quem AINDA NÃO tem grupo+pasta — o gap que trava a cópia
-        // no SharePoint (XMLs do arquivo E impostos da ordem técnica). Antes
-        // só existia o CONTADOR semConfig no log do cron; ninguém sabia QUEM
-        // faltava sem abrir empresa por empresa (Paulo, 24/07).
-        const empresasSemConfig = [];
+        // Quem NÃO resolve a pasta — a fila de trabalho de verdade, com a
+        // causa e a ação de cada uma vindas do dono.
+        const empresasSemPasta = [];
         for (const col of ['simples_empresas', 'lucro_empresas']) {
             const snap = await db.collection(col).get();
             for (const d of snap.docs) {
                 const data = d.data();
                 if (data._merged_into || data._deleted) continue; // zumbis fora
+                const codCliente = codClienteDoCadastro(data);
+                const achado = pastas
+                    ? await resolverPastaDaEmpresa(data, pastas)
+                    : { ok: false, pasta: null, codCliente, motivo: null };
                 if (data.sharePointConfig?.autoSyncEnabled) {
                     empresasAutoSync.push({
                         id: d.id,
                         nome: data.nome,
                         cnpj: data.cnpj,
-                        grupo: data.sharePointConfig.grupo,
-                        empresaPasta: data.sharePointConfig.empresaPasta,
+                        codCliente,
+                        // `null` = não deu para conferir (a listagem falhou).
+                        pastaResolvida: pastas ? achado : null,
                     });
                 }
-                const cfg = data.sharePointConfig;
-                if (!cfg || !String(cfg.grupo || '').trim() || !String(cfg.empresaPasta || '').trim()) {
-                    empresasSemConfig.push({
+                if (pastas && !achado.ok) {
+                    empresasSemPasta.push({
                         id: d.id,
                         nome: data.razaoSocial || data.nome || '—',
                         cnpj: String(data.cnpj || '').replace(/\D/g, ''),
                         fonte: col === 'simples_empresas' ? 'simples' : 'lucro',
+                        codCliente,
+                        motivo: achado.motivo,
                     });
                 }
             }
         }
-        empresasSemConfig.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+        empresasSemPasta.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-        return res.json({ lastSync, empresasAutoSync, empresasSemConfig });
+        return res.json({ lastSync, empresasAutoSync, empresasSemPasta, pastasErro });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }

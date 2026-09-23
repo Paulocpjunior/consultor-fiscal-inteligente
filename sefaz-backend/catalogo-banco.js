@@ -15,15 +15,19 @@
 
 /** @type {Array<{colecao:string, grupo:string, funcionalidade:string, descricao?:string}>} */
 export const CATALOGO_BANCO = [
+    { colecao: 'ebef_dossies', grupo: 'Societário', funcionalidade: 'Dossiês e-BEF por empresa e exercício; acesso por carteira, documentos privados e revisão; escrita exclusiva do backend' },
+    { colecao: 'ebef_versoes', grupo: 'Societário', funcionalidade: 'Subcoleção de ebef_dossies: snapshots imutáveis de cada revisão e operação do dossiê e-BEF' },
     // ── Cadastro & acesso ──────────────────────────────────────────────────
     { colecao: 'users', grupo: 'Cadastro & Acesso', funcionalidade: 'Usuários, papéis e departamentos do SaaS (login, admin/colaborador, gate dos módulos irmãos)' },
     { colecao: 'carteiras', grupo: 'Cadastro & Acesso', funcionalidade: 'Carteira de clientes por colaborador' },
+    { colecao: 'carteira_acessos', grupo: 'Cadastro & Acesso', funcionalidade: 'Indice privado de autorizacao por UID, mantido atomicamente pelo backend com os vinculos de carteira' },
     { colecao: 'carteira_observacoes', grupo: 'Cadastro & Acesso', funcionalidade: 'Observação do colaborador sobre um cliente na competência (guia do mês); 1 doc por empresa × competência, escrita só pelo backend' },
     { colecao: 'simples_empresas', grupo: 'Cadastro & Acesso', funcionalidade: 'Empresas do Simples Nacional (cadastro + apuração)' },
     { colecao: 'lucro_empresas', grupo: 'Cadastro & Acesso', funcionalidade: 'Empresas do Lucro Presumido/Real' },
     { colecao: 'empresas_mesclagens', grupo: 'Cadastro & Acesso', funcionalidade: 'Auditoria de mesclagem de empresas duplicadas' },
     { colecao: 'reinf_gateway_lotes', grupo: 'Cadastro & Acesso', funcionalidade: 'Auditoria do gateway EFD-Reinf (fase 4 do túnel): quem transmitiu, declarante, ambiente, ids e protocolo — nunca o conteúdo do evento' },
     { colecao: 'reinf_fechamentos', grupo: 'Cadastro & Acesso', funcionalidade: 'Rito do fechamento da EFD-Reinf (R-2099): farol da competência, recibo de cada evento, conferência contra o totalizador e o que foi arquivado/avisado — nunca o conteúdo do evento' },
+    { colecao: 'reinf_retencoes_ajustadas', grupo: 'Cadastro & Acesso', funcionalidade: 'Ajuste DECLARADO da retenção de uma NOTA para o R-4020 (31/08): 1 doc por empresa × competência, mapa por chave da nota, com autor, data e motivo escrito. Existe porque a NFS-e paulistana traz nos campos de PIS/COFINS o tributo da OPERAÇÃO do prestador (1,65%+7,60%) e não a retenção — declarar aqueles valores infla a retenção (315,73 no lugar de 158,72). Vence a derivação automática; a gravação é incremental por nota' },
     { colecao: 'empresas_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificados A1/A3 por empresa (metadados)' },
     { colecao: 'sefaz_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificado do escritório (config)' },
     { colecao: 'sefaz_certificados_historico', grupo: 'Cadastro & Acesso', funcionalidade: 'Histórico de trocas do certificado do escritório' },
@@ -67,10 +71,12 @@ export const CATALOGO_BANCO = [
 
     // ── Simples / DAS ──────────────────────────────────────────────────────
     { colecao: 'das_emitidos', grupo: 'Simples · DAS', funcionalidade: 'DAS emitidos (PGDAS-D + guia)' },
+    { colecao: 'das_emissao_operacoes', grupo: 'Simples · DAS', funcionalidade: 'Diário privado de emissão: reserva idempotente, recibo PGDAS-D e recuperação de guia sem retransmissão; escrita exclusiva do backend' },
     { colecao: 'pgdas_sem_movimento', grupo: 'Simples · DAS', funcionalidade: 'PGDAS-D de mês sem movimento (declaração sem guia)' },
     { colecao: 'pgdas_atividades_codigos', grupo: 'Simples · DAS', funcionalidade: 'Código oficial de atividade do PGDAS-D cadastrado pelo admin (ISS fixo/SUP)' },
     { colecao: 'ncm_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Cadastro de NCM: alíquota interna, IVA-ST (com Portaria e vigência), CEST e redução de base' },
     { colecao: 'cfop_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'CÉREBRO do CFOP: o que alguém corrigiu numa nota vira parâmetro do FORNECEDOR para as próximas competências (não retroage)' },
+    { colecao: 'retencao_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Parâmetro de RETENÇÃO por prestador: alíquota + base legal que SUGEREM a retenção nas próximas competências (não retroage; sugestão nunca grava sozinha)' },
     { colecao: 'das_envios_cliente', grupo: 'Simples · DAS', funcionalidade: 'Envios de DAS ao cliente' },
     { colecao: 'das_cron_logs', grupo: 'Simples · DAS', funcionalidade: 'Execuções do cron de DAS/vencimentos' },
 
@@ -107,8 +113,10 @@ export const CATALOGO_BANCO = [
     { colecao: 'sage_codigos_participantes', grupo: 'Integrações', funcionalidade: 'De→Para de códigos de participante do E-Fiscal (Exportar SAGE) — 1 doc por empresa' },
     { colecao: 'sped_ajustes_apuracao', grupo: 'Integrações', funcionalidade: 'Ajustes da apuração ICMS (Registro E111 do SPED Fiscal) — 1 doc por empresa×competência' },
     { colecao: 'sped_inventario', grupo: 'Integrações', funcionalidade: 'Bloco H do SPED Fiscal — contagem física do inventário (H005/H010); 1 doc por empresa × data do inventário' },
+    { colecao: 'sped_bloco_k', grupo: 'Integrações', funcionalidade: 'Bloco K do SPED Fiscal — apontamento de produção e estoque (K200/K230/K235); 1 doc por empresa × competência' },
     { colecao: 'sped_saldos_abertura', grupo: 'Integrações', funcionalidade: '🧮 Saldo credor de ABERTURA (E110 c.14 / E520 c.7 do último SPED ENTREGUE, colado) — 1 doc por empresa; o transporte mês a mês é calculado, nunca redigitado' },
     { colecao: 'sped_ciap_bens', grupo: 'Integrações', funcionalidade: 'CIAP / Bloco G do SPED Fiscal — bens do imobilizado com crédito de ICMS em 48 parcelas; 1 doc por empresa' },
+    { colecao: 'rotina_coberturas_declaradas', grupo: 'Cadastro & Acesso', funcionalidade: '📋 Entrega DECLARADA das obrigações que o catálogo NÃO cobre (INSS patronal, ISS municipal) — sem ela a etapa 4 da Rotina mandava, para sempre, não fechar o mês; 1 doc por empresa × competência' },
     { colecao: 'fechamentos_competencia', grupo: 'Cadastro & Acesso', funcionalidade: '🔒 DAR FIM DE MÊS — o ato que fecha a competência e vira a base de impostos, livros, ficha financeira e da importação do Contábil (CCI): congela o ACERVO (instante do corte + ultNSU/maxNSU), os VALORES apurados e o LASTRO, com versão a cada reabertura; 1 doc por empresa × competência' },
     { colecao: 'contadores', grupo: 'Cadastro & Acesso', funcionalidade: 'Catálogo de contadores do escritório (identificação dos relatórios) — escolhido por empresa no modal Dados Fiscais' },
     { colecao: 'nbs_codigos_oficiais', grupo: 'Catálogos', funcionalidade: 'Catálogo NBS oficial' },

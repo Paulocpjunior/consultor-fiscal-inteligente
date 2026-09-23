@@ -32,6 +32,12 @@ export function cstDoLancamento(
     cstInformado?: unknown,
 ): CstDoLancamento;
 
+/**
+ * A tributação informada que vale para ESTE item (item > nota) — '' segue a régua.
+ * Todo leitor com a nota na mão passa a 3ª posição de `cstDoLancamento` por aqui.
+ */
+export function cstInformadoDoItem(doc: unknown, item: unknown): string;
+
 /** Trava do campo digitado: vazio é resposta, fora da Tabela B é recusado. */
 export function validarCstEscriturado(
     valor: unknown,

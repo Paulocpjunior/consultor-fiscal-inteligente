@@ -185,7 +185,11 @@ describe('🚨 a cronologia está LIGADA de ponta a ponta', () => {
         // A ficha é o FALLBACK: o bloco dela tem que estar condicionado.
         expect(orq).toMatch(/regime === 'lucro' && !saldoVeioDaAbertura/);
         // E a cadeia usa as MESMAS somas do E110/E520 — não uma conta nova.
-        expect(orq).toMatch(/somarIcmsPorDirecao\(notasMes, 'saida'\)/);
+        // 11/09: a soma do ICMS recebe o CONTEXTO (regime + CNPJ), senão a
+        // cadeia somaria o destaque cru e o E110 o crédito zerado.
+        expect(orq).toMatch(/somarIcmsPorDirecao\(notasMes, 'saida', ctxCronologia\)/);
+        expect(orq).toMatch(/somarIcmsPorDirecao\(notasMes, 'entrada', ctxCronologia\)/);
+        expect(orq).toMatch(/const ctxCronologia = \{ empresa, regimeEscrituracao \}/);
         expect(orq).toMatch(/somarImpostoPorDirecao\(notasMes, 'entrada', 'vIPI', 'vIPI'\)/);
     });
 

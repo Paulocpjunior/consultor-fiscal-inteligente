@@ -81,6 +81,93 @@ export function valorOperacaoDoItem(item) {
 }
 
 /**
+ * OS CAMPOS DO VL_OPR QUE PODEM EXISTIR SÓ NO TOTAL DO DOCUMENTO — e a RESERVA.
+ *
+ * 🚨 12/09 (ELS · 08/2026, Paulo: *"os valores TOTAL DA OPERAÇÃO não bate com
+ * meu valor Contábil … será que ele está pegando descontos de alguma nota?"*):
+ * Livro 957.467,11 × PVA 955.593,91. O Livro lê o `vNF` do DOCUMENTO; o C190
+ * soma os ITENS — e a nota importada pelo NAVEGADOR não tinha frete, seguro,
+ * outras despesas nem FCP-ST no item (o parser não os gravava; o do backend
+ * grava desde 04/08). Cada nota dessas entrava no arquivo a MENOR pelo valor
+ * das despesas acessórias, e o PVA aceita — é livro a menor.
+ *
+ * A régua: quando NENHUM item da nota traz o campo (ausente — `0` conta como
+ * trazido, zero é resposta) e o TOTAL do documento o traz, o total é a
+ * RESERVA. Com UM item o valor é exato; com vários, o rateio é proporcional ao
+ * valor de cada item (a mesma conta que o emitente faz ao preencher o campo
+ * por item) e sai CARIMBADO no aviso da geração — número derivado não se
+ * apresenta como lido. O caminho de volta ao valor POR ITEM que o XML declara
+ * é o ♻️ Reler itens dos XMLs (`backfill-itens-fiscais.js`).
+ *
+ * ⚠️ O desconto entra com sinal NEGATIVO: desconto só no total com o item
+ * sem `vDesc` faria o VL_OPR sair a MAIOR — é a outra ponta da mesma classe
+ * (o caso PWR de 20/08, agora no C190).
+ */
+export const CAMPOS_DA_RESERVA = Object.freeze([
+    { item: 'vFrete', total: 'vFrete', sinal: 1, rotulo: 'frete' },
+    { item: 'vSeg', total: 'vSeg', sinal: 1, rotulo: 'seguro' },
+    { item: 'vOutro', total: 'vOutro', sinal: 1, rotulo: 'outras despesas' },
+    { item: 'vICMSST', total: 'vST', sinal: 1, rotulo: 'ICMS-ST' },
+    { item: 'vFCPST', total: 'vFCPST', sinal: 1, rotulo: 'FCP-ST' },
+    { item: 'vIPI', total: 'vIPI', sinal: 1, rotulo: 'IPI' },
+    { item: 'vDesc', total: 'vDesc', sinal: -1, rotulo: 'desconto' },
+]);
+
+const itemTraz = (it, campo) => it != null && it[campo] !== undefined && it[campo] !== null && it[campo] !== '';
+
+/**
+ * O que o TOTAL do documento declara e NENHUM item carrega.
+ *
+ * @returns {{ campos: Array<{campo:string, total:string, rotulo:string, valor:number}>, valor: number }}
+ *          `valor` já com o sinal (desconto negativo); zero quando não há reserva.
+ */
+export function reservaDosTotais(nota) {
+    const itens = Array.isArray(nota?.itens) ? nota.itens : [];
+    const totais = nota?.totais || {};
+    const campos = [];
+    let valor = 0;
+    if (!itens.length) return { campos, valor };
+    for (const c of CAMPOS_DA_RESERVA) {
+        if (itens.some((it) => itemTraz(it, c.item))) continue;   // algum item traz: o item manda
+        const doTotal = nDoc(totais[c.total]);
+        if (doTotal <= 0) continue;
+        campos.push({ campo: c.item, total: c.total, rotulo: c.rotulo, valor: doTotal * c.sinal });
+        valor += doTotal * c.sinal;
+    }
+    return { campos, valor: Math.round(valor * 100) / 100 };
+}
+
+/**
+ * VL_OPR de CADA item da nota, com a reserva dos totais distribuída.
+ *
+ * @returns {{ porItem: number[], reserva: ReturnType<typeof reservaDosTotais>, rateado: boolean }}
+ *          `rateado` = a reserva foi dividida entre 2+ itens (proporcional ao
+ *          valor de cada um); com um item só o valor é exato, não derivado.
+ */
+export function valorOperacaoDosItens(nota) {
+    const itens = Array.isArray(nota?.itens) ? nota.itens : [];
+    const porItem = itens.map(valorOperacaoDoItem);
+    const reserva = reservaDosTotais(nota);
+    if (!reserva.valor || !itens.length) return { porItem, reserva, rateado: false };
+
+    const pesos = itens.map((it) => nDoc(it.vProd ?? it.valor));
+    const somaPesos = pesos.reduce((a, b) => a + b, 0);
+    let distribuido = 0;
+    for (let i = 0; i < itens.length; i++) {
+        let parte;
+        if (i === itens.length - 1) {
+            parte = Math.round((reserva.valor - distribuido) * 100) / 100;   // a sobra do arredondamento vai no último
+        } else {
+            const fracao = somaPesos > 0 ? pesos[i] / somaPesos : 1 / itens.length;
+            parte = Math.round(reserva.valor * fracao * 100) / 100;
+            distribuido = Math.round((distribuido + parte) * 100) / 100;
+        }
+        porItem[i] = Math.round((porItem[i] + parte) * 100) / 100;
+    }
+    return { porItem, reserva, rateado: itens.length > 1 };
+}
+
+/**
  * VL_OPR a partir de uma linha C170 JÁ GERADA (forma do arquivo).
  *
  * ⚠️ É o PISO, não o valor exato: frete/seguro/outras despesas não existem no

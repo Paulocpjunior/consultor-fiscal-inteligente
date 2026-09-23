@@ -9,6 +9,16 @@ export interface XmlParticipanteNfe {
     uf: string | null;
     codMunIBGE: string | null;
     ie: string | null;
+    /**
+     * O que o `<enderEmit>`/`<enderDest>` traz além da UF e do município — e
+     * que este extrator descartava até 18/09. O `logradouro` é o campo 10 do
+     * 0150 (ENDERECO), **obrigatório sem condição** no Guia 3.2.3.
+     */
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cep: string | null;
 }
 
 export interface XmlParticipantesNfe {
@@ -43,6 +53,23 @@ export function ehNotaPropriaDeEntrada(
 ): { sim: boolean; prova: 'tpNF' | null };
 
 /**
+ * Por que a nota de entrada do EMITENTE fica fora da escrituração — a MESMA
+ * frase no Livro, no `.FML` e no SPED. Cada tela escrevendo a sua é o começo
+ * de duas respostas divergentes sobre o mesmo fato.
+ */
+export const MOTIVO_ENTRADA_DO_EMITENTE: string;
+
+/**
+ * O espelho: a entrada declarada no documento é do EMITENTE (terceiro), não da
+ * empresa — devolução recebida pelo fornecedor, retorno de industrialização.
+ * Ela NÃO se escritura no livro de entradas de quem está no `<dest>`.
+ */
+export function ehEntradaDoEmitente(
+    d: DocParaDirecao | null | undefined,
+    empresaCnpj?: string | null,
+): { sim: boolean; prova: 'tpNF' | null };
+
+/**
  * Cancelamento EFETIVO do documento — mesma lição da direção: o status gravado
  * pode mentir (evento 155 não virava o status; merge stub→nota ressuscitava a
  * cancelada). Decide na LEITURA pelo status, pelo cStat legado da própria nota
@@ -54,7 +81,15 @@ export function ehNotaPropriaDeEntrada(
  * `eventos` a régua diz "não cancelada" com toda confiança.
  */
 export const CAMPOS_PARA_DOC_CANCELADO: readonly string[];
+export function origemDoCancelamento(d: any): 'documento' | 'declarado' | null;
 export function docCancelado(d: unknown): boolean;
+
+/** Campos que a projeção precisa trazer para a LÁPIDE ser lida. */
+export const CAMPOS_PARA_DOC_RETIRADO: readonly string[];
+/** O documento foi tirado do acervo (retirada `_deleted` ou perdedor de merge)? */
+export function docRetiradoDoAcervo(d: unknown): boolean;
+/** O contrário, para ler como filtro: `notas.filter(docContaNoLivro)`. */
+export function docContaNoLivro(d: unknown): boolean;
 export const CSTAT_EVENTO_CANCELAMENTO: Set<string>;
 
 /**
@@ -116,3 +151,12 @@ export function issDoDocumento(doc: unknown): number;
 export function issRetidoDoDocumento(doc: unknown): number;
 /** O documento DECLARA retenção de ISS (inclui o booleano do portal). */
 export function issRetidoDeclarado(doc: unknown): boolean;
+/**
+ * Quanto o tomador reteve — valor explícito ('documento') ou, declarado sem
+ * valor separado (portal de SP), o ISS da nota ('declarado-iss-integral').
+ * Sem declaração: `valor: null`, nunca zero.
+ */
+export function issRetidoEfetivoDoc(doc: unknown): {
+    valor: number | null;
+    origem: 'documento' | 'declarado-iss-integral' | null;
+};

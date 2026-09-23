@@ -65,6 +65,12 @@ export interface DocumentoExistente {
     origem?: string | null;
     status?: string | null;
     importadoEm?: string | null;
+    /**
+     * A captura pela SEFAZ grava `createdAt` (Timestamp do Firestore) e NÃO
+     * `importadoEm` — a frase saía "data não registrada" sobre nota com data
+     * (print do Paulo, 11/09). Armadilha das duas formas, dentro deste leitor.
+     */
+    createdAt?: unknown;
     importadoPorEmail?: string | null;
     _deleted?: boolean;
     _merged_into?: string | null;
@@ -96,6 +102,13 @@ export interface LeituraDuplicado {
     mensagem: string;
     /** O que fazer — null quando realmente não há nada a fazer. */
     acao: string | null;
+    /**
+     * 🚨 As DUAS empresas são partes: o app grava o documento do OUTRO LADO
+     * (id derivado da chave + CNPJ de quem escritura — `documento-lado.js`),
+     * em vez de recusar. É a raiz de 17/08 (KROYA × GOLDLOG) fechada em
+     * 11/09 (LEGACY × FEDERAÇÃO).
+     */
+    gravaOutroLado?: boolean;
 }
 
 const texto = (v: unknown): string => String(v ?? '').trim();
@@ -137,10 +150,16 @@ const TRILHO: Record<string, string> = {
     pdf: 'importação de PDF',
 };
 
-function quando(iso?: string | null): string {
-    const s = texto(iso);
-    if (!s) return 'data não registrada';
-    const d = new Date(s);
+function quando(valor?: unknown): string {
+    // ISO (importação pelo navegador/portal) OU Timestamp do Firestore
+    // (captura pela SEFAZ grava `createdAt`) — as duas formas, um leitor.
+    const v: any = valor;
+    const d = v && typeof v.toDate === 'function'
+        ? v.toDate()
+        : v && typeof v.seconds === 'number'
+            ? new Date(v.seconds * 1000)
+            : (texto(v) ? new Date(texto(v)) : null);
+    if (!d) return 'data não registrada';
     if (Number.isNaN(d.getTime())) return 'data não registrada';
     return `em ${d.toLocaleDateString('pt-BR')}`;
 }
@@ -160,10 +179,17 @@ function porQual(origem?: string | null): string {
 export function lerDuplicado(
     existente: DocumentoExistente | null | undefined,
     empresaEscolhida: { id?: string | null; nome?: string | null; cnpj?: string | null },
+    /**
+     * As partes do ARQUIVO que está chegando. O que está gravado pode ser um
+     * RESUMO (resNFe), que só traz o emitente — julgar a contraparte só por
+     * ele devolvia "outra empresa" sobre a destinatária da nota (LEGACY ×
+     * FEDERAÇÃO, 11/09). O arquivo completo tem os dois lados.
+     */
+    arquivo?: { cnpjEmit?: string | null; cnpjDest?: string | null } | null,
 ): LeituraDuplicado {
     const d = existente || {};
     const dono = texto(d.empresaNome) || texto(d.empresaCnpj) || 'empresa não registrada no documento';
-    const carimbo = `${quando(d.importadoEm)} · ${porQual(d.origem)}`;
+    const carimbo = `${quando(d.importadoEm ?? d.createdAt)} · ${porQual(d.origem)}`;
 
     // A LÁPIDE VEM PRIMEIRO: documento escondido está invisível na lista de
     // XMLs e ao mesmo tempo bloqueia a reimportação — o pior dos dois mundos.
@@ -209,20 +235,24 @@ export function lerDuplicado(
         const posse = decidirPosseDocumento({
             existente: d,
             pretendente: { empresaId: empresaEscolhida.id, empresaCnpj: empresaEscolhida.cnpj },
-            documento: d,
+            // O gravado E o arquivo: um resumo sem destinatário não pode
+            // apagar o destinatário que a NF-e completa traz.
+            documento: arquivo ? { cnpjEmit: arquivo.cnpjEmit ?? null, cnpjDest: arquivo.cnpjDest ?? null } : d,
         });
         if (posse.situacao === 'contraparte-legitima') {
+            // A RAIZ FECHOU (11/09): cada lado tem o SEU documento. Quem grava é
+            // o importador, com o id do dono (`idDoDocumentoDoLado`); aqui só
+            // se DIZ o que vai acontecer — e que ninguém errou.
             return {
                 situacao: 'contraparte-na-carteira',
                 permiteReincluir: false,
-                exigeAcao: true,
+                gravaOutroLado: true,
+                exigeAcao: false,
                 mensagem: `Esta NF-e é da ${texto(empresaEscolhida.nome) || 'empresa selecionada'} TAMBÉM — ela é `
-                    + `saída de uma das duas e entrada da outra. Hoje o documento está gravado em ${dono} `
-                    + `(${carimbo}), e o CFI ainda guarda UM dono por chave.`,
-                acao: 'Ninguém errou aqui: as duas empresas precisam escriturar. Enquanto a identidade do '
-                    + 'documento não separa os dois lados, lance a nota que falta pelo ✍️ Lançar nota sem XML '
-                    + 'DEIXANDO A CHAVE EM BRANCO (com a chave ela cai no mesmo documento) — e avise o time, '
-                    + 'porque essa é para sair quando a correção subir.',
+                    + `saída de uma das duas e entrada da outra. O documento já está gravado em ${dono} `
+                    + `(${carimbo}); este arquivo entra como o OUTRO LADO, no livro da `
+                    + `${texto(empresaEscolhida.nome) || 'empresa selecionada'}.`,
+                acao: null,
             };
         }
         return {

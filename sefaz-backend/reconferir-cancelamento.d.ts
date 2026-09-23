@@ -61,6 +61,15 @@ export function resumirReconferencia(p: {
      * escritório não é parte fica indeterminada, nunca "tudo certo".
      */
     modo?: 'distdfe' | 'cert-escritorio';
+    /**
+     * true quando a SEFAZ interrompeu a rodada no cStat 656 (consumo indevido).
+     *
+     * 🚨 Sem este fato a frase da rodada AFIRMA ter perguntado o que ela apenas
+     * ia perguntar — foi o que produziu, no print de 02/09 da MV LIDER, "0
+     * consultada(s)" ao lado de "Esta rodada perguntou 60 de 126 notas". Ele
+     * também tira a promessa da próxima rodada, que com o 656 não começa.
+     */
+    abortou656?: boolean;
 }): {
     consultadas: number;
     canceladas: number;

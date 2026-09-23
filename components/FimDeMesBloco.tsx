@@ -23,15 +23,32 @@
  * reabrir vivem no backend. A tela exibe o que ele respondeu — cópia da régua
  * na tela é contornável, e divergiria.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
+// ⚠️ AQUI SÓ ENTRAM OS **ATOS** (fechar/reabrir). A LEITURA saiu de propósito:
+// este bloco é renderizado uma vez por EMPRESA, e um `fetch` no mount virava
+// ~400 requisições simultâneas ao abrir a Rotina do Mês — foi o **HTTP 429** do
+// print de 27/08. O estado chega por PROPS, do painel, que já lê tudo numa
+// leitura só. Ver `lerFechamentosDaCompetencia`.
 import {
-    situacaoFimDeMes, darFimDeMes, reabrirCompetencia,
-    type SituacaoFimDeMes, type BloqueioFimDeMes,
+    darFimDeMes, reabrirCompetencia,
+    type FechamentoCompetencia, type BloqueioFimDeMes,
 } from '../services/fimDeMesService';
+// 📋 A porta do envio DECLARADO. Ela é um ATO (um clique por vez), como
+// fechar e reabrir — a leitura continua vindo por props.
+import { registrarEnvioForaDoApp, meiosForaDoApp, type MeioForaDoApp } from '../services/envioImpostoService';
+// 📋 A porta da COBERTURA declarada — a obrigação que o catálogo não cobre.
+import { declararCoberturaForaDoCatalogo } from '../services/rotinaFiscalService';
 
 interface Props {
     empresaId: string;
     competencia: string;
+    /** Para a declaração de envio fora do app (auditoria por CNPJ). */
+    empresaCnpj?: string;
+    empresaNome?: string;
+    /** O carimbo, vindo do painel — NUNCA buscado aqui (ver o 429 acima). */
+    fechamento?: FechamentoCompetencia | null;
+    /** Os bloqueios, derivados das etapas que o painel já calculou. */
+    bloqueios: BloqueioFimDeMes[];
     /** Só admin reabre (decisão do Paulo) — sem isso o botão nem aparece. */
     ehAdmin?: boolean;
     /** Leva à tela da etapa que está bloqueando. */
@@ -46,22 +63,16 @@ const fmtDataHora = (iso?: string | null) => {
     return isNaN(d.getTime()) ? '—' : d.toLocaleString('pt-BR');
 };
 
-const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrPara, onMudou }) => {
-    const [sit, setSit] = useState<SituacaoFimDeMes | null>(null);
+const FimDeMesBloco: React.FC<Props> = ({
+    empresaId, competencia, empresaCnpj, empresaNome,
+    fechamento: f, bloqueios: bloqueiosDoPainel,
+    ehAdmin, onIrPara, onMudou,
+}) => {
     const [ocupado, setOcupado] = useState(false);
     const [erro, setErro] = useState<string | null>(null);
     const [bloqueiosDaRecusa, setBloqueiosDaRecusa] = useState<BloqueioFimDeMes[]>([]);
     const [motivo, setMotivo] = useState('');
     const [pedindoMotivo, setPedindoMotivo] = useState(false);
-
-    const carregar = useCallback(async () => {
-        setErro(null);
-        const r = await situacaoFimDeMes(empresaId, competencia);
-        setSit(r);
-        if (!r.ok) setErro(r.erro || 'Não foi possível ler a situação da competência.');
-    }, [empresaId, competencia]);
-
-    useEffect(() => { void carregar(); }, [carregar]);
 
     const fechar = async () => {
         // ⚠️ PERGUNTA ANTES: fechar muda o que o Contábil vai importar, e só um
@@ -80,7 +91,8 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
             setBloqueiosDaRecusa(r.bloqueios || []);
             return;
         }
-        await carregar();
+        // Quem recarrega é o PAINEL — uma leitura para a tela toda. Recarregar
+        // aqui seria a leitura por empresa voltando pela porta de trás.
         onMudou?.();
     };
 
@@ -90,19 +102,34 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
         setOcupado(false);
         if (!r.ok) { setErro(r.erro || 'Não foi possível reabrir.'); return; }
         setPedindoMotivo(false); setMotivo('');
-        await carregar();
         onMudou?.();
     };
 
-    if (!sit) {
-        return <p className="text-[11px] text-slate-400">Lendo a situação da competência…</p>;
-    }
+    // 📋 A porta do envio declarado, montada UMA vez e passada aos três ramos.
+    const declarar = (
+        <DeclararEnvio
+            empresaId={empresaId} empresaCnpj={empresaCnpj} empresaNome={empresaNome}
+            competencia={competencia} onMudou={onMudou}
+        />
+    );
 
-    const f = sit.fechamento;
-    const pre = sit.precondicao;
-    // Os bloqueios da RECUSA vencem os da leitura: eles são do instante do
+    // Os bloqueios da RECUSA vencem os do painel: eles são do instante do
     // clique, e a tela não pode mostrar dois retratos do mesmo fato.
-    const bloqueios = bloqueiosDaRecusa.length ? bloqueiosDaRecusa : (pre?.bloqueios || []);
+    const bloqueios = bloqueiosDaRecusa.length ? bloqueiosDaRecusa : bloqueiosDoPainel;
+
+    // 📋 A porta da cobertura, montada com as obrigações que o BACKEND nomeou.
+    // A lista vem do bloqueio — escrevê-la aqui faria a tela declarar quitação
+    // sobre um nome que a leitura não reconhece, e a trava voltaria calada.
+    const bloqueioCobertura = bloqueios.find(
+        (b) => b.id === 'obrigacoes' && b.podeDeclararCobertura === true,
+    );
+    const declararCobertura = bloqueioCobertura ? (
+        <DeclararCobertura
+            empresaId={empresaId} empresaCnpj={empresaCnpj} competencia={competencia}
+            obrigacoes={bloqueioCobertura.propostas || []} onMudou={onMudou}
+        />
+    ) : null;
+    const pre = { pode: bloqueiosDoPainel.length === 0 };
 
     // ── FECHADA ─────────────────────────────────────────────────────────────
     if (f && f.estado === 'fechada') {
@@ -196,7 +223,7 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
                         {ocupado ? 'Fechando…' : '🔒 Dar fim de mês novamente'}
                     </button>
                 ) : (
-                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} />
+                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />
                 )}
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
             </div>
@@ -205,16 +232,50 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
 
     // ── ABERTA: pronta ou bloqueada ─────────────────────────────────────────
     if (pre?.pode) {
+        // ═══════════════════════════════════════════════════════════════════
+        // 🚨 UMA AFIRMAÇÃO QUE O APP ACABOU DE DESMENTIR NÃO FICA NA TELA.
+        //
+        // Print do Paulo (27/08, REGINA CELIA): "✓ Pronto para dar fim de mês"
+        // em VERDE com a recusa em VERMELHO logo abaixo. O `pre.pode` sai das
+        // ETAPAS que o painel leu; o ato recusa por OUTRAS razões também
+        // (competência ilegível, mês já fechado, sem apuração) — e nenhuma
+        // delas é bloqueio de etapa, então a caixa continuava se dizendo
+        // pronta enquanto a linha de baixo dizia o contrário.
+        //
+        // Isto é INDEPENDENTE da causa daquele print (que era o Simples sem
+        // ficha, corrigido no backend): é a classe. Qualquer recusa futura que
+        // não seja bloqueio de etapa cairia na mesma contradição.
+        // ═══════════════════════════════════════════════════════════════════
+        const recusouSemBloqueio = !!erro && bloqueiosDaRecusa.length === 0;
         return (
-            <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-2 space-y-1">
+            <div className={`rounded-lg border p-2 space-y-1 ${
+                recusouSemBloqueio
+                    ? 'border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20'
+                    : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+            }`}>
                 {/* Era aqui que ficava o "✓ Mês fechado" por DEDUÇÃO. Agora ele
-                    diz o que de fato é: pronto para o ato. */}
-                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                    ✓ Pronto para dar fim de mês
-                </p>
-                <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
-                    Notas capturadas e validadas, apuração feita, obrigações entregues e guia enviada com o rito.
-                </p>
+                    diz o que de fato é: pronto para o ato — e para de dizê-lo
+                    no instante em que o ato prova que não estava. */}
+                {recusouSemBloqueio ? (
+                    <>
+                        <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                            ⚠ O fim de mês foi RECUSADO
+                        </p>
+                        <p className="text-[11px] text-amber-900/80 dark:text-amber-200/80">
+                            As cinco etapas estão fechadas, mas o ato não passou — o motivo está abaixo.
+                            Nenhuma etapa está bloqueando: é outra coisa.
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            ✓ Pronto para dar fim de mês
+                        </p>
+                        <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
+                            Notas capturadas e validadas, apuração feita, obrigações entregues e guia enviada com o rito.
+                        </p>
+                    </>
+                )}
                 <button
                     onClick={fechar}
                     disabled={ocupado}
@@ -223,14 +284,14 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
                     {ocupado ? 'Fechando…' : '🔒 Dar fim de mês'}
                 </button>
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
-                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} />}
+                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />}
             </div>
         );
     }
 
     return (
         <div className="space-y-1">
-            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} />
+            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} />
             {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
         </div>
     );
@@ -242,8 +303,225 @@ const FimDeMesBloco: React.FC<Props> = ({ empresaId, competencia, ehAdmin, onIrP
  * Trava sem caminho é trava que a equipe contorna (13/08) — e com a decisão de
  * BLOQUEAR, esta lista é a única saída que a pessoa tem.
  */
-const Bloqueios: React.FC<{ bloqueios: BloqueioFimDeMes[]; onIrPara?: (id: string) => void }> = ({ bloqueios, onIrPara }) => {
+/**
+ * 📋 DECLARAR UM ENVIO QUE ACONTECEU FORA DO APP.
+ *
+ * Paulo, 27/08 (AC MASON): *"a obrigação já foi entregue e as guias enviadas
+ * para o cliente"* — e a etapa 5 travava o fim de mês, porque reenviar pelo app
+ * DUPLICARIA a guia no cliente.
+ *
+ * ⚠️ **NENHUMA RÉGUA MORA AQUI.** O piso do texto, a lista de meios e a recusa
+ * de data no futuro vivem no backend (`envio-fora-do-app.js`). Esta tela DIZ o
+ * que o backend respondeu — validar aqui criaria a segunda cópia, e ela
+ * divergiria no primeiro meio novo.
+ */
+const DeclararEnvio: React.FC<{
+    empresaId: string; empresaCnpj?: string; empresaNome?: string; competencia: string;
+    onMudou?: () => void;
+}> = ({ empresaId, empresaCnpj, empresaNome, competencia, onMudou }) => {
+    const [aberto, setAberto] = useState(false);
+    const [meios, setMeios] = useState<MeioForaDoApp[]>([]);
+    const [tipo, setTipo] = useState('');
+    const [meio, setMeio] = useState('');
+    const [comoFoi, setComoFoi] = useState('');
+    const [quando, setQuando] = useState('');
+    const [erro, setErro] = useState<string | null>(null);
+    const [feito, setFeito] = useState<string | null>(null);
+    const [salvando, setSalvando] = useState(false);
+
+    // A lista vem do BACKEND — copiá-la aqui faria a tela oferecer um id que
+    // o backend recusa no dia em que um meio entrar.
+    const abrir = async () => {
+        setAberto(true);
+        if (meios.length) return;
+        try { setMeios(await meiosForaDoApp()); } catch (e: any) { setErro(e?.message || 'Não consegui carregar os meios.'); }
+    };
+
+    const salvar = async () => {
+        if (!empresaCnpj) { setErro('Empresa sem CNPJ legível — não dá para registrar o envio.'); return; }
+        setSalvando(true); setErro(null);
+        try {
+            const r = await registrarEnvioForaDoApp({
+                empresaId, empresaCnpj, empresaNome: empresaNome || '',
+                tipo: tipo.trim().toUpperCase(), competencia,
+                meio, comoFoi, quando,
+            });
+            if (!r.ok) { setErro(r.error || 'Não consegui registrar.'); return; }
+            // A frase do backend DIZ que o app não enviou — mostrá-la é o que
+            // impede alguém de ler isto como "o app mandou a guia".
+            setFeito(r.declaracao?.texto || 'Envio registrado.');
+            setComoFoi(''); setTipo('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao registrar.');
+        } finally { setSalvando(false); }
+    };
+
+    if (!aberto) {
+        return (
+            <button
+                onClick={abrir}
+                className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200"
+            >
+                📋 Já enviei esta guia por fora — registrar
+            </button>
+        );
+    }
+
+    return (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2 space-y-2">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-semibold">Registrar um envio que já aconteceu.</span>{' '}
+                O app <span className="font-semibold">não vai enviar nada</span> — ele grava a sua
+                declaração, com o seu nome e a data, e o envio fica marcado como{' '}
+                <span className="font-semibold">sem prova de entrega</span>.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                    value={tipo} onChange={(e) => setTipo(e.target.value)}
+                    placeholder="Guia (DAS, DARF, DARE…)"
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+                <select
+                    value={meio} onChange={(e) => setMeio(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                >
+                    <option value="">Por qual meio?</option>
+                    {meios.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <input
+                    type="date" value={quando} onChange={(e) => setQuando(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+            </div>
+            <textarea
+                value={comoFoi} onChange={(e) => setComoFoi(e.target.value)}
+                rows={2}
+                placeholder="Como a guia chegou ao cliente? (esta frase é o que responde a pergunta daqui a três meses)"
+                className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+            />
+            {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
+            {feito && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ {feito}</p>}
+            <div className="flex gap-2">
+                <button
+                    onClick={salvar} disabled={salvando}
+                    className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50"
+                >
+                    {salvando ? 'Registrando…' : 'Registrar o envio'}
+                </button>
+                <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
+/**
+ * 📋 DECLARAR A ENTREGA DE UMA OBRIGAÇÃO QUE O CATÁLOGO NÃO COBRE.
+ *
+ * Paulo, 28/08 (CLINICA MEDICA MANTOAN): *"pra encerrar o mês essas duas etapas
+ * está como se não tivesse feita"*. A etapa 4 acusava *"o catálogo NÃO cobre 1
+ * obrigação: INSS Patronal (depende de folha)"* — e ela NUNCA ia fechar, porque
+ * a folha vive no módulo de DP.
+ *
+ * ⚠️ **A LISTA VEM DO BACKEND**, não de um campo livre: é ela que a leitura
+ * compara depois (`coberturaDeclarada`). Deixar a pessoa escrever o nome faria
+ * a declaração passar aqui e a trava continuar de pé, calada.
+ *
+ * ⚠️ E NENHUMA RÉGUA MORA AQUI — piso do texto, data no futuro e autor são do
+ * módulo puro.
+ */
+const DeclararCobertura: React.FC<{
+    empresaId: string; empresaCnpj?: string; competencia: string;
+    obrigacoes: string[]; onMudou?: () => void;
+}> = ({ empresaId, empresaCnpj, competencia, obrigacoes, onMudou }) => {
+    const [aberto, setAberto] = useState(false);
+    const [comoFoi, setComoFoi] = useState('');
+    const [quando, setQuando] = useState('');
+    const [erro, setErro] = useState<string | null>(null);
+    const [feito, setFeito] = useState<string | null>(null);
+    const [salvando, setSalvando] = useState(false);
+
+    const salvar = async () => {
+        setSalvando(true); setErro(null);
+        try {
+            const r = await declararCoberturaForaDoCatalogo({
+                empresaId, empresaCnpj, competencia, obrigacoes, comoFoi, quando,
+            });
+            if (!r.ok) { setErro(r.error || 'Não consegui registrar.'); return; }
+            // A frase do backend DIZ que o app não tem prova da entrega — é ela
+            // que impede alguém de ler isto como "o app entregou".
+            setFeito(r.declaracao?.texto || 'Entrega declarada.');
+            setComoFoi('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao registrar.');
+        } finally { setSalvando(false); }
+    };
+
+    if (!aberto) {
+        return (
+            <button
+                onClick={() => setAberto(true)}
+                className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200"
+            >
+                📋 Já entreguei estas obrigações por fora — registrar
+            </button>
+        );
+    }
+
+    return (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2 space-y-2">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-semibold">Registrar a entrega destas obrigações:</span>{' '}
+                {obrigacoes.join(', ')}. O app <span className="font-semibold">não as acompanha</span> —
+                elas não viram tarefa automática e ele <span className="font-semibold">não tem prova
+                da entrega</span>. Fica gravado o seu nome e a data.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                    type="date" value={quando} onChange={(e) => setQuando(e.target.value)}
+                    className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                />
+            </div>
+            <textarea
+                value={comoFoi} onChange={(e) => setComoFoi(e.target.value)}
+                rows={2}
+                placeholder="Como foram entregues? (esta frase é o que responde a pergunta daqui a três meses)"
+                className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+            />
+            {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
+            {feito && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ {feito}</p>}
+            <div className="flex gap-2">
+                <button
+                    onClick={salvar} disabled={salvando}
+                    className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50"
+                >
+                    {salvando ? 'Registrando…' : 'Registrar a entrega'}
+                </button>
+                <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const Bloqueios: React.FC<{
+    bloqueios: BloqueioFimDeMes[];
+    onIrPara?: (id: string) => void;
+    /** 📋 A porta do envio declarado — só aparece quando a GUIA é o bloqueio. */
+    declarar?: React.ReactNode;
+    /** 📋 A porta da cobertura — só quando a OBRIGAÇÃO fora do catálogo trava. */
+    declararCobertura?: React.ReactNode;
+}> = ({ bloqueios, onIrPara, declarar, declararCobertura }) => {
     if (!bloqueios.length) return null;
+    // ⚠️ E só quando declarar RESOLVE: se o app já enviou a guia e o que falta
+    // é o rito, oferecer "já enviei por fora" convida a declarar o que o app
+    // fez (Paulo, 27/08, VINCENZO: *"ESSE FOI ENVIADO PELO SISTEMA"*). Quem
+    // decide é a etapa — a tela não reimplementa a pergunta.
+    const travaGuia = bloqueios.some((b) => b.id === 'guias' && b.podeDeclararEnvio !== false);
     return (
         <div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40 p-2 space-y-1">
             <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
@@ -266,6 +544,17 @@ const Bloqueios: React.FC<{ bloqueios: BloqueioFimDeMes[]; onIrPara?: (id: strin
                     )}
                 </div>
             ))}
+            {/* 📋 A SAÍDA NASCE ONDE A TRAVA APARECE (Paulo autorizou em 27/08).
+                Trava sem caminho é trava que a equipe contorna — e aqui o
+                contorno seria mandar a guia DE NOVO ao cliente. Só aparece
+                quando é a GUIA que bloqueia: oferecê-la ao lado de "falta
+                capturar" convidaria a declarar o que não foi feito. */}
+            {travaGuia && declarar}
+            {/* 📋 A MESMA régua, na etapa 4: a porta só aparece onde ela
+                RESOLVE. Quem decide é o backend (`podeDeclararCobertura`) —
+                oferecê-la sobre regime indefinido ou prazo de outra UF faria
+                alguém declarar por cima de um cadastro que dá para arrumar. */}
+            {declararCobertura}
         </div>
     );
 };

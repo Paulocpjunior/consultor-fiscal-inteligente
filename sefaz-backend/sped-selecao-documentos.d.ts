@@ -39,15 +39,25 @@ export interface SelecaoBlocoC<T = any> {
     semItens: string[];
     /** NFC-e marcadas como entrada — o Guia Prático proíbe escriturá-las. */
     nfceEmEntrada: string[];
+    /**
+     * `tpNF=0` de TERCEIRO: a entrada é do EMITENTE (devolução recebida pelo
+     * fornecedor, retorno). Não é operação desta empresa — ver
+     * `ehEntradaDoEmitente`.
+     */
+    entradaDoEmitente: string[];
 }
 
-export function selecionarNotasBlocoC<T = any>(notas: T[] | null | undefined): SelecaoBlocoC<T>;
+export function selecionarNotasBlocoC<T = any>(
+    notas: T[] | null | undefined,
+    empresaCnpj: string | null | undefined,
+): SelecaoBlocoC<T>;
 
 export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined): T[];
 
 /** O que ficou de fora do arquivo, dito com a ação — nunca calado. */
 export function avisosDaSelecao(p?: {
     soResumo?: string[]; semItens?: string[]; nfceEmEntrada?: string[];
+    entradaDoEmitente?: string[];
 }): string[];
 
 /** NFS-e — o que vai ao bloco A do EFD-Contribuições (CT-e fica de fora: é do D). */
@@ -87,6 +97,7 @@ export function ehItemDeServico(item: unknown): boolean;
  * série; nunca o '1' que o bloco D inventava.
  */
 export function serieDoDocumento(nota: unknown): string;
+export function numeroDoDocumento(nota: unknown): string;
 
 /**
  * COD_ITEM — a CHAVE que liga o item ao cadastro do 0200.
@@ -97,6 +108,18 @@ export function serieDoDocumento(nota: unknown): string;
  * item ÓRFÃO declarado e não referenciado (PWR). Nunca devolve vazio.
  */
 export function codItemDoItem(item: unknown): string;
+/**
+ * Dois itens no MESMO COD_ITEM: devolve o campo que DIVERGE, ou null quando
+ * são o mesmo produto (o caso normal — o mesmo item em vinte documentos).
+ */
+export function conferirColisaoDeItem(
+    existente: unknown,
+    novo: unknown,
+): 'descricao' | 'ncm' | null;
+/** A frase da colisão — uma só, para as duas famílias. '' quando não há. */
+export function avisoDeColisaoDeItem(
+    colisoes: Array<{ codItem: string; de: unknown; para: unknown }> | null | undefined,
+): string;
 
 /**
  * UNID na forma canônica do 0190 (maiúscula, sem espaço nas pontas, 6 chars).
@@ -113,3 +136,25 @@ export function unidadeDoItem(item: unknown): string;
  * conhecia 'CM', a do Contribuições não). Unidade fora dela repete o código.
  */
 export function descreverUnidade(codigo: unknown): string;
+
+/**
+ * O `00` do TIPO_ITEM está sendo afirmado numa INDÚSTRIA — diga isso.
+ * '' num comércio (onde 00 é a resposta certa) e '' sem item de mercadoria.
+ */
+export function avisoDeTipoItemPresumido(
+    itens: Array<{ tipo?: string }> | null | undefined,
+    ctx?: { contribuinteIpi?: string } | null,
+): string;
+
+/** Documentos escriturados no EFD ICMS/IPI (bloco C sem NFC-e + bloco D) — quem pode sustentar 0150/0200. */
+export function unidadesPorCodItem(
+    notas: Array<Record<string, unknown>> | null | undefined,
+    entra?: (nota: Record<string, unknown>) => boolean,
+): Map<string, Set<string>>;
+export function codItemNoArquivo(item: unknown, unidadesPorCodigo?: Map<string, Set<string>> | null): string;
+export function codigosComDuasUnidades(unidadesPorCodigo?: Map<string, Set<string>> | null): Array<{ codItem: string; unidades: string[] }>;
+export function avisoDeItemComDuasUnidades(lista: Array<{ codItem: string; unidades: string[] }> | null | undefined): string;
+export function documentosEscrituradosNoFiscal(
+    notas: Array<Record<string, unknown>> | null | undefined,
+    empresaCnpj?: string | null,
+): { ids: Set<string>; escriturado: (n: Record<string, unknown> | null | undefined) => boolean };

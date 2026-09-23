@@ -9,44 +9,60 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { indicadorFrete } from './nfe-frete.js';
 // A régua das DUAS FORMAS do documento mora num lugar só (11/08).
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
-import { docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico } from './xml-metadata-helper.js';
+import {
+    dataDeclaradaDoDocumento, docCancelado, direcaoEfetivaDoc, valorDoDocumentoServico,
+} from './xml-metadata-helper.js';
 // A assinatura de alíquota que separa RETENÇÃO (0,65%+3%) de tributo da
 // OPERAÇÃO (1,65%+7,60%) — a régua do R-4020, reusada pelo F600.
 import { conferirRetencaoFederal } from './retencao-federal-coerencia.js';
 // A leitura das retenções federais nas DUAS formas (achatada × objeto) é do
 // DONO — o mesmo leitor que alimenta o R-4020. Segunda cópia divergiria.
 import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
+// 🚨 O DONO de "quanto esta nota reteve, de verdade" (31/08). O F600 lia só o
+// documento — a pendência que ficou nomeada naquele dia e que o caso FRONTINI
+// (04/09) veio cobrar. Segunda cópia aqui faria o SPED e o REINF declararem
+// números diferentes sobre a MESMA nota.
+import { retencaoEfetivaDaNota, chaveDoAjuste } from './retencao-pj-ajuste.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
     selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
-    serieDoDocumento, codItemDoItem, unidadeDoItem, levaC170NoContribuicoes,
+    serieDoDocumento, numeroDoDocumento, codItemNoArquivo, unidadeDoItem, levaC170NoContribuicoes,
     codSitDoDocumento,
 } from './sped-selecao-documentos.js';
 // 🚨 Quem decide o que entra no bloco D — e o que fica de fora, com a CAUSA.
 import { cadastroDoFreteContratado, decidirFreteNoBlocoD, avisosDoBlocoD } from './frete-contratado-bloco-d.js';
 // O modelo mora na CHAVE; o campo cru `modelo` o importer principal não grava.
 import {
-    modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc,
+    modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc, codPartDoDocumento,
 } from './participante-doc-helper.js';
+// 🚨 Serviço TOMADO sem COD_PART barra o ARQUIVO INTEIRO no PVA (INSTITUTO
+// HAYAY, 03/09). A decisão é do DONO porque o coletor do 0200 tem de concordar.
+import { separarDeclaraveisNoBlocoA, avisoDoBlocoASemParticipante } from './sped-a100-declaravel.js';
 // CST e CFOP do C170 saem das MESMAS réguas do EFD ICMS/IPI — dois arquivos
 // declarando códigos diferentes para o mesmo item é a divergência de sempre.
-import { cstDoLancamento } from './cst-correlacao.js';
+import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 import { convertCfopParaEntrada, serieDoC100 } from './sped-fiscal-blocoC.js';
 // Régua ÚNICA da base do PIS/COFINS — desconto incondicional fora da receita e
 // ICMS fora da base (Tema 69). Estava faltando nos DOIS lugares que a usam (o
 // C170 e o bloco M), e nos dois na direção mais cara.
 import {
-    receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205,
-    descontosDosItens, valoresLiquidosDosItens,
+    receitaDoItem, baseDoItem, receitaEBaseDoDocumento, codigosReceitaM205, zeroNoArquivo,
+    descontosDosItens, valoresLiquidosDosItens, fretesDosItens,
 } from './base-pis-cofins.js';
 // O valor total do documento (mercadorias + acessórias + ST + IPI − desconto) —
 // o mesmo que o VL_OPR do C190 usa no EFD ICMS/IPI.
 import { valorOperacaoDoItem } from './valor-operacao-c190.js';
+// 🚨 A NFC-e É C100 + C175 (HYPE CAFÉ 1385 · 08/2026, 14/09 — 295 recusas do
+// PVA 6.2.0). O C170 saiu do cupom em 24/08 e o registro que o Guia manda no
+// lugar nunca entrou. O dono consolida por CFOP + CST + alíquotas e decide em
+// qual CST a contribuição INCIDE — o C170 da nota 55 lê a MESMA régua.
+import { consolidarC175, camposDoC175, cstComIncidenciaNaSaida } from './sped-contrib-c175.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
 import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
@@ -103,10 +119,15 @@ function getCstCofins(item, regimeApuracao, direcao) {
 }
 
 // ─── Constantes do C100/C170 do bloco C ─────────────────────────────────
-/** IND_FRT 9 = sem cobrança de frete — o mesmo que o EFD ICMS/IPI declara. */
-const IND_FRT_SEM_COBRANCA = '9';
 /** IND_MOV 0 = houve movimentação física. Mercadoria em NF-e sempre tem. */
 const IND_MOV_COM_MOVIMENTACAO = '0';
+/**
+ * IND_ESCRI 2 = *"Apuração com base no registro INDIVIDUALIZADO de NF-e (C100
+ * e C170)"* — que é o único caminho que este gerador produz. Ver o bloco de
+ * comentário no C010: o campo saía do REGIME, e com `1` (consolidado) a
+ * validação do M210 tirava TODOS os C170 de modelo 55 da receita e da base.
+ */
+const IND_ESCRI_INDIVIDUALIZADA = '2';
 /** IND_APUR 0 = apuração mensal do IPI. */
 const IND_APUR_MENSAL = '0';
 /**
@@ -130,7 +151,7 @@ function cstIcmsDoItemContrib(item, cfopLancado, nota) {
         item.cstIcms || item.cst || item.CST || item.CSTICMS || item.cst_icms || item.icmsCst || '',
     ).replace(/\D/g, '');
     if (!cru) return '';   // item sem CST não recebe CST deduzido do CFOP
-    const r = cstDoLancamento(cru, cfopLancado, nota?.cstEscriturado);
+    const r = cstDoLancamento(cru, cfopLancado, cstInformadoDoItem(nota, item));
     const escolhido = String(r.cst || cru);
     return escolhido.length === 2 ? `0${escolhido}` : escolhido.padStart(3, '0').slice(-3);
 }
@@ -170,10 +191,11 @@ function valorTotalDoDocumento(nota, totais) {
     return (nota.itens || []).reduce((s, i) => s + valorOperacaoDoItem(i), 0);
 }
 
-function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem) {
+function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem, freteDoItem) {
     const vlItem = Number.isFinite(liquidoDoItem)
         ? liquidoDoItem
         : parseFloat(item.vProd || item.valor || 0) || 0;
+    const frete = Number.isFinite(freteDoItem) ? Math.max(0, freteDoItem) : 0;
     if (direcao === 'saida') {
         const cstPis = getCstPis(item, regimeApuracao, 'saida');
         const cstCofins = getCstCofins(item, regimeApuracao, 'saida');
@@ -187,21 +209,59 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem)
         // empresa prova: VL_BC_PIS 16.055,60 = VL_ITEM 19.580 − ICMS 3.524,40.
         // O líquido já vem do dono (desconto próprio + rateio do documento);
         // sem ele, cai no `baseDoItem`, que só conhece o desconto do ITEM.
+        //
+        // 🚨 E O FRETE COBRADO DO ADQUIRENTE SOMA AQUI (16/09, PWR 08/2026). O
+        // Guia 1.35 (C100 campo 18, Observações) manda acrescê-lo *"ao valor da
+        // base de cálculo do PIS/Pasep e da Cofins, nos correspondentes campos
+        // do Registro C170"* — estes campos 26 e 32, e NÃO o VL_ITEM. Sem ele a
+        // base saía R$ 750,00 a MENOS que a ficha, e a guia paga foi a maior.
         const base = Number.isFinite(liquidoDoItem)
-            ? Math.max(0, vlItem - (parseFloat(item.vICMS || 0) || 0))
-            : baseDoItem(item);
+            ? Math.max(0, vlItem + frete - (parseFloat(item.vICMS || 0) || 0))
+            : baseDoItem(item, frete);
         // ⚠️ E O VALOR SEGUE A BASE, nunca o destacado no documento: no aceito,
         // o C170 traz 104,36 (0,65% da base reduzida) enquanto o C100 traz
         // 127,27 (o que o emitente destacou). Manter o destacado aqui faria o
         // próprio registro se desmentir — base × alíquota ≠ valor declarado.
+        // 🚨 CST SEM INCIDÊNCIA SAI COM BASE, ALÍQUOTA E VALOR ZERO (14/09, ao
+        // construir o C175). O item CST 04 (monofásico — refrigerante, cerveja)
+        // ou 06 (alíquota zero) caía no `|| aliq.pis * 100` e levava 0,65%: o
+        // arquivo declarava contribuição sobre revenda que a lei já tributou no
+        // fabricante, e o M210 do PVA a somava como receita tributada. É a
+        // condição da própria validação do M210 (*"CST 01 a 05 com alíquota
+        // diferente de zero"*), e o dono é o mesmo do C175 — um item não pode
+        // incidir no cupom e não incidir na nota 55.
+        const incidePis = cstComIncidenciaNaSaida(cstPis);
+        const incideCofins = cstComIncidenciaNaSaida(cstCofins);
         return {
             cstPis, cstCofins,
-            basePis: base, baseCofins: base,
-            aliqPis, aliqCofins,
-            vlPis: base * (aliqPis / 100),
-            vlCofins: base * (aliqCofins / 100),
+            basePis: incidePis ? base : 0, baseCofins: incideCofins ? base : 0,
+            aliqPis: incidePis ? aliqPis : 0, aliqCofins: incideCofins ? aliqCofins : 0,
+            vlPis: incidePis ? base * (aliqPis / 100) : 0,
+            vlCofins: incideCofins ? base * (aliqCofins / 100) : 0,
         };
     }
+    return pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq);
+}
+
+/**
+ * PIS/COFINS de um item de ENTRADA — a régua é só o REGIME de quem escritura.
+ *
+ * 🚨 DONO ÚNICO, e ele nasceu de um defeito VIVO (29/08). O C170 já decidia
+ * assim desde 20/08; o **A170 ficou para trás** e emitia, na entrada, o CST do
+ * XML — que é o do FORNECEDOR — e, quando caía no 70, declarava crédito ao
+ * lado dele. Medido:
+ *
+ *   |A170|1|SERV-GENERICO|...|1000,00|||0|**70**|1000,00|0,6500|**6,50**|...
+ *
+ * ou seja o registro diz *"aquisição SEM direito a crédito"* e declara 6,50 de
+ * crédito na casa seguinte — a família do M100/M500 que se desmentia por
+ * dentro. A contagem de campos está CERTA, então nenhuma trava de forma vê.
+ *
+ * ⚠️ **Zero aqui É A RESPOSTA** ("não há crédito a apropriar"), nunca o default
+ * de quem não achou o dado (a régua de 06/08) — e ele só alcança o regime
+ * CUMULATIVO, em que crédito não existe por lei. No não-cumulativo nada muda.
+ */
+function pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq) {
     const naoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
     const cst = naoCumulativo ? '50' : '70';
     if (!naoCumulativo) {
@@ -314,9 +374,25 @@ export function buildBlocoA(dados) {
     const linhas = [];
     /** Documentos que o PVA recusaria por VL_DOC = 0 — saem, mas NOMEADOS. */
     const valorZero = [];
-    const notasA = filtrarNotasBlocoA(dados.notas);
+    // 🚨 SERVIÇO TOMADO SEM COD_PART BARRA O ARQUIVO INTEIRO (03/09, INSTITUTO
+    // HAYAY 08/2026 — "Campo obrigatório na entrada · 4 - COD_PART"). Quem
+    // decide é o DONO, porque o coletor do 0200 tem de concordar: tirar o A100
+    // tira o A170, e o A170 do documento sem itens é o único que referencia o
+    // `SERV-GENERICO` — deixá-lo no 0200 trocaria esta recusa pela do item
+    // ÓRFÃO (a régua de 24/08: medir o que o registro SUSTENTA).
+    const { declaraveis: notasA, foras: semParticipante } = separarDeclaraveisNoBlocoA(
+        filtrarNotasBlocoA(dados.notas), dados.empresa?.cnpj,
+    );
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
+
+    // ⚠️ O aviso entra ANTES do early return: competência em que TODAS as notas
+    // caem aqui sairia com o bloco vazio e sem uma palavra — o que é o defeito
+    // com outra roupa.
+    if (Array.isArray(dados.warnings)) {
+        const aviso = avisoDoBlocoASemParticipante(semParticipante, regimeApuracao);
+        if (aviso) dados.warnings.push(aviso);
+    }
 
     if (notasA.length === 0) {
         linhas.push(fmt.buildLine(['A001', '1']));
@@ -332,7 +408,7 @@ export function buildBlocoA(dados) {
     // toda saída retida). Uma segunda leitura aqui faria o A100 e o F600
     // contarem retenções diferentes no MESMO arquivo. Warnings mudos: quem
     // nomeia o que ficou de fora é o bloco F, uma vez só.
-    const retF600 = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const retF600 = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null, dados.retencoesAjustadas);
     const retPorNota = new Map((retF600.eventos || []).map(e => [String(e.numero), e]));
 
     for (const notaCrua of notasA) {
@@ -357,10 +433,11 @@ export function buildBlocoA(dados) {
         const indOper = direcao === 'saida' ? '1' : '0';
         const indEmit = direcao === 'saida' ? '0' : '1';
 
-        const participanteRaw = direcao === 'saida' ? nota.destinatario : nota.emitente;
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
-            : '';
+        // ⚠️ PELO DONO, como o C100 deste MESMO arquivo: o recorte
+        // `cnpjCpf || cnpj || CNPJ` estava escrito à mão nos dois, e é este
+        // número que o 0150 cadastra — três leituras do mesmo campo é como o
+        // registro passa a referenciar participante que o 0150 não declara.
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
 
         const vlDoc = valorDoDocumentoServico(nota);
 
@@ -416,7 +493,8 @@ export function buildBlocoA(dados) {
         const itensDoDoc = (nota.itens || []).length
             ? nota.itens.map((item, i) => ({
                 nItem: item.nItem || String(i + 1),
-                cod: codItemDoItem(item),
+                // `codItemDoItem` + a unidade quando o código circula com duas (o mapa é o do 0200).
+                cod: codItemNoArquivo(item, dados.unidadesPorCodItem),
                 descr: item.xProd || item.descricao || '',
                 valor: parseFloat(item.vProd || item.valor || 0),
                 item,
@@ -430,8 +508,16 @@ export function buildBlocoA(dados) {
             }];
 
         for (const it of itensDoDoc) {
-            const cstPis = getCstPis(it.item, regimeApuracao, direcao);
-            const cstCofins = getCstCofins(it.item, regimeApuracao, direcao);
+            // 🚨 NA ENTRADA QUEM DECIDE É O REGIME, NUNCA O CST DO XML — ele é
+            // o do FORNECEDOR (a lição de 20/08, que o C170 já honrava e este
+            // laço não). `pisCofinsDaAquisicao` é o dono único; duas decisões
+            // fariam o C170 e o A170 do MESMO arquivo discordarem sobre a
+            // mesma aquisição.
+            const aq = direcao !== 'saida'
+                ? pisCofinsDaAquisicao(it.valor, regimeApuracao, aliq)
+                : null;
+            const cstPis = aq ? aq.cstPis : getCstPis(it.item, regimeApuracao, direcao);
+            const cstCofins = aq ? aq.cstCofins : getCstCofins(it.item, regimeApuracao, direcao);
             // ⚠️ NAT_BC_CRED só existe quando HÁ crédito (CST de aquisição
             // 50-56) — campo fiscal não recebe default.
             const comCredito = CSTS_COM_CREDITO.has(cstPis);
@@ -454,13 +540,13 @@ export function buildBlocoA(dados) {
                 comCredito ? '01' : '',               // NAT_BC_CRED
                 indOrigemCredito,                     // IND_ORIG_CRED
                 cstPis,
-                fmt.formatValue(it.valor),
-                fmt.formatValue(aliq.pis * 100, 4),
-                fmt.formatValue(it.valor * aliq.pis),
+                fmt.formatValue(aq ? aq.basePis : it.valor),
+                fmt.formatValue(aq ? aq.aliqPis : aliq.pis * 100, 4),
+                fmt.formatValue(aq ? aq.vlPis : it.valor * aliq.pis),
                 cstCofins,
-                fmt.formatValue(it.valor),
-                fmt.formatValue(aliq.cofins * 100, 4),
-                fmt.formatValue(it.valor * aliq.cofins),
+                fmt.formatValue(aq ? aq.baseCofins : it.valor),
+                fmt.formatValue(aq ? aq.aliqCofins : aliq.cofins * 100, 4),
+                fmt.formatValue(aq ? aq.vlCofins : it.valor * aliq.cofins),
                 '', '',                               // COD_CTA, COD_CCUS
             ]));
         }
@@ -498,7 +584,7 @@ export function buildBlocoA(dados) {
 
 export function buildBlocoC_Contrib(dados) {
     const linhas = [];
-    const selecaoC = selecionarNotasBlocoC(dados.notas);
+    const selecaoC = selecionarNotasBlocoC(dados.notas, dados.empresa?.cnpj);
     const notasC = selecaoC.notas;
     if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecaoC));
     const regimeApuracao = dados.regimeApuracao || '2';
@@ -511,10 +597,45 @@ export function buildBlocoC_Contrib(dados) {
     }
 
     linhas.push(fmt.buildLine(['C001', '0']));
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 O `IND_ESCRI` NÃO É O REGIME — e aqui ele saía do regime (17/09).
+    //
+    // A linha era `regimeApuracao === '1' ? '1' : '2'`, e o campo NÃO fala de
+    // cumulativo × não-cumulativo. Guia Prático 1.35, C010 campo 03:
+    //
+    //   *"Indicador da apuração das contribuições e créditos, na escrituração
+    //    das operações por NF-e e ECF, no período: 1 – Apuração com base nos
+    //    registros de CONSOLIDAÇÃO das operações por NF-e (C180 e C190) e por
+    //    ECF (C490); 2 – Apuração com base no registro INDIVIDUALIZADO de NF-e
+    //    (C100 e C170) e de ECF (C400)"*.
+    //
+    // 🚨 O CUSTO ERA RECEITA E BASE **ZERADAS** NO LUCRO REAL. A validação do
+    // M210 campo 03 (e a do campo 04, idêntica) só recolhe os C170 *"cujo
+    // COD_MOD seja diferente de 55 ou quando COD_MOD seja igual a 55 e o
+    // IND_ESCRI do registro C010 seja igual a 2"*. Com IND_ESCRI = 1, toda
+    // NF-e (modelo 55) sairia da soma, e o PVA iria buscar C181/C491 — que
+    // este gerador nunca emite. O arquivo declararia ZERO de receita e ZERO de
+    // base numa empresa com movimento, e o PVA ACEITA: ele regera o bloco M.
+    //
+    // ⚠️ E NÃO CABE DEIXAR VAZIO. O campo é `Obrig. N` porque só é exigido de
+    // quem manda os DOIS tipos de registro — mas a validação do M210 exige
+    // literalmente `= 2` para o modelo 55, e vazio não é 2: os C170 cairiam
+    // fora do mesmo jeito.
+    //
+    // ✅ O `2` ESTÁ PROVADO POR ARQUIVO ACEITO: é o que a PWR (cumulativa) vem
+    // declarando nos arquivos que o PVA importou. Só o não-cumulativo saía com
+    // `1`, e nenhuma empresa do Lucro Real tinha gerado ainda — o defeito
+    // esperava o primeiro cliente, como o IPI em E200/E210 e o Bloco H zerado.
+    //
+    // 📌 Constante, e não parâmetro, DE PROPÓSITO: quem decide este campo é o
+    // que o gerador EMITE, e ele emite C100/C170 individualizados em qualquer
+    // regime. No dia em que existir o caminho consolidado (C180/C190), o valor
+    // passa a DEPENDER do que foi gerado — nunca a ser cravado de novo.
+    // ═══════════════════════════════════════════════════════════════════════
     linhas.push(fmt.buildLine([
         'C010',
         fmt.sanitizeCnpjCpf(dados.empresa.cnpj),
-        regimeApuracao === '1' ? '1' : '2',
+        IND_ESCRI_INDIVIDUALIZADA,
     ]));
 
     for (const notaCrua of notasC) {
@@ -540,10 +661,7 @@ export function buildBlocoC_Contrib(dados) {
         // inteira apagaria a apuração.
         const indEmit = ehEmissaoPropriaDoc(nota, dados.empresa?.cnpj) ? '0' : '1';
 
-        const participanteRaw = participanteDoDocumento(nota, dados.empresa?.cnpj);
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '').replace(/\D/g, '')
-            : '';
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
 
         // 🚨 O VL_MERC É O VALOR DAS MERCADORIAS — BRUTO. Guia Prático da
         // EFD-Contribuições 1.35, C170 campo 07: *"informar o valor total do
@@ -564,6 +682,12 @@ export function buildBlocoC_Contrib(dados) {
         // não tem de onde reduzir a base daquele item.
         const liquidosDosItens = valoresLiquidosDosItens(nota);
         const descontosPorItem = descontosDosItens(nota);
+        // 🚨 O FRETE COBRADO DO ADQUIRENTE É BASE (Guia 1.35, C100 campo 18):
+        // ele vem do ITEM quando o XML o traz por item, e do TOTAL do documento
+        // rateado quando não — as DUAS formas, porque ler uma só é a ausência
+        // plausível de sempre. Só a BASE o recebe; o VL_ITEM continua sendo
+        // *"somente o valor das mercadorias"*.
+        const fretesPorItem = fretesDosItens(nota);
         let vProd = 0, vDesc = 0, vPis = 0, vCofins = 0;
         (nota.itens || []).forEach((item, k) => {
             vProd += parseFloat(item.vProd || item.valor || 0) || 0;
@@ -611,7 +735,7 @@ export function buildBlocoC_Contrib(dados) {
             modeloDoDoc(nota),
             '00',                                          // COD_SIT (cancelada já saiu acima)
             serieDoDocumento(nota),                       // SER — três posições
-            fmt.sanitizeString(nota.numero || '', 9),
+            fmt.sanitizeString(numeroDoDocumento(nota), 9),   // NUM_DOC — gravado, ou o da CHAVE (26-34)
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
             fmt.formatDate(nota.dataEntradaSaida || nota.dhEmi),
@@ -626,7 +750,7 @@ export function buildBlocoC_Contrib(dados) {
             fmt.formatValue(vDesc),                        // 14 VL_DESC
             '',                                            // 15 VL_ABAT_NT
             fmt.formatValue(vProd),                        // 16 VL_MERC
-            IND_FRT_SEM_COBRANCA,                          // 17 IND_FRT
+            indicadorFrete(nota),                         // 17 IND_FRT
             fmt.formatValue(t.vFrete || 0),                // 18 VL_FRT
             fmt.formatValue(t.vSeg || 0),                  // 19 VL_SEG
             fmt.formatValue(t.vOutro || 0),                // 20 VL_OUT_DA
@@ -662,7 +786,47 @@ export function buildBlocoC_Contrib(dados) {
         // C170 declarado na Tabela de Identificação vira item ÓRFÃO, que é a
         // recusa seguinte (a PWR pagou essa em 19/08).
         // ═══════════════════════════════════════════════════════════════════
-        if (!levaC170NoContribuicoes(nota)) continue;
+        if (!levaC170NoContribuicoes(nota)) {
+            // ═══════════════════════════════════════════════════════════════
+            // 🚨 C175 — O REGISTRO QUE O GUIA MANDA NO LUGAR DO C170 (14/09,
+            // HYPE CAFÉ 1385 · 08/2026, PVA 6.2.0: **295 recusas**, uma por
+            // NFC-e — *"…com a informação referente à base de cálculo,
+            // alíquota e valor das contribuições apuradas sendo escrituradas
+            // de forma consolidada e analítica (por CST e alíquotas), no
+            // registro C175"*). Tirar o C170 em 24/08 fechou metade: sem o
+            // C175 a Receita não vê receita nenhuma no cupom, regera o bloco M
+            // ZERADO e recusa o nosso M210 por não ter documento que o
+            // sustente. Cada item passa pela MESMA régua do C170 (CFOP,
+            // líquido, ICMS, CST, alíquota) e o dono consolida por
+            // CFOP + CST + alíquotas — o desenho do C190 do ICMS/IPI.
+            // ═══════════════════════════════════════════════════════════════
+            const itensParaC175 = (nota.itens || []).map((item, k) => {
+                const liquidoDoItem = liquidosDosItens[k] || 0;
+                const freteDoItem = fretesPorItem[k] || 0;
+                const p = pisCofinsDoItemC170(
+                    item, direcao, regimeApuracao, aliq, liquidoDoItem, freteDoItem,
+                );
+                return {
+                    cfop: convertCfopParaEntrada(item.cfop || item.CFOP || '0000', direcao, dados, nota, item),
+                    vlItem: parseFloat(item.vProd || item.valor || 0) || 0,
+                    desconto: descontosPorItem[k] || 0,
+                    icms: parseFloat(item.vICMS || 0) || 0,
+                    // ⚠️ O cupom entra na MESMA régua do C170: um item não pode
+                    // ter o frete na base da nota 55 e não ter no cupom — seria
+                    // fechar a instância e deixar a classe aberta (a lição do
+                    // C170 que foi corrigido em 20/08 e deixou o A170 para trás).
+                    frete: freteDoItem,
+                    cstPis: p.cstPis, cstCofins: p.cstCofins,
+                    aliqPis: p.aliqPis, aliqCofins: p.aliqCofins,
+                };
+            });
+            const c175 = consolidarC175(itensParaC175);
+            for (const r of c175.registros) linhas.push(fmt.buildLine(camposDoC175(r, fmt.formatValue)));
+            if (Array.isArray(dados.warnings)) {
+                for (const a of c175.avisos) dados.warnings.push(`NFC-e nº ${nota.numero || '?'}: ${a}`);
+            }
+            continue;
+        }
         (nota.itens || []).forEach((item, k) => {
             // ⚠️ VL_ITEM é BRUTO (Guia, campo 07: quantidade × preço unitário)
             // e o desconto vai no campo 08 — é dali que o PVA reduz a base.
@@ -670,7 +834,7 @@ export function buildBlocoC_Contrib(dados) {
             const vlItem = parseFloat(item.vProd || item.valor || 0) || 0;
             const liquidoDoItem = liquidosDosItens[k] || 0;
             const cfopLancado = convertCfopParaEntrada(
-                item.cfop || item.CFOP || '0000', direcao, dados, nota,
+                item.cfop || item.CFOP || '0000', direcao, dados, nota, item,
             );
             const cstIcms = cstIcmsDoItemContrib(item, cfopLancado, nota);
             const aliqIcmsItem = parseFloat(item.aliqIcms || 0)
@@ -679,12 +843,14 @@ export function buildBlocoC_Contrib(dados) {
             // ⚠️ A BASE lê o MESMO líquido: com o desconto lançado só no total
             // do documento, `baseDoItem(item)` não o enxergaria e a base sairia
             // cheia — o registro se desmentiria dentro da própria linha.
-            const p = pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem);
+            const p = pisCofinsDoItemC170(
+                item, direcao, regimeApuracao, aliq, liquidoDoItem, fretesPorItem[k] || 0,
+            );
 
             linhas.push(fmt.buildLine([
                 'C170',
                 item.nItem || '1',                                    //  2 NUM_ITEM
-                fmt.sanitizeString(codItemDoItem(item), 60),            //  3 COD_ITEM
+                fmt.sanitizeString(codItemNoArquivo(item, dados.unidadesPorCodItem), 60), //  3 COD_ITEM (codItemDoItem + unidade)
                 fmt.sanitizeString(item.xProd || item.descricao || '', 255), // 4 DESCR_COMPL
                 fmt.formatValue(item.qCom || item.quantidade || 1, 5), //  5 QTD
                 unidadeDoItem(item),                                    //  6 UNID
@@ -808,12 +974,14 @@ export function buildBlocoD_Contrib(dados) {
     linhas.push(fmt.buildLine(['D010', fmt.sanitizeCnpjCpf(dados.empresa.cnpj)]));
 
     for (const { nota, direcao, vlDoc, decisao } of escriturados) {
-        const participanteRaw = direcao === 'saida'
-            ? (nota.destinatario || nota.tomador)
-            : (nota.emitente || nota.prestador);
-        const codPart = participanteRaw
-            ? String(participanteRaw.cnpjCpf || participanteRaw.cnpj || '').replace(/\D/g, '')
-            : '';
+        // ⚠️ ERA A QUARTA CÓPIA DO RECORTE — e ela NÃO tinha defeito hoje: o
+        // `nota` deste laço já passou pelo normalizador acima, então as duas
+        // leituras concordavam. É justamente aí que a cópia é perigosa: a
+        // próxima correção entraria numa só, e o D100 passaria a referenciar
+        // participante diferente do que o 0150 cadastra (o `getContadorPadrao`
+        // e o `UNIDADES_PADRAO`, nesta MESMA dupla de arquivos, já divergiram
+        // assim). Aqui o dono não muda o número — muda quem responde.
+        const codPart = codPartDoDocumento(nota, dados.empresa?.cnpj);
         // A MESMA leitura do C100 vizinho — `formatDate` lê o dia do TEXTO do
         // documento, nunca de conversão de fuso (22/08).
         const dataDoc = fmt.formatDate(nota.dataEmissao || nota.dhEmi);
@@ -835,7 +1003,7 @@ export function buildBlocoD_Contrib(dados) {
             // que chegasse sem o campo; a chave carrega a série (23-25).
             serieDoDocumento(nota),                              // 07 SER
             '',                                                  // 08 SUB
-            fmt.sanitizeString(nota.numero || '', 9),            // 09 NUM_DOC
+            fmt.sanitizeString(numeroDoDocumento(nota), 9),       // 09 NUM_DOC — gravado, ou o da CHAVE (26-34)
             fmt.sanitizeString(nota.chaveAcesso || nota.chave || '', 44), // 10 CHV_CTE
             dataDoc,                                             // 11 DT_DOC
             dataDoc,                                             // 12 DT_A_P
@@ -940,12 +1108,14 @@ function empilharAvisosDoBlocoD(dados, foraPorMotivo, valorZeroD) {
  * @param {Array|null} warnings  onde nomear o que ficou de fora (null = mudo,
  *                               para releitura idempotente pelo bloco M)
  */
-export function coletarRetencoesF600(notas, warnings) {
+export function coletarRetencoesF600(notas, warnings, ajustes) {
     const eventos = [];
     const daOperacao = [];
     const semBase = [];
     const semCnpjFonte = [];
     const foraDaAliquota = [];
+    const porAjuste = [];
+    const mapaAjustes = ajustes && typeof ajustes === 'object' ? ajustes : {};
 
     for (const notaCrua of (notas || [])) {
         if (docCancelado(notaCrua) || notaCrua.status === 'denegado') continue;
@@ -963,16 +1133,46 @@ export function coletarRetencoesF600(notas, warnings) {
         // é o DONO da régua (o mesmo leitor do R-4020), nunca uma cópia.
         const v = notaCrua.valores || {};
         const fed = lerRetencoesFederaisDoDoc(notaCrua);
-        const pis = fed.pis ?? 0;
-        const cofins = fed.cofins ?? 0;
+        const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
+
+        // 🚨 O AJUSTE DECLARADO VENCE O DOCUMENTO — a pendência que ficou
+        // NOMEADA em 31/08 (*"o F600 continua com a régua antiga… vale rever
+        // com medição própria"*), e o caso que a pediu chegou em 04/09:
+        //
+        // > FRONTINI ENGENHEIROS, NFS-e emitidas 08/2026: *"ele esqueceu de
+        // > informar as retenções de 2 notas… como eu faço agora no consultor?"*
+        //
+        // A nota já está capturada do portal, com retenção ZERO. Corrigi-la no
+        // portal (carta de correção) não muda o que o CFI capturou: o abatimento
+        // do M200/M600 continuaria a MENOR — a empresa recolheria PIS/COFINS que
+        // já foram retidos na fonte.
+        //
+        // ⚠️ SÓ O AJUSTE DECLARADO ENTRA AQUI, de propósito. `retencaoEfetivaDaNota`
+        // também sabe DECOMPOR a CSRF, e ligar isso junto mudaria o valor do
+        // arquivo em notas que hoje ficam de fora (o `daOperacao` abaixo) — a
+        // régua de 31/08 é literal: *ligá-las ao mesmo dono muda VALOR de arquivo
+        // fiscal, e vale rever com medição própria, nunca de carona*. O dono
+        // continua ÚNICO; o que se restringe é qual origem este bloco aceita.
+        const ajuste = mapaAjustes[chaveDoAjuste(notaCrua)];
+        const efetiva = retencaoEfetivaDaNota({
+            nota: { ...fed, csllOuTotal: fed.csllOuTotal, base: parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0 },
+            ajuste,
+        });
+        const declarada = efetiva.origem === 'ajuste-declarado';
+
+        const pis = declarada ? efetiva.pis : (fed.pis ?? 0);
+        const cofins = declarada ? efetiva.cofins : (fed.cofins ?? 0);
         if (pis + cofins <= 0) continue;   // sem retenção federal gravada — caso normal
 
-        const rotulo = String(notaCrua.numero || notaCrua.chave || '(sem número)');
         const base = parseFloat(v.baseCalculo) || parseFloat(notaCrua.valorServicos) || parseFloat(notaCrua.valorTotal) || 0;
         const diag = conferirRetencaoFederal({ base, pis, cofins, csll: fed.csllOuTotal, ir: fed.ir, inss: fed.inss });
-        if (diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
+        // ⚠️ A assinatura da OPERAÇÃO fala do que o DOCUMENTO traz. Havendo
+        // ajuste, alguém já disse qual é a retenção de verdade — barrar a nota
+        // aqui devolveria o problema que o ajuste acabou de resolver.
+        if (!declarada && diag.situacao === 'campos-sao-totais-da-operacao') { daOperacao.push(rotulo); continue; }
         if (!base) { semBase.push(rotulo); continue; }
-        if (diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);
+        if (!declarada && diag.situacao === 'aliquota-fora') foraDaAliquota.push(rotulo);
+        if (declarada) porAjuste.push(`${rotulo} (${efetiva.ajustadoPor || 'autor não informado'})`);
 
         // A fonte pagadora é o TOMADOR — mesma leitura das duas formas do
         // documento que o 0150 usa (portal grava achatado, XML aninhado).
@@ -981,7 +1181,10 @@ export function coletarRetencoesF600(notas, warnings) {
         if (cnpjFonte.length !== 14) { semCnpjFonte.push(rotulo); continue; }
 
         eventos.push({
-            data: notaCrua.dataEmissao || notaCrua.dhEmi || null,
+            // ⚠️ Normalizada AQUI, não só no `fmt.formatDate` lá embaixo: o
+            // valor intermediário que acerta porque o consumidor conserta é o
+            // acerto por acidente.
+            data: dataDeclaradaDoDocumento(notaCrua.dataEmissao || notaCrua.dhEmi) || null,
             base, pis, cofins, cnpjFonte, numero: rotulo,
         });
     }
@@ -1014,6 +1217,17 @@ export function coletarRetencoesF600(notas, warnings) {
                 + '(pode ser base com dedução ou digitação).',
             );
         }
+        // 🚨 NÚMERO QUE MUDA POR DECLARAÇÃO HUMANA VAI DITO. O F600 abate o
+        // M200/M600, então a retenção informada à mão muda o valor a recolher —
+        // e quem conferir o arquivo daqui a três meses tem de saber que aquele
+        // número não saiu do documento.
+        if (porAjuste.length) {
+            warnings.push(
+                `F600: ${porAjuste.length} nota(s) entraram com a retenção AJUSTADA à mão, não com a do `
+                + `documento — nº ${porAjuste.slice(0, 8).join(', ')}. O abatimento do M200/M600 muda por `
+                + 'causa disso; confira contra o comprovante de retenção antes de transmitir.',
+            );
+        }
     }
 
     const totalPis = eventos.reduce((t, e) => t + e.pis, 0);
@@ -1036,7 +1250,7 @@ function contaDeclaradaNo0500(dados) {
 }
 
 export function buildBlocoF(dados) {
-    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings);
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, dados.warnings, dados.retencoesAjustadas);
     const eventos = ret.eventos || [];
     const aliq = getAliquotas(dados.regimeApuracao || '2');
     // 🚨 A RECEITA SEM DOCUMENTO (aluguel) — sem ela o M200/M600 sai ZERADO
@@ -1181,6 +1395,16 @@ export function buildBlocoF(dados) {
 // BLOCO M — Apuracao PIS/COFINS
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * "NÃO HOUVE AJUSTE" — o zero que é RESPOSTA, não default.
+ *
+ * O PVA recusa os quatro campos de ajuste do M210/M610 em branco (DGB, 28/08),
+ * e o app não gera M220/M620: quando não há registro de ajuste, o valor
+ * ajustado é zero, e isso é FATO. É a exceção que a própria regra de 06/08
+ * escreve — *"zero só entra quando zero É a resposta"*.
+ */
+const SEM_AJUSTE = fmt.formatValue(0);
+
 export function buildBlocoM(dados) {
     const linhas = [];
     const regimeApuracao = dados.regimeApuracao || '2';
@@ -1200,8 +1424,12 @@ export function buildBlocoM(dados) {
     /** Desconto incondicional tirado da receita — vai no aviso, com a contagem. */
     let descontoExcluido = 0;
     let docsComDesconto = 0;
+    let freteNaBase = 0;
+    let docsComFrete = 0;
     /** Documento sem valor legível em nenhuma das formas — sai do total e é DITO. */
     const semValor = [];
+    /** Itens de SAÍDA cujo CST não tem incidência (04/06/07/08/09…) — fora da base e DITOS. */
+    const semIncidencia = { itens: 0, valor: 0, docs: 0 };
 
     for (const nota of (dados.notas || [])) {
         if (docCancelado(nota) || nota.status === 'denegado') continue;
@@ -1227,7 +1455,28 @@ export function buildBlocoM(dados) {
             semValor.push(String(nota.numero || nota.chave || '(sem número)'));
             continue;
         }
-        const rb = receitaEBaseDoDocumento(nota, doDocumento);
+        // 🚨 A RECEITA DO M210 É A DOS CST COM INCIDÊNCIA (Guia 1.35, M210
+        // campo 03: *"quando o CST da operação vinculada for 01, 02, 03, 04, 05
+        // com alíquota diferente de zero"*). O item CST 04/06 sai do C170/C175
+        // com base zero — o bloco M lê a MESMA régua, senão o nosso M210
+        // discordaria dos nossos próprios documentos (14/09, ao construir o
+        // C175). O que fica de fora vai CONTADO no aviso.
+        let notaParaBase = nota;
+        if (!semItens && direcaoEfetivaDoc(nota) === 'saida') {
+            const itensComIncidencia = nota.itens.filter((i) => (
+                cstComIncidenciaNaSaida(getCstPis(i, regimeApuracao, 'saida'))
+                || cstComIncidenciaNaSaida(getCstCofins(i, regimeApuracao, 'saida'))
+            ));
+            if (itensComIncidencia.length !== nota.itens.length) {
+                const fora = nota.itens.filter((i) => !itensComIncidencia.includes(i));
+                semIncidencia.itens += fora.length;
+                semIncidencia.valor += fora.reduce((s, i) => s + receitaDoItem(i), 0);
+                semIncidencia.docs += 1;
+                if (itensComIncidencia.length === 0) continue;
+                notaParaBase = { ...nota, itens: itensComIncidencia };
+            }
+        }
+        const rb = receitaEBaseDoDocumento(notaParaBase, doDocumento);
         if (rb.receita === 0 && rb.base === 0) {
             semValor.push(String(nota.numero || nota.chave || '(sem número)'));
             continue;
@@ -1262,6 +1511,7 @@ export function buildBlocoM(dados) {
             totalReceitaSaida += rb.receitaBruta;
             icmsExcluido += rb.icms;
             if (rb.desconto > 0) { descontoExcluido += rb.desconto; docsComDesconto += 1; }
+            if (rb.frete > 0) { freteNaBase += rb.frete; docsComFrete += 1; }
             // ⚠️ O VALOR APURADO SEGUE A BASE, não o destacado no documento. O
             // `vPIS` do XML foi calculado pelo emitente sobre a mercadoria
             // cheia; somá-lo aqui declararia contribuição sobre uma base que o
@@ -1316,6 +1566,11 @@ export function buildBlocoM(dados) {
     // ele não aparece o arquivo declara receita a MAIOR (PWR 07/2026: 38.316,84
     // no lugar de 37.754,60). Sem esta linha, "a receita está errada" só se
     // responde lendo o código — e há empresa com desconto em quase toda nota.
+    // ⚠️ A CONTA FECHA NA PRÓPRIA FRASE, e o frete é a PARCELA QUE SOMA — sem
+    // ele os dois avisos abaixo passariam a se desmentir no primeiro documento
+    // com frete, que é exatamente o caso desta competência.
+    const maisFrete = freteNaBase > 0 ? ` + frete ${freteNaBase.toFixed(2)}` : '';
+
     if (descontoExcluido > 0 && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             `Desconto incondicional: ${docsComDesconto} documento(s), total `
@@ -1323,8 +1578,8 @@ export function buildBlocoM(dados) {
             + `esse campo como a soma dos VL_ITEM dos C170, e é por isso que o PVA mostra `
             + `${totalReceitaSaida.toFixed(2)}. O desconto sai no campo 08 (VL_DESC) de cada C170, como manda `
             + `a Seção 12, e reduz a BASE: ${totalReceitaSaida.toFixed(2)} − ${descontoExcluido.toFixed(2)} `
-            + `− ${icmsExcluido.toFixed(2)} de ICMS = ${totalBcSaida.toFixed(2)}, que é sobre o que a guia é `
-            + 'paga. Confira a BASE do M210 no PVA, não a receita.',
+            + `− ${icmsExcluido.toFixed(2)} de ICMS${maisFrete} = ${totalBcSaida.toFixed(2)}, que é sobre o que `
+            + 'a guia é paga. Confira a BASE do M210 no PVA, não a receita.',
         );
     }
 
@@ -1336,9 +1591,112 @@ export function buildBlocoM(dados) {
             // novo faria o aviso se desmentir — e aviso que não fecha é pior
             // que aviso nenhum.
             `Base do PIS/COFINS (Tema 69 · RE 574.706): o ICMS destacado nas saídas foi EXCLUÍDO da base — `
-            + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)} = base `
+            + `receita ${totalReceitaSaida.toFixed(2)} − ICMS ${icmsExcluido.toFixed(2)}${maisFrete} = base `
             + `${totalBcSaida.toFixed(2)}. É a mesma exclusão que a ficha do Lucro já fazia; antes desta `
             + 'competência o SPED declarava a base CHEIA, maior que a da guia.',
+        );
+    }
+
+    // 🚨 O FRETE VAI DITO — ele ACRESCE a base, e número que muda sozinho faz
+    // desconfiar do número certo (a régua de 24/08, nesta mesma empresa).
+    //
+    // PWR 08/2026: o arquivo declarava base 14.436,83 e a ficha 15.186,83 —
+    // R$ 750,00 de frete que o app não somava. Sem esta linha, "a base subiu"
+    // só se responde lendo o código; com ela, quem gera confere contra a
+    // Memória de Apuração na hora.
+    //
+    // ⚠️ Nasce MUDO em competência sem frete — foi assim que o mês anterior
+    // fechou certo (*"no mês que fizemos as notas não tinha frete"*), e alarme
+    // sobre arquivo correto é o jeito conhecido de a equipe ignorar o aviso.
+    if (freteNaBase > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `Frete na base do PIS/COFINS: ${docsComFrete} documento(s) de saída, total `
+            + `${freteNaBase.toFixed(2)}, ACRESCIDO à base — Guia 1.35, C100 campo 18: o frete que consta no `
+            + 'documento e é suportado pelo ADQUIRENTE compõe a receita bruta do vendedor e "deve integrar a '
+            + 'base de cálculo do(s) produto(s) vendido(s)… nos correspondentes campos do Registro C170". '
+            + `Ele NÃO entra no VL_ITEM (campo 07 = "somente o valor das mercadorias"), então o VL_REC_BRT do `
+            + `M210 segue ${totalReceitaSaida.toFixed(2)} e só a BASE sobe, para ${totalBcSaida.toFixed(2)}. `
+            + 'Confira essa base contra a Memória de Apuração — é ela que a guia paga.',
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🚨 A RECEITA DO M210 E A DA MEMÓRIA DE APURAÇÃO MEDEM COISAS DIFERENTES
+    // — e quem confere as duas telas lado a lado não tem como saber disso.
+    //
+    // Paulo, 17/09 (PWR 08/2026, com a base JÁ conferida): *"Base do PIS/COFINS
+    // bateu, mas o valor da Receita não mudou e tem que ser 18.355,90, que é o
+    // valor das Vendas; foi o mesmo caso do mês que fizemos"*. E ele estava
+    // olhando dois números CERTOS:
+    //
+    //   · o `VL_REC_BRT` do M210 é a Σ dos `VL_ITEM` dos C170 — **mercadoria
+    //     BRUTA**, sem frete e sem abater desconto (Guia 1.35, M210 campo 03 e
+    //     C170 campo 07, com a validação `Σ VL_ITEM = VL_MERC do C100`);
+    //   · a Memória parte do **valor contábil da nota** (`vNF` = mercadoria −
+    //     desconto + frete), que é a receita do IRPJ/CSLL presumido.
+    //
+    // A diferença é SEMPRE `frete − desconto`, e sem esta linha ela volta todo
+    // mês como "a receita está errada" — foi o que custou cinco dias em 25/08,
+    // com o desconto, e voltou agora com o frete junto.
+    //
+    // ⚠️ NÃO DÁ PARA "CONSERTAR" A RECEITA DO M210 mexendo no C170: somar frete
+    // ou abater desconto no `VL_ITEM` quebra a validação contra o `VL_MERC` —
+    // duas recusas no lugar de uma divergência de tela. E o PVA **regera** o
+    // bloco M a partir dos documentos (Manual do Lucro Presumido, PVA 2.04),
+    // então escrever outro número aqui é escrever num campo que ele sobrescreve.
+    // O único caminho que o Guia oferece para o frete VIRAR receita declarada é
+    // escriturá-lo no F100 (*"no caso da pessoa jurídica vir a escriturar essa
+    // receita de frete no registro F100"*) — decisão de valor, com o número na
+    // frente do dono, nunca de carona.
+    //
+    // ⚠️ Nasce MUDO quando não há frete nem desconto: ali os dois números são
+    // iguais, e alarme sobre arquivo correto é o jeito conhecido de a equipe
+    // parar de ler os avisos que importam.
+    // ═══════════════════════════════════════════════════════════════════════
+    const contabilDasSaidas = totalReceitaSaida - descontoExcluido + freteNaBase;
+    if (Array.isArray(dados.warnings)
+        && Math.round(contabilDasSaidas * 100) !== Math.round(totalReceitaSaida * 100)) {
+        const parcelas = [
+            descontoExcluido > 0 ? `− desconto ${descontoExcluido.toFixed(2)}` : '',
+            freteNaBase > 0 ? `+ frete ${freteNaBase.toFixed(2)}` : '',
+        ].filter(Boolean).join(' ');
+        dados.warnings.push(
+            `Receita do M210/M610 × Memória de Apuração: o arquivo declara ${totalReceitaSaida.toFixed(2)} e a `
+            + `Memória mostra ${contabilDasSaidas.toFixed(2)} — os DOIS estão certos e medem coisas diferentes. `
+            + 'O VL_REC_BRT é a soma dos VL_ITEM dos C170, que o Guia 1.35 define como "somente o valor das '
+            + `mercadorias" (BRUTAS); a Memória parte do valor contábil da nota (mercadorias ${parcelas}), que é a `
+            + `receita do IRPJ/CSLL. A diferença é ${Math.abs(contabilDasSaidas - totalReceitaSaida).toFixed(2)}. `
+            + `O que a guia de PIS/COFINS paga é a BASE (${totalBcSaida.toFixed(2)}), e é ela que tem de bater `
+            + 'com a Memória — confira a base, não a receita. '
+            // 🚨 E A FRASE QUE FALTAVA: **não existe caminho** que ponha o
+            // contábil nesse campo. Sem dizer isso, "os dois estão certos" se
+            // lê como "ainda vamos ajustar", e o dono volta no mês seguinte
+            // esperando o número mudar — foi o que aconteceu em 18/09, um dia
+            // depois de a conciliação subir.
+            //
+            // O único caminho que o Guia oferece para o frete VIRAR receita
+            // declarada é escriturá-lo no F100, e ele dá OUTRO número
+            // (mercadoria bruta + frete, sem abater o desconto) — por isso ele
+            // vai com o valor calculado, nunca como promessa vaga.
+            + `Mexer no C170 para chegar em ${contabilDasSaidas.toFixed(2)} quebra a validação "Σ VL_ITEM = `
+            + 'VL_MERC do C100" (duas recusas no lugar de uma divergência de tela), e o PVA REGERA o bloco M a '
+            + 'partir dos documentos, então escrever outro número ali é escrever num campo que ele sobrescreve. '
+            + `${freteNaBase > 0
+                ? `O único caminho do Guia para o frete virar receita DECLARADA é o registro F100, e ele dá `
+                  + `${(totalReceitaSaida + freteNaBase).toFixed(2)} (bruta + frete, sem abater o desconto) — `
+                  + 'não o valor da Memória. É decisão de valor, e depende do plano de contas (COD_CTA/0500).'
+                : 'Não há caminho no leiaute que leve o valor contábil a esse campo.'}`,
+        );
+    }
+
+    if (semIncidencia.itens > 0 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `PIS/COFINS sem incidência: ${semIncidencia.itens} item(ns) de saída em ${semIncidencia.docs} `
+            + `documento(s), R$ ${semIncidencia.valor.toFixed(2)}, ficaram FORA da base do M210/M610 porque o CST `
+            + 'do item é 04/06/07/08/09 (monofásico, alíquota zero, isento, sem incidência, suspensão). '
+            + 'É a régua do Guia 1.35 (M210 campo 03: só CST 01 a 05 com alíquota diferente de zero); o C170/C175 '
+            + 'desses itens sai com base e valor zero. Se algum desses itens deveria tributar, o CST está errado '
+            + 'na NOTA — confira em Relatórios → ✏️ CFOP por nota.',
         );
     }
 
@@ -1365,25 +1723,73 @@ export function buildBlocoM(dados) {
     // duas vezes é ruído). Os totais têm que fechar com os F600 emitidos: no
     // arquivo aceito da HS (05/2026), Σ VL_RET_PIS = 114,40 = VL_RET_CUM do
     // M200 e Σ VL_RET_COFINS = 528,00 = VL_RET_CUM do M600, centavo a centavo.
-    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null);
+    const ret = dados.retencoesF600 || coletarRetencoesF600(dados.notas, null, dados.retencoesAjustadas);
     const retPis = ret.totalPis || 0;
     const retCofins = ret.totalCofins || 0;
 
+    // A receita financeira entra na contribuição do período, então o crédito
+    // que o M200 desconta depende dela — por isso ela é resolvida ANTES do
+    // M100. Ela é chamada PURA sobre a ficha, sem depender de nada abaixo.
+    const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
+    // 🚨 A CONTRIBUIÇÃO DO PERÍODO É CALCULADA UMA VEZ. Ela decide DOIS
+    // registros — quanto crédito o M100/M500 declara descontado (campo 14) e
+    // quanto o M200/M600 desconta (campo 03) —, e duas expressões iguais hoje
+    // divergem na primeira correção que tocar só uma delas. Foi isso que o
+    // comentário do M100 já dizia, e a primeira versão desta correção repetiu
+    // a conta mesmo assim.
+    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
+    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
+
     // M100 — Credito PIS (nao-cumulativo)
+    //
+    // 🚨 O M100/M500 SE DESMENTIA POR DENTRO — valores certos, CASAS TROCADAS.
+    //
+    // 29/08. O leiaute saía assim: o crédito aparecia no campo 08 (VL_CRED, certo),
+    // **de novo no 09** (VL_AJUS_ACRES — um ajuste de acréscimo que não existe) e
+    // **de novo no 11** (VL_CRED_DIF — crédito DIFERIDO, ou seja "não usei nada
+    // neste período"), enquanto o campo 12 (VL_CRED_DISP, o crédito DISPONÍVEL)
+    // saía **ZERO** e os campos 13 e 15 saíam VAZIOS, sendo os dois `Obrig. S`.
+    //
+    // 📖 O Guia 1.35 escreve a conta nos próprios campos:
+    //   · campo 12 VL_CRED_DISP = *"(08 + 09 – 10 – 11)"*
+    //   · campo 14 VL_CRED_DESC = *"Se IND_DESC_CRED=0, informar o valor total do
+    //     Campo 12; Se IND_DESC_CRED=1, informar o valor parcial do Campo 12"*
+    //   · campo 15 SLD_CRED = *"Saldo de créditos a utilizar em períodos futuros
+    //     (12 – 14)"*
+    //
+    // Com o que saía, 08+09−10−11 dava o crédito inteiro e o campo 12 dizia ZERO —
+    // e o campo 14 descontava um valor que o campo 12 afirmava não existir. É a
+    // família do M210 da MANTOAN (18/08): a contagem de campos está CERTA, então a
+    // trava de contagem não vê; quem vê é a conta.
+    //
+    // ⚠️ **Por que ninguém tinha visto**: o M100/M500 só sai no NÃO-CUMULATIVO com
+    // crédito de entrada, e as SEIS empresas fechadas por recibo são todas
+    // CUMULATIVAS. É a mesma sorte do IPI que foi parar em E200/E210 e do Bloco H
+    // zerado — o defeito esperando a primeira empresa do outro regime.
+    //
+    // ⚠️ **NADA AQUI É INVENTADO**: ajuste e diferimento saem ZERO porque o app não
+    // gera M110/M510 (ajuste) nem difere crédito — e aí o zero É a resposta ("não
+    // houve"), nunca o default de quem não achou o dado (regra de 06/08). O
+    // IND_DESC_CRED e o saldo saem do que o M200 de fato desconta.
     if (isNaoCumulativo && totalPisEntrada > 0) {
+        // O quanto o M200 vai de fato descontar — o mesmo número, calculado no
+        // mesmo lugar: dois cálculos fariam o M100 e o M200 discordarem sobre
+        // o crédito usado, dentro do mesmo arquivo.
+        const dispPis = totalPisEntrada;
+        const descPis = Math.min(dispPis, vlContribPis);
         linhas.push(fmt.buildLine([
             'M100', '01', '0',
             fmt.formatValue(totalBcEntrada),
             fmt.formatValue(aliq.pis * 100, 4),
             '', '',
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(0),
-            fmt.formatValue(totalPisEntrada),
-            fmt.formatValue(0),
-            '',
-            fmt.formatValue(totalPisEntrada),
-            '',
+            fmt.formatValue(totalPisEntrada),   // 08 VL_CRED
+            fmt.formatValue(0),                 // 09 VL_AJUS_ACRES — não há ajuste
+            fmt.formatValue(0),                 // 10 VL_AJUS_REDUC
+            fmt.formatValue(0),                 // 11 VL_CRED_DIF — não há diferimento
+            fmt.formatValue(dispPis),           // 12 VL_CRED_DISP = 08+09-10-11
+            descPis >= dispPis ? '0' : '1',     // 13 IND_DESC_CRED (0 total · 1 parcial)
+            fmt.formatValue(descPis),           // 14 VL_CRED_DESC
+            fmt.formatValue(dispPis - descPis), // 15 SLD_CRED = 12 - 14
         ]));
     }
 
@@ -1407,8 +1813,8 @@ export function buildBlocoM(dados) {
     // ZERO. Ela tem alíquota e código PRÓPRIOS, então vai numa LINHA SEPARADA
     // do M210/M610 (COD_CONT 02), não somada à apuração comum: juntar
     // declararia parte da receita sob a alíquota errada.
-    const finM = montarReceitaFinanceira({ receita: dados.receitaAplicacaoFinanceira });
-    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
+    // (declarado acima, antes do M100 — o crédito descontado precisa dele)
+
     const vlCredDescontPis = isNaoCumulativo ? Math.min(totalPisEntrada, vlContribPis) : 0;
     // A retenção declarada é a REAL (soma dos F600); o "a recolher" é que não
     // desce de zero. Cap na retenção esconderia o saldo a compensar.
@@ -1461,8 +1867,24 @@ export function buildBlocoM(dados) {
     // QUANT_BC_PIS · ALIQ_PIS_QUANT · VL_CONT_APUR · VL_AJUS_ACRES ·
     // VL_AJUS_REDUC · VL_CONT_DIFER · VL_CONT_DIFER_ANT · VL_CONT_PER.
     //
-    // Campo de ajuste/diferimento que esta empresa não tem sai VAZIO, nunca
-    // 0,00 inventado: campo de valor não recebe default (regra de 06/08).
+    // 🚨 OS QUATRO CAMPOS DE AJUSTE SÃO OBRIGATÓRIOS — e saíam VAZIOS (28/08,
+    // DGB CONSULTORIA 21903193000160 · 08/2026, **8 recusas**, quatro por
+    // registro): *"Campo de preenchimento obrigatório · 5 - VL_AJUS_ACRES_BC ·
+    // 6 - VL_AJUS_REDUC_BC · 12 - VL_AJUS_ACRES · 13 - VL_AJUS_REDUC"*, com
+    // *"Registro/Campo não informado ou inválido"* em cada um.
+    //
+    // O comentário que estava aqui dizia o contrário — *"campo de ajuste sai
+    // VAZIO, nunca 0,00 inventado"* —, e essa era uma DEDUÇÃO minha. A regra
+    // de 06/08 nunca proibiu isto: ela diz que **zero só entra quando zero É a
+    // resposta**, e é exatamente o caso — a empresa NÃO TEM ajuste, e o app
+    // não gera M220/M620, então o zero é fato, não "não sabemos".
+    //
+    // ⚠️ E SÓ ESTES QUATRO. O PVA listou 8 erros — quatro por registro — e
+    // deixou de fora `QUANT_BC` / `ALIQ_QUANT` (a alternativa por QUANTIDADE,
+    // excludente com a alíquota ad valorem) e `VL_CONT_DIFER` /
+    // `VL_CONT_DIFER_ANT` (diferimento, de fato opcional). Preencher os oito
+    // "por simetria" seria a mesma dedução que produziu este defeito, na
+    // direção contrária.
     // M205 — Detalhamento por código de receita (visão DCTF).
     //
     // Paulo, 20/08: *"esse registro nós preenchemos manual, tem a possibilidade
@@ -1476,6 +1898,23 @@ export function buildBlocoM(dados) {
     // financeira NÃO cai no aviso do "não-cumulativo sem código provado".
     // ⚠️ Ele vale só para ESTA apuração — reaproveitá-lo no não-cumulativo
     // comum declararia o débito na receita errada da DCTF.
+    // 🚨 O `NUM_CAMPO 08` é o do regime NÃO-cumulativo — foi assim que o
+    // assinado do CF BANK (06/2026) o trouxe, e é ele que está provado. Se a
+    // apuração sair CUMULATIVA, o valor da receita financeira vai para o campo
+    // 12 do M200 e este detalhamento apontaria um campo ZERADO: o Guia é
+    // literal (*"o somatório do campo 04 deve corresponder ao valor constante
+    // de contribuição a recolher, do Registro Pai M200"*), e a prevalidação
+    // pega isso. O app **não deduz** o par código+campo do outro regime —
+    // deduzir declararia o débito na receita errada da DCTF —, então a
+    // combinação sai DITA para alguém conferir antes do PVA.
+    if (finM && !isNaoCumulativo && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            'Bloco M: a empresa tem receita de aplicação financeira e a apuração saiu CUMULATIVA. O par '
+            + 'código de receita + NUM_CAMPO que o app conhece (08 · 457401/798701) está provado no regime '
+            + 'NÃO-cumulativo (assinado do CF BANK 06/2026) — confira o M205/M605 antes de transmitir: o '
+            + 'app não deduz o código do outro regime.',
+        );
+    }
     if (finM) {
         linhas.push(fmt.buildLine([
             'M205', CODIGOS_RECEITA_APLICACAO_FINANCEIRA.numCampo,
@@ -1484,9 +1923,13 @@ export function buildBlocoM(dados) {
     }
 
     const m205 = codigosReceitaM205(isNaoCumulativo);
-    if (m205 && vlRecCumPis > 0) {
+    // ⚠️ A GUARDA LÊ O QUE VAI NO ARQUIVO, não o float (28/08, DGB): a
+    // contribuição vem de base × alíquota e a retenção do documento, então
+    // sobrava 0,0045 — maior que zero para o `>`, e 0,00 na linha. O PVA
+    // recusa o M205 que existe com valor zero.
+    if (m205 && !zeroNoArquivo(vlRecCumPis)) {
         linhas.push(fmt.buildLine(['M205', m205.numCampo, m205.pis, fmt.formatValue(vlRecCumPis)]));
-    } else if (!m205 && vlRecNcPis > 0 && Array.isArray(dados.warnings)) {
+    } else if (!m205 && !zeroNoArquivo(vlRecNcPis) && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             'M205/M605 (detalhamento por código de receita, visão DCTF) NÃO foi gerado: o código de receita do '
             + 'regime NÃO-CUMULATIVO não está provado contra nenhum arquivo aceito, e este app não deduz código '
@@ -1504,13 +1947,13 @@ export function buildBlocoM(dados) {
             // VL_BC_CONT 16.055,60.
             fmt.formatValue(totalReceitaSaida),  // VL_REC_BRT
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT  ← recebia a alíquota
-            '', '',                             // ajustes de BC (acréscimo/redução)
+            SEM_AJUSTE, SEM_AJUSTE,             // 5-6 ajustes de BC — obrigatórios
             fmt.formatValue(totalBcSaida),      // VL_BC_CONT_AJUS (sem ajuste = a própria BC)
             fmt.formatValue(aliq.pis * 100, 4), // ALIQ_PIS
-            '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT
+            '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT (por quantidade)
             fmt.formatValue(totalPisSaida),     // VL_CONT_APUR
-            '', '',                             // ajustes de contribuição
-            '', '',                             // diferimento (período e anterior)
+            SEM_AJUSTE, SEM_AJUSTE,             // 12-13 ajustes da contribuição — obrigatórios
+            '', '',                             // diferimento (período e anterior) — opcionais
             fmt.formatValue(totalPisSaida),     // VL_CONT_PER
         ]));
     }
@@ -1525,37 +1968,40 @@ export function buildBlocoM(dados) {
             'M210', COD_CONT_APLICACAO_FINANCEIRA,
             fmt.formatValue(finM.receita),          // VL_REC_BRT
             fmt.formatValue(finM.receita),          // VL_BC_CONT — sem exclusão aqui
-            '', '',
+            SEM_AJUSTE, SEM_AJUSTE,                 // 5-6 ajustes de BC
             fmt.formatValue(finM.receita),          // VL_BC_CONT_AJUS
             fmt.formatValue(finM.aliqPis * 100, 4), // ALIQ_PIS (0,65)
             '', '',
             fmt.formatValue(finM.pis),              // VL_CONT_APUR
-            '', '', '', '',
+            SEM_AJUSTE, SEM_AJUSTE, '', '',         // 12-13 ajustes · diferimento
             fmt.formatValue(finM.pis),              // VL_CONT_PER
         ]));
     }
 
     // M500 — Credito COFINS (nao-cumulativo)
+    // Espelho do M100 — ver o comentário lá (as casas 09/11/12 estavam
+    // trocadas, e os campos 13 e 15, obrigatórios, saíam vazios).
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
+        const dispCof = totalCofinsEntrada;
+        const descCof = Math.min(dispCof, vlContribCofins);
         linhas.push(fmt.buildLine([
             'M500', '01', '0',
             fmt.formatValue(totalBcEntrada),
             fmt.formatValue(aliq.cofins * 100, 4),
             '', '',
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(0),
-            fmt.formatValue(totalCofinsEntrada),
-            fmt.formatValue(0),
-            '',
-            fmt.formatValue(totalCofinsEntrada),
-            '',
+            fmt.formatValue(totalCofinsEntrada),  // 08 VL_CRED
+            fmt.formatValue(0),                   // 09 VL_AJUS_ACRES
+            fmt.formatValue(0),                   // 10 VL_AJUS_REDUC
+            fmt.formatValue(0),                   // 11 VL_CRED_DIF
+            fmt.formatValue(dispCof),             // 12 VL_CRED_DISP = 08+09-10-11
+            descCof >= dispCof ? '0' : '1',       // 13 IND_DESC_CRED
+            fmt.formatValue(descCof),             // 14 VL_CRED_DESC
+            fmt.formatValue(dispCof - descCof),   // 15 SLD_CRED = 12 - 14
         ]));
     }
 
     // M600 — Contribuicao COFINS do periodo. Mesmo leiaute do M200 (provado no
     // mesmo arquivo aceito: |M600|0|0|0|0|0|0|0|528|528|0|0|0|).
-    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
     const vlCredDescontCofins = isNaoCumulativo ? Math.min(totalCofinsEntrada, vlContribCofins) : 0;
     const vlRecNcCofins = isNaoCumulativo ? Math.max(vlContribCofins - vlCredDescontCofins - retCofins, 0) : 0;
     const vlRecCumCofins = isNaoCumulativo ? 0 : Math.max(vlContribCofins - retCofins, 0);
@@ -1581,7 +2027,8 @@ export function buildBlocoM(dados) {
     // M605 — o par do M205, do lado da COFINS. Mesmo código provado, mesma
     // recusa em deduzir o do não-cumulativo (o aviso já saiu no M205; repetir
     // aqui seria ruído).
-    if (m205 && vlRecCumCofins > 0) {
+    // ⚠️ Mesma régua do M205 — ver o comentário lá.
+    if (m205 && !zeroNoArquivo(vlRecCumCofins)) {
         linhas.push(fmt.buildLine(['M605', m205.numCampo, m205.cofins, fmt.formatValue(vlRecCumCofins)]));
     }
     // O par do M205 da apuração diferenciada (receita financeira).
@@ -1600,13 +2047,13 @@ export function buildBlocoM(dados) {
             'M610', codCont,
             fmt.formatValue(totalReceitaSaida),    // VL_REC_BRT — receita ≠ base
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT
-            '', '',                                // ajustes de BC
+            SEM_AJUSTE, SEM_AJUSTE,                // 5-6 ajustes de BC — obrigatórios
             fmt.formatValue(totalBcSaida),         // VL_BC_CONT_AJUS
             fmt.formatValue(aliq.cofins * 100, 4), // ALIQ_COFINS
-            '', '',                                // QUANT_BC · ALIQ_QUANT
+            '', '',                                // QUANT_BC · ALIQ_QUANT (por quantidade)
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_APUR
-            '', '',                                // ajustes de contribuição
-            '', '',                                // diferimento
+            SEM_AJUSTE, SEM_AJUSTE,                // 12-13 ajustes da contribuição
+            '', '',                                // diferimento — opcionais
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_PER
         ]));
     }
@@ -1618,12 +2065,12 @@ export function buildBlocoM(dados) {
             'M610', COD_CONT_APLICACAO_FINANCEIRA,
             fmt.formatValue(finM.receita),
             fmt.formatValue(finM.receita),
-            '', '',
+            SEM_AJUSTE, SEM_AJUSTE,
             fmt.formatValue(finM.receita),
             fmt.formatValue(finM.aliqCofins * 100, 4),
             '', '',
             fmt.formatValue(finM.cofins),
-            '', '', '', '',
+            SEM_AJUSTE, SEM_AJUSTE, '', '',
             fmt.formatValue(finM.cofins),
         ]));
     }

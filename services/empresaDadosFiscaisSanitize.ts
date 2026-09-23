@@ -12,26 +12,21 @@
  */
 import type { EmpresaDadosFiscais } from '../types';
 import { normalizarCodCliente } from '../sefaz-backend/cod-cliente.js';
+import { soZerosComoVazio, ccmSpParaGravar } from '../sefaz-backend/ccm-sp.js';
 
 /** Só dígitos; '' quando não sobrar nada. */
 function digitos(v: string): string {
     return v.replace(/\D/g, '');
 }
 
-/**
- * A régua do CCM SÓ-ZEROS, num lugar só (#311): '', '0', '00000000'… NÃO é
- * inscrição — é o contorno que a equipe digitava num campo que parecia
- * obrigatório, e vale como VAZIO em TODO leitor. Em 21/08 (Paulo: *"coloco uma
- * sequência de 8 zeros… e o erro segue"*) a regra existia na gravação e na
- * captura de NFS-e, mas a régua de PENDÊNCIAS não a conhecia — e acusava
- * "CCM preenchido fora de SP capital" sobre zeros que significam "não tem".
- * Devolve null para vazio/só-zeros; senão o valor original (sem reformatar).
- */
-export function soZerosComoVazio(v: unknown): string | null {
-    const s = String(v ?? '').trim();
-    if (!s) return null;
-    return /^0*$/.test(digitos(s)) && !/[1-9]/.test(s) ? null : s;
-}
+// 🚨 A RÉGUA DO CCM SÓ-ZEROS MUDOU DE CASA em 29/08 — e o motivo é o caso LAV
+// voltando com outro sintoma. Ela nasceu aqui em 21/08 (#311) e ficou onde
+// nasceu: o BACKEND, que lê o CCM em nove lugares, não a conhecia, e
+// `'00000000'` é **truthy** — então o `if (!ccm)` de cada leitor recebia um
+// "sim, tem CCM" sobre um campo que significa "não tem". O dono agora é
+// `sefaz-backend/ccm-sp.js` (que este arquivo IMPORTA e re-exporta, para quem
+// já importava daqui não mudar).
+export { soZerosComoVazio };
 
 export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosFiscais {
     const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
@@ -61,8 +56,8 @@ export function sanitizarDadosFiscais(dados: EmpresaDadosFiscais): EmpresaDadosF
         telefone: numerico(dados.telefone),
         // CCM canônico: só dígitos. Zeros (000000000) são o contorno que a
         // equipe digitava num campo que parecia obrigatório → tratados como
-        // vazio (apaga), igual ao backend.
-        ccmSp: ccmBruto == null ? undefined : (/^0*$/.test(digitos(ccmBruto)) ? '' : digitos(ccmBruto)),
+        // vazio (apaga). Quem decide é o DONO, não uma cópia daqui.
+        ccmSp: ccmSpParaGravar(ccmBruto),
         // Inscrição municipal genérica: NÃO stripa (pode ser alfanumérica
         // conforme a prefeitura); só trim.
         inscricaoMunicipal: trim(dados.inscricaoMunicipal),

@@ -326,6 +326,9 @@ router.post('/reconferir-cancelamento', requireAuth, express.json(), async (req,
 
         const resumo = resumirReconferencia({
             selecao, resultados, modo: usaCertEscritorio ? 'cert-escritorio' : 'distdfe',
+            // O FATO viaja: sem ele a frase da rodada afirma ter perguntado o
+            // que a SEFAZ não deixou perguntar.
+            abortou656,
         });
         if (abortou656) {
             resumo.avisos.unshift('A SEFAZ pediu pausa (cStat 656) e a rodada parou aqui. O que não foi '

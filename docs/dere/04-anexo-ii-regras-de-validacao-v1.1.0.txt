@@ -1,0 +1,451 @@
+
+
+===== PÁGINA 1 =====
+CGIBS  RECEITA FEDERAL 
+Comitê Gestor do IBS  Ministério da Fazenda 
+Leiautes da DeRE 
+Anexo II – Regras de Validação 
+Versão 1.1.0  |  22 de junho de 2026 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+DeRE 
+Declaração de Regimes Específicos 
+Leiautes 
+Anexo II – Regras de Validação 
+ 
+
+
+===== PÁGINA 2 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 1 de 7 
+ 
+SUMÁRIO 
+ANEXO II – REGRAS DE VALIDAÇÃO E ERROS ................................ ................................ ................................ ................................ ...........................  2 
+TABELA DE REGRAS DE VALIDAÇÃO ................................ ................................ ................................ ................................ ................................ ...... 2 
+ 
+ 
+
+===== PÁGINA 3 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 2 de 7 
+ 
+ANEXO II – REGRAS DE VALIDAÇÃO E ERROS 
+TABELA DE REGRAS DE VALIDAÇÃO 
+⚠️ NOTA: DETALHAMENTO DE MENSAGENS DE ERRO 
+ 
+As validações processadas pelo sistema da DeRE retornam mensagens de erro ao contribuinte sempre que alguma regra técnica ou de 
+negócio é violada. O texto literal e o detalhamento das mensagens de erro estão consolidados no documento ‘08-Mensagens de Erro 
+do Sistema’. 
+ 
+O Comportamento do Sistema de Validação (Interrupção de Processamento): 
+O indicativo de interrupção define o comportamento do sistema da DeRE ao identificar um erro. Independentemente da indicação de 
+interrupção (Sim/Não), qualquer erro resulta na recusa integral do evento  (o sistema não grava a informação na base de dados e 
+devolve o status {cdRetorno} = [0]). 
+A distinção aplica-se à continuidade da trilha de validação: 
+• Interrompe o processamento: [Sim] (erro crítico/estrutural): O processamento é abortado imediatamente no exato ponto da 
+falha. Não são avaliadas as regras ou campos subsequentes. O arquivo de retorno exibirá a ocorrência que provocou a parada do  
+sistema, acompanhada de eventuais erros acumulativos já registrados nas etapas anteriores à interrupção; 
+• Interrompe o processamento: [Não] (erro acumulativo): O processamento não é abortado no momento da falha. O sistema 
+registra a inconsistência e continua executando a trilha de validação até a leitura final do arquivo (desde que não encontre um erro crítico 
+no caminho). O arquivo de retorno exibirá a listagem consolidada dos erros acumulados ao longo do evento. 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+ALTERACAO_SEM_CHAVE_PREEXISTENTE 1. Se o evento for de alteração ({tpOper} = [2]), ele NÃO pode ser recebido se NÃO existir um evento 
+“Ativo” do mesmo tipo, conforme regra ‘RN - Arquivos/Eventos Tratados pelo Sistema’, e com a mesma 
+“Chave do Evento”; 
+(Mensagem de erro: MS1107 - Interrompe o processamento: Sim) 
+2. Se o evento for de alteração ({tpOper} = [2]) de um evento de tabela, ele NÃO pode ser recebido se 
+existir OUTRO evento “Ativo” conforme regra ‘RN - Arquivos/Eventos Tratados pelo Sistema ’, e com a 
+mesma “Chave do Evento” considerando a nova vigência; 
+(Mensagem de erro: MS1108 - Interrompe o processamento: Sim) 
+3. Se o evento for de alteração ({tpOper} = [2]) de um evento de tabela, ele NÃO pode ser recebido se sua 
+nova vigência coincidir com a vigência atual. 
+(Mensagem de erro: MS1010 - Interrompe o processamento: Sim) 
+AMBIENTE 1. Na recepção de eventos no ambiente de produção, o campo {tpAmb} só pode ser preenchido com o 
+valor [1]. 
+(Mensagem de erro: MS1055 - Interrompe o processamento: Sim) 
+2. Na recepção de eventos no ambiente de produção restrita, o campo {tpAmb} só pode ser preenchido 
+com o valor [2]. 
+(Mensagem de erro: MS1056 - Interrompe o processamento: Sim) 
+(*) Nos demais ambientes os valores não são verificados, pois o foco da regra é nos ambientes produtivos. 
+CCTA_CONCATENACAO O campo {cCta} deve ser igual a concatenação do campo {cCtaInterna} com o campo {cDbrMista}. 
+(Mensagem de erro: MS1070 - Interrompe o processamento: Não) 
+CCTA_NO_PGCC 1. A conta ({cCta}) deve existir no D -1011-Plano Geral de Contas Comentado válido no último dia do 
+{perApur}; 
+(Mensagem de erro: MS1118 - Interrompe o processamento: Não) 
+2. A conta ({cCta}) deve estar vigente, pelo menos por um dia, no {perApur}; 
+(Mensagem de erro: MS1119 - Interrompe o processamento: Não) 
+3. A conta ({cCta}) deve ser analítica ({indCta} = [A]). 
+(Mensagem de erro: MS1120 - Interrompe o processamento: Não) 
+CODTRIB_COMPATIVEL_EVT O {codTrib} informado no PGCC para a conta {cCta} deve corresponder a um daqueles descritos na ‘RN - 
+Tabela de codtribs obrigatórios para eventos auxiliares’, para o evento em processamento. 
+(Mensagem de erro: MS1121 - Interrompe o processamento: Não) 
+CODTRIB_PERMITIDO_D1106 O evento de inclusão ou alteração ({tpOper} = [1 ou 2]) será rejeitado caso o contribuinte não possua, no 
+PGCC vigente, pelo menos uma conta cujo codTrib esteja na lista de códigos de tributação obrigatórios 
+do evento D-1106 conforme ‘RN - Tabela de codtribs obrigatórios para eventos auxiliares’. 
+(Mensagem de erro: MS1135 - Interrompe o processamento: Sim) 
+CODTRIB_PERMITIDO_D2101 O evento de inclusão ou alteração ({tpOper} = [1 ou 2]) será rejeitado caso o contribuinte não possua, no 
+PGCC vigente, pelo menos uma conta cujo codTrib esteja na lista de códigos de tributação obrigatórios 
+do evento D-2101 conforme ‘RN - Tabela de codtribs obrigatórios para eventos auxiliares’. 
+(Mensagem de erro: MS1135 - Interrompe o processamento: Sim) 
+
+===== PÁGINA 4 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 3 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+CONFERIR_JUROS O valor de juros informado no campo {vJuros} deve ser igual a {vInicTitulo} * {pJuros} / 100. 
+(Mensagem de erro: MS1136 - Interrompe o processamento: Não) 
+CONFERIR_SALDO_FINAL_NAT_SALDO_FI
+NAL 
+O valor do saldo final {vSaldoFinal} e de sua natureza {natSaldoFinal} devem coincidir, respectivamente 
+com os valores representados por {vSaldoFinalCalc} e {natSaldoFinalCalc}, apurados conforme cálculo 
+abaixo: 
+1. Calcular Saldo Líquido (SL): 
+a) Se {natSaldoInic} = [D]: SL = {vSaldoInic} + {vMovDebt} - {vMovCred} 
+b) Se {natSaldoInic} = [C]: SL = ({vSaldoInic} * (-1)) + {vMovDebt} - {vMovCred} 
+ 
+2. Verificar Resultado: 
+a) Se SL > [0.00]: 
+{vSaldoFinalCalc} = SL 
+{natSaldoFinalCalc} = [D] 
+b) Se SL < [0.00]: 
+{vSaldoFinalCalc} = (SL * (-1)). 
+{natSaldoFinalCalc} = [C] 
+c) Se SL = [0.00]: 
+{vSaldoFinalCalc} = [0.00] 
+{natSaldoFinalCalc} = {natSaldoInic}. 
+(Mensagem de erro: MS1140 - Interrompe o processamento: Não) 
+CONFERIR_SELIC O valor equivalente a variação da SELIC informado no campo {vSelic} deve ser igual a {vInicTitulo} * {pSelic} 
+/ 100. 
+(Mensagem de erro: MS1137 - Interrompe o processamento: Não) 
+CONFERIR_VAPUR O valor de {vApur} devem coincidir com {vApurCalc} conforme o cálculo abaixo: 
+1. Se {natVApur} = [D]: {vApurCalc} = ({vMovDebt} - {vAjusteDebt} + {vAjusteCred}). 
+2. Se {natVApur} = [C]: {vApurCalc} = ({vMovCred} - {vAjusteCred} + {vAjusteDebt}). 
+(Mensagem de erro: MS1141 - Interrompe o processamento: Não) 
+CONTA_NO_PLANO_CONTAS_REFERENCI
+AL 
+Verificar se o código da conta contábil ({cCtaRef}) informado no PGCC existe no Plano de Contas 
+Referencial: 
+1. Identificar o plano referencial associado à empresa (COSIF, ANS, SUSEP ou SPED), através do campo 
+{planoCtaRef}; 
+2. Consultar a tabela de contas referenciais correspondente; 
+3. Verificar se o código da conta contábil informado está cadastrado no plano referencial aplicável. 
+(Mensagem de erro: MS1077 - Interrompe o processamento: Sim) 
+CONTRIBUINTE_NO_CADASTRO O sistema deve verificar se um CNPJ existe no cadastro e qual sua situação cadastral numa determinada 
+data. 
+Tipos de Eventos: 
+D-1011 – Plano Geral de Contas Comentado; 
+D-1106 – Identificação de Aplicações Financeiras; 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública; 
+D-1101 – Balancete Mensal; 
+D-1199 – Fechamento de Eventos Mensais. 
+1. Validação de CNPJ Baixado: 
+Não se aplica, pois os eventos de tabela não possuem período de apuração. 
+2. Validação de CNPJ Nulo: 
+O evento não pode ser aceito se o CNPJ estiver anulado no Sistema CNPJ. 
+(Mensagem de erro: MS1063 - Interrompe o processamento: Sim) 
+3. Validação de CNPJ Inapto (situação = 4) pelo motivo de Inexistência de Fato (motivo = 15): 
+Não se aplica, pois os eventos de tabela não possuem período de apuração. 
+DESCRICAO_CTA Preenchimento obrigatório se {indCta} = [A]. 
+(Mensagem de erro: MS1075 - Interrompe o processamento: Não) 
+DT_FIM_JUROS 1. A data de fim de juros ({dtFimJuros}) deve estar dentro do período de apuração ({perApur}); 
+(Mensagem de erro: MS1131 - Interrompe o processamento: Não) 
+2. A data de fim de juros ({dtFimJuros}) deve ser igual ou posterior a data de aquisição ({dtAquisição}). 
+(Mensagem de erro: MS1132 - Interrompe o processamento: Não) 
+DT_FIM_VIGENCIA O valor informado deve ser maior ou igual a data de início da vigência ({iniVig}) 
+(Mensagem de erro: MS1078 - Interrompe o processamento: Não) 
+DT_INICIO_JUROS_POSTERIOR_DT_AQUIS
+ICAO 
+A data de início de juros ({dtInicioJuros}) deve ser igual ou posterior a data de aquisição ({dtAquisicao}). 
+(Mensagem de erro: MS1130 - Interrompe o processamento: Não) 
+DT_LIQUIDACAO 1. A data de liquidação ({dtLiquidacao}) deve estar dentro do período de apuração ({perApur}); 
+(Mensagem de erro: MS1133 - Interrompe o processamento: Não) 
+2. A data de liquidação ({dtLiquidacao}) deve ser igual ou posterior a data de aquisição ({dtAquisição}). 
+(Mensagem de erro: MS1134 - Interrompe o processamento: Não) 
+
+===== PÁGINA 5 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 4 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+DV_CNPJ O dígito verificador indicado no CNPJ deve corresponder ao calculado conforme a regra abaixo: 
+1. Fórmula de Conversão: 
+Valor = Código_ASCII(Caractere) - 48 
+Números (0-9): Permanecem com os valores de 0 a 9. 
+Letras (A-Z): Assumem valores decimais de 17 a 42 (Ex: A=17, B=18...). 
+2. Algoritmo de Cálculo (Módulo 11): 
+O cálculo utiliza dois conjuntos de pesos para determinar os dois últimos dígitos. 
+ Primeiro Dígito (DV1 - Posição 13) 
+Pesos aplicados às 12 primeiras posições: 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2. 
+Segundo Dígito (DV2 - Posição 14) 
+Pesos aplicados às 13 primeiras posições (incluindo DV1): 6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2. 
+2.1 Lógica do Dígito: 
+- Calcular a Soma dos produtos (Valor × Peso). 
+- Calcular o Resto = Soma mod 11. 
+- Calcular o Dígito = 11 - Resto. 
+ Se o Dígito ≥ 10, o valor final é 0. 
+(Mensagem de erro: MS1239 - Interrompe o processamento: Não) 
+Exemplo (CNPJ: ABC123450001-XX): 
+• DV1: Valores=(17, 18, 19, 1, 2, 3, 4, 5, 0, 0, 0, 1) x Pesos=(5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2). Soma = 318. Resto 
+= 318 mod 11 = 10. DV1 = 11 - 10 = 1. 
+• DV2: Valores=(17, 18, 19, 1, 2, 3, 4, 5, 0, 0, 0, 1, 1) x Pesos=(6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2). Soma = 374. 
+Resto = 374 mod 11 = 0. DV2 = 11 - 0 = 11 (Como ≥ 10, DV2 = 0). CNPJ Validado: ABC123450001-10. 
+EVENTOS_OBRIGATORIOS_PERIODO 1. Não existe evento D-1101 Balancete Mensal ativo registrado na base da DeRE. 
+(Mensagem de erro: MS1146 - Interrompe o processamento: Sim) 
+2. O PGCC ativo possua ao menos uma conta cujo código de tributação ({codTrib}) esteja incluído na lista 
+de códigos de tributação obrigatórios para o evento D -1106 conforme ‘RN - Tabela de codtribs 
+obrigatórios para eventos auxiliares’ e não exista evento D-1106 ativo registrado na base da DeRE; 
+(Mensagem de erro: MS1147 - Interrompe o processamento: Sim) 
+3. O PGCC ativo possua ao menos uma conta cujo código de tributação ({codTrib}) esteja incluído na lista 
+de códigos de tributação obrigatórios para o evento D -2101 conforme ‘RN - Tabela de codtribs 
+obrigatórios para eventos auxiliares’ e não exista evento D-2101 ativo registrado na base da DeRE. 
+(Mensagem de erro: MS1148 - Interrompe o processamento: Sim) 
+EXCLUSAO_SEM_CHAVE_PREEXISTENTE Se o evento for de exclusão ({tpOper} = [3]), ele NÃO pode ser recebido se NÃO existir um evento “Ativo” 
+do mesmo tipo, conforme regra ‘RN - Arquivos/Eventos Tratados pelo Sistema’, e com a mesma “Chave 
+do Evento”. 
+(Mensagem de erro: MS1009 - Interrompe o processamento: Sim) 
+EXIGIR_GRUPO_REGIME O sistema deverá obrigar o preenchimento do grupo de acordo com os valores dos campos {regTribPrinc} 
+e {regTribSecund} conforme abaixo: 
+1. Serviços Financeiros: Grupo Obrigatório: servFinanc; 
+(Mensagem de erro: MS1065 - Interrompe o processamento: Não) 
+2. Plano de Assistência à Saúde: Grupo Obrigatório: plAssistSaude; 
+(Mensagem de erro: MS1066 - Interrompe o processamento: Não) 
+3. Concursos de Prognósticos: Grupo Obrigatório: prognosticos. 
+(Mensagem de erro: MS1067 - Interrompe o processamento: Não) 
+EXIGIR_MOTIVO_EXCLUSAO O preenchimento do campo {motExcl} é obrigatório para eventos de exclusão ({tpOper} = [3]). 
+(Mensagem de erro: MS1105 - Interrompe o processamento: Não) 
+EXIGIR_NR_RECIBO 1. O preenchimento do campo {nrRecibo} é obrigatório para os eventos de Alteração e Exclusão ({tpOper} 
+= [2 ou 3]); 
+(Mensagem de erro: MS1122 - Interrompe o processamento: Não) 
+2. O preenchimento do campo {nrRecibo} é vedado para os eventos de Inclusão ({tpOper} = [1]). 
+(Mensagem de erro: MS1123 - Interrompe o processamento: Não) 
+EXIGIR_NUMERO_PROCESSO O preenchimento do campo {nrProc} é obrigatório quando o motivo da exclusão ({motExcl}) do evento é 
+do tipo [1] (Determinação judicial ou administrativa). 
+(Mensagem de erro: MS1106 - Interrompe o processamento: Não) 
+EXIGIR_TP_OPER_ALTERACAO_PARA_NOV
+A_VALIDADE 
+O grupo de dados {novaValidade} poderá ser preenchido se, e somente se, o campo {tpOper} = [2] 
+(Alteração). 
+(Mensagem de erro: MS1096 - Interrompe o processamento: Não) 
+EXISTE_CODTRIB_NA_TABELA Validar se existe o {codTrib} na <<Tabela 11 - Códigos de Tributação (codTrib)>>. 
+(Mensagem de erro: MS1076 - Interrompe o processamento: Não) 
+
+===== PÁGINA 6 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 5 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+EXISTE_INFO_CONTRIBUINTE 1. D-1011 - Plano Geral de Contas Comentado 
+Eventos de inclusão ou alteração serão recebidos desde que a data de início considerada esteja 
+compreendida dentro do período de validade de um evento D -1001 ativo. A data considerada segue a 
+seguinte prioridade: 
+1- A nova data de início de validade, se informada na alteração; 
+2- A data de início de validade original, nos demais casos. 
+(Mensagem de erro: MS1069 - Interrompe o processamento: Sim) 
+2. D-1101 - Balancete Mensal 
+Eventos de inclusão ou alteração serão recebidos desde que o período de apuração coincida com o 
+período de validade de um evento D-1001 ativo. 
+(Mensagem de erro: MS1127 - Interrompe o processamento: Sim) 
+3. D-1106 - Identificação de Aplicações Financeiras 
+Eventos de inclusão ou alteração serão recebidos desde que o período de apuração coincida com o 
+período de validade de um evento D-1001 ativo. 
+(Mensagem de erro: MS1127 - Interrompe o processamento: Sim) 
+4. D-2101 - Débitos Títulos Oferta Pública 
+Eventos de inclusão ou alteração serão recebidos desde que o período de apuração coincida com o 
+período de validade de um evento D-1001 ativo. 
+(Mensagem de erro: MS1127 - Interrompe o processamento: Sim) 
+FIM_VALID A data de fim da validade ({fimValid}), quando informada, deve ser igual ou posterior a {iniValid} do mesmo 
+grupo de dados. 
+(Mensagem de erro: MS1095 - Interrompe o processamento: Não) 
+INCLUSAO_COM_CHAVE_PREEXISTENTE Se o evento for de inclusão ({tpOper} = [1]), ele não pode ser recebido se já existir um evento “Ativo” do 
+mesmo tipo, conforme regra ‘RN - Arquivos/Eventos Tratados pelo Sistema’, e com a mesma “Chave do 
+Evento”. 
+(Mensagem de erro: MS1005 - Interrompe o processamento: Sim) 
+INDCTA_CONTAS_DESDOBR 1. Se a conta possui código de desdobramento igual a zero ({cDbrMista} = [000]), E possui contas 
+desdobradas ({cDbrMista} > [000]) então ela deve ser obrigatoriamente classificada como Sintética 
+({indCta} = [S]); 
+(Mensagem de erro: MS1116 - Interrompe o processamento: Não) 
+2. Se a conta possui com código de desdobramento maior que zero ({cDbrMista} > [000]) então ela deve 
+ser obrigatoriamente classificada como Analítica ({indCta} = [A]). 
+(Mensagem de erro: MS1117 - Interrompe o processamento: Não) 
+INI_VALID A data para o início da validade {iniValid} não deve ser menor que {dataInicioDeRE}. 
+(Mensagem de erro: MS1094 - Interrompe o processamento: Não) 
+Observação: 
+{dataInicioDeRE} é a data de início da DeRE e será parametrizada no sistema. 
+NUM_SEQ_UNICO Para títulos adquiridos por meio de fundos de investimentos exclusivos ({tpAquis} = [2]), o campo {idTitulo} 
+deverá ser sequencial e único. O erro deverá ser informado no primeiro título que infringir a regra de 
+negócio. 
+(Mensagem de erro: MS1138 - Interrompe o processamento: Sim) 
+Exemplo: 
+IdTitulo [1, 2, 3, 5, 6, 8]. 
+Erro disparado no idTitulo igual a 5. 
+OBRIGAR_CCTAREF_IGUAL_CONTA_PRIN
+CIPAL 
+Para contas desdobradas ({cDbrMista} > [000]) o campo {cCtaRef} deve ser igual ao da conta que originou 
+esse desdobro. 
+(Mensagem de erro: MS1114 - Interrompe o processamento: Não) 
+OBRIGAR_CODTRIB 1. O campo {codTrib} é obrigatório para contas analíticas ({indCta} = [A]); 
+(Mensagem de erro: MS1103 - Interrompe o processamento: Não) 
+2. O campo {codTrib} é exclusivo para contas analíticas ({indCta} = [A]); 
+(Mensagem de erro: MS1109 - Interrompe o processamento: Não) 
+3. O campo {codTrib} deve possuir nove dígitos, sendo aceitável o intervalo de [100000000] a [999999999], 
+inclusive. 
+(Mensagem de erro: MS1115 - Interrompe o processamento: Não) 
+OBRIGAR_IND_TRIB_ISS O campo {indTribISS} é vedado para contas sintéticas ({indCta} = [S]). 
+(Mensagem de erro: MS1102 - Interrompe o processamento: Não) 
+OBRIGAR_NATVAPUR O preenchimento do campo {natVApur} é obrigatório quando {vApur} é maior que zero. 
+(Mensagem de erro: MS1142 - Interrompe o processamento: Não) 
+OBRIGAR_PERAPUR_IGUAL_NRRECIBO O período de apuração declarado no campo {perApur} deve coincidir com o período apontado no número 
+de recibo ({nrRecibo}) sempre que o evento seja de Alteração ou Exclusão ({tpOper} = [2 ou 3]). 
+(Mensagem de erro: MS1126 - Interrompe o processamento: Sim) 
+OBRIGAR_PREENCH_DESC_FUNDO O campo {descFundo} deverá ser preenchido para título cujo tipo de aquisição for “Compra por meio de 
+fundos de investimento exclusivos com composição mínima de 95% de títulos de dívida (§ 2º do Art. 195)” 
+({tpAquis} = [2]). 
+(Mensagem de erro: MS1129 - Interrompe o processamento: Não) 
+
+===== PÁGINA 7 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 6 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+OBRIGAR_PREENCH_INFO_BALANCETE O grupo de dados {infoBalancete} deverá ser preenchido para eventos de Inclusão ou Alteração ({tpOper} 
+= [1 ou 2]). 
+(Mensagem de erro: MS1144 - Interrompe o processamento: Não) 
+OBRIGAR_PREENCH_INFO_CONTRIB O grupo de dados {infoContrib} poderá ser preenchido se, e somente se, o campo {tpOper} for igual a [1] 
+(Inclusão) ou [2] (Alteração). 
+(Mensagem de erro: MS1098 - Interrompe o processamento: Não) 
+OBRIGAR_PREENCH_INFO_DEB_OF_PUB O grupo de dados {infoAplicResTec} deverá ser preenchido para eventos de Inclusão ou Alteração 
+({tpOper} = [1 ou 2]). 
+(Mensagem de erro: MS1143 - Interrompe o processamento: Não) 
+OBRIGAR_PREENCH_INFO_PGCC O grupo de dados {infoPGCC} poderá ser preenchido se, e somente se, o campo {tpOper} for igual a [1] 
+(Inclusão) ou [2] (Alteração). 
+(Mensagem de erro: MS1104 - Interrompe o processamento: Não) 
+OBRIGAR_PREENCH_INFO_RES_TEC O grupo de dados {infoAplicResTec} deverá ser preenchido para eventos de Inclusão ou Alteração 
+({tpOper} = [1 ou 2]). 
+(Mensagem de erro: MS1125 - Interrompe o processamento: Não) 
+PAI_CTA_ANALITICA 1. O campo {cCtaSup} só pode ser preenchido para contas de nível acima de 1 ({nivelCta} > [1]); 
+(Mensagem de erro: MS1100 - Interrompe o processamento: Não) 
+2. Todas a contas analíticas ({indCta} = [A]) devem ter uma conta pai ({cCtaSup} <> [vazio]); 
+(Mensagem de erro: MS1074 - Interrompe o processamento: Não) 
+3. A conta pai ({cCtaSup}) deve ser uma das contas informadas em {infoContas}; 
+(Mensagem de erro: MS1099 - Interrompe o processamento: Não) 
+4. A conta pai ({cCtaSup}) deve ser uma conta sintética ({indCta} = [S]). 
+(Mensagem de erro: MS1083 - Interrompe o processamento: Não) 
+REG_SEC_DIFERENTE_REG_PRINC Se informado, o valor de {regTribSecund} deve ser diferente de {regTribPrinc}. 
+(Mensagem de erro: MS1093 - Interrompe o processamento: Não) 
+REJEITAR_GRUPO_REGIME O sistema deverá rejeitar o preenchimento de algum grupo segundo o valor de {regTribPrinc} e 
+{regTribSecund} conforme a tabela abaixo: 
+{regTribPrinc} e {regTribSecund} diferente de: 
+[1] Serviços Financeiros: Grupo: servFinanc; 
+(Mensagem de erro: MS1101 - Interrompe o processamento: Não) 
+[2] Plano de Assistência à Saúde: Grupo: plAssistSaude; 
+(Mensagem de erro: MS1107 - Interrompe o processamento: Não) 
+[3] Concursos de Prognósticos: Grupo: prognosticos. 
+(Mensagem de erro: MS1108 - Interrompe o processamento: Não) 
+RN - Arquivos/Eventos Tratados pelo 
+Sistema 
+D-1001 – Informações do Contribuinte (chave: nrInsc + idePeriodo.iniValid + idePeriodo.fimValid) 
+D-1011 – Plano Geral de Contas Comentado (chave: nrInsc + idePeriodo.iniValid + idePeriodo.fimValid) 
+D-1106 – Identificação de Aplicações Financeiras (chave: nrInsc + idePeriodo.perApur) 
+D-2101 – Débito em Operações com Títulos de Dívida com Oferta Pública  (chave: nrInsc + 
+idePeriodo.perApur) 
+D-1101 – Balancete Mensal (chave: nrInsc + idePeriodo.perApur) 
+D-1199 – Fechamento de Eventos Mensais (chave: nrInsc + idePeriodo.perApur) 
+RN - Formação do Número do Recibo do 
+Evento 
+Campo de 31 caracteres conforme abaixo: 
+0000-000000-0000000000000000000, onde: 
+0000 (Código do Tipo do Evento. Ex.: 1001, 1011 etc. / 4 caracteres); 
+- (Preencher com “-” / 1 caractere); 
+000000 (Período de apuração do evento “AAAAMM” ou o ano/mês do campo da recepção do evento, no 
+formato “AAAAMM”, caso seja um evento não periódico / 6 caracteres); 
+- (Preencher com “-” / 1 caractere); 
+0000000000000000000 (idInternoEvento/Valor do campo id da tabela do respectivo evento/ Campo 
+autoincremental gerado ao incluir o evento na respectiva tabela do evento/1 a 19 caracteres). 
+RN - Numero do Protocolo do Lote O número do protocolo será composto por no máximo 28 caracteres conforme abaixo: 
+T.AAAAMM.NNNNNNNNNNNNNNNNNNN, onde: 
+T (Tipo de ambiente de recepção): 1-Produção; 2-Pré-Produção; 
+AAAAMM (Ano/Mês): Ano e Mês da recepção do lote; 
+NNNNNNNNNNNNNNNNNNN (Número de Identificação do Lote): Máximo de 19 posições. Número 
+sequencial gerado internamente pelo sistema DeRE. 
+RN - Tabela de codtribs obrigatórios para 
+eventos auxiliares 
+Evento D-1106: 
+[120130001; 120230001; 120330001] (Saúde); 
+[111112701] (Seguros). 
+Evento D-2101: 
+[110113001; 110113002]. 
+
+===== PÁGINA 8 =====
+Leiautes da DeRE – Anexo II – Regras de Validação Versão 1.1.0 
+ 
+Página 7 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Descrição 
+RN - Unicidade Recepção Evento 1. A identificação única do evento (Id) é composta por 42 caracteres, conforme abaixo: 
+DeRENNNNTXXXXXXXXXXXXXXAAAAMMDDHHMMSSQQQQQ 
+DeRE - Texto fixo. Identifica o evento da DeRE. Respeitar maiúsculas e minúsculas. 
+NNNN - Código do Evento sendo transmitido (ex: 1001, 1011, 1101 etc.). 
+T - Tipo de Inscrição do Contribuinte (1 - CNPJ). 
+XXXXXXXXXXXXXX - Número da Inscrição (CNPJ) do declarante. CNPJ Alfanumérico (A -Z, 0-9), letras 
+devem ser convertidas para MAIÚSCULAS completado com zeros à esquerda. 
+AAAAMMDD - Data da geração do arquivo (Ano, Mês, Dia). 
+HHMMSS - Hora da geração do arquivo (Hora, Minuto, Segundo). Fuso Horário: Brasília (UTC-3). 
+QQQQQ - Sequencial numérico (00001 a 99999). Utilizado para garantir unicidade caso sejam gerados 
+múltiplos arquivos no mesmo segundo. 
+(Mensagem de erro: MS1050 - Interrompe o processamento: Sim) 
+2. Verificar se o número do NI (AAAAAAAAAAAAAA) do ID do evento corresponde ao {nrInsc} informado 
+no evento. 
+O {nrInsc} deve ser completado com zeros à esquerda antes da comparação. 
+(Mensagem de erro: MS1073 - Interrompe o processamento: Sim) 
+3. O campo [id] (número único, identificador do evento gerado pelo contribuinte) deve ser único na base 
+de dados do sistema, para eventos do mesmo contribuinte e do mesmo tipo. 
+(Mensagem de erro: MS1004 - Interrompe o processamento: Sim) 
+4. Verificar se já foi recebido anteriormente um evento com o mesmo hashcode. 
+(Mensagem de erro: MS1006 - Interrompe o processamento: Sim) 
+RN - Validar Saldos Finais Eventos 
+Auxiliares e Balancete 
+Ao identificar que um contribuinte possui em seu PGCC contas contábeis com {codTrib} que conste da 
+regra ‘RN - Tabela de codtribs obrigatórios para eventos auxiliares’, deve ser validada a consistência entre 
+os saldos conforme: 
+1. Para o evento D-1106, comparar os saldos finais ({vSaldoFinal}) totalizados de cada conta {cCta} com o 
+saldo final ({vSaldoFinal}) desta {cCta} no evento D-1101. 
+(Mensagem de erro: MS1149 - Interrompe o processamento: Sim) 
+2. Para o evento D-2101, comparar os saldos finais ({vFinalTitulo}) totalizados de cada conta {cCta} com o 
+saldo final ({vSaldoFinal}) desta {cCta} no evento D-1101. 
+(Mensagem de erro: MS1150 - Interrompe o processamento: Não) 
+TPATIVIDADE_REGFIN O sistema rejeitará evento cujo valor do campo {tpAtividade} NÃO encontrar correspondente no código 
+da tabela <<Tabela 21 – Atividades de Serviços Financeiros>>. 
+(Mensagem de erro: MS1110 - Interrompe o processamento: Não) 
+TPATIVIDADE_REGPROG O sistema rejeitará evento cujo valor do campo {tpAtividade} NÃO encontrar correspondente no código 
+da tabela <<Tabela 41 – Atividades de Concursos de Prognósticos>>. 
+(Mensagem de erro: MS1112 - Interrompe o processamento: Não) 
+TPATIVIDADE_REGSAUDE O sistema rejeitará evento cujo valor do campo {tpAtividade} NÃO encontrar correspondente no código 
+da tabela <<Tabela 31 – Atividades de Planos de Assistência à Saúde>>. 
+(Mensagem de erro: MS1111 - Interrompe o processamento: Não) 
+ULTIMO_RECIBO_ATIVO Para {tpOper} = [2] (Alteração) E {tpOper} = [3] (Exclusão), deverá existir um Evento já recebido, “Ativo”, 
+com número de recibo de entrega igual ao informado no campo, do mesmo Código do Tipo do Evento e 
+mesma Chave conforme ‘RN - Arquivos/Eventos Tratados pelo Sistema’. 
+(Mensagem de erro: MS1124 - Interrompe o processamento: Sim) 
+UNICIDADE_CCTA Não é permitido recebimento de um Plano de Contas que contenha alguma conta cujo número da conta 
+({cCta}) seja igual ao número de outra conta do mesmo Plano. 
+(Mensagem de erro: MS1071 - Interrompe o processamento: Não) 
+ 

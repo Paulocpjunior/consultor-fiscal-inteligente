@@ -10,12 +10,25 @@
 //   0150 — Tabela de Cadastro do Participante (clientes/fornecedores)
 //   0190 — Identificacao das Unidades de Medida (UN, KG, L, etc)
 //   0200 — Tabela de Identificacao do Item (produtos e servicos)
+//   0300 — Cadastro de bens/componentes do ativo imobilizado (CIAP, quando ha)
 //   0990 — Encerramento do Bloco 0
 //
 // Layout: Guia Pratico 3.2.2, Leiaute 020 (vigente 01/01/2026).
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
+// 🚨 O 0300 é o CADASTRO que o G125 referencia (Guia 3.2.3, G125 campo 02:
+// "o código informado neste campo deve constar de um registro 0300"), e o
+// arquivo não o trazia — cada bem do CIAP saía ÓRFÃO, a família do item órfão
+// do 0200 e do participante órfão do 0150. O dono é o módulo do CIAP: ele já lê
+// esse cadastro para o G125, e duas leituras fariam os dois registros
+// discordarem sobre o mesmo bem dentro do mesmo arquivo.
+import { montarRegistros0300 } from './sped-bloco-g.js';
+// 🚨 O 0460 é o cadastro que o C195 referencia — e o dono dele é o módulo do
+// DIFAL, que também escreve o C195. Uma fonte, não duas: descrições diferentes
+// para a MESMA observação fariam o arquivo se contradizer.
+import { montarRegistro0460 } from './sped-difal-c197.js';
 // TIPO_ITEM/NCM do item de serviço — a MESMA régua do bloco 0 do
 // EFD-Contribuições; duas cópias declarariam tipos diferentes para o mesmo item
 // em dois arquivos do mesmo mês.
@@ -26,6 +39,7 @@ import {
 // custado a recusa do COD_MUN, corrigida em metade delas.
 import {
     build0150, build0190, avisoParticipantesSemMunicipio,
+    avisoParticipantesSemEndereco,
 } from './sped-bloco0-cadastros.js';
 
 const VERSAO_LEIAUTE = '020';  // Leiaute 020 vigente desde 01/01/2026
@@ -82,6 +96,32 @@ function buildBloco0(dados) {
     // ── 0005 — Dados Complementares ─────────────────────────────────────
     linhas.push(build0005(dados));
 
+    // 🚨 CEP ILEGÍVEL SAI VAZIO — e a ausência vai DITA, nunca calada.
+    // `sanitizeCep` completa o zero à esquerda (recuperação legítima: ele se
+    // perde quando o cadastro grava o CEP como número) e DESCARTA o que tem
+    // mais de 8 dígitos, porque CEP truncado é um CEP DIFERENTE, que o PVA
+    // aceita e aponta outro município — a família do `1405`. O campo é
+    // `Obrig. O`, então quem lê precisa saber por que ele saiu em branco.
+    const cepCru = String(dados.empresa?.dadosFiscais?.cep || '').replace(/\D/g, '');
+    if (cepCru && cepCru.length > 8 && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `0005: o CEP cadastrado tem ${cepCru.length} dígitos e o campo aceita 8 — ele saiu VAZIO, e o `
+            + 'PVA vai recusar com "Campo de preenchimento obrigatório". O app NÃO corta o número: CEP '
+            + 'truncado é um CEP de outro lugar. Corrija em Empresas → Dados Fiscais.',
+        );
+    }
+
+    // 🚨 IE torta no cadastro é ALERTA, nunca contorno (regra de 06/08): o
+    // PVA recusa o arquivo com "Inscrição Estadual inválida" e a causa mora
+    // em Dados Fiscais — sem esta frase a pessoa procura defeito no gerador.
+    const motivoIe = fmt.motivoIeInvalida(dados.empresa?.dadosFiscais?.uf, dados.empresa?.dadosFiscais?.inscricaoEstadual);
+    if (motivoIe && Array.isArray(dados.warnings)) {
+        dados.warnings.push(
+            `0000: ${motivoIe} — o PVA vai recusar com "Inscrição Estadual inválida". O app NÃO completa `
+            + 'nem corta o número: corrija a IE em Empresas → Dados Fiscais (ELS · 08/2026, 11/09).',
+        );
+    }
+
     // ── 0100 — Contabilista ─────────────────────────────────────────────
     linhas.push(build0100(dados));
 
@@ -95,6 +135,11 @@ function buildBloco0(dados) {
     }
     const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
+    // O campo 10 (ENDERECO) é obrigatório SEM condição — e a recusa dele veio
+    // 732 vezes num arquivo só (VINATEX, 18/09). Aviso próprio porque a AÇÃO é
+    // outra: ali é o ♻️ que relê o XML, aqui é o cadastro do participante.
+    const avisoEnd = avisoParticipantesSemEndereco(dados.participantes);
+    if (avisoEnd && Array.isArray(dados.warnings)) dados.warnings.push(avisoEnd);
 
     // ── 0190 — Unidades de Medida ───────────────────────────────────────
     for (const u of dados.unidades || []) {
@@ -104,6 +149,35 @@ function buildBloco0(dados) {
     // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
     for (const item of dados.itens || []) {
         linhas.push(build0200(item));
+    }
+
+    // ── 0300 — Bens/componentes do CIAP ─────────────────────────────────
+    // Só sai quando a empresa tem CIAP cadastrado — a maioria não tem, e o
+    // bloco G dela sai vazio. Sem isto o G125 referenciaria um cadastro que o
+    // arquivo não declara.
+    const r0300 = montarRegistros0300(
+        dados.ciap?.bens,
+        fmt.formatCompetenciaInicio(dados.competenciaInicio),
+    );
+    for (const l of r0300.linhas) linhas.push(l);
+    if (Array.isArray(dados.warnings)) for (const a of r0300.avisos) dados.warnings.push(a);
+
+    // ── 0500 — Plano de contas das contas do 0300 ───────────────────────
+    // 🚨 O `COD_CTA` do 0300 aponta para AQUI: o Guia diz que o 0500 existe
+    // *"para identificar as contas contábeis (…) relativas às contas
+    // referenciadas no registro 0300"*. Emitir o COD_CTA sem esta declaração é
+    // o ÓRFÃO — a mesma classe do item do 0200 e do bem do G125 sem 0300 —, e
+    // é por isso que a conta só entra no 0300 quando ela está COMPLETA
+    // (código + nível + nome). Coerência é tudo ou nada (a régua do F100,
+    // 24/08).
+    for (const l of r0300.linhas0500) linhas.push(l);
+
+    // ── 0460 — Tabela de Observações do Lançamento Fiscal ───────────────
+    // Só sai quando o bloco C de fato emitiu um C195 (`dados.difalTemC195`, que
+    // ele grava): o Guia valida nos DOIS sentidos — o C195 exige o 0460, e o
+    // 0460 exige existir em pelo menos um registro dos demais blocos.
+    for (const l of montarRegistro0460(dados.difalCodObservacao, dados.difalTemC195)) {
+        linhas.push(l);
     }
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
@@ -182,9 +256,19 @@ function build0000(dados) {
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         '',  // CPF (vazio pra PJ)
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
-        fmt.sanitizeString(df.inscricaoEstadual || '', 14),
+        // 🚨 IE SÓ COM DÍGITOS (11/09, ELS · 08/2026, PVA: *"Inscrição Estadual
+        // inválida"*): esta linha escrevia o texto do cadastro como estava —
+        // `158.638.009.11`, com pontos — e o PVA confere o DV pela UF. O dono
+        // é o MESMO do 0140 do Contribuições. O que o cadastro tem ERRADO
+        // (11 dígitos numa IE paulista de 12) vai DITO no aviso, não corrigido.
+        fmt.sanitizeIe(df.inscricaoEstadual),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
-        fmt.sanitizeString(df.ccmSp || empresa.ccmSp || '', 15),  // Inscricao Municipal (cadastro unico dadosFiscais, fallback legado)
+        // 🚨 Inscrição Municipal — pelo DONO (`ccm-sp.js`), que lê as duas
+        // formas E trata os SÓ-ZEROS como vazio. Até 29/08 esta linha escrevia
+        // `00000000` no arquivo quando a equipe usava o contorno dos oito zeros
+        // no cadastro: campo em branco é AUSÊNCIA, oito zeros é uma AFIRMAÇÃO
+        // falsa de inscrição, e a diferença é a que esta casa paga caro.
+        fmt.sanitizeString(ccmSpDaEmpresa({ dadosFiscais: df, ccmSp: empresa.ccmSp }), 15),
         fmt.sanitizeString(df.codSuframa || '', 9),
         perfilDoArquivo(dados),
         df.indAtividade === 'industrial' ? '0' : '1',
@@ -210,7 +294,12 @@ function build0005(dados) {
     const df = dados.empresa.dadosFiscais || {};
     return fmt.buildLine([
         '0005',
-        fmt.sanitizeString(dados.empresa.nomeFantasia || dados.empresa.nome, 100),
+        // 🚨 O leiaute dá **060** ao FANTASIA (o 0000 é que tem NOME de 100), e
+        // este campo cortava em 100: razão social longa saía com 91 caracteres
+        // num campo de 60, que é a recusa "Tamanho do campo inválido" — a
+        // família do `COD_ENQ 318,68` da PWR (20/08). A trava de contagem conta
+        // CAMPOS, não TAMANHO, então ela ficava muda aqui.
+        fmt.sanitizeString(dados.empresa.nomeFantasia || dados.empresa.nome, 60),
         fmt.sanitizeCep(df.cep),
         fmt.sanitizeString(df.logradouro || '', 60),
         fmt.sanitizeString(df.numero || '', 10),
@@ -247,9 +336,16 @@ function build0100(dados) {
     const c = dados.contador || {};
     return fmt.buildLine([
         '0100',
-        fmt.sanitizeString(c.nome || 'CONTADOR SP CONTABIL', 100),
+        // 🚨 SEM DEFAULT INVENTADO. Isto saía 'CONTADOR SP CONTABIL' e o CRC
+        // '1SP123456/O-7' — dado FABRICADO num campo que a fiscalização lê, a
+        // família do '1405', do 'PARTSEM' e do '5352'. Pior que o campo vazio:
+        // vazio o PVA ACUSA; contabilista inventado ele ACEITA, e o arquivo
+        // passa a declarar um profissional que não existe, com um CRC que não é
+        // de ninguém. Faltando, o campo sai VAZIO e a geração AVISA qual env
+        // preencher (`conferirContador`).
+        fmt.sanitizeString(c.nome || '', 100),
         fmt.sanitizeCnpjCpf(c.cpf || ''),
-        fmt.sanitizeString(c.crc || '1SP123456/O-7', 15),
+        fmt.sanitizeString(c.crc || '', 15),
         fmt.sanitizeCnpjCpf(c.cnpj || ''),
         fmt.sanitizeCep(c.cep || ''),
         fmt.sanitizeString(c.logradouro || '', 60),

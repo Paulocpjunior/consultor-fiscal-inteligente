@@ -77,6 +77,12 @@ export function conferirAntesDeGerar(
     documentos: DocumentoFiscal[],
     opts: {
         numeroEmpresaEfiscal: number;
+        /**
+         * Quem ESCRITURA — o preflight roda a geração REAL, então ele precisa
+         * ver o MESMO que ela: sem o CNPJ, a nota de entrada do FORNECEDOR
+         * (`tpNF=0` dele) apareceria na conferência e não no arquivo.
+         */
+        empresaCnpj?: string;
         tipoInventario?: string;
         cfopCtx?: CfopCtx;
         /** Código do "Consumidor" no E-Fiscal do cliente (NFC-e sem comprador). */
@@ -220,7 +226,7 @@ export function conferirAntesDeGerar(
             // alarme falso em TODA compra de produtor rural, que é o jeito mais
             // rápido de ensinar a equipe a ignorar o preflight.
             const direcao = direcaoEfetivaDoc(d) as string;
-            const cfopFinal = cfopParaEscriturar(it.cfop, direcao, opts.cfopCtx, d);
+            const cfopFinal = cfopParaEscriturar(it.cfop, direcao, opts.cfopCtx, d, it);
             const primeiro = String(cfopFinal || '')[0];
             const esperado = direcao === 'entrada' ? ['1', '2', '3'] : ['5', '6', '7'];
             if (!primeiro || !esperado.includes(primeiro)) {

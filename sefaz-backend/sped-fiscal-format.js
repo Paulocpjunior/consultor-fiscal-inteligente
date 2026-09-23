@@ -146,9 +146,26 @@ function sanitizeCnpjCpf(s) {
 }
 
 /** Sanitiza CEP pra ficar so com digitos. */
+/**
+ * CEP do SPED — o leiaute dá `008*`, ou seja tamanho FIXO de 8 dígitos.
+ *
+ * 🚨 29/08 — ela só tirava os não-dígitos e NÃO cortava: um CEP com lixo colado
+ * saía com 30 caracteres num campo de 8 (recusa "Tamanho do campo inválido").
+ *
+ * ⚠️ E cortar em 8 seria PIOR que o estouro: CEP truncado é um CEP DIFERENTE,
+ * que o PVA aceita e aponta outro município — é a família do `1405` e do
+ * `PARTSEM`. Então:
+ *  · **até 8 dígitos** → completa com zero à ESQUERDA. Isso é RECUPERAÇÃO, não
+ *    invenção: o zero se perde quando o cadastro grava o CEP como número, e ele
+ *    é implícito ("01310-100" gravado como 1310100).
+ *  · **mais de 8** → devolve VAZIO. Ausência o PVA acusa; CEP errado, não.
+ */
 function sanitizeCep(s) {
     if (!s) return '';
-    return String(s).replace(/\D/g, '');
+    const d = String(s).replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length > 8) return '';
+    return d.padStart(8, '0');
 }
 
 /**
@@ -156,8 +173,70 @@ function sanitizeCep(s) {
  * Adiciona | no inicio, fim e entre cada campo.
  * Termina com |\r\n.
  */
+/**
+ * A Inscrição Estadual como o SPED a quer: só dígitos, ou VAZIO.
+ *
+ * "ISENTO" / "NÃO CONTRIBUINTE" viram vazio (é o que significam), e a
+ * pontuação do cadastro (`158.638.009.11`) sai — o PVA confere o DV da IE pela
+ * UF, e ponto no meio é "Inscrição Estadual inválida" (ELS · 08/2026, 11/09).
+ * Um dono para as DUAS famílias: o 0140 do Contribuições já traduzia assim e o
+ * 0000 do ICMS/IPI escrevia o texto cru.
+ */
+function sanitizeIe(bruto) {
+    const d = String(bruto == null ? '' : bruto).replace(/\D/g, '');
+    return d.length ? d.slice(0, 14) : '';
+}
+
+/** Comprimento da IE por UF — só o que está PROVADO por arquivo/recusa. */
+const DIGITOS_IE_POR_UF = { SP: 12 };
+
+/**
+ * A IE cadastrada serve para o arquivo? Devolve o motivo quando não, e `null`
+ * quando serve OU quando o app não tem como saber (UF sem comprimento
+ * conhecido — ausência não é prova).
+ */
+function motivoIeInvalida(uf, bruto) {
+    const cru = String(bruto == null ? '' : bruto).trim();
+    const d = sanitizeIe(cru);
+    if (!d) return null;
+    const esperado = DIGITOS_IE_POR_UF[String(uf || '').trim().toUpperCase()];
+    if (esperado && d.length !== esperado) {
+        return `a IE cadastrada "${cru}" tem ${d.length} dígito(s) e a de ${String(uf).toUpperCase()} tem ${esperado}`;
+    }
+    return null;
+}
+
 function buildLine(campos) {
     return '|' + campos.map(c => c === null || c === undefined ? '' : String(c)).join('|') + '|\r\n';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O IND_MOV SAI DO QUE FOI PRODUZIDO, NUNCA DO QUE FOI SELECIONADO
+//
+// 17/09, EDUARDO GUERRA (1137) · EFD ICMS/IPI 08/2026 — PVA, UM erro, linha
+// 5363: *"Registro de abertura do bloco informa que o bloco tem movimento, no
+// entanto nenhum registro foi informado no bloco"* · campo `2 - IND_MOV` ·
+// conteúdo `0` · registro `D001` · conteúdo do registro **`|D001|0|`**.
+//
+// A CAUSA é de ORDEM, não de leitura: o `IND_MOV` era decidido pela SELEÇÃO
+// (`notas.length > 0`) e o conteúdo, pelo LAÇO — dois passos do gerador
+// decidindo o MESMO fato. Quando o laço descarta tudo (no caso dele, CT-e sem
+// CFOP legível, que a régua de 21/08 mantém FORA de propósito), a abertura já
+// foi escrita prometendo movimento. É a classe do C100 × C190 (26/08): o pai
+// lê uma fonte, o filho agrega outra.
+//
+// ⚠️ NÃO se resolve fazendo o descartado entrar: CFOP cravado no D190
+// declararia a NATUREZA da operação de transporte no escuro (é o `5352` de
+// 21/08, e o `1405` antes dele). Quem muda é a ABERTURA, que passa a falar do
+// passado — a mesma régua da frase da rodada de reconferência (02/09):
+// *"frase que fala no passado se escreve do RESULTADO, nunca da intenção"*.
+//
+// @param {string} reg  Código do registro de abertura ('C001', 'D001'…).
+// @param {string[]} conteudo  As linhas JÁ produzidas do bloco (sem abertura
+//   nem encerramento). Vazio ⇒ IND_MOV=1 (bloco SEM dados).
+function abrirBloco(reg, conteudo) {
+    const linhas = Array.isArray(conteudo) ? conteudo : [];
+    return buildLine([reg, linhas.length > 0 ? '0' : '1']);
 }
 
 export {
@@ -168,5 +247,8 @@ export {
     sanitizeString,
     sanitizeCnpjCpf,
     sanitizeCep,
+    sanitizeIe,
+    motivoIeInvalida,
     buildLine,
+    abrirBloco,
 };

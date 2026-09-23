@@ -152,3 +152,60 @@ describe('varredura — é ela que responde sem arquivo novo', () => {
         expect(varrerRetencaoFederal([]).avisos).toEqual([]);
     });
 });
+
+// ============================================================================
+// 🚨 "PUXOU UMA NOTA QUE NÃO TEM RETENÇÃO — COMO NÃO CONSIDERAR ELA?"
+// (02/09, Paulo, HS PROJETOS · 08/2026, nota 22243 da EMBRATOP GEO)
+//
+// O PDF da NFS-e paulistana traz, lado a lado:
+//   · PIS/PASEP 2,31 (1,65% de 140) e COFINS 10,64 (7,60%) — as alíquotas do
+//     NÃO-CUMULATIVO, ou seja o tributo da OPERAÇÃO do prestador (caso ATLAS);
+//   · Contribuições Sociais - Retidas: 0,00, com a descrição
+//     "0 - PIS/COFINS/CSLL Não Retidos".
+//
+// Os dois sinais concordam e o campo de contribuições retidas é O campo da
+// retenção neste leiaute. Com ele PRESENTE e ZERO, a resposta está no
+// documento — mandar ajustar à mão é a régua de 24/08 ao contrário.
+// ============================================================================
+describe('🚫 o documento DECLARA que não houve retenção', () => {
+    // Os números são os do PDF que o Paulo mandou.
+    const nota22243 = { base: 140, pis: 2.31, cofins: 10.64, csll: 0, csllPresente: true };
+
+    it('CSRF presente e ZERO + assinatura da operação ⇒ sem retenção a declarar', () => {
+        const r = conferirRetencaoFederal(nota22243);
+        expect(r.situacao).toBe('sem-retencao-declarada');
+        // 🚨 Não exige ação: não há o que ajustar numa nota sem retenção.
+        expect(r.exigeAcao).toBe(false);
+        expect(r.acao).toBeNull();
+        expect(r.motivo).toMatch(/Não Retidos/);
+        expect(r.motivo).toMatch(/tributo da OPERAÇÃO/);
+    });
+
+    // ⚠️ PRESENÇA ≠ ZERO: sem o campo, o app NÃO conclui — o documento não
+    // disse nada, e concluir "sem retenção" ali tiraria do R-4020 uma nota que
+    // ninguém conferiu.
+    it('CSRF AUSENTE não vira "sem retenção" — continua exigindo conferência', () => {
+        const r = conferirRetencaoFederal({ base: 140, pis: 2.31, cofins: 10.64, csll: 0 });
+        expect(r.situacao).toBe('campos-sao-totais-da-operacao');
+        expect(r.exigeAcao).toBe(true);
+    });
+
+    // 🚨 E ELA SÓ VALE COM A ASSINATURA DA OPERAÇÃO: PIS 0,65% + COFINS 3% com
+    // a CSRF zerada é RETENÇÃO DE VERDADE com o campo agregado em branco.
+    // Concluir "sem retenção" ali declararia a MENOS do que foi retido.
+    it('retenção de verdade com CSRF zerada NÃO é dispensada', () => {
+        const r = conferirRetencaoFederal({ base: 1000, pis: 6.5, cofins: 30, csll: 0, csllPresente: true });
+        expect(r.situacao).not.toBe('sem-retencao-declarada');
+    });
+
+    // ⚠️ E o caso ATLAS continua como era: CSRF de 4,65% preenchida é retenção,
+    // e o app manda usar ELA, não os campos de PIS/COFINS.
+    it('CSRF preenchida (4,65%) segue sendo retenção, não dispensa', () => {
+        const r = conferirRetencaoFederal({
+            base: 3413.24, pis: 56.32, cofins: 259.41, csll: 158.72, csllPresente: true,
+        });
+        expect(r.situacao).toBe('campos-sao-totais-da-operacao');
+        expect(r.exigeAcao).toBe(true);
+        expect(r.acao).toMatch(/CSRF 4,65%/);
+    });
+});

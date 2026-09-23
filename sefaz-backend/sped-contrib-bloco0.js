@@ -18,11 +18,13 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 // 0150 e 0190 têm o MESMO leiaute nas duas famílias, e o aviso do COD_MUN
 // (recusa de 18/08) vivia só aqui — o EFD ICMS/IPI ficava mudo sobre o
 // MESMO registro. Dono único.
 import {
     build0150, build0190, avisoParticipantesSemMunicipio,
+    avisoParticipantesSemEndereco,
 } from './sped-bloco0-cadastros.js';
 // IND_REG_CUM sai do que o arquivo PRODUZIU (F550 × blocos A/C/D).
 import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
@@ -122,6 +124,11 @@ function buildBloco0Contrib(dados) {
 
     const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
+    // O campo 10 (ENDERECO) é obrigatório SEM condição — e a recusa dele veio
+    // 732 vezes num arquivo só (VINATEX, 18/09). Aviso próprio porque a AÇÃO é
+    // outra: ali é o ♻️ que relê o XML, aqui é o cadastro do participante.
+    const avisoEnd = avisoParticipantesSemEndereco(dados.participantes);
+    if (avisoEnd && Array.isArray(dados.warnings)) dados.warnings.push(avisoEnd);
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
     const totalBloco = linhas.length + 1;
@@ -214,9 +221,16 @@ function build0100(dados) {
     const c = dados.contador || {};
     return fmt.buildLine([
         '0100',
-        fmt.sanitizeString(c.nome || 'CONTADOR SP CONTABIL', 100),
+        // 🚨 SEM DEFAULT INVENTADO. Isto saía 'CONTADOR SP CONTABIL' e o CRC
+        // '1SP123456/O-7' — dado FABRICADO num campo que a fiscalização lê, a
+        // família do '1405', do 'PARTSEM' e do '5352'. Pior que o campo vazio:
+        // vazio o PVA ACUSA; contabilista inventado ele ACEITA, e o arquivo
+        // passa a declarar um profissional que não existe, com um CRC que não é
+        // de ninguém. Faltando, o campo sai VAZIO e a geração AVISA qual env
+        // preencher (`conferirContador`).
+        fmt.sanitizeString(c.nome || '', 100),
         fmt.sanitizeCnpjCpf(c.cpf || ''),
-        fmt.sanitizeString(c.crc || '1SP123456/O-7', 15),
+        fmt.sanitizeString(c.crc || '', 15),
         fmt.sanitizeCnpjCpf(c.cnpj || ''),
         fmt.sanitizeCep(c.cep || ''),
         fmt.sanitizeString(c.logradouro || c.endereco || '', 60),
@@ -296,8 +310,9 @@ function build0110(dados) {
  * eles significam. IE com letra de verdade não existe no leiaute do 0140.
  */
 export function ieDoArquivo(bruto) {
-    const d = String(bruto == null ? '' : bruto).replace(/\D/g, '');
-    return d.length ? d.slice(0, 14) : '';
+    // O dono mudou de casa (11/09): o 0000 do ICMS/IPI escrevia a IE crua com
+    // pontos e o PVA recusou. Um `sanitizeIe` para as duas famílias.
+    return fmt.sanitizeIe(bruto);
 }
 
 function build0140(dados) {
@@ -319,7 +334,12 @@ function build0140(dados) {
         // TRADUÇÃO para o arquivo, e traduzir é trabalho do gerador.
         ieDoArquivo(df.inscricaoEstadual),
         fmt.sanitizeString(df.codMunIBGE || '', 7),
-        fmt.sanitizeString(empresa.ccmSp || '', 15),
+        // 🚨 Inscrição Municipal — pelo DONO (`ccm-sp.js`). Esta linha tinha
+        // DOIS defeitos: lia só a forma ACHATADA (`empresa.ccmSp`), então quem
+        // preencheu no modal Dados Fiscais (`dadosFiscais.ccmSp`, o canônico)
+        // saía com o campo VAZIO; e os SÓ-ZEROS do contorno da equipe entravam
+        // como se fossem inscrição — afirmação falsa num arquivo fiscal.
+        fmt.sanitizeString(ccmSpDaEmpresa({ dadosFiscais: df, ccmSp: empresa.ccmSp }), 15),
         fmt.sanitizeString(df.codSuframa || '', 9),
     ]);
 }

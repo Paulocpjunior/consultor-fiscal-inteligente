@@ -15,11 +15,24 @@
 import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
-import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
+import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
+// 🚨 O DONO DO INSUMO DA ROTINA — módulo PURO. A rota do ato montava este
+// objeto à mão e a tela dizia "pronto" enquanto o botão recusava (27/08).
+import { empresaDaRotina, COLECOES_DA_ROTINA } from './rotina-empresa-insumo.js';
+// 🔒 Os carimbos do fim de mês da competência, em UMA query. Ver o comentário
+// de `lerFechamentosDaCompetencia`: cada card buscando o seu era ~400 idas ao
+// Firestore e o HTTP 429 do print de 27/08.
+import { lerFechamentosDaCompetencia } from './fechamento-store.js';
+// 📋 A entrega DECLARADA das obrigações fora do catálogo — UMA query para a
+// competência inteira, pelo mesmo motivo do carimbo: ler por card foi o 429.
+import { lerCoberturasDaCompetencia, gravarCoberturaDeclarada } from './cobertura-declarada-store.js';
+// A régua da declaração é PURA e mora no dono — a rota só faz I/O.
+import { conferirDeclaracaoCobertura, textoDaDeclaracaoCobertura } from './obrigacao-fora-do-catalogo.js';
+import { normalizarCompetencia } from './competencia.js';
 
 /**
  * Cobertura do catálogo para UM cliente.
@@ -45,6 +58,8 @@ function coberturaDoCliente(e, competencia, prazosMunicipais = []) {
             // Município + calendários: é o que transforma o ISS de pendência
             // nomeada em obrigação com data — para quem tem o calendário.
             codMunIBGE: e.codMunIBGE, prazosMunicipais,
+            // 🏦 DeRE: cadastro do regime específico + CNAE (sinal).
+            regimeEspecificoIbsCbs: e.regimeEspecificoIbsCbs, cnae: e.cnae,
         }, `${mes}/${ano}`);
     } catch (err) {
         console.warn(`[rotina] cobertura do catálogo falhou (${e.nome}):`, err.message);
@@ -88,36 +103,11 @@ const competenciaAtual = () => {
  */
 async function carregarEmpresas(db) {
     const out = [];
-    for (const [col, regime] of [['simples_empresas', 'simples'], ['lucro_empresas', 'lucro']]) {
+    for (const [col] of COLECOES_DA_ROTINA) {
         const snap = await db.collection(col).get();
         snap.forEach((doc) => {
-            const d = doc.data() || {};
-            if (d._deleted || d._merged_into) return;
-            const cnpj = soDigitos(d.cnpj);
-            if (cnpj.length !== 14) return;
-            const df = d.dadosFiscais || {};
-            out.push({
-                id: doc.id,
-                cnpj,
-                nome: d.razaoSocial || d.nome || d.fantasia || '—',
-                regime,
-                // Para o catálogo dizer se COBRE este cliente: ele resolve o
-                // regime fiscal pela coleção + regimePadrao (Lucro sem o campo
-                // vira INDEFINIDO, e adivinhar regime é adivinhar imposto).
-                colecao: col,
-                regimePadrao: d.regimePadrao || d.dadosFiscais?.regimePadrao || '',
-                uf: d.dadosFiscais?.uf || d.uf || '',
-                capturaAtiva: d.capturarSefaz !== false,
-                // ISS de SP capital: município, CCM e SUP decidem se há guia do
-                // município no mês (e se a captura da NFS-e sequer roda).
-                codMunIBGE: String(df.codMunIBGE || d.codMunIBGE || '').trim(),
-                ccmSp: String(df.ccmSp || d.ccmSp || '').replace(/\D/g, ''),
-                issFixoSup: (d.issPadraoConfig?.tipo || df.issConfig?.tipo) === 'sup_fixo',
-                // usados só pra achar a prova da apuração da competência
-                fichaFinanceira: d.fichaFinanceira || null,
-                faturamentoManual: d.faturamentoManual || null,
-                faturamentoMensalDetalhado: d.faturamentoMensalDetalhado || null,
-            });
+            const e = empresaDaRotina(doc.id, col, doc.data());
+            if (e) out.push(e);
         });
     }
     return out;
@@ -256,7 +246,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
             // `status` ainda 'autorizado'. Sem eles a Rotina dizia
             // "0 cancelada(s)" e a etapa fechava VERDE — o farol honesto
             // mentindo justamente no guia do mês do colaborador.
-            .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos',
+            .select('empresaId', 'empresaCnpj', 'cnpjDest', 'cnpjEmit', 'direcao', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado',
                 // `emitente`/`destinatario`/`tpNF` entram pra detectar compra
                 // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
                 // detalhe fica na aba própria, aqui só sinaliza a obrigação.
@@ -279,7 +269,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
                 // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
                 // da escrituração olhava — a validação passou a olhar.
-                'eventos', 'numero'),
+                'eventos', 'cancelamentoDeclarado', 'numero'),
         { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
     );
     const documentos = docsSnaps.map((s) => s.data() || {});
@@ -331,6 +321,10 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         console.warn('[rotina] tipo de certificado indisponível:', e.message);
     }
 
+    // UMA query para os carimbos da competência inteira — nunca uma por empresa.
+    const carimbos = await lerFechamentosDaCompetencia(db, competencia);
+    const coberturasDeclaradas = await lerCoberturasDaCompetencia(db, competencia);
+
     const rotinas = empresas.map((e) => montarRotinaFiscal({
         // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
         // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
@@ -346,7 +340,23 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         envios: enviosPorEmpresa.get(e.id) || [],
         capturaAtiva: e.capturaAtiva,
         capturaPorAgenteLocal: empresasA3.has(e.id),
+        // 🔒 O carimbo ENTRA no núcleo, não é grudado depois: é ele que decide
+        // se ainda há próximo passo. Empresa com o mês fechado não volta ao
+        // vermelho porque uma tarefa foi reaberta depois (Paulo, 27/08:
+        // *"empresa fechada, imposto enviado, página virada"*). O núcleo
+        // devolve o carimbo na rotina — é dele que o bloco "Dar fim de mês"
+        // se alimenta, e buscá-lo por card foi o que produziu o 429.
+        fechamento: carimbos.get(String(e.id || '')) || null,
+        // 📋 A declaração entra no NÚCLEO, como o carimbo: é ela que decide
+        // se a etapa 4 ainda trava por obrigação que o catálogo não cobre.
+        declaracaoCobertura: coberturasDeclaradas.get(String(e.id || '')) || null,
     }));
+
+    // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
+    // precisa, e buscá-lo por card foi o que produziu o 429.
+    for (const r of rotinas) {
+        r.fechamento = carimbos.get(String(r.empresa?.id || '')) || null;
+    }
 
     // O ISS e as CONTAGENS voltam juntos: os três são montados AQUI, numa
     // leitura só, e o painel os publica. Recalculá-los fora faria os dois
@@ -387,9 +397,12 @@ router.get('/painel', requireAuth, async (req, res) => {
 
         // Ordem de trabalho: quem está mais atrás aparece primeiro — é a fila
         // do dia, não uma lista alfabética.
+        // ⚠️ A empresa FECHADA vai por ÚLTIMO, depois até das que estão prontas
+        // para fechar: a pronta ainda pede um clique, a fechada não pede nada.
+        // Sem isso as duas empatavam em 99 e se misturavam no fim da fila.
         rotinas.sort((a, b) => {
-            const oa = a.proximoPasso?.ordem ?? 99;
-            const ob = b.proximoPasso?.ordem ?? 99;
+            const oa = a.farol === 'fechado' ? 100 : (a.proximoPasso?.ordem ?? 99);
+            const ob = b.farol === 'fechado' ? 100 : (b.proximoPasso?.ordem ?? 99);
             if (oa !== ob) return oa - ob;
             return String(a.empresa?.nome || '').localeCompare(String(b.empresa?.nome || ''), 'pt-BR');
         });
@@ -417,6 +430,60 @@ router.get('/painel', requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[rotina-fiscal/painel]', e);
         return res.status(500).json({ ok: false, error: `Falha ao montar a rotina: ${e.message}` });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/rotina-fiscal/cobertura-declarada
+//
+// 📋 DECLARAR QUE AS OBRIGAÇÕES FORA DO CATÁLOGO FORAM ENTREGUES POR FORA.
+//
+// Paulo, 28/08 (CLINICA MEDICA MANTOAN 07/2026): a etapa 4 dizia *"o catálogo
+// NÃO cobre 1 obrigação deste regime: INSS Patronal (depende de folha)"* e
+// mandava *"não dê o mês por fechado"* — e essa etapa NUNCA ia fechar, porque o
+// INSS patronal depende da folha, que vive no módulo de DP.
+//
+// ⚠️ A RÉGUA É DO MÓDULO PURO, conferida ANTES de gravar: obrigações NOMEADAS,
+// texto com o piso da T3, data que não está no futuro e AUTOR. E o que
+// realmente decide se a trava sai é a COMPARAÇÃO NA LEITURA
+// (`coberturaDeclarada`): declaração que não menciona uma obrigação nova deixa
+// a etapa acusando de novo — quitação de julho não alcança o que apareceu
+// depois dela.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/cobertura-declarada', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, competencia, obrigacoes, comoFoi, quando } = req.body || {};
+        const comp = normalizarCompetencia(competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        // Competência ilegível RECUSA com o motivo — gravar no mês errado daria
+        // quitação a uma competência que ninguém declarou.
+        if (!comp) return res.status(400).json({ ok: false, error: 'Competência ilegível.' });
+        if (!(await podeAcessarEmpresaId(req.user, empresaId)).ok) {
+            return res.status(403).json({ ok: false, error: 'Esta empresa não está na sua carteira.' });
+        }
+
+        const conf = conferirDeclaracaoCobertura({
+            obrigacoes, comoFoi, quando,
+            quem: req.user?.email || req.user?.uid || null,
+        });
+        // 400, nunca 500: declaração incompleta é RESPOSTA, e a frase diz o que
+        // falta preencher.
+        if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+
+        const doc = await gravarCoberturaDeclarada(getDb(), {
+            empresaId, empresaCnpj, competencia: comp, declaracao: conf.declaracao,
+        });
+        console.log(`[rotina-fiscal] cobertura declarada ${empresaId} ${comp} por ${conf.declaracao.declaradoPor}`);
+        return res.json({
+            ok: true,
+            // A frase volta para a tela DIZER que o app não tem prova da
+            // entrega — quem declarou precisa ver isso na hora, não só na
+            // auditoria.
+            declaracao: { ...doc, texto: textoDaDeclaracaoCobertura(conf.declaracao) },
+        });
+    } catch (e) {
+        console.error('[rotina-fiscal/cobertura-declarada]', e);
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 

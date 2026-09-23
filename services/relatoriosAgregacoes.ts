@@ -1,3 +1,4 @@
+import { federaisDoRelatorio } from '../sefaz-backend/federais-relatorio.js';
 /**
  * relatoriosAgregacoes.ts — PURO (testável). As contas dos relatórios do menu
  * Relatórios que agregam documentos fiscais (lista do Paulo, 01/08: resumo
@@ -7,7 +8,12 @@
  * a MESMA alocação do Exportar SAGE e do Livro. Relatório nunca inventa conta.
  */
 import type { DocumentoFiscal } from '../types';
-import { alocarTributacaoIcms } from './iobSageExportService';
+import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from './iobSageExportService';
+// 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o conhecimento não tem `itens[]`
+// e por isso SUMIA do Resumo por CFOP em silêncio — enquanto o D100/D190 do
+// SPED o escriturava. O cabeçalho vira o item sintético e passa pela MESMA
+// alocação da nota de mercadoria (CST informado > regime > destaque).
+import { itensParaEscriturar, ehItemSinteticoDeCte } from '../sefaz-backend/cte-escrituracao.js';
 // RÉGUA ÚNICA das duas formas de gravação: captura SEFAZ/portal grava
 // ACHATADO (cnpjEmit) e importação de XML grava OBJETO (emitente.cnpjCpf).
 // Ler só o objeto zerava TUDO que depende de "a empresa é a emitente" — foi
@@ -31,18 +37,27 @@ import {
 // objeto do XML): o CSV do portal grava `valorIr`/`valorInss`/`valorCsll` na
 // RAIZ, e este relatório só lia `valores.*` — 67 notas da CLUDE com IR/INSS
 // gravados imprimiam "?" (19/08). Quem lê é o dono, nunca uma segunda cópia.
-import { lerRetencoesFederaisDoDoc } from '../sefaz-backend/reinf-retencoes-pj.js';
+import {
+    lerRetencoesFederaisDoDoc,
+    documentoEntraEmRetencoes,
+} from '../sefaz-backend/reinf-retencoes-pj.js';
 // A assinatura de alíquota decide o que o campo É: "CSLL" que vale 4,65% da
 // base é o TOTAL das três (CSRF); PIS 1,65% + COFINS 7,60% é o tributo da
 // OPERAÇÃO do prestador, não retenção (casos CLINIPAR e ATLAS, 07/08).
-import { conferirRetencaoFederal } from '../sefaz-backend/retencao-federal-coerencia.js';
 // 🚨 "É NOTA DE SERVIÇO?" — o rótulo `tipo === 'NFSe'` é a forma MAIS RARA.
 // A NFS-e do **ADN** (NFS-e Nacional) grava `tipo: 'nfseNacional'` e a do
 // portal por CSV/TXT grava `prestador`/`tomador`. Perguntando pelo rótulo
 // cru, esses documentos sumiam de TRÊS relatórios de uma vez — ISS destacado,
 // Serviços tomados/prestados e **Retenções**. É o achado (2) de 21/08, que
 // fechou no bloco A do EFD-Contribuições e ficou vivo aqui.
+// (o conhecimento de transporte saiu daqui: quem junta as duas espécies é
+// `documentoEntraEmRetencoes`, no dono — ver a aba Retenções abaixo)
 import { ehNotaDeServico } from '../sefaz-backend/sped-selecao-documentos.js';
+// 🚨 O DONO de "quanto esta nota reteve, de verdade" (31/08). O ajuste
+// declarado (autor + motivo) VENCE o documento — sem isto, quem informa a
+// retenção à mão continua vendo o zero do documento na tela e conclui que o
+// app não gravou (04/09, FRONTINI ENGENHEIROS).
+import { chaveDoAjuste } from '../sefaz-backend/retencao-pj-ajuste.js';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -63,6 +78,11 @@ const direcaoDoc = (d: DocumentoFiscal): 'entrada' | 'saida' =>
     (direcaoEfetivaDoc(d) as 'entrada' | 'saida');
 const contabilDoc = (d: DocumentoFiscal) => d.totais?.vNF || d.valorTotal || 0;
 
+/** Descarta chave vazia — o aninhado só VENCE onde ele de fato responde. */
+const semVazios = (o: any) => Object.fromEntries(
+    Object.entries(o || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+);
+
 /** Contraparte (quem não é a empresa): destinatário na saída e na nota própria de entrada. */
 export function contraparteDoc(d: DocumentoFiscal): any {
     const x = d as any;
@@ -71,16 +91,31 @@ export function contraparteDoc(d: DocumentoFiscal): any {
     // e o abrasf gravam ANINHADO. Ler só o aninhado é a armadilha que mais
     // mordeu este projeto — e era por isso que a coluna
     // "Fornecedor/Remetente" do Livro saía toda com "—" (VINCENZO, 12/08).
-    const emitente = temLado(d.emitente) ? d.emitente : (temLado(d.prestador) ? d.prestador : {
-        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || '',
-        nome: x.xNomeEmit || x.nomeEmit || '',
+    //
+    // 🚨 E O ANINHADO PODE EXISTIR PELA METADE (28/08): a NFS-e do **ADN**
+    // grava `prestador: { cnpjCpf }` — bloco com documento e SEM NOME. Um
+    // `temLado ? aninhado : chato` puro daria o bloco incompleto por resposta
+    // e a coluna sairia vazia com o nome gravado no campo do lado. Por isso o
+    // aninhado só vence CAMPO A CAMPO, onde ele tem valor; o achatado
+    // preenche o resto. Nunca menos informação do que já havia.
+    const chatoEmit = {
+        // A NFS-e do portal de SP e do ADN nomeiam o lado de SERVIÇO
+        // (`prestadorCnpj`/`prestadorNome`); o importer de NF-e usa `…Emit`.
+        cnpjCpf: x.cnpjEmit || x.cnpjEmitente || x.prestadorCnpj || '',
+        nome: x.xNomeEmit || x.nomeEmit || x.prestadorNome || '',
         ie: x.ieEmit || '', uf: x.ufEmit || '', codMunIBGE: x.codMunEmit || '',
-    });
-    const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
-        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || '',
-        nome: x.xNomeDest || x.nomeDest || '',
+        municipio: x.municipioEmit || x.xMunEmit || '',
+    };
+    const chatoDest = {
+        cnpjCpf: x.cnpjDest || x.cnpjDestinatario || x.tomadorCnpj || x.tomadorCpf || '',
+        nome: x.xNomeDest || x.nomeDest || x.tomadorNome || '',
         ie: x.ieDest || '', uf: x.ufDest || '', codMunIBGE: x.codMunDest || '',
-    });
+        municipio: x.municipioDest || x.xMunDest || '',
+    };
+    const juntar = (aninhado: any, chato: any) =>
+        (temLado(aninhado) ? { ...chato, ...semVazios(aninhado) } : chato);
+    const emitente = juntar(temLado(d.emitente) ? d.emitente : d.prestador, chatoEmit);
+    const destinatario = juntar(temLado(d.destinatario) ? d.destinatario : d.tomador, chatoDest);
     // 🚨 QUEM DECIDE O LADO É O DONO, não uma cópia (26/08). A cópia daqui
     // reconhecia a nota própria de entrada só por `tpNF === '0'`, SEM o laço
     // que o dono tem — e o comentário do próprio dono já diz por que ele
@@ -98,6 +133,15 @@ export function contraparteDoc(d: DocumentoFiscal): any {
 export interface CtxCorrelacao {
     naturezaAtividade?: string;
     cfopOverrides?: Record<string, string>;
+    /** 🧠 Parâmetros do cérebro (por fornecedor) — sem eles o Resumo por CFOP e o
+     *  Por produto mostravam a régua automática num fornecedor já ensinado. */
+    parametrosCfop?: import('../sefaz-backend/cfop-cerebro.js').ParametroCfop[] | null;
+    /**
+     * Regime de quem ESCRITURA — decide o CRÉDITO de ICMS da entrada, não o
+     * CFOP. Ausente mantém o comportamento antigo (`entradaGeraCreditoIcms`
+     * não afirma sem saber): tirar crédito de quem tem direito é o erro caro.
+     */
+    regimeTributario?: string | null;
 }
 
 export interface LinhaCfop {
@@ -110,7 +154,19 @@ export interface LinhaCfop {
     icms: number;
     isentos: number;
     outras: number;
+    /** IPI **creditado** (zero em quem não se credita — a coluna é de crédito). */
     ipi: number;
+    /** IPI destacado que virou CUSTO, já dentro de Outras. Informativo. */
+    ipiCusto: number;
+    /** ICMS-ST retido pelo fornecedor: nunca é crédito, já está em Outras. */
+    st: number;
+    /**
+     * 🚚 Quantos dos documentos desta linha são CT-e (frete tomado/prestado).
+     * O CFOP de transporte (x352/x353…) já separa o frete da mercadoria; este
+     * número é o que permite o recorte "só fretes" e a conferência do Paulo
+     * (21/09) sem uma segunda conta.
+     */
+    ctes: number;
 }
 
 /**
@@ -130,15 +186,21 @@ export interface LinhaCfop {
 export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): LinhaCfop[] {
     const mapa = new Map<string, LinhaCfop>();
     for (const d of docs) {
-        if (!docValido(d) || !(d.itens || []).length) continue;
+        // 🚚 O CT-e não tem `itens[]` — o cabeçalho vira o item sintético
+        // (`itensParaEscriturar`), senão o frete some do relatório calado.
+        const itensDoDoc = itensParaEscriturar(d) as typeof d.itens;
+        if (!docValido(d) || !(itensDoDoc || []).length) continue;
+        // A espécie tem UM dono (a varredura do R-4020 barra `ehConhecimentoDe
+        // Transporte` aqui): quem diz que a linha é frete é o item sintético.
+        const ehCte = itensDoDoc.some(ehItemSinteticoDeCte);
         const porCfop = new Map<string, typeof d.itens>();
-        for (const it of d.itens) {
+        for (const it of itensDoDoc) {
             const cru = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
             // Na saída `correlacionarCfop` devolve o próprio CFOP; a nota
             // própria de entrada (art. 136) já nasce 1xxx e passa intacta.
             // O CFOP informado NA NF vence a régua automática (decisão do
             // Paulo, 17/08: "é por NF"). Sem ele, nada muda.
-            const cfop = String(cfopDoLancamento(d, cru, direcaoDoc(d) as any, ctx) || cru);
+            const cfop = String(cfopDoLancamento(d, cru, direcaoDoc(d) as any, ctx, it) || cru);
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
@@ -153,13 +215,15 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
                 ? r2(contabil - distribuido)
                 : (totalItens > 0 ? r2(contabil * (valorGrupo(its) / totalItens)) : 0);
             distribuido = r2(distribuido + contabilLinha);
-            const a = alocarTributacaoIcms(its, contabilLinha);
+            const a = alocarTributacaoIcms(its, contabilLinha, ctxAlocacaoDoDoc(d, ctx));
             const k = `${direcaoDoc(d)}|${cfop}`;
             const linha = mapa.get(k) || {
                 cfop, direcao: direcaoDoc(d),
-                notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0, ipi: 0,
+                notas: 0, itens: 0, contabil: 0, base: 0, icms: 0, isentos: 0, outras: 0,
+                ipi: 0, ipiCusto: 0, st: 0, ctes: 0,
             };
             linha.notas += 1;
+            if (ehCte) linha.ctes += 1;
             linha.itens += its.length;
             linha.contabil = r2(linha.contabil + contabilLinha);
             linha.base = r2(linha.base + a.base);
@@ -167,6 +231,8 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             linha.isentos = r2(linha.isentos + a.isentos);
             linha.outras = r2(linha.outras + a.outras);
             linha.ipi = r2(linha.ipi + a.ipi);
+            linha.ipiCusto = r2(linha.ipiCusto + a.ipiCusto);
+            linha.st = r2(linha.st + a.st);
             mapa.set(k, linha);
         });
     }
@@ -243,8 +309,18 @@ export interface LinhaServico {
     inss: number;
     csll: number;
     liquido: number;
-    /** Doc gravado antes de 01/08 não tem IR/INSS/CSLL — ausente ≠ zero retido. */
+    /**
+     * O documento NÃO TRAZ os campos de IR/INSS/CSLL — ausente ≠ zero retido.
+     *
+     * ⚠️ Ela não diz QUANDO a nota entrou: vale para nota antiga, para nota
+     * digitada sem preencher e para trilho que não traz o dado (o CT-e OS que
+     * chega só em PDF). A ressalva que fala por ela é `ressalvaSemRetencaoGravada`.
+     */
     retencoesFederaisGravadas: boolean;
+    /** O número saiu de um ajuste declarado, não do documento. */
+    retencaoAjustada?: boolean;
+    retencaoAjustadaPor?: string | null;
+    retencaoAjustadaMotivo?: string | null;
     /**
      * As três contribuições retidas NUM CAMPO SÓ (assinatura CSRF 4,65%) — o
      * documento não traz o rateio. Fica FORA da coluna CSLL e dos totais por
@@ -264,22 +340,45 @@ export interface LinhaServico {
 }
 
 export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
+    return linhasDe(docs, direcao, ehNotaDeServico);
+}
+
+function linhasDe(
+    docs: DocumentoFiscal[],
+    direcao: 'entrada' | 'saida',
+    incluir: (d: DocumentoFiscal) => boolean,
+    ajustes?: Record<string, any> | null,
+): LinhaServico[] {
+    const mapaAjustes = ajustes && typeof ajustes === 'object' ? ajustes : {};
     return docs
         // 🔴 Era `d.tipo === 'NFSe'`: a NFS-e do ADN (`tipo: 'nfseNacional'`)
         // sumia das TRÊS abas que saem daqui — Serviços tomados, prestados e
         // **Retenções**, que é a que alimenta a conferência do R-4020.
-        .filter(d => docValido(d) && ehNotaDeServico(d) && direcaoDoc(d) === direcao)
+        .filter(d => docValido(d) && incluir(d) && direcaoDoc(d) === direcao)
         .map(d => {
-            const parte: any = direcao === 'saida' ? (d.tomador || d.destinatario) : (d.prestador || d.emitente);
+            // 🚨 ERA A SEGUNDA CÓPIA DA CONTRAPARTE — e ela lia SÓ o bloco
+            // ANINHADO (28/08, Paulo: *"veja a diferença de um mês para o
+            // outro com relação ao campo prestador de serviços"*).
+            //
+            // A NFS-e do **portal de SP** (o trilho que traz a maioria das
+            // notas) grava `prestadorNome`/`tomadorNome` e `xNomeEmit`/
+            // `xNomeDest` ACHATADOS, e **não grava bloco aninhado nenhum** —
+            // então `d.prestador` era `undefined`, `d.emitente` também, e a
+            // coluna Prestador/Tomador saía "—" na competência inteira. No mês
+            // importado pelo navegador (que grava `{prestador, tomador}`) ela
+            // aparecia. Mesma tela, mesmo cliente, dois meses diferentes.
+            //
+            // Quem responde é o DONO, que lê as duas formas e conhece a nota
+            // própria de entrada — a cópia daqui não conhecia nem uma nem a
+            // outra. `linhasRetencoes` e `servicosPorCodigo`, ao lado, já o
+            // chamavam: esta era a única que ainda perguntava sozinha.
+            const parte: any = contraparteDoc(d);
             const v = d.valores || {};
             const base = v.baseCalculo ?? d.valorTotal ?? 0;
             // As duas formas de gravação, lidas pelo DONO da régua.
-            const fed = lerRetencoesFederaisDoDoc(d);
-            // A assinatura de alíquota separa o que o campo É: CSLL de verdade,
-            // total CSRF sem rateio, ou tributo da operação do prestador.
-            const coer = conferirRetencaoFederal({ base, pis: fed.pis, cofins: fed.cofins, csll: fed.csllOuTotal });
-            const csllEhTotal = coer.situacao === 'csll-e-o-total';
-            const daOperacao = coer.situacao === 'campos-sao-totais-da-operacao';
+            const { fed, efetiva, ajustada, daOperacao, valores: federais } = federaisDoRelatorio(
+                d, base, mapaAjustes[chaveDoAjuste(d as unknown as Record<string, unknown>)],
+            );
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
                 numero: d.numero || '—',
@@ -294,17 +393,23 @@ export function linhasServicos(docs: DocumentoFiscal[], direcao: 'entrada' | 'sa
                 // PIS/COFINS da OPERAÇÃO não são retenção: fora das colunas e
                 // dos totais, mostrados à parte (senão o relatório afirma
                 // retenção que ninguém reteve — o erro que o R-4020 já barra).
-                pis: daOperacao ? 0 : (fed.pis ?? 0),
-                cofins: daOperacao ? 0 : (fed.cofins ?? 0),
+                pis: federais.pis,
+                cofins: federais.cofins,
                 ir: fed.ir ?? 0,
                 inss: fed.inss ?? 0,
                 // "CSLL" com assinatura de 4,65% é o TOTAL das três — somar
                 // como CSLL contaria PIS e COFINS em dobro (caso CLINIPAR).
-                csll: (csllEhTotal || daOperacao) ? 0 : (fed.csllOuTotal ?? 0),
+                csll: federais.csll,
                 liquido: v.liquido ?? d.valorTotal ?? 0,
-                retencoesFederaisGravadas:
-                    fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined,
-                csrfSemRateio: (csllEhTotal || daOperacao) ? (fed.csllOuTotal ?? 0) : 0,
+                // Nota ajustada TEM retenção informada por construção — é o
+                // que tira o "?" da coluna depois que alguém declarou.
+                retencoesFederaisGravadas: ajustada
+                    || fed.ir !== undefined || fed.inss !== undefined || fed.csllOuTotal !== undefined,
+                // Número que não saiu do documento se apresenta CARIMBADO.
+                retencaoAjustada: ajustada,
+                retencaoAjustadaPor: ajustada ? (efetiva.ajustadoPor || null) : null,
+                retencaoAjustadaMotivo: ajustada ? (efetiva.motivo || null) : null,
+                csrfSemRateio: federais.pccAgregado,
                 pisCofinsOperacao: daOperacao ? r2((fed.pis ?? 0) + (fed.cofins ?? 0)) : 0,
                 codigoServico: String((d as any).codigoServico || '').trim(),
                 descricaoNota: String((d as any).discriminacao || (d as any).descricao || '').trim(),
@@ -406,8 +511,42 @@ export function servicosPorCodigo(docs: DocumentoFiscal[], direcao: 'entrada' | 
  * Só fica de fora quem tem os campos GRAVADOS e a soma deu zero — aí "sem
  * retenção" é fato, não lacuna de captura.
  */
-export function linhasRetencoes(docs: DocumentoFiscal[], direcao: 'entrada' | 'saida'): LinhaServico[] {
-    return linhasServicos(docs, direcao)
+/**
+ * A aba **Retenções** — e ela NÃO é a aba de serviços filtrada.
+ *
+ * 🚨 **CONHECIMENTO DE TRANSPORTE COM RETENÇÃO ENTRA AQUI** (04/09, J.P.
+ * PISSATO). O CT-e OS de transporte de valores retém **IRRF de 1%** (art. 55 da
+ * Lei 7.713/1988 — o próprio DACTE-OS diz isso em Observações), e
+ * `ehNotaDeServico` devolve **false** para ele de propósito: o lugar dele no
+ * SPED é o bloco D, não o A.
+ *
+ * Ou seja: enquanto isto saía de `linhasServicos`, lançar o CT-e OS com o
+ * modelo CERTO (67) fazia a nota **SUMIR** do relatório — trocaria um campo
+ * vazio por uma nota invisível, que é pior. É a régua de 22/08: *trocar alarme
+ * falso por silêncio falso não é correção.*
+ *
+ * ⚠️ **Só entra o CT-e que TEM retenção gravada**, e a diferença importa: as
+ * NFS-e entram mesmo sem os campos (é o "?" que denuncia captura incompleta —
+ * *ausente ≠ zero retido*), mas conhecimento de transporte sem retenção é o
+ * caso NORMAL. Trazê-los todos encheria a aba de "?" em cima de frete que não
+ * tem retenção nenhuma — o alarme sobre documento correto que ensina a equipe a
+ * ignorar a lista.
+ *
+ * 🚨 **E A SELEÇÃO DEIXOU DE SER ESCRITA AQUI** (04/09, à tarde): ela era uma
+ * SEGUNDA CÓPIA da régua que a rota do R-4020 usa, e as duas divergiram no
+ * mesmo dia — esta aceitava o CT-e e a de lá continuava com `/NFSe/i`, então a
+ * nota aparecia neste relatório e o Consultor Contábil dizia "nenhum
+ * beneficiário". Quem responde é `documentoEntraEmRetencoes`, no dono.
+ */
+export function linhasRetencoes(
+    docs: DocumentoFiscal[],
+    direcao: 'entrada' | 'saida',
+    ajustes?: Record<string, any> | null,
+): LinhaServico[] {
+    const mapa = ajustes && typeof ajustes === 'object' ? ajustes : {};
+    return linhasDe(docs, direcao, d => documentoEntraEmRetencoes(d, {
+        temAjuste: !!mapa[chaveDoAjuste(d as unknown as Record<string, unknown>)],
+    }), ajustes)
         // csrfSemRateio conta como retenção: a nota da ATLAS tem 158,72 retidos
         // num campo só — sumir da lista porque as colunas individuais zeraram
         // seria esconder justamente a retenção que existe.
@@ -520,9 +659,10 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
         if (docCancelado(d)) g.canceladas.add(num);
         mapa.set(k, g);
     }
-    return Array.from(mapa.values()).map(g => {
+    return Array.from(mapa.values()).flatMap(g => {
         const nums = Array.from(g.presentes).sort((a, b) => a - b);
         const primeiro = nums[0], ultimo = nums[nums.length - 1];
+        if (primeiro === undefined || ultimo === undefined) return [];
         const faltantes: number[] = [];
         let faltantesTotal = 0;
         for (let n = primeiro; n <= ultimo; n++) {
@@ -544,11 +684,11 @@ export function nfCanceladasFaltantes(docs: DocumentoFiscal[], empresaCnpj: stri
 export function formatarFaixas(nums: number[]): string {
     if (!nums.length) return '';
     const faixas: string[] = [];
-    let ini = nums[0], fim = nums[0];
+    let ini = nums[0]!, fim = nums[0]!;
     for (let i = 1; i <= nums.length; i++) {
-        if (i < nums.length && nums[i] === fim + 1) { fim = nums[i]; continue; }
+        if (i < nums.length && nums[i] === fim + 1) { fim = nums[i]!; continue; }
         faixas.push(ini === fim ? String(ini) : `${ini}–${fim}`);
-        if (i < nums.length) { ini = nums[i]; fim = nums[i]; }
+        if (i < nums.length) { ini = nums[i]!; fim = nums[i]!; }
     }
     return faixas.join(', ');
 }
@@ -566,14 +706,40 @@ export function formatarFaixas(nums: number[]): string {
  *
  * Três leituras, com ações OPOSTAS:
  *  · `captura-incompleta` — faltam mais números do que existem notas ⇒ o
- *    problema é o cofre/autXML, não a numeração;
+ *    problema é o trilho de captura, não a numeração;
  *  · `buraco-pontual` — poucos buracos num talão majoritariamente capturado ⇒
  *    aí sim vale conferir número a número (inutilização ou nota perdida);
  *  · `continua` — nada faltando.
+ *
+ * ═══ 🚨 A LEITURA É POR SÉRIE, NUNCA SOMADA ═════════════════════════════════
+ *
+ * Ela nasceu somando as séries ("a causa é da EMPRESA"), e a J.N. VINATEX
+ * (Paulo, 10/09 · 08/2026) derrubou a premissa com os dois talões dela:
+ *
+ *   · **55 · série 10** — 11194–12712, 1417 capturadas, **102** faltantes
+ *     ⇒ buraco PONTUAL: vale conferir número a número.
+ *   · **65 · série 10** — 11745–13399, 582 capturadas, **1073** faltantes
+ *     ⇒ mais buracos do que notas: é CAPTURA, e não se confere um a um.
+ *
+ * Somados dão 1175 contra 1999, ou seja `buraco-pontual` — e a tela mandava
+ * **conferir 1175 números um a um**, sendo que 1073 deles (91%) são NFC-e que
+ * o trilho não trouxe. A série que precisava do alarme ficou ESCONDIDA atrás da
+ * série grande e bem capturada.
+ *
+ * E o motivo é estrutural, não aritmético: **o trilho de captura é por
+ * MODELO**. A NF-e chega pelo cofre/autXML (a SEFAZ não entrega ao emitente,
+ * Rej. 641) e a NFC-e chega pelo SAE-NFC-e, que exige o A1 do PRÓPRIO emitente
+ * — com A3 quem traz é o Agente A3, na máquina onde o cartão está. Trilhos
+ * diferentes falham por motivos diferentes e pedem AÇÕES OPOSTAS, então os
+ * números não se somam (a régua de 03/09: *quando as ações são diferentes, os
+ * números são diferentes*).
  */
 export type CausaFaltantes = 'captura-incompleta' | 'buraco-pontual' | 'continua';
 
 export interface LeituraFaltantes {
+    /** Qual talão — a causa é da SÉRIE, porque o trilho de captura é por modelo. */
+    modelo: string;
+    serie: string;
     causa: CausaFaltantes;
     faltantes: number;
     capturadas: number;
@@ -581,32 +747,46 @@ export interface LeituraFaltantes {
     acao: string;
 }
 
-export function lerFaltantes(linhas: LinhaSerieNumeracao[]): LeituraFaltantes {
-    const faltantes = linhas.reduce((s, l) => s + l.faltantesTotal, 0);
-    const capturadas = linhas.reduce((s, l) => s + (l.ultimo - l.primeiro + 1 - l.faltantesTotal), 0);
+/** O trilho por onde aquele modelo chega — a ação de "faltou" muda com ele. */
+function acaoDeCapturaIncompleta(modelo: string, faltantes: number, capturadas: number): string {
+    const abre = `Faltam MAIS números (${faltantes}) do que as notas capturadas (${capturadas}) neste talão. `
+        + 'Isto não é uma lista para conferir uma a uma: é o trilho de captura que não está trazendo as notas. ';
+    // ⚠️ Mandar a NFC-e para a Cobertura de Saída seria o achado 18 (21/08):
+    // aviso que aponta o lugar de OUTRO problema. O cofre/autXML é o trilho da
+    // NF-e; a NFC-e nem passa por ele.
+    if (String(modelo) === '65') {
+        return abre
+            + 'A NFC-e não vem pelo cofre nem por autXML — ela chega pelo SAE-NFC-e, que exige o A1 do PRÓPRIO '
+            + 'emitente; com certificado A3 a chave vive no cartão e não roda no servidor, então quem traz é o '
+            + 'Agente A3, na máquina onde o cartão está. Confira o trilho desta empresa antes de caçar número.';
+    }
+    return abre
+        + 'A SEFAZ não entrega a saída ao emitente (Rej. 641): a NF-e vem pelo cofre de e-mail ou por autXML. '
+        + 'Resolva em Captura → Cobertura de Saída; enquanto isso, a numeração deste talão não pode ser conferida.';
+}
 
-    if (!faltantes) {
-        return {
-            causa: 'continua', faltantes, capturadas,
-            acao: 'A numeração está contínua no recorte — nada a conferir.',
-        };
+/**
+ * Uma leitura POR SÉRIE — só das que têm buraco. Lista vazia = nada a dizer.
+ */
+export function lerFaltantesPorSerie(linhas: LinhaSerieNumeracao[]): LeituraFaltantes[] {
+    const saida: LeituraFaltantes[] = [];
+    for (const l of (linhas || [])) {
+        const faltantes = l.faltantesTotal;
+        if (!faltantes) continue;
+        const capturadas = l.ultimo - l.primeiro + 1 - faltantes;
+        const base = { modelo: String(l.modelo), serie: String(l.serie), faltantes, capturadas };
+        if (faltantes > capturadas) {
+            saida.push({ ...base, causa: 'captura-incompleta', acao: acaoDeCapturaIncompleta(base.modelo, faltantes, capturadas) });
+            continue;
+        }
+        saida.push({
+            ...base, causa: 'buraco-pontual',
+            acao: `${faltantes} buraco(s) num talão majoritariamente capturado (${capturadas} notas). Aqui vale `
+                + 'conferir número a número: cada um é inutilização na SEFAZ (não gera XML) ou nota emitida que '
+                + 'não chegou.',
+        });
     }
-    if (faltantes > capturadas) {
-        return {
-            causa: 'captura-incompleta', faltantes, capturadas,
-            acao: `Faltam MAIS números (${faltantes}) do que as notas capturadas (${capturadas}). Isto não é `
-                + 'uma lista para conferir uma a uma: é o trilho de captura da SAÍDA que não está trazendo as '
-                + 'notas — a SEFAZ não entrega ao emitente (Rej. 641), elas vêm pelo cofre de e-mail ou por '
-                + 'autXML. Resolva em Captura → Cobertura de Saída; enquanto isso, a numeração não pode ser '
-                + 'conferida.',
-        };
-    }
-    return {
-        causa: 'buraco-pontual', faltantes, capturadas,
-        acao: `${faltantes} buraco(s) num talão majoritariamente capturado (${capturadas} notas). Aqui vale `
-            + 'conferir número a número: cada um é inutilização na SEFAZ (não gera XML) ou nota emitida que '
-            + 'não chegou.',
-    };
+    return saida;
 }
 
 // ─── Resumo por participante (fornecedor/cliente) ───────────────────────────
@@ -740,7 +920,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
             if (it.uCom) linha._unidades.add(String(it.uCom).trim().toUpperCase());
             if (it.cfop) {
                 const cru = String(it.cfop).replace(/\D/g, '');
-                linha._cfops.add(String(cfopDoLancamento(d, cru, direcao, ctx) || cru));
+                linha._cfops.add(String(cfopDoLancamento(d, cru, direcao, ctx, it) || cru));
             }
             linha._notas.add(d.id || d.chave);
             mapa.set(k, linha);
@@ -749,7 +929,7 @@ export function resumoPorProduto(docs: DocumentoFiscal[], direcao: 'entrada' | '
     return Array.from(mapa.values()).map(l => ({
         produto: l.produto, ncm: l.ncm,
         cfops: Array.from(l._cfops).sort().join(' '),
-        unidade: l._unidades.size === 1 ? Array.from(l._unidades)[0] : (l._unidades.size ? 'várias' : '—'),
+        unidade: l._unidades.size === 1 ? (Array.from(l._unidades)[0] ?? '—') : (l._unidades.size ? 'várias' : '—'),
         qtd: l.qtd, itens: l.itens, notas: l._notas.size, valor: l.valor,
     })).sort((a, b) => b.valor - a.valor);
 }
@@ -778,4 +958,93 @@ export function resumoPorUf(docs: DocumentoFiscal[]): LinhaUf[] {
     }
     return Array.from(mapa.values()).sort((a, b) =>
         (b.saidasValor + b.entradasValor) - (a.saidasValor + a.entradasValor));
+}
+
+// ─── Ressalvas das abas de serviço/retenção ─────────────────────────────────
+
+/**
+ * 🚨 A RESSALVA NÃO PODE AFIRMAR UMA DATA QUE NINGUÉM MEDIU.
+ *
+ * Ela dizia: *"N nota(s) **importadas antes de 01/08/2026** não têm IR/INSS/CSLL
+ * gravados — ausência NÃO significa zero retido; **reimporte o XML** para
+ * completar."* Duas coisas erradas, e a segunda é a cara:
+ *
+ * · **A data.** O que o app mede é `retencoesFederaisGravadas` — o documento
+ *   não TRAZ os campos. Isso vale para nota antiga, para nota digitada sem
+ *   preencher e para trilho que não traz o dado. Afirmar quando ela foi
+ *   importada é o `csllOuTotal` com outra roupa: quem lê acredita.
+ *
+ * · **A AÇÃO.** *"Reimporte o XML"* é impossível onde não existe XML — e é
+ *   exatamente o caso que trouxe isto (04/09, J.P. PISSATO LOTERIAS e 923
+ *   MONACO): o CT-e OS chega **só em PDF**, a empresa usa certificado A3 e não
+ *   há captura automática. É o achado 18 (21/08) na forma cara — a pessoa
+ *   procura o XML, não acha, e conclui que o app está quebrado.
+ *
+ * A ação que SEMPRE funciona é informar a retenção na própria nota (a porta que
+ * nasceu em 04/09). O XML fica como alternativa, e DITO como alternativa.
+ */
+export function ressalvaSemRetencaoGravada(quantas: number): string {
+    return `${quantas} nota(s) não têm IR/INSS/CSLL gravados — ausência NÃO significa `
+        + `zero retido. Informe a retenção na própria nota (✍️ Informar retenção, no `
+        + `detalhe do documento) ou, havendo XML da nota, reimporte-o para completar.`;
+}
+
+export interface DuplicataServico {
+    numero: string;
+    participante: string;
+    base: number;
+    vezes: number;
+}
+
+/**
+ * 🚨 A MESMA NOTA DUAS VEZES — e nenhum validador acusa.
+ *
+ * O CASO (04/09, J.P. PISSATO · 08/2026): o CT-e OS 114.924 da PROTEGE foi
+ * lançado à mão com o modelo certo, e o documento ANTIGO da mesma nota continuou
+ * na base. O relatório somou **7.802,74** onde o papel diz **3.901,37** — e a
+ * duplicata infla o Livro de Serviços tomados, a competência, o bloco A do
+ * EFD-Contribuições e a base do R-4020.
+ *
+ * O único jeito de perceber era alguém reparar que o total estava dobrado. Este
+ * é o erro que sai do escritório: o PVA aceita, a tela não acende, e ele só
+ * aparece na fiscalização.
+ *
+ * ⚠️ **O APP NÃO ESCOLHE QUAL REMOVER** — qual documento está certo é decisão de
+ * quem olha (a espécie, a origem, quem lançou). Ele DENUNCIA, e a saída já
+ * existe: 🚫 retirar do cliente, no detalhe do documento.
+ *
+ * ⚠️ **NOTA SEM NÚMERO FICA DE FORA**: várias notas legítimas chegam sem ele, e
+ * agrupá-las acusaria documento correto — o alarme sobre o que está certo é o
+ * jeito conhecido de a equipe desligar a conferência.
+ *
+ * ⚠️ **E A CHAVE INCLUI O VALOR**: mesmo prestador e mesmo número com valores
+ * diferentes é reemissão, não cópia.
+ */
+export function duplicatasNasLinhas(linhas: LinhaServico[]): DuplicataServico[] {
+    const mapa = new Map<string, DuplicataServico>();
+    for (const l of linhas) {
+        const numero = String(l.numero || '').trim();
+        if (!numero) continue;
+        const participante = String(l.participante || '').trim();
+        const base = r2(Number(l.base) || 0);
+        const chave = `${numero}|${participante.toUpperCase()}|${base}`;
+        const atual = mapa.get(chave);
+        if (atual) atual.vezes += 1;
+        else mapa.set(chave, { numero, participante, base, vezes: 1 });
+    }
+    return [...mapa.values()].filter(d => d.vezes > 1);
+}
+
+/** A frase da denúncia — com a nota NOMEADA e a ação, nunca só um contador. */
+export function ressalvaDuplicatas(dups: DuplicataServico[]): string | null {
+    if (!dups.length) return null;
+    const nomes = dups.slice(0, 5)
+        .map(d => `nº ${d.numero} · ${d.participante} · ${d.base.toFixed(2)} (${d.vezes}×)`)
+        .join(' · ');
+    const resto = dups.length > 5 ? ` e mais ${dups.length - 5}` : '';
+    return `⚠️ ${dups.length} nota(s) aparecem MAIS DE UMA VEZ (mesmo prestador, número e `
+        + `valor) — a base deste relatório está somando em dobro, e o mesmo vale para o `
+        + `Livro de Serviços e o bloco A do EFD-Contribuições: ${nomes}${resto}. `
+        + `Confira qual documento está certo e retire o outro (🚫 Retirar do cliente, no `
+        + `detalhe do documento) — o app não escolhe por você.`;
 }

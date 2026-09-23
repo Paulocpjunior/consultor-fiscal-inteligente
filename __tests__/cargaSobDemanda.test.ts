@@ -29,6 +29,7 @@
 // ============================================================================
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import * as ts from 'typescript';
 
 const RAIZ = join(__dirname, '..');
 
@@ -79,22 +80,32 @@ interface Leitura {
 /** Toda chamada a `fetchAllDocs('<coleção>', ...)` dentro de services/. */
 function leiturasDeMovimento(fonte: string, arquivo: string): Leitura[] {
     const achados: Leitura[] = [];
-    for (const colecao of COLECOES_DE_MOVIMENTO) {
-        const re = new RegExp(`fetchAllDocs\\(\\s*'${colecao}'`, 'g');
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(fonte)) !== null) {
-            // A janela cobre os argumentos da chamada — é lá que o filtro mora.
-            const trecho = fonte.slice(m.index, m.index + 400);
-            const args = trecho.slice(0, trecho.indexOf(')') + 1);
-            const janela = trecho.slice(0, 300);
-            achados.push({
-                arquivo: arquivo.replace(RAIZ + '/', ''),
-                colecao,
-                trecho: args,
-                temFiltro: /where\s*\(|orderBy\s*\(|fbLimit\s*\(|limit\s*\(/.test(janela),
+    const sf = ts.createSourceFile(arquivo, fonte, ts.ScriptTarget.Latest, true);
+    const variaveis = new Map<string, ts.Expression>();
+    function coletar(node: ts.Node) {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) variaveis.set(node.name.text, node.initializer);
+        ts.forEachChild(node, coletar);
+    }
+    coletar(sf);
+    function temFiltro(node: ts.Node | undefined, visitados = new Set<string>()): boolean {
+        if (!node) return false;
+        if (ts.isCallExpression(node) && ['where', 'orderBy', 'fbLimit', 'limit'].includes(node.expression.getText(sf))) return true;
+        if (ts.isIdentifier(node) && variaveis.has(node.text) && !visitados.has(node.text)) {
+            return temFiltro(variaveis.get(node.text), new Set([...visitados, node.text]));
+        }
+        return !!ts.forEachChild(node, child => temFiltro(child, visitados) || undefined);
+    }
+    function visitar(node: ts.Node) {
+        if (ts.isCallExpression(node) && node.expression.getText(sf) === 'fetchAllDocs') {
+            const first = node.arguments[0];
+            if (first && ts.isStringLiteral(first) && COLECOES_DE_MOVIMENTO.includes(first.text)) achados.push({
+                arquivo: arquivo.replace(RAIZ + '/', ''), colecao: first.text,
+                trecho: node.getText(sf), temFiltro: temFiltro(node.arguments[1]),
             });
         }
+        ts.forEachChild(node, visitar);
     }
+    visitar(sf);
     return achados;
 }
 

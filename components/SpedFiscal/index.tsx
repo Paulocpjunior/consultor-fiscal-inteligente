@@ -31,6 +31,7 @@ const FilaMigracao = lazy(() => import('./FilaMigracao'));
 const CreditoAcumulado = lazy(() => import('./CreditoAcumulado'));
 const CiapBlocoG = lazy(() => import('./CiapBlocoG'));
 const InventarioBlocoH = lazy(() => import('./InventarioBlocoH'));
+const BlocoK = lazy(() => import('./BlocoK'));
 const ConferenciaEspelho = lazy(() => import('./ConferenciaEspelho'));
 
 interface Props {
@@ -56,7 +57,7 @@ function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: strin
     return { inicio: fmt(mesInicio), fim: fmt(mesFim) };
 }
 
-type SpedTab = 'gerar' | 'ajustes' | 'saldo' | 'ciap' | 'inventario' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
+type SpedTab = 'gerar' | 'ajustes' | 'saldo' | 'ciap' | 'inventario' | 'bloco-k' | 'credito' | 'migracao' | 'fila' | 'espelho' | 'analisar' | 'contribuicoes' | 'editar' | 'cruzar' | 'cruzar-xml' | 'conciliar';
 
 // MensagemBlock vive em ./MensagemBlock.tsx (reutilizado pelas abas).
 
@@ -208,6 +209,16 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 { label: 'Linhas no arquivo', value: String(stats.linhas) },
             ] : undefined;
 
+            // 🚨 UM AVISO POR LINHA — nunca `.join(' — ')`. O travessão é o
+            // separador que as próprias frases usam por dentro, então juntar
+            // produz um parágrafo único de fonte 12px em que o aviso que
+            // responde a pergunta fica indistinguível do resto (PWR, 18/09).
+            const linhasDoAviso = [
+                ...travas.map(t => `🚨 ${t.detalhe}`),
+                ...(auditoria && !travas.length ? [auditoria.resumo] : []),
+                ...warnings,
+            ].filter(Boolean);
+
             // O arquivo é gerado mesmo assim (o colaborador pode precisar
             // vê-lo), mas o título NÃO pode dizer "sucesso" quando a auditoria
             // travou: farol honesto vale pro arquivo fiscal também.
@@ -218,11 +229,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     : warnings.length
                         ? `SPED gerado com avisos: ${filename}`
                         : `SPED gerado: ${filename}`,
-                detalhes: [
-                    ...travas.map(t => `🚨 ${t.detalhe}`),
-                    ...(auditoria && !travas.length ? [auditoria.resumo] : []),
-                    ...warnings,
-                ].join(' — ') || 'Download concluído.',
+                detalhes: linhasDoAviso.length ? linhasDoAviso : 'Download concluído.',
                 extras,
             });
             if (onShowToast && !warnings.length && !travas.length) {
@@ -334,7 +341,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 titulo: warnings.length
                     ? `SPED Contribuições gerado com avisos: ${filename}`
                     : `SPED Contribuições gerado: ${filename}`,
-                detalhes: warnings.length ? warnings.join(' — ') : 'Download concluído.',
+                // 🚨 UM AVISO POR LINHA, e isto é o caso da PWR (18/09): a
+                // geração dela empilha CINCO avisos — desconto, ICMS, frete, a
+                // conciliação `Receita do M210/M610 × Memória de Apuração` e a
+                // identidade do arquivo com a linha do M210 copiada dele. Com
+                // `.join(' — ')` os cinco viravam ~2.500 caracteres num
+                // parágrafo só, e o dono voltou pela terceira vez com a mesma
+                // pergunta que o quarto aviso respondia.
+                detalhes: warnings.length ? warnings : 'Download concluído.',
                 extras,
             });
             if (onShowToast && !warnings.length) {
@@ -427,6 +441,17 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             }}
                         >
                             📦 Inventário (Bloco H)
+                        </button>
+                        <button
+                            onClick={() => setSpedTab('bloco-k')}
+                            className="px-4 py-2 text-xs font-bold rounded-lg transition-colors"
+                            style={{
+                                background: spedTab === 'bloco-k' ? 'var(--accent)' : 'var(--bg-card)',
+                                color: spedTab === 'bloco-k' ? '#fff' : 'var(--text-muted)',
+                                border: `1px solid ${spedTab === 'bloco-k' ? 'var(--accent)' : 'var(--border-default)'}`,
+                            }}
+                        >
+                            🏭 Bloco K (produção)
                         </button>
                         <button
                             onClick={() => setSpedTab('credito')}
@@ -571,6 +596,12 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             {spedTab === 'migracao' && (
                 <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
                     <ProntidaoMigracao onShowToast={onShowToast} />
+                </Suspense>
+            )}
+
+            {spedTab === 'bloco-k' && (
+                <Suspense fallback={<p className="text-xs text-center py-6" style={{ color: 'var(--text-muted)' }}>Carregando...</p>}>
+                    <BlocoK currentUser={currentUser} empresas={empresas} onShowToast={onShowToast} />
                 </Suspense>
             )}
 

@@ -285,3 +285,78 @@ describe('🚨 a frase da tela nasce junto do estado', () => {
         expect(d.texto).toMatch(/Feche de novo/);
     });
 });
+
+// ============================================================================
+// 🚨 O FIM DE MÊS NUNCA FUNCIONOU PARA O SIMPLES — e o Simples é a maior parte
+// da carteira (27/08, print do Paulo: REGINA CELIA PIRES · 07/2026).
+//
+// A tela mostrava as cinco etapas verdes e **"✓ Pronto para dar fim de mês"**;
+// o botão recusava com *"Sem apuração registrada nesta competência não há valor
+// a fechar"*. Duas leituras do mesmo fato na mesma tela, pela terceira vez na
+// semana.
+//
+// A causa está no comentário que eu mesmo escrevi na recusa: *"a etapa 3 da
+// rotina já teria barrado, então isto é cinto e suspensório"*. **Premissa
+// errada** — a etapa 3 fecha pelo DONO (`acharApuracaoDaCompetencia`), que
+// conhece TRÊS fontes: a `fichaFinanceira[]` do Lucro, o `faturamentoManual` e
+// o `faturamentoMensalDetalhado` do Simples. Só a primeira é "ficha".
+// ============================================================================
+describe('🚨 o fim de mês do SIMPLES', () => {
+    const rotinaOk = {
+        etapas: [
+            { id: 'captura', nome: 'Capturar notas', status: 'concluida', resumo: '1 saída' },
+            { id: 'validacao', nome: 'Validar', status: 'concluida' },
+            { id: 'apuracao', nome: 'Apurar', status: 'concluida' },
+            { id: 'obrigacoes', nome: 'Entregar', status: 'concluida' },
+            { id: 'guias', nome: 'Guias', status: 'na' },
+        ],
+    };
+    const fechar = (extra: any = {}): any => montarFimDeMes({
+        empresaId: 'e1', competencia: '2026-07', regime: 'SIMPLES',
+        rotina: rotinaOk, ficha: null,
+        corte: { instante: '2026-08-27T12:00:00.000Z' },
+        quem: { email: 'ana@x' }, agoraIso: '2026-08-27T12:00:00.000Z',
+        ...extra,
+    });
+
+    it('fecha com a apuração do Simples — sem ficha nenhuma', () => {
+        const r = fechar({ apuracao: { fonte: 'simples', totalImpostos: null, receita: 5000 } });
+        expect(r.ok).toBe(true);
+        expect(r.fechamento.apuradoFonte).toBe('simples');
+    });
+
+    // 🔒 Sem a FONTE, o Contábil recebe um `apurado` todo null e conclui "este
+    // cliente não teve movimento" — afirmação que ninguém fez.
+    it('diz de onde veio o apurado e leva a ressalva do DAS', () => {
+        const f = fechar({ apuracao: { fonte: 'simples', totalImpostos: null, receita: 5000 } }).fechamento;
+        expect(f.apuradoRessalva).toMatch(/Simples Nacional/);
+        expect(f.apuradoRessalva).toMatch(/o valor do DAS não vive na ficha/);
+        expect(f.apuradoRessalva).toMatch(/ACERVO e o LASTRO/);
+    });
+
+    // ⚠️ A RECEITA NÃO ENTRA NO APURADO. Ela é INSUMO, e insumo convida o outro
+    // lado a RECALCULAR — a régua do R-2055, que este carimbo existe para
+    // honrar. O que atravessa é RESULTADO.
+    it('a receita lançada NÃO vira valor apurado', () => {
+        const f = fechar({ apuracao: { fonte: 'simples', totalImpostos: null, receita: 5000 } }).fechamento;
+        expect(Object.values(f.apurado)).not.toContain(5000);
+        expect(f.apurado.totalImpostos).toBeNull();
+    });
+
+    // A recusa continua existindo — para quem não tem apuração NENHUMA.
+    it('sem ficha E sem apuração, continua recusando', () => {
+        const r = fechar({ apuracao: null });
+        expect(r.ok).toBe(false);
+        expect(r.motivo).toMatch(/Sem apuração registrada/);
+    });
+
+    it('no Lucro nada muda — a ficha continua sendo a fonte', () => {
+        const f = fechar({
+            ficha: { id: 'f1', totalImpostos: 1234.56, ipiRecolher: 200 },
+            apuracao: { fonte: 'lucro', totalImpostos: 1234.56 },
+        }).fechamento;
+        expect(f.apuradoFonte).toBe('ficha-lucro');
+        expect(f.apurado.totalImpostos).toBe(1234.56);
+        expect(f.apuradoRessalva).toBeNull();
+    });
+});

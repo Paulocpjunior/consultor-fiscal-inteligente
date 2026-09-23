@@ -43,7 +43,9 @@
 import * as fmt from './sped-fiscal-format.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
-import { docCancelado } from './xml-metadata-helper.js';
+// O número que a CHAVE carrega (posições 26-34) — a régua já existia para o ♻️.
+import { numeroDaChave } from './releitura-notas-vazias.js';
+import { docCancelado, ehEntradaDoEmitente, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 /** Rótulos de tipo que NUNCA são mercadoria (bloco C). */
 const RE_NAO_MERCADORIA = /CTe|MDFe|NFSe|NFS-e/i;
@@ -149,19 +151,43 @@ export function levaC170NoContribuicoes(nota) {
  * Separa as notas do bloco C entre as que se escrituram e as que NÃO têm como
  * ser escrituradas — cada grupo com ação própria.
  *
+ * @param notas
+ * @param empresaCnpj  quem ESCRITURA. **Obrigatório e sem default**: é ele que
+ *   separa a nota própria de entrada NOSSA (art. 136, que se escritura) da nota
+ *   de entrada do FORNECEDOR (`tpNF=0` dele, que não é operação nossa). Sem o
+ *   CNPJ a régua não afirma, e a nota de terceiro voltaria ao bloco C em
+ *   silêncio — parâmetro que dá para esquecer é a classe do
+ *   `saldoCredorIpiAnterior`. Registrado em `consumidoresMedidos.test.ts`.
  * @returns {{notas: object[], soResumo: string[], semItens: string[]}}
  */
-export function selecionarNotasBlocoC(notas) {
+export function selecionarNotasBlocoC(notas, empresaCnpj) {
     const escrituradas = [];
     const soResumo = [];
     const semItens = [];
     const nfceEmEntrada = [];
+    const entradaDoEmitente = [];
     for (const n of notas || []) {
         if (!ehNotaDeMercadoria(n)) continue;
+        // 🚨 A ENTRADA É DO EMITENTE, NÃO NOSSA (09/09, MV LIDER · 08/2026).
+        // `tpNF=0` de TERCEIRO é o fornecedor dando entrada no estoque DELE —
+        // devolução recebida, retorno de industrialização. Ver o comentário de
+        // `ehEntradaDoEmitente`: a mercadoria entra nele, logo SAI de quem está
+        // no `<dest>`. Escriturá-la no nosso C100 declara a operação dele, e
+        // ainda conta a mesma devolução duas vezes quando o cliente emitiu a
+        // saída dele. Vem ANTES do cancelamento: cancelada de terceiro também
+        // não é entrada nossa.
+        if (ehEntradaDoEmitente(n, empresaCnpj).sim) {
+            entradaDoEmitente.push(rotuloDoDoc(n));
+            continue;
+        }
         // 📖 Guia Prático 3.2.3, C100: *"As NFC-e (código 65) não devem ser
         // escrituradas nas ENTRADAS"*. Cupom é venda ao consumidor — recebê-lo
         // como documento de entrada não é operação que se escritura no bloco C.
-        if (modeloDoDoc(n) === '65' && n.direcao === 'entrada') {
+        // ⚠️ A direção sai da RÉGUA (`direcaoEfetivaDoc`), nunca do campo
+        // gravado: cupom com `tpNF=0` emitido pela empresa fica como 'saida' no
+        // banco e escapava desta exclusão, entrando no bloco C como se fosse
+        // venda. É a família de `docCancelado` e `modeloDoDoc`, na direção.
+        if (modeloDoDoc(n) === '65' && direcaoEfetivaDoc(n) === 'entrada') {
             nfceEmEntrada.push(rotuloDoDoc(n));
             continue;
         }
@@ -180,7 +206,136 @@ export function selecionarNotasBlocoC(notas) {
         if (ehResumoSefaz(n)) { soResumo.push(rotuloDoDoc(n)); continue; }
         semItens.push(rotuloDoDoc(n));
     }
-    return { notas: escrituradas, soResumo, semItens, nfceEmEntrada };
+    return { notas: escrituradas, soResumo, semItens, nfceEmEntrada, entradaDoEmitente };
+}
+
+/**
+ * Quais documentos ESTÃO escriturados no EFD ICMS/IPI — e portanto podem
+ * sustentar um participante no 0150 ou um item no 0200.
+ *
+ * 🚨 O CASO (11/09, LEGACY · 08/2026, PVA): `|0200|ITEM-1|Serviço|||SV|09|` sem
+ * nenhum C170 apontando para ele — *"Não informar item, se não referenciado em
+ * pelo menos um dos demais blocos"*. O coletor do 0200 varria TODAS as notas
+ * do período, e a NFS-e não vai ao bloco C deste arquivo (ela é do bloco A do
+ * EFD-Contribuições, e no ICMS/IPI do DF vira totais no B470). O participante
+ * já tinha esta régua no orquestrador; o item não — meia trava.
+ *
+ * Entram: as notas do bloco C (`selecionarNotasBlocoC`) menos a NFC-e (o C100
+ * dela não leva COD_PART e ela é emissão própria, sem C170) e os CT-e do bloco
+ * D. Nota que ficou de fora do bloco C (só resumo, sem itens, entrada do
+ * emitente) leva o participante e os itens dela junto.
+ */
+export function documentosEscrituradosNoFiscal(notas, empresaCnpj) {
+    const ids = new Set();
+    for (const n of selecionarNotasBlocoC(notas, empresaCnpj).notas) {
+        if (modeloDoDoc(n) === COD_MOD_NFCE) continue;
+        // 🚨 CANCELADA NÃO SUSTENTA NADA (11/09, ELS · 08/2026, PVA: 19×
+        // *"Para documento fiscal cancelado (código da situação = 02 ou 03) ou
+        // NF-e denegada (04), somente informar os campos código da situação,
+        // indicador de operação, código do modelo e a chave"*). O C100 dela
+        // sai SEM COD_PART e SEM filhos (Guia 3.2.3, C100, Exceção 1) — então
+        // o participante e os itens dela no 0150/0200 seriam ÓRFÃOS, a recusa
+        // seguinte. Vale para o CT-e cancelado do bloco D pelo mesmo motivo
+        // (D100, Exceção 1).
+        if (docCancelado(n)) continue;
+        ids.add(n.id || n.chave);
+    }
+    for (const c of selecionarCtesBlocoD(notas)) {
+        if (docCancelado(c)) continue;
+        ids.add(c.id || c.chave);
+    }
+    return { ids, escriturado: (n) => ids.has(n?.id || n?.chave) };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🚨 O MESMO COD_ITEM COM DUAS UNIDADES — o C170 e o 0200 discordavam, e o
+// PVA cobra o 0220 que o app não tem como montar
+//
+// 11/09, ELS (distribuidora, Simples) · 08/2026 — PVA, 13×: *"Se o campo de
+// Unidade deste registro for diferente do campo Unidade do registro 0200, é
+// obrigatório que o registro 0200 possua um filho 0220"*.
+//
+// A CAUSA é a chave: o `cProd` é do CATÁLOGO DO FORNECEDOR (a régua de 18/08 —
+// "o XML da compra traz o CFOP do FORNECEDOR, não o nosso" — vale para o
+// código do produto igual). Numa distribuidora que compra de dezenas de
+// produtores, o código `1` de um vem em KG e o `1` de outro vem em CX; o 0200
+// cadastra o PRIMEIRO (com a unidade dele) e todo C170 do segundo aponta para
+// esse cadastro com a unidade ERRADA. É a colisão de 29/08 (`ITEM-n` por
+// documento) na forma que o PVA vê — porque ele compara a UNIDADE.
+//
+// 📖 Guia 3.2.3, C170 campo 06: *"Caso a unidade de medida do documento fiscal
+// seja diferente da unidade de medida de controle de estoque informada no
+// Registro 0200, deverá ser informado no Registro 0220 o fator de conversão"*.
+// O fator NÃO está no XML — e fator inventado (1 KG = 1 CX) é o `1405` num
+// registro que o bloco K cruza. O que o app PODE afirmar é que são cadastros
+// DIFERENTES: o item passa a ser identificado por código + unidade.
+//
+// ⚠️ DETERMINÍSTICO, não "o primeiro vence": quando um código aparece com
+// mais de uma unidade no arquivo, TODAS as ocorrências ganham o sufixo
+// (`1-KG`, `1-CX`) — senão a ordem das notas decidiria qual dos dois fica
+// com o código limpo, e a mesma competência regerada daria outro arquivo.
+// Código com uma unidade só continua LIMPO: nada muda para o caso comum, e é
+// por isso que o cadastro de inventário/bloco K (que aponta pelo código que a
+// pessoa digitou) não se move.
+//
+// 🚦 QUEM LÊ É O PAR: o coletor do 0200 e o C170 (nas DUAS famílias) passam
+// pela mesma função com o MESMO mapa — chave calculada em dois lugares foi o
+// que produziu a divergência de 22/08.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Mapa `COD_ITEM → Set(UNID)` dos itens que ENTRAM no arquivo.
+ *
+ * @param {object[]} notas
+ * @param {(nota: object) => boolean} entra  quais notas escrituram item (a
+ *   régua de cada família — `escriturado && !emissãoPrópria` no ICMS/IPI,
+ *   `levaC170NoContribuicoes` no Contribuições).
+ * @returns {Map<string, Set<string>>}
+ */
+export function unidadesPorCodItem(notas, entra) {
+    const mapa = new Map();
+    for (const nota of notas || []) {
+        if (typeof entra === 'function' && !entra(nota)) continue;
+        for (const item of (nota?.itens || [])) {
+            const cod = codItemDoItem(item);
+            if (!mapa.has(cod)) mapa.set(cod, new Set());
+            mapa.get(cod).add(unidadeDoItem(item));
+        }
+    }
+    return mapa;
+}
+
+/**
+ * O COD_ITEM que VAI PARA O ARQUIVO — `codItemDoItem` mais o sufixo da unidade
+ * quando o mesmo código circula com mais de uma. Sem mapa, é a chave de sempre.
+ */
+export function codItemNoArquivo(item, unidadesPorCodigo) {
+    const cod = codItemDoItem(item);
+    const unidades = unidadesPorCodigo instanceof Map ? unidadesPorCodigo.get(cod) : null;
+    if (!unidades || unidades.size <= 1) return cod;
+    return `${cod}-${unidadeDoItem(item)}`;
+}
+
+/** Os códigos que ganharam sufixo — para o aviso da geração. */
+export function codigosComDuasUnidades(unidadesPorCodigo) {
+    const lista = [];
+    for (const [cod, unidades] of (unidadesPorCodigo instanceof Map ? unidadesPorCodigo : new Map())) {
+        if (unidades.size > 1) lista.push({ codItem: cod, unidades: Array.from(unidades).sort() });
+    }
+    return lista;
+}
+
+/** O aviso — só nasce quando houve sufixo. */
+export function avisoDeItemComDuasUnidades(lista) {
+    if (!Array.isArray(lista) || !lista.length) return '';
+    const amostra = lista.slice(0, 5)
+        .map((c) => `${c.codItem} (${c.unidades.join(' × ')})`)
+        .join('; ');
+    return `0200: ${lista.length} código(s) de item aparecem com MAIS DE UMA unidade no período — ${amostra}`
+        + `${lista.length > 5 ? ` e mais ${lista.length - 5}` : ''}. O código do produto é o do FORNECEDOR, `
+        + 'e fornecedores diferentes usam o mesmo número para produtos diferentes. O arquivo cadastra um '
+        + '0200 por código+unidade (ex.: 1-KG e 1-CX) para o C170 e o 0200 concordarem — sem isso o PVA '
+        + 'cobra o 0220 (fator de conversão), que o XML não traz e o app não inventa.';
 }
 
 /** CT-e do período (bloco D), sem os resumos. */
@@ -192,8 +347,19 @@ export function selecionarCtesBlocoD(notas) {
  * Avisos do que ficou de FORA do arquivo — nota que some sem ninguém saber é
  * livro a menor, e foi assim que a PS VIDROS perdeu 100 das 131.
  */
-export function avisosDaSelecao({ soResumo = [], semItens = [], nfceEmEntrada = [] } = {}) {
+export function avisosDaSelecao({
+    soResumo = [], semItens = [], nfceEmEntrada = [], entradaDoEmitente = [],
+} = {}) {
     const avisos = [];
+    if (entradaDoEmitente.length) {
+        avisos.push(
+            `SPED: ${entradaDoEmitente.length} nota(s) ficaram FORA do arquivo por serem ENTRADA DO `
+            + `FORNECEDOR (tpNF=0 emitido por ele) — nº ${entradaDoEmitente.slice(0, 8).join(', ')}`
+            + `${entradaDoEmitente.length > 8 ? '…' : ''}. É devolução recebida ou retorno: a mercadoria `
+            + 'entrou no estoque DELE, então não é entrada desta empresa. Se houve devolução, o documento '
+            + 'que se escritura é a nota de SAÍDA que a empresa emite — confira se ela foi capturada.',
+        );
+    }
     if (nfceEmEntrada.length) {
         avisos.push(
             `SPED: ${nfceEmEntrada.length} NFC-e ficaram fora por estarem como ENTRADA — `
@@ -319,6 +485,54 @@ export function ehItemDeServico(item) {
 }
 
 /**
+ * O `00` está sendo AFIRMADO em quem provavelmente não revende — diga isso.
+ *
+ * 🚨 A PENDÊNCIA ACIMA ERA REAL E ESTAVA **CALADA** (fechado em 29/08). O Guia
+ * dá ONZE valores ao TIPO_ITEM (00 revenda · 01 matéria-prima · 02 embalagem ·
+ * 03 produto em processo · 04 produto acabado · 05 subproduto · 06 produto
+ * intermediário · 07 uso e consumo · 08 ativo imobilizado · 09 serviços · 10
+ * outros insumos · 99 outras), e o app declara **00 em toda mercadoria**.
+ *
+ * ⚠️ **E ISSO É CERTO NO CASO COMUM**: num COMÉRCIO, "mercadoria para revenda"
+ * é exatamente o que o item é. Acender ali seria alarme sobre arquivo correto
+ * na carteira inteira — o jeito conhecido de a equipe desligar o aviso.
+ *
+ * 🚨 **QUEM ACENDE É A INDÚSTRIA**, e por prova do CADASTRO (`contribuinteIpi`
+ * = sim), nunca por dedução do ramo: numa indústria a matéria-prima é 01 e o
+ * produto acabado é 04, e **isso não está no XML** — o fornecedor não declara a
+ * destinação que a mercadoria terá aqui (o caso KALUNGA do CFOP, um campo
+ * adiante). Deduzir produziria o `1405` num campo que o **Bloco K cruza**.
+ *
+ * 📌 Por isso o app **não escolhe**: ele DIZ quantos itens saíram com o `00`
+ * afirmado e o que isso significa.
+ *
+ * ✅ **DECISÃO DO PAULO (30/08): o aviso mensal fica, e o CADASTRO POR ITEM
+ * NÃO se constrói** — perguntado se preferia aceitar o aviso todo mês ou mandar
+ * fazer o cadastro, respondeu *"1 aceito"*. É a mesma fronteira do calendário
+ * municipal (*"eu não vou fazer nada manual"*, 16/08): seriam milhares de
+ * linhas para digitar.
+ *
+ * 🚩 **NÃO RESSUSCITAR COMO PENDÊNCIA.** Isto não é lacuna esperando conserto —
+ * é desenho escolhido pelo dono. Construir o cadastro "para silenciar o aviso"
+ * seria extensão minha por cima de uma decisão dele, que é o vício do FGTS
+ * (18/08). Só volta a ser questão se ELE pedir.
+ */
+export function avisoDeTipoItemPresumido(itens, ctx) {
+    const marcado = String(ctx?.contribuinteIpi || '').toLowerCase();
+    if (marcado !== 'sim') return '';
+    const mercadorias = (Array.isArray(itens) ? itens : [])
+        .filter((i) => String(i?.tipo || '') === TIPO_ITEM_MERCADORIA_REVENDA);
+    if (!mercadorias.length) return '';
+    return `0200: ${mercadorias.length} item(ns) saíram com TIPO_ITEM "00 — Mercadoria para Revenda", `
+        + 'que é o padrão do app, numa empresa marcada como CONTRIBUINTE DE IPI. Numa indústria o item '
+        + 'costuma ser 01 (matéria-prima), 03 (produto em processo), 04 (produto acabado) ou 07 '
+        + '(uso e consumo) — e a destinação NÃO vem no XML, então o app não a deduz: o fornecedor não '
+        + 'sabe o que a mercadoria vira aqui. O PVA ACEITA o 00; quem cruza este campo é o Bloco K. '
+        + 'Confira os itens antes de transmitir e, se o TIPO_ITEM precisar ser outro, avise para virar '
+        + 'cadastro por item.';
+}
+
+/**
  * SER — a série do documento, com as TRÊS posições que o PVA cobra.
  *
  * 🚨 O bloco D escrevia `nota.serie || '1'`: série **1 INVENTADA** em todo CT-e
@@ -335,6 +549,29 @@ export function ehItemDeServico(item) {
  * três posições … Se não existir Série … informar 000"* — por isso '000' é a
  * resposta final, nunca '1'.
  */
+/**
+ * NUM_DOC — o número do documento (C100 campo 08, D100 campo 09).
+ *
+ * 🚨 O CT-e CAPTURADO NÃO TINHA NÚMERO NENHUM (18/09, EDUARDO GUERRA ·
+ * 08/2026): a captura lia o número pela tag `nNF`, que é da NF-e, e o
+ * conhecimento traz `nCT`. Todo D100 saía com o campo 09 VAZIO —
+ * `|D100|0|1|…|57|00|001|||3526…|` —, o Guia o exige *"maior que zero"* e
+ * confere contra a chave, e o PVA quebrava o relatório de entradas ao gerar
+ * ("Ocorreu um erro ao gerar o relatório") só nesta empresa, a única com
+ * CT-e no livro.
+ *
+ * A chave não mente: o número mora nas posições **26-34**, ao lado da série
+ * (23-25) que `serieDoDocumento` já lê — para NF-e, NFC-e e CT-e igualmente.
+ * O gravado vence; a chave é a RESERVA; sem os dois, vazio (ausência o PVA
+ * acusa, número inventado não).
+ */
+export function numeroDoDocumento(nota) {
+    const gravado = String(nota?.numero ?? '').replace(/\D/g, '').replace(/^0+/, '');
+    if (gravado) return gravado;
+    const daChave = numeroDaChave(nota?.chave || nota?.chaveAcesso || nota?.chNFe || nota?.chCTe);
+    return daChave || '';
+}
+
 export function serieDoDocumento(nota) {
     const gravada = String(nota?.serie ?? '').replace(/\D/g, '');
     if (gravada) return gravada.padStart(3, '0').slice(-3);
@@ -368,16 +605,76 @@ export function serieDoDocumento(nota) {
  * Quem manda é o 0200, porque ele é o CADASTRO: quem aponta se ajusta a quem é
  * apontado. Nunca devolve vazio — campo obrigatório sem valor é recusa certa.
  *
- * ⚠️ **Pendência NOMEADA, não corrigida**: item sem `nItem` cai em `ITEM-?`, e
- * dois produtos distintos nessa situação colapsam num cadastro só. É o
- * comportamento que o 0200 já tinha; mudá-lo sem um caso real seria trocar uma
- * chave de cadastro no escuro, que é pior que a colisão.
+ * ⚠️ **A PENDÊNCIA FOI RE-MEDIDA EM 29/08, E ELA ESTAVA MAL NOMEADA.** Ficou
+ * escrito aqui que *"item sem `nItem` cai em `ITEM-?`"* — e medir os QUATRO
+ * trilhos que criam item mostrou que **todos preenchem o `nItem`**, com o
+ * índice do laço como reserva (`xml-importer.js:102`, `xmlParserService.ts:269`
+ * e `:671`, `notaDigitada.ts:258`). O `?` é **inalcançável**, e a trava por
+ * varredura ao lado impede que um trilho novo o alcance.
+ *
+ * 🚨 **O QUE É REAL É OUTRA COISA, e é pior porque acontece calada**: o
+ * `ITEM-n` é numerado **POR DOCUMENTO** e o 0200 é a tabela do **ARQUIVO
+ * INTEIRO**. Dois produtos SEM `cProd`, cada um o item 1 do seu documento,
+ * viram os dois `ITEM-1` — e o coletor do 0200 faz `if (!map.has(cod))`, ou
+ * seja **o primeiro vence e o segundo desaparece dentro dele**. O arquivo
+ * declara um item onde havia dois, e os C170 dos dois apontam para a descrição
+ * de um só.
+ *
+ * ⚠️ **E A CHAVE NÃO MUDA AQUI, de propósito.** Ela é o que o C170/A170
+ * REFERENCIA: mexer nela sem um caso real medido troca uma colisão silenciosa
+ * por um item ÓRFÃO em todo cliente cujo XML não traz `cProd` — a recusa que a
+ * PWR já pagou (19/08). O que a casa faz com o que não sabe decidir é
+ * **DENUNCIAR**: `conferirColisaoDeItem` abaixo acusa a fusão, com os dois
+ * nomes, para quem gera decidir.
  */
 export function codItemDoItem(item) {
     const i = item || {};
     const direto = i.cProd || i.codigo || i.cFiscal;
     if (direto) return String(direto);
     return `ITEM-${i.nItem || '?'}`;
+}
+
+/**
+ * Dois itens caíram no MESMO `COD_ITEM` — eles são o mesmo produto?
+ *
+ * Devolve o nome do campo que DIVERGE (ou `null` quando são o mesmo item). O
+ * caso normal — o mesmo produto aparecendo em vinte documentos com o mesmo
+ * `cProd` — responde `null` e não gera ruído; alarme sobre arquivo correto é o
+ * jeito conhecido de a equipe desligar a trava.
+ *
+ * ⚠️ Compara **descrição e NCM**, que é o que o 0200 declara e o que muda de
+ * verdade entre dois produtos. Campo VAZIO de um dos lados não acusa: ausência
+ * não é divergência (é captura incompleta, e tem trilho próprio).
+ */
+export function conferirColisaoDeItem(existente, novo) {
+    const a = existente || {};
+    const b = novo || {};
+    for (const campo of ['descricao', 'ncm']) {
+        const x = String(a[campo] ?? '').trim().toUpperCase();
+        const y = String(b[campo] ?? '').trim().toUpperCase();
+        if (x && y && x !== y) return campo;
+    }
+    return null;
+}
+
+/**
+ * A frase da colisão — UMA só, para as duas famílias.
+ *
+ * Duas mensagens fariam o mesmo defeito ser descrito de dois jeitos, e quem lê
+ * o aviso do EFD ICMS/IPI e o do Contribuições no mesmo dia concluiria que são
+ * problemas diferentes.
+ */
+export function avisoDeColisaoDeItem(colisoes) {
+    if (!Array.isArray(colisoes) || !colisoes.length) return '';
+    const amostra = colisoes.slice(0, 5)
+        .map((c) => `${c.codItem} ("${c.de}" × "${c.para}")`)
+        .join('; ');
+    return `0200: ${colisoes.length} item(ns) DIFERENTE(s) caíram no mesmo COD_ITEM e o arquivo `
+        + `declara só o primeiro — ${amostra}${colisoes.length > 5 ? ` e mais ${colisoes.length - 5}` : ''}. `
+        + 'Acontece quando o XML não traz o código do produto (cProd): o item passa a ser numerado '
+        + 'por documento (ITEM-1, ITEM-2…) e dois produtos de documentos diferentes colidem. '
+        + 'O PVA ACEITA — o livro é que sai com a descrição errada. Corrija o cadastro do produto '
+        + 'na origem ou lance o item pelo ✏️ para ele ganhar código próprio.';
 }
 
 /**

@@ -23,8 +23,18 @@
 // visualizador imprime na mesma sequência). G125 segue o layout do Guia
 // Prático (OP, ST, FRT, DIF) — a validação final é no PVA, como todo o resto
 // do arquivo.
+//
+// 🚨 29/08 — O BLOCO INTEIRO SAÍA GRUDADO NUMA LINHA SÓ, e é o caso REALITY
+// (21/08) vivo aqui. Este módulo montava a linha à mão (`[...].join('|')`),
+// sem o `|` inicial e sem o `\r\n`; o orquestrador junta os blocos com
+// `join('')`, então G001, G110, G125 e G990 saíam colados na cauda do bloco E.
+// A lição de 21/08 estava escrita — *"módulo novo que bypassar o buildLine cai
+// na R15"* — e o bloco G nunca tinha passado por ela porque a ÚNICA empresa
+// com CIAP (EXPERTE) está bloqueada na captura: é a mesma sorte do IPI em
+// E200/E210 e do Bloco H zerado. Agora as quatro saem pelo `fmt.buildLine`.
 // ============================================================================
 
+import * as fmt from './sped-fiscal-format.js';
 // Régua única do cancelamento (status + cStat + evento 110111) e da direção
 // efetiva (a nota própria de entrada fica gravada como 'saida').
 import { docCancelado, direcaoEfetivaDoc, valorDoDocumento } from './xml-metadata-helper.js';
@@ -195,6 +205,115 @@ function dataSped(valor) {
     return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0300 — O CADASTRO QUE O G125 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 29/08. O Guia 3.2.3 é literal no G125 campo 02: *"o código informado neste
+// campo deve constar de um registro 0300"*, e o próprio 0300 abre dizendo que
+// ele existe *"para identificar e caracterizar TODOS os bens ou componentes
+// arrolados no registro G125 do Bloco G"*.
+//
+// 🔴 O app emitia o G125 e **nenhum 0300**: cada `COD_IND_BEM` apontava para um
+// cadastro que o arquivo não declara. É EXATAMENTE a família do item órfão do
+// 0200 (PWR, 19/08) e do participante órfão do 0150 — o registro referencia
+// quem não está lá, e o PVA recusa.
+//
+// 📌 E o cadastro JÁ TEM o que o 0300 pede: código, descrição, bem × componente
+// e o bem principal são os MESMOS campos que o G125 lê. Por isso o dono é este
+// módulo — o bloco 0 IMPORTA daqui. Duas leituras do mesmo cadastro fariam o
+// 0300 e o G125 discordarem sobre o mesmo bem dentro do mesmo arquivo.
+//
+// ⚠️ **O `COD_CTA` NÃO SE INVENTA.** Ele é a conta analítica do plano de contas
+// da empresa (campo 06 do 0500) e o app não a deduz — é a mesma disciplina do
+// F100 (24/08) e do 0002. Sem ela cadastrada o campo sai **VAZIO** e a falta vai
+// NOMEADA, com o lugar de preencher. Emitir o 0300 com a conta em branco é
+// melhor que não emitir: sem ele o G125 é órfão GARANTIDO, e o PVA nomeia o
+// campo que falta em vez de recusar o bloco inteiro.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * A conta contábil do bem está COMPLETA para virar 0500?
+ *
+ * 🚨 COERÊNCIA É TUDO OU NADA — a régua do F100/0500 (24/08). O `COD_CTA` do
+ * 0300 aponta para o **0500**, e o Guia é literal: o 0500 existe *"para
+ * identificar as contas contábeis (…) **relativas às contas referenciadas no
+ * registro 0300**"*. Então o COD_CTA sem o 0500 é ÓRFÃO — e o 0500 precisa de
+ * `NIVEL` e `NOME_CTA`, que são do PLANO DE CONTAS da empresa e o app não
+ * deduz. Sem os três, o COD_CTA também não sai.
+ */
+export function contaContabilCompleta(bem) {
+    return Boolean(
+        String(bem?.contaContabil || '').trim()
+        && String(bem?.contaContabilNome || '').trim()
+        && String(bem?.contaContabilNivel || '').trim(),
+    );
+}
+
+/**
+ * 0300 — Cadastro de bens ou componentes do ativo imobilizado.
+ * Um por bem do CIAP, montado do MESMO cadastro que alimenta o G125.
+ *
+ * Devolve `{ linhas, linhas0500, avisos }` — a falta da conta sai DITA, nunca
+ * calada, e o COD_CTA só entra quando o 0500 correspondente também sai.
+ */
+export function montarRegistros0300(bens, dtIni) {
+    const lista = Array.isArray(bens) ? bens : [];
+    const linhas = [];
+    const avisos = [];
+    const semConta = [];
+    /** COD_CTA → {nivel, nome} — dedup: o Guia proíbe dois 0500 com o mesmo par. */
+    const contas = new Map();
+    for (const bem of lista) {
+        const codigo = String(bem?.codigo || '').trim();
+        // Bem sem código já é acusado por `apurarCiap` — aqui ele não vira um
+        // 0300 anônimo, que seria cadastro fabricado.
+        if (!codigo) continue;
+        const completa = contaContabilCompleta(bem);
+        const conta = completa ? String(bem.contaContabil).trim() : '';
+        if (!completa) semConta.push(codigo);
+        else if (!contas.has(conta)) {
+            contas.set(conta, {
+                nivel: String(bem.contaContabilNivel).trim(),
+                nome: String(bem.contaContabilNome).trim(),
+            });
+        }
+        linhas.push(fmt.buildLine([
+            '0300',
+            fmt.sanitizeString(codigo, 60),
+            bem?.tipo === 'componente' ? '2' : '1',
+            fmt.sanitizeString(String(bem?.descricao || codigo), 255),
+            fmt.sanitizeString(String(bem?.codigoBemPrincipal || ''), 60),
+            fmt.sanitizeString(conta, 60),
+            String(PARCELAS_CIAP),
+        ]));
+    }
+    // 0500 — REG|DT_ALT|COD_NAT_CC|IND_CTA|NIVEL|COD_CTA|NOME_CTA (7 campos;
+    // o do EFD-Contribuições tem 9 — leiaute por FAMÍLIA, nunca deduzido).
+    //
+    // ✅ O que a régua DERIVA, com o motivo: `COD_NAT_CC` = **01 (Contas de
+    // ativo)**, porque o bem do CIAP É ativo imobilizado; `IND_CTA` = **A**,
+    // porque o próprio 0300 chama o campo de *"conta ANALÍTICA"*; e `DT_ALT` =
+    // 1º de janeiro do ano, como o 0500 do EFD assinado do CF BANK.
+    const dt = String(dtIni || '').replace(/\D/g, '');
+    const dtAlt = dt.length === 8 ? `0101${dt.slice(4)}` : dt;
+    const linhas0500 = [...contas.entries()].map(([cod, c]) => fmt.buildLine([
+        '0500', dtAlt, '01', 'A',
+        fmt.sanitizeString(c.nivel, 5),
+        fmt.sanitizeString(cod, 60),
+        fmt.sanitizeString(c.nome, 60),
+    ]));
+    if (semConta.length) {
+        avisos.push(
+            `0300 (CIAP): ${semConta.length} bem(ns) sem a CONTA CONTÁBIL COMPLETA — o campo COD_CTA sai `
+            + `VAZIO e o PVA o cobra (${semConta.slice(0, 5).join(', ')}${semConta.length > 5 ? '…' : ''}). `
+            + 'O COD_CTA aponta para o registro 0500, que exige também o NÍVEL e o NOME da conta: são do '
+            + 'plano de contas da empresa e o app não os deduz — emitir o código sem a declaração é '
+            + 'justamente a recusa. Preencha os TRÊS em SPED Fiscal → aba 🏭 CIAP (Bloco G).',
+        );
+    }
+    return { linhas, linhas0500, avisos };
+}
+
 /**
  * Monta as linhas do Bloco G. Sem bens no CIAP devolve o bloco VAZIO
  * (G001 com IND_MOV=1), que é o que a maioria das empresas entrega.
@@ -202,13 +321,13 @@ function dataSped(valor) {
 export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
     const bens = apuracao?.bens || [];
     if (bens.length === 0) {
-        return ['G001|1|', 'G990|2|'];
+        return [fmt.buildLine(['G001', '1']), fmt.buildLine(['G990', '2'])];
     }
 
-    const linhas = ['G001|0|'];
+    const linhas = [fmt.buildLine(['G001', '0'])];
 
     // G110 — ordem conferida contra o relatório do PVA da EXPERTE.
-    linhas.push([
+    linhas.push(fmt.buildLine([
         'G110',
         dataSped(dtIni),
         dataSped(dtFin),
@@ -219,12 +338,11 @@ export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
         dec(apuracao.indice, 8),
         dec(apuracao.creditoApropriado),
         dec(apuracao.outrosCreditos),
-        '',
-    ].join('|'));
+    ]));
 
     for (const bem of bens) {
         // G125 — layout do Guia Prático: OP, ST, FRT, DIF (nessa ordem).
-        linhas.push([
+        linhas.push(fmt.buildLine([
             'G125',
             String(bem.codigo || ''),
             dataSped(bem.dataMovimentacao),
@@ -235,10 +353,9 @@ export function montarLinhasBlocoG({ apuracao, dtIni, dtFin }) {
             dec(bem.creditoIcmsDifal),
             String(bem.numeroParcela ?? ''),
             dec(bem.valorParcela),
-            '',
-        ].join('|'));
+        ]));
     }
 
-    linhas.push(`G990|${linhas.length + 1}|`);
+    linhas.push(fmt.buildLine(['G990', String(linhas.length + 1)]));
     return linhas;
 }

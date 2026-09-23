@@ -78,7 +78,12 @@ export function buildBlocoH(dados) {
                 fmt.formatValue(item.vlUnit, 6),
                 fmt.formatValue(item.vlItem, 2),
                 item.indProp,
-                item.codPart,
+                // 🚨 Este campo saía CRU enquanto os três vizinhos já cortavam
+                // (29/08): um COD_PART de 160 caracteres num campo de **060** é
+                // a recusa "Tamanho do campo inválido" — a família do FANTASIA
+                // do 0005 e do COD_ENQ da PWR. Achado MEDINDO a saída com
+                // valores longos, não lendo o código.
+                fmt.sanitizeString(item.codPart, 60),
                 fmt.sanitizeString(item.txtCompl, 255),
                 fmt.sanitizeString(item.codCta, 255),
                 fmt.formatValue(item.vlItemIr, 2),

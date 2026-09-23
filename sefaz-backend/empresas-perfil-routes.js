@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { getCnpjsDaCarteira, getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
+import { ccmSpDaEmpresa } from './ccm-sp.js';
 
 const router = express.Router();
 
@@ -41,15 +42,12 @@ function getIe(data) {
 }
 
 function getCcmSp(data) {
-    // CCM SÓ-ZEROS ('00000000') vale como VAZIO (#311 — contorno da equipe num
-    // campo que parecia obrigatório; 21/08, caso LAV: os zeros voltavam para a
-    // tela do modal e alimentavam a pendência "CCM fora de SP capital").
-    // Espelho em JS da régua de services/empresaDadosFiscaisSanitize
-    // (soZerosComoVazio) — o backend não importa TS; mudar uma é mudar a outra.
-    const bruto = data.dadosFiscais?.ccmSp || data.ccmSp || '';
-    const soDigitos = String(bruto).replace(/\D/g, '');
-    if (!String(bruto).trim() || /^0*$/.test(soDigitos)) return undefined;
-    return bruto;
+    // 🚨 AQUI MORAVA A SEGUNDA CÓPIA — e o comentário dela se declarava como
+    // tal: *"espelho em JS da régua de services/empresaDadosFiscaisSanitize;
+    // o backend não importa TS; mudar uma é mudar a outra"*. Em 29/08 o dono
+    // passou a ser `ccm-sp.js` (backend, que é quem lê o CCM em nove lugares) e
+    // o `.ts` importa DELE. Cópia que avisa que é cópia continua sendo cópia.
+    return ccmSpDaEmpresa(data) || undefined;
 }
 
 // Campos que a conferência de cadastro (services/cadastroClientePendencias)

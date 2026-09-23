@@ -5,11 +5,14 @@ import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type Em
 import { exportarParaIobSage, downloadBlob, participanteDoDoc } from '../../services/iobSageExportService';
 import { conferirAntesDeGerar, type ResultadoPreflight } from '../../services/iobSagePreflight';
 import { conferirCorrelacaoCfop } from '../../services/cfopConferencia';
+import { lerParametrosCfop } from '../../services/cfopEscrituradoService';
+import { avisoParametrosCfop } from '../../sefaz-backend/cfop-parametros-store.js';
 import type { CfopCtx } from '../../services/iobSageExportService';
 import { formatCurrency } from '../../services/xmlParserService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { direcaoEfetivaDoc } from '../../sefaz-backend/xml-metadata-helper.js';
 import { resolverNaturezaAtividade } from '../../sefaz-backend/cfop-correlacao.js';
+import { regimeDaEmpresa } from '../../sefaz-backend/regime-tributario.js';
 import { parseLogEfiscal, cruzarLogComFml, type CruzamentoLogEfiscal } from '../../services/iobSageLogEfiscal';
 import { carregarCodigosParticipantes, salvarCodigosParticipantes, carregarUfsParticipantes, salvarUfsParticipantes } from '../../services/sageCodigosService';
 import { ufValida } from '../../services/ufsBrasil';
@@ -59,10 +62,19 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Notas que ficaram FORA do arquivo. Antes isso era console.warn: o .FML
     // saía só com produtos e o E-Fiscal ainda dizia "importado com sucesso".
     const [falhas, setFalhas] = useState<Array<{ documento: string; motivo: string }>>([]);
+    // O que ficou fora por DECISÃO da régua, separado das falhas: falha pede
+    // conserto, isto é escrituração correta — fundir os dois faria a equipe
+    // procurar defeito onde não há (e um bloco VERMELHO sobre arquivo certo é
+    // o jeito conhecido de ensinar a ignorar o vermelho que importa).
+    const [foraDaEscrituracao, setForaDaEscrituracao] = useState<Array<{ documento: string; motivo: string }>>([]);
     // Natureza da atividade + overrides da empresa (tela Correlação CFOP).
     // Sem isso, a configuração da equipe não chegava ao arquivo.
     const [cfopCtx, setCfopCtx] = useState<CfopCtx | undefined>(undefined);
     const [naturezaOrigem, setNaturezaOrigem] = useState<'cadastro' | 'indicador' | 'padrao' | null>(null);
+    /** 🧠 Falha ao LER o cérebro — o arquivo sai pela régua AUTOMÁTICA e isso
+     *  vai DITO, nunca em silêncio (a régua de 07/09, que o backend já honrava
+     *  e o front engolia num `catch`). */
+    const [avisoCerebro, setAvisoCerebro] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
 
     const [corrigindoEnderecos, setCorrigindoEnderecos] = useState(false);
@@ -154,10 +166,18 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Configuração de CFOP + código do CONSUMIDOR da empresa escolhida.
     useEffect(() => {
         let alive = true;
-        if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); return; }
-        getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id)
-            .then(df => {
+        if (!empresaSelecionada) { setCfopCtx(undefined); setCodigoConsumidor(''); setConsumidorSalvo(''); setAvisoCerebro(null); return; }
+        // 🧠 Os parâmetros do cérebro vêm JUNTO do cadastro (07/09): o .FML, o
+        // preflight e a conferência de correlação leem o MESMO contexto, e sem
+        // eles aqui o arquivo ignorava o CFOP ensinado para o fornecedor.
+        Promise.all([
+            getDadosFiscaisEmpresa(empresaSelecionada.fonte, empresaSelecionada.id),
+            lerParametrosCfop(empresaSelecionada.id),
+        ])
+            .then(([df, leituraCerebro]) => {
                 if (!alive) return;
+                const parametros = leituraCerebro.parametros;
+                setAvisoCerebro(avisoParametrosCfop(leituraCerebro.erro));
                 // Parametriza pelo CADASTRO (Paulo, 05/08): natureza declarada,
                 // senão o indicador de atividade, senão o padrão — a MESMA
                 // régua do SPED. Antes lia só `naturezaAtividade` e empresa do
@@ -165,7 +185,20 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 // parâmetro nenhum.
                 const nat = resolverNaturezaAtividade(df || {});
                 setNaturezaOrigem(nat.origem);
-                setCfopCtx({ naturezaAtividade: nat.natureza, cfopOverrides: df?.cfopOverrides });
+                setCfopCtx({
+                    naturezaAtividade: nat.natureza,
+                    cfopOverrides: df?.cfopOverrides,
+                    parametrosCfop: parametros.filter(p => p.ativo !== false),
+                    // Optante do Simples não se credita de ICMS (LC 123 art.
+                    // 23): sem isto o `.FML` mandava base + imposto creditado
+                    // ao E-Fiscal, e o livro dele saía com crédito que não
+                    // existe (09/09, MV LIDER).
+                    regimeTributario: (regimeDaEmpresa({
+                        dadosFiscais: df || {},
+                        colecao: empresaSelecionada.fonte === 'simples'
+                            ? 'simples_empresas' : 'lucro_empresas',
+                    }) as { regime: string }).regime,
+                });
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
                 setConsumidorSalvo(cod);
@@ -279,6 +312,10 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         try {
             return conferirAntesDeGerar(filtrados, {
                 numeroEmpresaEfiscal,
+                // O preflight roda a geração REAL: sem o CNPJ ele prometeria um
+                // arquivo diferente do que sai (a nota de entrada do FORNECEDOR
+                // ficaria na conferência e fora do .FML) — o defeito de 12/08.
+                empresaCnpj: empresaSelecionada?.cnpj,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
                 codigoParticipanteConsumidor: codigoConsumidor.trim(),
@@ -521,6 +558,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
         try {
             const result = exportarParaIobSage({
                 documentos: filtrados,
+                empresaCnpj: empresaSelecionada?.cnpj,
                 numeroEmpresaEfiscal,
                 tipoInventario: tipoInventario.trim(),
                 cfopCtx,
@@ -533,6 +571,7 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
             setUltimoConteudo(result.conteudo);
             const st = result.estatisticas;
             setFalhas(result.falhas);
+            setForaDaEscrituracao(result.foraDaEscrituracao);
             // Só baixa se ALGUMA nota entrou. Arquivo só com produtos importa
             // "com sucesso" no E-Fiscal e não lança nada — pior que erro.
             if (st.notasNoArquivo === 0) {
@@ -617,6 +656,16 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 </p>
             )}
 
+            {/* 🚨 O CÉREBRO NÃO PÔDE SER LIDO — e o `.FML` sai pela régua
+                AUTOMÁTICA. `[]` calado aqui é o arquivo ignorando o CFOP que
+                alguém ensinou de propósito (07/09); a frase é a MESMA do
+                backend, importada, para as duas pontas não divergirem. */}
+            {avisoCerebro && (
+                <div className="rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-3 text-xs text-red-700 dark:text-red-300">
+                    {avisoCerebro}
+                </div>
+            )}
+
             {correlacao && correlacao.linhas.length > 0 && (
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -669,6 +718,28 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             (o override vale aqui também) ou declare a <strong>natureza da atividade</strong> nos
                             dados fiscais.
                         </p>
+                    )}
+                </div>
+            )}
+
+            {foraDaEscrituracao.length > 0 && (
+                <div className="border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                    <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                        {foraDaEscrituracao.length} nota(s) fora do arquivo — e está CERTO
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        São notas de <strong>entrada do fornecedor</strong> (tpNF=0 emitido por ele):
+                        devolução recebida ou retorno, em que a mercadoria entrou no estoque DELE.
+                        Não são entradas desta empresa — mandá-las escrituraria a operação do
+                        fornecedor no livro do cliente, e o E-Fiscal aceitaria calado.
+                    </p>
+                    <ul className="mt-1 text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5 max-h-40 overflow-y-auto">
+                        {foraDaEscrituracao.slice(0, 50).map((f, i) => (
+                            <li key={i}><strong>{f.documento}</strong></li>
+                        ))}
+                    </ul>
+                    {foraDaEscrituracao.length > 50 && (
+                        <p className="text-[11px] text-slate-500 mt-1">…e mais {foraDaEscrituracao.length - 50}.</p>
                     )}
                 </div>
             )}

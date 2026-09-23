@@ -14,7 +14,6 @@
  * Paridade obrigatória: o parser do FRONT (xmlParserService) lê os mesmos
  * campos. Ler só de um lado é como as duas leituras divergem sem ninguém ver.
  */
-// @ts-expect-error — módulo .js do backend (sem tipos)
 import { extrairItens } from '../sefaz-backend/xml-importer.js';
 
 const wrap = (dets: string) => `<?xml version="1.0"?>

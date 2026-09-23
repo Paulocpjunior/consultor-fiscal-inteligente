@@ -32,6 +32,34 @@ const CST_PIS_COFINS_VALIDOS = new Set([
     '98', '99',
 ]);
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O CST TEM LADO — e o comentário acima já dizia isso sem nada travar.
+//
+// Os códigos 01-09 e 49 descrevem a RECEITA (a operação de quem vende); os
+// 50-75 descrevem o CRÉDITO da AQUISIÇÃO (a operação de quem compra). Um não
+// serve no lugar do outro, e o PVA recusa.
+//
+// 🚨 **CASO REAL**: a PWR saiu com **CST `01` numa ENTRADA** (20/08) — código
+// que nem existe na tabela das aquisições. O gerador foi corrigido no dia (a
+// entrada passou a usar 50 no não-cumulativo e 70 no cumulativo), mas a
+// CLASSE ficou aberta: a separação por direção estava escrita no comentário
+// deste arquivo e **nunca virou regra**. É o vício de 13/08 — *regra escrita
+// não é regra travada* —, a três linhas de distância.
+//
+// ⚠️ **98 e 99 ("Outras Operações") valem nos DOIS lados**, de propósito: é o
+// que a tabela diz, e acusá-los seria alarme sobre código legítimo.
+//
+// ⚠️ E quem dá a direção é o **CFOP da própria linha** (1/2/3 entrada · 5/6/7
+// saída), que este módulo já lê — não uma leitura nova do documento, que
+// divergiria da que gerou o arquivo.
+// ════════════════════════════════════════════════════════════════════════════
+const CST_DE_SAIDA = new Set(['01', '02', '03', '04', '05', '06', '07', '08', '09', '49']);
+const CST_DE_ENTRADA = new Set([
+    '50', '51', '52', '53', '54', '55', '56',
+    '60', '61', '62', '63', '64', '65', '66', '67',
+    '70', '71', '72', '73', '74', '75',
+]);
+
 // CST com tributacao efetiva — espera VL_PIS/VL_COFINS > 0 (em principio).
 const CST_TRIBUTADO = new Set(['01', '02', '03', '49', '50', '51', '52', '53', '54', '55', '56', '98']);
 // CST sem onus tributario — espera VL_PIS/VL_COFINS == 0.
@@ -63,6 +91,51 @@ const C170 = {
     CST_COFINS: 30, VL_BC_COFINS: 31, ALIQ_COFINS: 32, VL_COFINS: 35,
 };
 
+// ── A170 e A100 (bloco A — serviços) ────────────────────────────────────────
+//
+// 📌 EM 22/08 O A170 FICOU DE FORA, E O MOTIVO ESCRITO ERA: *"a contagem dele
+// não está em CAMPOS_POR_REGISTRO, e conferir posição deduzida é alarme
+// falso"*. Esse motivo CADUCOU em 29/08, quando o Guia 1.35 foi extraído: o
+// A170 sai com **18 campos, sem buraco e com os NOMES**, e o A100 com 21 —
+// ou seja as posições abaixo são LIDAS da fonte oficial, não deduzidas do
+// vizinho (que é o erro do `DT_FIN`, 22/08).
+//
+// ⚠️ E O A170 NÃO TEM CFOP — quem diz a direção é o **IND_OPER do A100 PAI**
+// (0 = aquisição · 1 = prestação). Por isso o pareamento é o mesmo do
+// C100 × C190 (R21) e do D100 × D190: o filho pertence ao pai que o
+// ANTECEDE. Ler "o primeiro A100 do arquivo" fecharia num arquivo de um
+// documento só e mentiria em todos os outros.
+const A170 = { CST_PIS: 8, CST_COFINS: 12 };
+const A100 = { IND_OPER: 1 };
+/** IND_OPER do A100: 0 = aquisição (entrada) · 1 = prestação (saída). */
+const IND_OPER_AQUISICAO = '0';
+
+/**
+ * O CST descreve um LADO da operação — acusa quando ele está no lado errado.
+ *
+ * Vale para C170 e A170 com a MESMA régua: o que muda entre os dois é de ONDE
+ * vem a direção (CFOP da linha × IND_OPER do A100 pai), nunca o julgamento.
+ * Duas cópias divergiriam no primeiro código novo da tabela.
+ */
+function conferirCstDaDirecao({ add, registro, idx, entrada, saida, origemDaDirecao, csts }) {
+    for (const [nome, cst] of csts) {
+        // Código inválido já foi acusado como tal — dizer "lado errado" sobre
+        // um código que não existe manda procurar o erro no lugar errado.
+        if (!cst || !CST_PIS_COFINS_VALIDOS.has(cst)) continue;
+        if (entrada && CST_DE_SAIDA.has(cst)) {
+            add('CST_DA_DIRECAO_ERRADA', 'erro', registro, idx,
+                `${nome} ${cst} descreve a RECEITA e a linha e de ENTRADA (${origemDaDirecao}). `
+                + 'Na aquisicao o codigo vem da Tabela 4.3.7 (50-56 com credito, 70-75 sem). '
+                + 'Foi o defeito da PWR em 20/08: o CST do XML e o do FORNECEDOR.');
+        }
+        if (saida && CST_DE_ENTRADA.has(cst)) {
+            add('CST_DA_DIRECAO_ERRADA', 'erro', registro, idx,
+                `${nome} ${cst} descreve o CREDITO DA AQUISICAO e a linha e de SAIDA `
+                + `(${origemDaDirecao}). Na receita o codigo vem da faixa 01-09/49.`);
+        }
+    }
+}
+
 /**
  * @param {object} parsed   resultado do parseSpedFiscalParaEdicao
  * @returns {{
@@ -83,7 +156,38 @@ export function aplicarRegrasContribuicoes(parsed) {
     const add = (regra, severidade, registro, idx, mensagem) =>
         achados.push({ regra, severidade, registro, idx, mensagem });
 
+    // O A170 herda a direção do A100 que o ANTECEDE (ver o comentário do mapa
+    // A170/A100 acima). `A990` fecha o bloco: filho depois dele é órfão, e
+    // carregar o pai para além do bloco julgaria a linha pelo documento errado.
+    let indOperDoA100Pai = null;
+
     for (const l of (parsed.linhas || [])) {
+        if (l.tipo === 'A100') {
+            indOperDoA100Pai = String((l.campos || [])[A100.IND_OPER] ?? '').trim();
+            continue;
+        }
+        if (l.tipo === 'A990' || l.tipo === 'A001') { indOperDoA100Pai = null; continue; }
+        if (l.tipo === 'A170') {
+            const a = l.campos || [];
+            // ⚠️ Sem pai legível não se afirma o lado: acusar aqui seria alarme
+            // sobre arquivo cuja direção o app não leu (a régua da ausência).
+            if (indOperDoA100Pai === IND_OPER_AQUISICAO || indOperDoA100Pai === '1') {
+                const entrada = indOperDoA100Pai === IND_OPER_AQUISICAO;
+                conferirCstDaDirecao({
+                    add,
+                    registro: 'A170',
+                    idx: l.idx,
+                    entrada,
+                    saida: !entrada,
+                    origemDaDirecao: `IND_OPER ${indOperDoA100Pai} do A100`,
+                    csts: [
+                        ['CST_PIS', String(a[A170.CST_PIS] || '').padStart(2, '0')],
+                        ['CST_COFINS', String(a[A170.CST_COFINS] || '').padStart(2, '0')],
+                    ],
+                });
+            }
+            continue;
+        }
         if (l.tipo !== 'C170') continue;
         const c = l.campos;
         const cstPis = String(c[C170.CST_PIS] || '').padStart(2, '0');
@@ -109,6 +213,21 @@ export function aplicarRegrasContribuicoes(parsed) {
             add('CFOP_INVALIDO', 'erro', 'C170', l.idx,
                 `CFOP "${cfop}" invalido.`);
         }
+
+        // ── O CST bate com a DIREÇÃO da operação? ──
+        //
+        // Caso real: a PWR saiu com CST 01 (receita) numa ENTRADA. O código
+        // existe na tabela, então a validade acima fica MUDA — quem pega é o
+        // lado. No C170 a direção sai do CFOP da PRÓPRIA linha.
+        conferirCstDaDirecao({
+            add,
+            registro: 'C170',
+            idx: l.idx,
+            entrada: /^[123]/.test(cfop),
+            saida: /^[567]/.test(cfop),
+            origemDaDirecao: `CFOP ${cfop}`,
+            csts: [['CST_PIS', cstPis], ['CST_COFINS', cstCofins]],
+        });
 
         // ── AVISOS de coerencia ──
 
@@ -251,4 +370,4 @@ function sumarizar(achados) {
     return out;
 }
 
-export const _internals = { CST_PIS_COFINS_VALIDOS, CST_TRIBUTADO, CST_SEM_ONUS };
+export const _internals = { CST_PIS_COFINS_VALIDOS, CST_TRIBUTADO, CST_SEM_ONUS, CST_DE_SAIDA, CST_DE_ENTRADA };

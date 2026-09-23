@@ -10,7 +10,7 @@
  * precedência NF > cérebro > override da empresa > régua automática. Aqui só se
  * CRIA, LISTA e DESLIGA.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { User } from '../types';
 import {
     lerParametrosCfop, gravarParametroCfop, desligarParametroCfop, type ParametroCfopDoc,
@@ -31,15 +31,22 @@ interface Props {
     /** Fornecedores lidos das notas de entrada — sem eles não há o que cadastrar. */
     fornecedores: FornecedorOpcao[];
     parametros: ParametroCfopDoc[];
+    /**
+     * Falha de LEITURA do carregamento do pai. Sem ela a lista vazia mente: a
+     * recusa do banco fica igual a "esta empresa não tem parâmetro" (10/09).
+     */
+    erroLeitura?: string | null;
     onMudou: (ps: ParametroCfopDoc[]) => void;
     /** Competência sugerida como início (a que está sendo conferida). */
     competenciaPadrao?: string;
 }
 
 const CfopCerebroPainel: React.FC<Props> = ({
-    empresaId, user, fornecedores, parametros, onMudou, competenciaPadrao,
+    empresaId, user, fornecedores, parametros, erroLeitura, onMudou, competenciaPadrao,
 }) => {
     const [erro, setErro] = useState<string | null>(null);
+    const [avisoLeitura, setAvisoLeitura] = useState<string | null>(erroLeitura ?? null);
+    useEffect(() => { setAvisoLeitura(erroLeitura ?? null); }, [erroLeitura]);
     const [salvando, setSalvando] = useState(false);
     const [cnpj, setCnpj] = useState('');
     const [cfopOrigem, setCfopOrigem] = useState('');
@@ -52,7 +59,13 @@ const CfopCerebroPainel: React.FC<Props> = ({
     const escolhido = useMemo(() => fornecedores.find(f => f.cnpj === cnpj), [fornecedores, cnpj]);
     const ativos = parametros.filter(p => p.ativo !== false);
 
-    const recarregar = async () => onMudou(await lerParametrosCfop(empresaId));
+    const recarregar = async () => {
+        const r = await lerParametrosCfop(empresaId);
+        // A falha de LEITURA é guardada, nunca colapsada em lista vazia: foi
+        // ela que fez o Paulo ler "não gravou" sobre parâmetro gravado.
+        setAvisoLeitura(r.erro);
+        onMudou(r.parametros);
+    };
 
     const criar = async () => {
         setErro(null);
@@ -103,6 +116,20 @@ const CfopCerebroPainel: React.FC<Props> = ({
             {erro && (
                 <div className="mt-2 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-red-700 dark:text-red-300">
                     {erro}
+                </div>
+            )}
+
+            {/* 🚨 LISTA VAZIA POR FALHA DE LEITURA NÃO PODE PARECER "NÃO TEM"
+                (10/09, ELS). Antes o `catch` devolvia `[]` calado: o parâmetro
+                era GRAVADO, o campo limpava, a lista continuava em "(0)" — e a
+                única saída que sobra para quem não vê efeito é criar de novo,
+                que aqui deixa o mesmo fornecedor com DOIS parâmetros. */}
+            {avisoLeitura && (
+                <div className="mt-2 rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-2 text-amber-800 dark:text-amber-300">
+                    ⚠️ Não deu para <strong>LER</strong> os parâmetros deste cliente ({avisoLeitura}).
+                    A lista abaixo pode estar incompleta — e o que você acabou de criar{' '}
+                    <strong>pode ter sido gravado assim mesmo</strong>. Recarregue a tela antes de
+                    criar de novo, senão o mesmo fornecedor fica com dois parâmetros.
                 </div>
             )}
 

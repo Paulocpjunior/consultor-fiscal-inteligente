@@ -140,7 +140,8 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                         <tr>
                             <th className="px-6 py-3">Empresa</th>
                             <th className="px-6 py-3">CNPJ</th>
-                            <th className="px-6 py-3">Regime Padrão</th>
+                            {/* O cabeçalho dizia "Regime Padrão" — o nome do CAMPO ANTIGO, que não é o que a coluna mostra desde 28/08. Cabeçalho que nomeia outro campo manda conferir a coisa errada. */}
+                            <th className="px-6 py-3">Regime</th>
                             <th className="px-6 py-3 text-right">Ações</th>
                         </tr>
                     </thead>
@@ -193,9 +194,13 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                                 </td>
                                 <td className="px-6 py-4 font-mono">{fmtCnpj(emp.cnpj || '')}</td>
                                 <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${emp.regimePadrao === 'Real' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                        {emp.regimePadrao || 'Presumido'}
-                                    </span>
+                                    {/* 🚨 A COLUNA ESCREVIA "Presumido" SOBRE UMA COMUNIDADE
+                                        IMUNE (28/08): era `regimePadrao || 'Presumido'`, ou seja,
+                                        campo vazio virava AFIRMAÇÃO de um regime que ninguém
+                                        escolheu — e quem marcou IMUNE no modal gravou em OUTRO
+                                        campo (`regimeTributario`). Quem responde é o dono, e
+                                        indefinido sai DITO, nunca disfarçado de Presumido. */}
+                                    <RegimeSelo emp={emp} />
                                 </td>
                                 <td className="px-6 py-4 text-right flex justify-end gap-2">
                                     <button onClick={() => onAbrir(emp.id)} className="text-sky-600 hover:text-sky-800 font-medium">Abrir</button>
@@ -222,3 +227,27 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
 };
 
 export default ListView;
+
+/**
+ * O regime como o DONO responde — com a origem, e sem inventar o ausente.
+ *
+ * `origem: 'cadastro'` é a escolha explícita de alguém no modal; qualquer outra
+ * é derivada, e derivada não se apresenta com a mesma confiança.
+ */
+const RegimeSelo: React.FC<{ emp: lucroPresumidoService.LucroEmpresaResumo }> = ({ emp }) => {
+    const r = emp.regime;
+    // Cadastro antigo (resposta sem o campo novo): cai no comportamento de
+    // antes, MENOS a invenção — vazio vira "não definido".
+    const rotulo = r?.rotulo || emp.regimePadrao || 'Não definido';
+    const indefinido = r ? !r.apuracaoDefinida : !emp.regimePadrao;
+    const cor = indefinido ? 'bg-amber-100 text-amber-800'
+        : rotulo === 'Lucro Real' || emp.regimePadrao === 'Real' ? 'bg-purple-100 text-purple-700'
+            : rotulo === 'Imune' || rotulo === 'Isenta' ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-blue-100 text-blue-700';
+    return (
+        <span className={`px-2 py-1 rounded-full text-xs font-bold ${cor}`}
+            title={r ? `Origem: ${r.origem === 'cadastro' ? 'escolhido em Dados Fiscais' : r.origem}` : undefined}>
+            {rotulo}
+        </span>
+    );
+};

@@ -41,7 +41,7 @@ interface Props {
     currentUser: User;
 }
 
-type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega';
+type FiltroTipo = 'todas' | 'bloqueadas' | 'sem-uf' | 'sem-cert' | 'cert-vencendo' | 'sem-procuracao' | 'sem-ccmsp' | 'nfse-nac-inativa' | 'sem-responsavel' | 'ok-tudo' | 'a3-sem-entrega' | 'nfsesp-sem-entrega' | 'nfsenac-sem-entrega' | 'nfsenac-sem-movimento';
 
 function formatCnpj(s: string) {
     return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -84,6 +84,23 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
     const [filtro, setFiltro] = useState<FiltroTipo>('bloqueadas');
     // '' = todos os colaboradores; nome exato = só empresas daquele responsável.
     const [filtroColaborador, setFiltroColaborador] = useState('');
+    // 🚨 O CLIQUE NO CARD PRECISA LEVAR OS OLHOS ATÉ O RESULTADO. Os cards
+    // ficam no TOPO; o select do filtro, o contador "N de M" e a TABELA ficam
+    // abaixo do bloco "Importar códigos" — fora da tela. Clicar no KPI mudava
+    // tudo isso sem NADA visível se mexer, e Paulo leu como *"é clicável mas
+    // não está funcional"* (29/08).
+    //
+    // ⚠️ Hook fica AQUI, no topo: a 1ª versão nasceu junto do `cardFiltro`, que
+    // vem DEPOIS dos early returns de loading/erro — hook condicional, e o
+    // React derruba a tela inteira com "Rendered more hooks than during the
+    // previous render".
+    const listaRef = useRef<HTMLDivElement | null>(null);
+    // Só rola quando o filtro vem de CARD/LINK (que estão no alto). O
+    // `<select>` NÃO rola: quem já está nele veria a página pular embaixo do
+    // dedo, o que é pior que não rolar.
+    const irParaLista = () => {
+        listaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
     const [busca, setBusca] = useState('');
     // Cadastro do cliente (pendências + responsável) — abre pela própria linha,
     // sem mandar o colaborador pra Carteira de Clientes em outra aba.
@@ -380,8 +397,15 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                 // entregou: o filtro existe justamente para a pessoa parar de
                 // olhar essas empresas.
                 case 'ok-tudo': return e.capturaNfeOk && e.capturaNfseSpOk && e.capturaNfseNacionalOk
-                    && e.coberturaA3?.situacao !== 'a3-sem-entrega';
+                    && e.coberturaA3?.situacao !== 'a3-sem-entrega'
+                    && e.coberturaNfseSp?.entregou !== false
+                    && e.coberturaNfseNac?.cor !== 'atencao';
                 case 'a3-sem-entrega': return e.coberturaA3?.situacao === 'a3-sem-entrega';
+                case 'nfsesp-sem-entrega': return e.coberturaNfseSp?.entregou === false;
+                case 'nfsenac-sem-entrega':
+                    return e.coberturaNfseNac?.situacao === 'adn-sem-visita'
+                        || e.coberturaNfseNac?.situacao === 'adn-nao-lido';
+                case 'nfsenac-sem-movimento': return e.coberturaNfseNac?.situacao === 'adn-sem-movimento';
                 case 'todas':
                 default: return true;
             }
@@ -449,14 +473,22 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
 
     // Card-filtro: clicar aplica o filtro correspondente na tabela e mostra um
     // anel de "selecionado". Ajuda o colaborador a atacar a pendência direto.
+    //
+    // 🚨 BOTÃO DENTRO DE CARD-FILTRO PRECISA DE `stopPropagation`. O card
+    // INTEIRO é clicável, então o clique no link interno borbulha: o link
+    // aplica o filtro dele e o CARD aplica o dele logo depois — o último
+    // vence, e para quem usa isso é indistinguível de "o link não funciona".
+    // Foi o que aconteceu com o ⚠ A3 sem entrega, que ficou seis dias assim
+    // (23/08 → 29/08) sem ninguém ver, até o Paulo tentar clicar: *"o card não
+    // está clicável, o link não está clicável"*.
     const cardFiltro = (f: FiltroTipo, base: string) => ({
         className: `${base} cursor-pointer transition hover:shadow-md ${filtro === f && !busca ? 'ring-2 ring-offset-1 ring-slate-500 dark:ring-slate-300' : ''}`,
         role: 'button' as const,
         tabIndex: 0,
         title: 'Filtrar a tabela por esta pendência',
-        onClick: () => { setBusca(''); setFiltro(f); },
+        onClick: () => { setBusca(''); setFiltro(f); irParaLista(); },
         onKeyDown: (ev: React.KeyboardEvent) => {
-            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setBusca(''); setFiltro(f); }
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setBusca(''); setFiltro(f); irParaLista(); }
         },
     });
 
@@ -487,11 +519,48 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     {!!r.a3SemEntrega && (
                         <button
                             type="button"
-                            onClick={() => setFiltro('a3-sem-entrega')}
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('a3-sem-entrega'); irParaLista(); }}
                             className="text-xs text-amber-700 underline text-left"
                             title="Empresas A3 cujo agente local cfi-a3 nunca entregou documento. Não prova que ele não rodou — rodada sem movimento não deixa registro."
                         >
                             ⚠ {r.a3SemEntrega} A3 sem entrega do agente ›
+                        </button>
+                    )}
+                    {/* Mesmo desenho, outro trilho: o número que o "✓ NFSe SP"
+                        escondia. Sem ele o cabeçalho conta cadastro e não
+                        conta captura (caso LAV, 29/08). */}
+                    {!!(r.nfseSpSemEntrega || r.nfseSpComErro) && (
+                        <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsesp-sem-entrega'); irParaLista(); }}
+                            className="text-xs text-amber-700 underline text-left"
+                            title="Empresas do portal da capital cujo trilho nunca baixou nota, ou cujo último download falhou. O laço do portal cruza o dropdown de prestadores com o nosso cadastro pelo CCM — quem não casa é pulada sem gerar erro."
+                        >
+                            ⚠ {(r.nfseSpSemEntrega || 0) + (r.nfseSpComErro || 0)} NFS-e SP sem entrega ›
+                        </button>
+                    )}
+                    {!!(r.nfseNacSemVisita || r.nfseNacNaoLido) && (
+                        <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsenac-sem-entrega'); irParaLista(); }}
+                            className="text-xs text-amber-700 underline text-left"
+                            title="Empresas do Padrão Nacional (ADN) cujo cron nunca rodou, ou cujo cursor não leu documento que o ADN TEM disponível."
+                        >
+                            ⚠ {(r.nfseNacSemVisita || 0) + (r.nfseNacNaoLido || 0)} NFS-e Nacional sem entrega ›
+                        </button>
+                    )}
+                    {/* ℹ️ NÃO é pendência: o ADN respondeu e não tem documento
+                        deste CNPJ. Fica em cinza, contado à parte — acusar
+                        centenas de empresas cujo município não usa o Padrão
+                        Nacional seria o alarme que ninguém consegue apagar. */}
+                    {!!r.nfseNacSemMovimento && (
+                        <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); setBusca(''); setFiltro('nfsenac-sem-movimento'); irParaLista(); }}
+                            className="text-xs text-slate-500 underline text-left"
+                            title="O ADN respondeu e não tem documento destas empresas (NSU 0/0). Não é falha da captura — a causa mais comum é o município não transcrever ao Padrão Nacional. Para ter a nota, importe pelo município."
+                        >
+                            ℹ️ {r.nfseNacSemMovimento} sem movimento no ADN ›
                         </button>
                     )}
                 </div>
@@ -579,7 +648,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
             )}
 
             {/* Filtros */}
-            <div className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+            <div ref={listaRef} className="flex flex-wrap gap-2 items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg scroll-mt-4">
                 <select value={filtro} onChange={e => setFiltro(e.target.value as FiltroTipo)} className="px-3 py-1.5 text-sm border rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-slate-600">
                     <option value="bloqueadas">🚨 Bloqueadas (qualquer motivo)</option>
                     <option value="sem-uf">Sem UF cadastrada (dadosFiscais.uf)</option>
@@ -589,6 +658,19 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                     <option value="sem-ccmsp">Sem autorização NFSe SP</option>
                     <option value="nfse-nac-inativa">NFSe Nacional desativada</option>
                     <option value="sem-responsavel">👤 Sem responsável na carteira</option>
+                    {/* 🚨 ESTES DOIS FALTAVAM — e a falta fazia a tela MENTIR.
+                        O `<select>` é o único lugar que mostra QUAL filtro está
+                        aplicado; sem a opção, ele exibia "Bloqueadas" enquanto a
+                        tabela mostrava outra coisa. Para quem clicou no link do
+                        KPI isso é indistinguível de "não funcionou" — foi a
+                        segunda queixa do Paulo no mesmo dia (*"é clicável mas
+                        não está funcional"*), depois do borbulhamento.
+                        📌 Filtro que a tela não sabe NOMEAR é filtro que ninguém
+                        confia. */}
+                    <option value="a3-sem-entrega">⚠ A3 sem entrega do agente</option>
+                    <option value="nfsesp-sem-entrega">⚠ NFS-e SP sem entrega</option>
+                    <option value="nfsenac-sem-entrega">⚠ NFS-e Nacional sem entrega</option>
+                    <option value="nfsenac-sem-movimento">ℹ️ ADN sem movimento (município não transcreve)</option>
                     <option value="ok-tudo">✅ Captura sem bloqueio</option>
                     <option value="todas">Todas</option>
                 </select>
@@ -803,13 +885,46 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                                                     : (e.coberturaA3?.texto || undefined)}
                                                 label="NFe"
                                             />
-                                            <Pill ok={e.capturaNfseSpOk} label="NFSe SP" />
+                                            {/* 🚨 TERCEIRO ESTADO, como no NFe: o cadastro diz
+                                                que existe caminho, a última rodada do portal diz
+                                                se ele ENTREGOU. Verde ao lado de "nunca baixou
+                                                nota desta empresa" seriam duas leituras do mesmo
+                                                fato na mesma tela. */}
+                                            <Pill
+                                                ok={e.capturaNfseSpOk}
+                                                alerta={e.coberturaNfseSp?.situacao === 'nfsesp-sem-entrega'
+                                                    || e.coberturaNfseSp?.situacao === 'nfsesp-com-erro'}
+                                                title={e.coberturaNfseSp?.acao
+                                                    ? `${e.coberturaNfseSp.texto} ${e.coberturaNfseSp.acao}`
+                                                    : (e.coberturaNfseSp?.texto || undefined)}
+                                                label="NFSe SP"
+                                            />
+                                            {/* 🚨 Terceiro estado também aqui. E o
+                                                `adn-sem-movimento` NÃO vira alerta: o ADN
+                                                respondeu e não tem nada — é explicação (o
+                                                município não transcreve), e vai no title. */}
                                             <Pill
                                                 ok={e.capturaNfseNacionalOk}
-                                                label={e.capturaNfseNacionalVia === 'a3-local' ? 'NFSe Nac A3' : 'NFSe Nac'}
-                                                title={e.capturaNfseNacionalVia === 'a3-local'
-                                                    ? 'Coberta por certificado A3. Captura depende do agente local cfi-a3, fora do cron em nuvem.'
-                                                    : undefined}
+                                                alerta={e.coberturaNfseNac?.cor === 'atencao'}
+                                                // 🚨 O rótulo "NFSe Nac A3" AFIRMAVA cobertura
+                                                // que não existe: o agente local captura NF-e e
+                                                // NFC-e, NUNCA NFS-e (02/09, caso SILVIO FREIRE).
+                                                // Empresa A3 fica sem trilho automático aqui, e a
+                                                // linha diz isso em vez de sugerir que o agente
+                                                // resolve.
+                                                label={e.capturaNfseNacionalVia === 'a3-sem-trilho-nfse'
+                                                    ? 'NFSe Nac (A3 sem trilho)' : 'NFSe Nac'}
+                                                // ⚠️ Os DOIS fatos convivem: de onde VIRIA a
+                                                // captura, e se ela ENTREGOU. Trocar um pelo
+                                                // outro apagaria metade da resposta.
+                                                title={[
+                                                    e.capturaNfseNacionalVia === 'a3-sem-trilho-nfse'
+                                                        ? 'Certificado A3 não roda no Cloud Run, e o agente local A3 captura NF-e e NFC-e — nunca NFS-e. '
+                                                          + 'Rodar a captura do ADN não resolve: o próprio trilho recusa a empresa.'
+                                                        : null,
+                                                    e.coberturaNfseNac?.texto,
+                                                    e.coberturaNfseNac?.acao,
+                                                ].filter(Boolean).join(' ') || undefined}
                                             />
                                         </div>
                                     </td>

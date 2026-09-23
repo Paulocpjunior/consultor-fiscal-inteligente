@@ -85,7 +85,7 @@ router.get('/credito-acumulado', requireAdmin, async (req, res) => {
                     // de entrada (art. 136) com `tpNF`. Campo fora da projeção
                     // some da leitura, e a régua responde como se ele não
                     // existisse — o defeito corrigido em 21/08 voltava aqui.
-                    .select('empresaId', 'empresaCnpj', 'direcao', 'tpNF', 'status', 'cStat', 'eventos',
+                    .select('empresaId', 'empresaCnpj', 'direcao', 'tpNF', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado',
                         'chave', 'modelo', 'itens', 'totais.vICMS'),
                 { label: `credito-acumulado ${competencia}`, maxDocs: 80000 },
             );

@@ -15,6 +15,7 @@ import { Router } from 'express';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { TRILHAS, montarAuditoria, ehDono } from './auditoria-dono.js';
+import { TIPOS_ATO, normalizarAto, montarDesempenho, periodoPadrao, tiposParaTela } from './desempenho-colaboradores.js';
 
 const router = Router();
 
@@ -58,7 +59,17 @@ router.get('/', requireAdmin, requireDono, async (req, res) => {
             }
         }));
 
-        const relatorio = montarAuditoria({ leituras, de, ate, quemFiltro });
+        // SÓ O CFI: `users` é o cadastro central de todos os módulos e
+        // `carteiras` diz quem é do Fiscal — o recorte precisa dos dois.
+        const [usuariosSnap, carteirasSnap] = await Promise.all([
+            db.collection('users').get(),
+            db.collection('carteiras').get(),
+        ]);
+        const escopo = {
+            usuarios: usuariosSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })),
+            vinculos: carteirasSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })),
+        };
+        const relatorio = montarAuditoria({ leituras, de, ate, quemFiltro, escopo });
         return res.json({
             ok: true,
             periodo: { de, ate, quem: quemFiltro },
@@ -73,6 +84,89 @@ router.get('/', requireAdmin, requireDono, async (req, res) => {
         });
     } catch (e) {
         console.error('[auditoria-dono]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /desempenho?de=ISO&ate=ISO — 📊 colaborador × empresa × tipo de ato.
+//
+// Paulo, 22/09: "o que cada colaborador efetivamente executou nos últimos 2
+// meses". Cada trilha é lida em separado (uma que falhe entra em `naoLidas`,
+// nunca vira zero). Trilha com data em Timestamp/ISO é lida por RANGE no
+// próprio Firestore; a de documentos importados à mão é lida por
+// `origem == 'manual'` e cortada em memória (a data mora em três campos).
+// ────────────────────────────────────────────────────────────────────────────
+const TETO_POR_TRILHA = 5000;
+
+function paraTimestamp(iso) {
+    return admin.firestore.Timestamp.fromDate(new Date(iso));
+}
+
+async function lerTrilha(db, tipo, { de, ate }) {
+    let q = db.collection(tipo.colecao);
+    if (tipo.filtroIgual) {
+        for (const [k, v] of Object.entries(tipo.filtroIgual)) q = q.where(k, '==', v);
+    }
+    if (tipo.leituraPorRange && tipo.campoData?.[0]) {
+        const campo = tipo.campoData[0];
+        if (tipo.tipoData === 'timestamp') {
+            q = q.where(campo, '>=', paraTimestamp(de)).where(campo, '<=', paraTimestamp(ate));
+        } else {
+            q = q.where(campo, '>=', de).where(campo, '<=', ate);
+        }
+    }
+    const snap = await q.limit(TETO_POR_TRILHA).get();
+    return {
+        docs: snap.docs.map((d) => normalizarAto(tipo, d.id, d.data())),
+        truncada: snap.size >= TETO_POR_TRILHA,
+    };
+}
+
+router.get('/desempenho', requireAdmin, requireDono, async (req, res) => {
+    try {
+        const db = getDb();
+        const padrao = periodoPadrao(2);
+        const de = String(req.query.de || '').trim() || padrao.de;
+        const ate = String(req.query.ate || '').trim() || padrao.ate;
+        if (Number.isNaN(Date.parse(de)) || Number.isNaN(Date.parse(ate))) {
+            return res.status(400).json({ ok: false, error: 'de/ate devem ser datas ISO' });
+        }
+
+        const [usuariosSnap, carteirasSnap] = await Promise.all([
+            db.collection('users').get(),
+            db.collection('carteiras').get(),
+        ]);
+        const usuarios = usuariosSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+        const vinculos = carteirasSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+
+        const naoLidas = [];
+        const truncadas = [];
+        const atos = [];
+        await Promise.all(TIPOS_ATO.map(async (tipo) => {
+            try {
+                const r = await lerTrilha(db, tipo, { de, ate });
+                atos.push(...r.docs);
+                if (r.truncada) truncadas.push(tipo.rotulo);
+            } catch (e) {
+                console.warn(`[auditoria-dono/desempenho] trilha ${tipo.colecao} não lida:`, e.message);
+                naoLidas.push({ tipo: tipo.id, rotulo: tipo.rotulo, motivo: e.message });
+            }
+        }));
+
+        const relatorio = montarDesempenho({ atos, usuarios, vinculos, naoLidas, de, ate });
+        if (truncadas.length) {
+            relatorio.ressalvas.unshift(`⚠️ ${truncadas.join(', ')}: leitura cortada em ${TETO_POR_TRILHA} registros — o total dessa(s) trilha(s) é PARCIAL.`);
+        }
+        return res.json({
+            ok: true,
+            geradoEm: new Date().toISOString(),
+            geradoPor: req.user?.email || null,
+            tipos: tiposParaTela(),
+            ...relatorio,
+        });
+    } catch (e) {
+        console.error('[auditoria-dono/desempenho]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

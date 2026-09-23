@@ -14,16 +14,20 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarCnpj } from './carteira-auth.js';
 import { montarPainelEnvios } from './envio-imposto-painel.js';
+// ♻️ Refazer o rito de um envio já registrado — o carimbo é histórico e não
+// se move sozinho quando a causa é consertada depois.
+import { refazerRitoDoEnvio, declararArquivamentoDoEnvio } from './refazer-rito-store.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
-import { parseDestinatarios } from './email-destinatarios-helper.js';
+import { parseDestinatarios, lerDestinatarios, recusaDeDestinatario } from './email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
 import { enviarTemplateWhatsapp, configWhatsapp, faltasDaConfig } from './whatsapp-cloud.js';
 import { resolverTemplate, montarVariaveisPorSchema } from './whatsapp-templates.js';
 import { nomeArquivoGuia } from './nome-arquivo-guia.js';
 import { conferirDebitosJaEnviados, avisoDeRepeticao } from './debito-ja-enviado.js';
 import { formasDaCompetencia } from './competencia.js';
+import { conferirDeclaracao, textoDaDeclaracao, CANAL_FORA_DO_APP, MEIOS_FORA_DO_APP } from './envio-fora-do-app.js';
 
 const router = Router();
 
@@ -49,6 +53,16 @@ async function lerTemplatesDoFiscal() {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+/**
+ * Os meios de envio fora do app — a tela LÊ daqui.
+ *
+ * Copiar a lista para o frontend criaria a segunda cópia: no dia em que um
+ * meio entrar, a tela ofereceria um id que o backend RECUSA.
+ */
+router.get('/meios-fora-do-app', requireAuth, (_req, res) => {
+    return res.json({ ok: true, meios: MEIOS_FORA_DO_APP });
+});
+
 router.post('/registrar', requireAuth, async (req, res) => {
     try {
         const {
@@ -61,9 +75,32 @@ router.post('/registrar', requireAuth, async (req, res) => {
         const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
         if (!acesso.ok) return res.status(acesso.status).json({ ok: false, error: acesso.error });
 
+        // 📋 ENVIO DECLARADO — a guia saiu FORA do app (a AC MASON, 27/08:
+        // "as guias já foram enviadas para o cliente" e a etapa 5 travava o
+        // fim de mês, porque reenviar pelo app duplicaria a guia no cliente).
+        //
+        // ⚠️ A DECLARAÇÃO É CONFERIDA AQUI, ANTES de gravar: meio da lista,
+        // texto com o piso da T3, data que não está no futuro e AUTOR. Sem o
+        // autor a declaração é de ninguém — e é ele que a torna aceitável no
+        // lugar da prova do servidor.
+        let declaracao = null;
+        if (String(canal || '') === CANAL_FORA_DO_APP) {
+            const conf = conferirDeclaracao({
+                meio: req.body?.meio,
+                comoFoi: req.body?.comoFoi,
+                quando: req.body?.quando,
+                quem: req.user?.email || req.user?.uid || null,
+            });
+            // 400, nunca 500: declaração incompleta é RESPOSTA, e a frase diz
+            // o que falta.
+            if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+            declaracao = conf.declaracao;
+        }
+
         const r = await executarRitoEnvioImposto({
             empresaId, empresaCnpj, empresaNome, tipo, competencia,
             canal: canal || 'email-app',
+            declaracao,
             para: para || null,
             pdfBase64, pdfFileName,
             valor,
@@ -75,7 +112,12 @@ router.post('/registrar', requireAuth, async (req, res) => {
             enviadoPor: req.user?.email || req.user?.uid || null,
         });
         console.log(`[envio-imposto] ${tipo} ${empresaCnpj} ${competencia} via ${canal || 'email-app'} por ${req.user?.email} — sp=${r.sharePoint.status} baixa=${r.baixa.status}`);
-        return res.json({ ok: true, gestor: GESTOR_EMAIL, ...r });
+        return res.json({
+            ok: true, gestor: GESTOR_EMAIL, ...r,
+            // A frase volta para a tela DIZER que o app não enviou nada — quem
+            // declarou precisa ver isso na hora, não só na auditoria.
+            declaracao: declaracao ? { ...declaracao, texto: textoDaDeclaracao(declaracao) } : null,
+        });
     } catch (e) {
         console.error('[envio-imposto/registrar]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -113,9 +155,14 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         if (!empresaCnpj || !tipo || !competencia) {
             return res.status(400).json({ ok: false, error: 'empresaCnpj + tipo + competencia são obrigatórios' });
         }
-        if (!para || !String(para).includes('@')) {
-            return res.status(400).json({ ok: false, error: 'E-mail do cliente ausente — preencha em Dados Fiscais da empresa.' });
-        }
+        // 🚨 O MESMO DONO QUE O FRONT USA (02/09): `includes('@')` aceitava
+        // `marcio07/MD@gmail.com` — dois e-mails colados por uma barra —, e o
+        // Graph recusaria a mensagem inteira sem nomear o endereço. Endereço
+        // torto vira RECUSA com o motivo, nunca descarte calado: descartar
+        // significa o cliente não receber a guia e ninguém saber.
+        const lidos = lerDestinatarios(para);
+        const recusaPara = recusaDeDestinatario(lidos);
+        if (recusaPara) return res.status(400).json({ ok: false, error: recusaPara });
         if (!mensagem) return res.status(400).json({ ok: false, error: 'Mensagem obrigatória.' });
 
         const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
@@ -139,8 +186,12 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             dominios: dominiosPermitidos(),
         });
 
+        // O Graph recebe a lista LIDA (ele aceita string[]) — mandar o campo
+        // cru devolveria a mensagem inteira recusada sem nomear o endereço.
+        const paraLista = lidos.validos;
+        const jaNoPara = new Set(paraLista.map((e) => e.toLowerCase()));
         const bcc = parseDestinatarios(process.env.DAS_ENVIO_BCC || process.env.DAS_ENVIO_CC, GESTOR_EMAIL)
-            .filter((c) => c.toLowerCase() !== String(para).trim().toLowerCase());
+            .filter((c) => !jaNoPara.has(c.toLowerCase()));
 
         const assuntoFinal = assunto || `${String(tipo).toUpperCase()} ${competencia} — ${empresaNome || ''}`.trim();
         const corpoHtml = montarEmailGuia({
@@ -166,7 +217,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         let remetente = escolha.remetente;
         let fonteRemetente = escolha.fonte;
         let avisoRemetente = escolha.motivo;
-        let envio = await enviarEmail({ remetente, para, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+        let envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
 
         if (!envio.ok && fonteRemetente === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
             // A caixa do colaborador não existe/não envia — a guia do cliente
@@ -174,7 +225,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             avisoRemetente = `a caixa ${remetente} não pôde enviar; usamos ${padrao}`;
             remetente = padrao;
             fonteRemetente = 'padrao';
-            envio = await enviarEmail({ remetente, para, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+            envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
         }
         if (!envio.ok) return res.status(502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
 
@@ -401,7 +452,7 @@ router.post('/debitos-ja-enviados', requireAuth, async (req, res) => {
         if (!cnpj || !competencia) {
             return res.status(400).json({ ok: false, error: 'Informe cnpj e competencia.' });
         }
-        if (!(await podeAcessarCnpj(req.user, cnpj))) {
+        if (!(await podeAcessarCnpj(req.user, cnpj)).ok) {
             return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
         }
         const db = fa().firestore();
@@ -475,6 +526,100 @@ router.get('/painel', requireAuth, async (req, res) => {
         return res.json({ ok: true, gestor: GESTOR_EMAIL, ...painel });
     } catch (e) {
         console.error('[envio-imposto/painel]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * ♻️ REFAZER O RITO de envios já registrados.
+ *
+ * Paulo, 28/08 (VINCENZO GUERRA): *"Já criei a pasta e continua assim, o que eu
+ * faço?"*. O status do rito é um CARIMBO HISTÓRICO — consertar a causa depois
+ * (cadastrar a pasta, gerar a tarefa, corrigir o tenant do proxy) não o move, e
+ * o mês ficava travado para sempre. A única saída oferecida era reenviar a guia
+ * ao cliente, o que DUPLICA a cobrança.
+ *
+ * ⚠️ **LOTE AQUI É SEGURO, e a diferença para "ninguém emite em série" (28/07)
+ * é concreta**: aquela regra protege a EMISSÃO, que cria cobrança. Isto não
+ * emite nada — arquiva um arquivo que já existe e conclui uma tarefa que já
+ * deveria estar concluída, e as duas operações são IDEMPOTENTES. E a causa é
+ * coletiva por natureza: "12 empresas sem pasta" é UMA tarefa.
+ *
+ * ⚠️ Mesmo assim o teto é explícito e a RECUSA diz o número — cortar calado
+ * faria "50 refeitos" passar por "os 200 rodaram".
+ */
+const TETO_REFAZER = 50;
+
+router.post('/refazer-rito', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const ids = Array.isArray(req.body?.logIds) ? req.body.logIds.map(String).filter(Boolean) : [];
+        if (!ids.length) return res.status(400).json({ ok: false, error: 'Informe os envios a refazer (logIds).' });
+        if (ids.length > TETO_REFAZER) {
+            return res.status(400).json({
+                ok: false,
+                error: `São ${ids.length} envios e o teto por rodada é ${TETO_REFAZER}. `
+                    + 'Rode em partes — cortar aqui faria a tela dizer que todos passaram.',
+            });
+        }
+
+        const quem = req.user?.email || req.user?.uid || null;
+        const resultados = [];
+        for (const logId of ids) {
+            try {
+                resultados.push({ logId, ...(await refazerRitoDoEnvio({ logId, quem })) });
+            } catch (e) {
+                // Um envio que explode NÃO derruba a rodada — e volta NOMEADO.
+                resultados.push({ logId, ok: false, erro: e.message });
+            }
+        }
+        const arquivados = resultados.filter((r) => r.sharePoint?.status === 'arquivado').length;
+        const baixados = resultados.filter((r) => ['baixada', 'ja-baixada'].includes(r.baixa?.status)).length;
+        const semPdf = resultados.filter((r) => r.pdfIndisponivel).length;
+        const falhas = resultados.filter((r) => r.ok === false).length;
+        // ⚠️ "0 baixado(s)" sobre envios cuja baixa JÁ estava fechada lia como
+        // falha (Paulo, 22/09). O que não precisou ser refeito vai CONTADO.
+        const jaFechados = resultados.filter((r) => r.ok !== false && r.refeito === false).length;
+        const semObrigacao = resultados.filter((r) => r.baixa?.status === 'sem-obrigacao').length;
+        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados, ${jaFechados} já fechados`);
+        return res.json({
+            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, jaFechados, semObrigacao, resultados,
+        });
+    } catch (e) {
+        console.error('[envio-imposto/refazer-rito]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📁 Declarar à mão o arquivamento de envios cuja cópia o app não consegue
+// refazer (não guarda o PDF). Admin, com texto obrigatório — a régua mora em
+// `patchDoArquivamentoDeclarado`.
+router.post('/refazer-rito/declarar-arquivamento', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const ids = Array.isArray(req.body?.logIds) ? req.body.logIds.map(String).filter(Boolean) : [];
+        if (!ids.length) return res.status(400).json({ ok: false, error: 'Informe os envios (logIds).' });
+        if (ids.length > TETO_REFAZER) {
+            return res.status(400).json({ ok: false, error: `São ${ids.length} envios e o teto por rodada é ${TETO_REFAZER}. Rode em partes.` });
+        }
+        const quem = req.user?.email || req.user?.uid || null;
+        const comoFoi = req.body?.comoFoi;
+        const resultados = [];
+        for (const logId of ids) {
+            try {
+                resultados.push({ logId, ...(await declararArquivamentoDoEnvio({ logId, quem, comoFoi })) });
+            } catch (e) {
+                resultados.push({ logId, ok: false, erro: e.message });
+            }
+        }
+        const declarados = resultados.filter((r) => r.ok).length;
+        const recusados = resultados.filter((r) => !r.ok);
+        // Declaração recusada em TODOS é erro de entrada (texto curto…): 400 com a frase.
+        if (!declarados && recusados.length) return res.status(400).json({ ok: false, error: recusados[0].erro, resultados });
+        console.log(`[envio-imposto/declarar-arquivamento] ${declarados}/${ids.length} por ${quem}`);
+        return res.json({ ok: true, total: ids.length, declarados, recusados: recusados.length, resultados });
+    } catch (e) {
+        console.error('[envio-imposto/declarar-arquivamento]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

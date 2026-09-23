@@ -1,0 +1,467 @@
+
+
+===== PÁGINA 1 =====
+CGIBS  RECEITA FEDERAL 
+Comitê Gestor do IBS  Ministério da Fazenda 
+Leiautes da DeRE 
+Histórico de Versões 
+Versão 1.1.0  |  22 de junho de 2026 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+DeRE 
+Declaração de Regimes Específicos 
+Leiautes 
+Histórico de Versões 
+ 
+ 
+
+
+===== PÁGINA 2 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 1 de 7 
+ 
+SUMÁRIO 
+HISTÓRICO DE VERSÕES ................................ ................................ ................................ ................................ ................................ ..............................  2 
+1 APRESENTAÇÃO E CRITÉRIOS DE VERSIONAMENTO ................................ ................................ ................................ ................................ ........ 2 
+1.1 Política de Versionamento ................................ ................................ ................................ ................................ ................................ .................. 2 
+1.2 Legenda de Ações ................................ ................................ ................................ ................................ ................................ .............................  2 
+2 NOTAS DA VERSÃO 1.1.0 ................................ ................................ ................................ ................................ ................................ ....................... 3 
+2.1 Destaques da Versão: ................................ ................................ ................................ ................................ ................................ ........................ 3 
+3 LEIAUTES DA DERE - EVENTOS ................................ ................................ ................................ ................................ ................................ ............ 4 
+3.1 Inclusão de Novos Eventos Periódicos e de Retorno ................................ ................................ ................................ ................................ ......... 4 
+4 LEIAUTES DA DERE - ANEXO I - TABELAS ................................ ................................ ................................ ................................ ...........................  5 
+4.1 Inclusão de Novas Tabelas de Domínio ................................ ................................ ................................ ................................ ..............................  5 
+4.2 Tabela 11 – Códigos de Tributação (codTrib) ................................ ................................ ................................ ................................ ...................... 5 
+4.3 Tabela 21 – Atividades de Serviços Financeiros ................................ ................................ ................................ ................................ ................. 5 
+5 LEIAUTES DA DERE - ANEXO II - REGRAS DE VALIDAÇÃO ................................ ................................ ................................ ................................  6 
+ 
+ 
+
+===== PÁGINA 3 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 2 de 7 
+ 
+HISTÓRICO DE VERSÕES 
+Versão do Pacote: 1.1.0 (Inclusão de Eventos Periódicos Mensais) 
+Data de Publicação: 22/06/2026 
+Status: Oficial / Produção 
+Referência Anterior: v.1.0.1 (Oficial / Produção - 29/05/2026) 
+1 APRESENTAÇÃO E CRITÉRIOS DE VERSIONAMENTO 
+Este documento consolida o histórico de alterações técnicas ocorridas nos leiautes, tabelas e 
+regras de validação da DeRE. Seu objetivo é fornecer aos contribuintes e desenvolvedores uma visão 
+clara, objetiva e técnica das modificações realizadas entre as versões publicadas, garantindo a 
+transparência e facilitando a adaptação dos sistemas de informação. 
+1.1 Política de Versionamento 
+A DeRE adota o padrão de versionamento semântico ( X.Y.Z), dimensionado pelo impacto 
+estrutural das mudanças, onde: 
+• X (Maior): Alterações estruturais profundas ou modificações substanciais em eventos ou 
+regras de negócio . Exige adaptação obrigatória dos sistemas para a geração e 
+transmissão dos eventos da DeRE; 
+• Y (Menor): Inclusão de novos eventos ou funcionalidades, exigindo implementações ou 
+adaptações pontuais para uso dos novos recursos; 
+• Z (Correção): Adequações técnicas de baixo impacto, como correções de erros, ajustes 
+em descrições textuais, melhorias em regras de validação , atualizações de tabelas de 
+domínio ou refinamentos técnicos e de negócio. 
+1.2 Legenda de Ações 
+As alterações são classificadas conforme abaixo: 
+• INCLUSÃO: Novo evento, grupo ou campo adicionado; 
+• ALTERAÇÃO: Mudança de nome, tamanho, tipo, obrigatoriedade ou regra de validação 
+de item existente; 
+• EXCLUSÃO: Remoção de evento, grupo ou campo; 
+• DESLOCAMENTO: Item movido de um evento/grupo para outro (implica exclusão na 
+origem e inclusão no destino). 
+ 
+
+===== PÁGINA 4 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 3 de 7 
+ 
+2 NOTAS DA VERSÃO 1.1.0 
+A Versão 1.1.0 implementa os eventos periódicos mensais e os respectivos retornos 
+totalizadores destinados à aferição do débito do IBS, da CBS e do IS. Esta atualização estabelece os 
+leiautes, as regras de validação e a lógica de processamento para a recep ção dos balancetes e de 
+seus eventos auxiliares, parametrizando o cálculo dos tributos com base na escrituração contábil do 
+contribuinte. 
+2.1 Destaques da Versão: 
+a) Implementação do s Eventos Periódicos Mensais: Inclusão dos leiautes do Balancete 
+Mensal (D-1101), dos eventos auxiliares (D-1106 e D-2101) e do Fechamento Mensal (D-1199). 
+Em conjunto, foram disponibilizados novos eventos de retorno da série D -9000 (D-9101, D-
+9106, D -9121 e D -9199), responsáveis por retornar ao contribuinte a consolidação das 
+informações dos eventos originários e a memória de cálculo do período; 
+b) Sistematização das Bases de Cálculo (Tabela 12): Inclusão da Tabela 12 – Códigos de Base 
+de Cálculo (codBC) e de suas tabelas auxiliares (Tabela 12.1 – Coeficientes de Rateio e 
+Reversão e Tabela 12.2 – Variáveis para Composição de Bases de Cálculo) . Esta estrutura 
+consolida as regras formadoras da base de cálculo, estabelecendo os parâmetros matemáticos 
+para a formação da base bruta , o rateio de despesas de captação e a reversão de deduções 
+vinculadas a receitas não tributadas; 
+c) Atualização de Tabelas de Domínio (Tabelas 11 e 21):  Inclusão de novos Códigos de 
+Tributação (codTrib) na Tabela 11 para suportar a segregação de receitas sujeitas à regra de 
+transição do PIS/Cofins no setor de Concursos de Prognósticos. Na Tabela 21, ocorreu o 
+desdobramento das atividades de Arrendamento Me rcantil (Operacional e Financeiro) e a 
+segregação de Arranjos de Pagamento vinculados a vales -benefícios (alimentação e 
+transporte); 
+d) Novas Regras de Validação: Inclusão de novas regras de integridade e consistência contábil. 
+Destaca-se a obrigatoriedade de cruzamento de saldos finais entre os eventos auxiliares (D -
+1106 e D-2101) e o Balancete Mensal (D -1101), a validação de variáveis financeiras (cálculo 
+de juros e variação da taxa Selic) e a verificação do encadeamento cronológico nas operações 
+de alteração ou exclusão. 
+ 
+
+===== PÁGINA 5 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 4 de 7 
+ 
+3 LEIAUTES DA DERE - EVENTOS 
+3.1 Inclusão de Novos Eventos Periódicos e de Retorno 
+Inclusão de Novos Eventos Periódicos e de Retorno 
+Evento Ação Descrição da Alteração Justificativa Técnica 
+D-1101 – Balancete Mensal INCLUSÃO Inclusão do leiaute do evento 
+periódico D-1101. 
+Capturar a movimentação das contas analíticas patrimoniais e 
+de resultado para a formação da base de cálculo e aferição dos 
+tributos. 
+D-1106 – Identificação de 
+Aplicações Financeiras 
+INCLUSÃO Inclusão do leiaute do evento 
+periódico D-1106. 
+Detalhar aplicações financeiras vinculadas a reservas técnicas 
+para composição da base de cálculo. 
+D-1199 – Fechamento Mensal INCLUSÃO Inclusão do leiaute do evento 
+periódico D-1199. 
+Sinalizar ao sistema a conclusão da transmissão da escrituração 
+mensal. 
+D-2101 – Débito em Operações 
+com Títulos de Dívida com Oferta 
+Pública 
+INCLUSÃO Inclusão do leiaute do evento 
+periódico D-2101. 
+Detalhar operações com títulos de dívida com oferta pública 
+para composição da base de cálculo. 
+D-9101 – Retorno Totalizador – 
+Balancete Mensal 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9101. 
+Confirmar o processamento e retornar a totalização dos valores 
+aferidos no evento D-1101 – Balancete Mensal. 
+D-9106 – Retorno Totalizador – 
+Identificação de Aplicações 
+Financeiras 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9106. 
+Confirmar o processamento e retornar a totalização dos valores 
+aferidos no evento D -1106 – Identificação de Aplicações 
+Financeiras. 
+D-9121 – Retorno Totalizador – 
+Débito em Operações com Títulos 
+de Dívida com Oferta Pública 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9121. 
+Confirmar o processamento e retornar a totalização dos valores 
+aferidos no evento D-2101 – Débito em Operações com Títulos 
+de Dívida com Oferta Pública. 
+D-9199 – Retorno Totalizador – 
+Fechamento Mensal 
+INCLUSÃO Inclusão do leiaute do evento de 
+retorno D-9199. 
+Confirmar o processamento do evento D -1199 (Fechamento 
+Mensal) e retornar o extrato contendo a memória de cálculo da 
+aferição dos débitos de IBS, CBS e IS. 
+ 
+ 
+
+===== PÁGINA 6 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 5 de 7 
+ 
+4 LEIAUTES DA DERE - ANEXO I - TABELAS 
+4.1 Inclusão de Novas Tabelas de Domínio 
+Inclusão de Novas Tabelas de Domínio 
+Tabela Ação Descrição da Alteração Justificativa Técnica 
+Tabela 12 – Códigos de 
+Base de Cálculo (codBC) 
+INCLUSÃO Inclusão da tabela de domínio interna que 
+consolida as regras de formação das bases de 
+cálculo do IBS, CBS e IS. 
+Mapear e consolidar as regras matemáticas aplicadas 
+pelo sistema da DeRE na formação das bases de cálculo 
+do IBS, da CBS e do IS, parametrizando a geração do 
+evento D-9199. 
+Tabela 12.1 – Coeficientes 
+de Rateio e Reversão 
+(Auxiliar) 
+INCLUSÃO Inclusão de tabela auxiliar contendo o 
+detalhamento e as memórias de cálculo dos  
+coeficientes de Rateio de Despesas de Captação e 
+de Reversão de Despesas. 
+Parametrizar as regras matemáticas aplicadas pelo 
+sistema da DeRE na alocação de despesas de captação 
+e na reversão de deduções vinculadas a receitas imunes 
+(exportação) ou com alíquota zero (atos cooperados). 
+Tabela 12.2 – Variáveis 
+para Composição de 
+Bases de Cálculo (Auxiliar) 
+INCLUSÃO Inclusão de tabela auxiliar contendo o 
+detalhamento das variáveis utilizadas nas equações 
+do codBC. 
+Detalhar a origem e a composição das variáveis que 
+compõem as bases de cálculo, fornecendo parâmetros 
+para a geração da memória de cálculo nos eventos de 
+retorno. 
+4.2 Tabela 11 – Códigos de Tributação (codTrib) 
+Tabela 11 – Códigos de Tributação (codTrib) 
+codTrib Ação Descrição da Alteração Justificativa Técnica 
+130140001, 130140002, 
+230140001, 230140002, 
+331600001 e 331600002 
+INCLUSÃO Inclusão de grupos e códigos para 
+escrituração de valores recebidos tributáveis 
+pela regra de transição do PIS/Cofins no setor 
+de Concursos de Prognósticos. 
+Permitir a escrituração segregada e a correta 
+parametrização das receitas sujeitas à regra de transição do 
+PIS/Cofins para a CBS (Art. 408 da LC 214/2025). 
+110210001 a 110210004 ALTERAÇÃO Atualização da referência legal dos códigos 
+referentes a descontos aplicados em 
+operações de Securitização e Faturização. 
+Correção técnica da base legal aplicável, substituindo a 
+referência do Art. 192 para o Art. 193, § 1º, da LC 214/2025. 
+110262001, 110411801 e 
+110412611 
+ALTERAÇÃO Revisão da orientação de preenchimento 
+sobre o rateio de despesas de captação de 
+recursos para bancos múltiplos, com 
+diretrizes padronizadas vinculadas aos 
+grupos aplicáveis. 
+Padronização nas instruções de escrituração para que o 
+contribuinte aplique corretamente os códigos de tributação 
+vinculados às despesas de captação e orientação sobre a 
+metodologia de rateio por atividade para o cálculo da 
+dedução admissível. 
+4.3 Tabela 21 – Atividades de Serviços Financeiros 
+Tabela 21 – Atividades de Serviços Financeiros 
+Código Ação Descrição da Alteração Justificativa Técnica 
+06A ALTERAÇÃO Desdobramento da atividade “Arrendamento mercantil 
+(leasing)”. O código 06A passa a ser exclusivo para leasing 
+operacional. 
+Permitir o controle, a validação e a aplicação de regras de 
+apuração específicas entre as modalidades operacional e 
+financeira. 
+06B INCLUSÃO Criação do código 06B exclusivo para leasing financeiro. Permitir o controle, a validação e a aplicação de regras de 
+apuração específicas entre as modalidades operacional e 
+financeira. 
+09F ALTERAÇÃO Alteração da descrição para inclusão da atividade Arranjos de 
+pagamento do tipo “vale-refeição, vale-alimentação ou vale-
+transporte”. 
+O descritivo “Arranjos de pagamento - outros tipos de arranjo” 
+foi deslocado para o código 09Z. 
+Isolar as operações ligadas a benefícios de alimentação e 
+transporte dos demais arranjos de pagamento. 
+09Z INCLUSÃO Inclusão do código 09Z para “Arranjos de pagamento - outros 
+tipos de arranjo”. 
+Isolar as operações ligadas a benefícios de alimentação e 
+transporte dos demais arranjos de pagamento. 
+
+===== PÁGINA 7 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 6 de 7 
+ 
+5 LEIAUTES DA DERE - ANEXO II - REGRAS DE VALIDAÇÃO 
+Anexo II – Regras de Validação 
+Nome da Regra Ação Descrição da Alteração Aplicação / Contexto 
+ALTERACAO_SEM_CHAVE_
+PREEXISTENTE 
+ALTERAÇÃO Adequação da lógica para referenciar a regra ‘RN - 
+Arquivos/Eventos Tratados pelo Sistema’ e inclusão 
+de validação específica para eventos de tabela. 
+• D-1001 – Informações do Contribuinte; 
+• D-1011 – Plano Geral de Contas Comentado; 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CONTRIBUINTE_NO_CAD
+ASTRO 
+ALTERAÇÃO Adequação da regra para incluir os eventos 
+mensais. 
+• D-1001 – Informações do Contribuinte; 
+• D-1011 – Plano Geral de Contas Comentado; 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; 
+• D-1199 – Fechamento Mensal; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+EXISTE_INFO_CONTRIBUI
+NTE 
+ALTERAÇÃO Ajuste estrutural para exigir que o envio dos novos 
+eventos periódicos (D-1101, D-1106 e D-2101) 
+possua um D-1001 ativo abrangendo o período de 
+apuração. 
+• D-1011 – Plano Geral de Contas Comentado; 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; 
+• D-1199 – Fechamento Mensal; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CCTA_NO_PGCC INCLUSÃO Valida a existência, vigência temporal e classificação 
+analítica da conta no D-1011 ativo. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CODTRIB_COMPATIVEL_E
+VT 
+INCLUSÃO Valida a compatibilidade do código de tributação 
+informado com o evento em processamento. 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CODTRIB_PERMITIDO_D1
+106 
+INCLUSÃO Valida a exigência de códigos de tributação 
+obrigatórios no PGCC para a recepção do evento D-
+1106. 
+• D-1106 – Identificação de Aplicações Financeiras. 
+CODTRIB_PERMITIDO_D2
+101 
+INCLUSÃO Valida a exigência de códigos de tributação 
+obrigatórios no PGCC para a recepção do evento D-
+2101. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CONFERIR_JUROS INCLUSÃO Efetua a consistência matemática do cálculo para 
+juros recebidos. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CONFERIR_SALDO_FINAL_
+NAT_SALDO_FINAL 
+INCLUSÃO Confere a integridade matemática do Balancete: 
+Valida se o saldo final e sua natureza equivalem ao 
+saldo líquido resultante da soma algébrica entre 
+saldo inicial e as movimentações no período. 
+• D-1101 – Balancete Mensal. 
+CONFERIR_SELIC INCLUSÃO Efetua a consistência matemática do cálculo 
+equivalente à variação da SELIC. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+CONFERIR_VAPUR INCLUSÃO Aplica cálculo de consistência sobre o Valor 
+Apurado a partir das movimentações e ajustes 
+declarados. 
+• D-1101 – Balancete Mensal. 
+DT_FIM_JUROS INCLUSÃO Valida a consistência temporal da data de fim de 
+juros. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+DT_INICIO_JUROS_POSTE
+RIOR_DT_AQUISICAO 
+INCLUSÃO Impede que a data de início de juros anteceda a 
+data de aquisição do título. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+DT_LIQUIDACAO INCLUSÃO Impõe que a data de liquidação da operação ocorra 
+dentro do período de apuração e não seja anterior 
+à data de aquisição. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+DV_CNPJ INCLUSÃO Aplica o algoritmo de Módulo 11 para cálculo e 
+validação dos dígitos verificadores do CNPJ. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+EVENTOS_OBRIGATORIOS
+_PERIODO 
+INCLUSÃO Verifica dependências estruturais garantindo a 
+recepção dos eventos mensais obrigatórios quando 
+aplicáveis. 
+• D-1199 – Fechamento Mensal. 
+EXIGIR_NR_RECIBO INCLUSÃO Torna obrigatório o preenchimento do recibo 
+anterior em operações de Alteração/Exclusão. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+
+===== PÁGINA 8 =====
+Histórico de Versões Versão 1.1.0 
+ 
+Página 7 de 7 
+ 
+Anexo II – Regras de Validação 
+Nome da Regra Ação Descrição da Alteração Aplicação / Contexto 
+NUM_SEQ_UNICO INCLUSÃO Garante a unicidade sequencial de identificadores 
+de títulos adquiridos via fundos de investimentos. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+OBRIGAR_NATVAPUR INCLUSÃO Exige a indicação da natureza do valor apurado 
+sempre que este for superior a zero. 
+• D-1101 – Balancete Mensal. 
+OBRIGAR_PERAPUR_IGUA
+L_NRRECIBO 
+INCLUSÃO Exige que o {perApur} declarado no cabeçalho do 
+evento coincida com a competência do Recibo em 
+casos de Alteração ou Exclusão. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+OBRIGAR_PREENCH_DESC
+_FUNDO 
+INCLUSÃO Exige a descrição do fundo em aquisições via 
+fundos de investimento exclusivos com composição 
+de 95% de títulos de dívida. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+OBRIGAR_PREENCH_INFO
+_BALANCETE 
+INCLUSÃO Regra estrutural para obrigatoriedade de grupos de 
+dados no evento D-1101. 
+• D-1101 – Balancete Mensal. 
+OBRIGAR_PREENCH_INFO
+_DEB_OF_PUB 
+INCLUSÃO Regra estrutural para obrigatoriedade de grupos de 
+dados no evento D-2101. 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+OBRIGAR_PREENCH_INFO
+_RES_TEC 
+INCLUSÃO Regra estrutural para obrigatoriedade de grupos de 
+dados no evento D-1106. 
+• D-1106 – Identificação de Aplicações Financeiras. 
+RN - Arquivos/Eventos 
+Tratados pelo Sistema 
+INCLUSÃO Institui as chaves compostas para a verificação de 
+unicidade no banco de dados. 
+• Geral (Todos os Eventos). 
+RN - Tabela de codtribs 
+obrigatórios para eventos 
+auxiliares 
+INCLUSÃO Lista os códigos de tributação que obrigam o 
+preenchimento dos eventos auxiliares (D-1106 e D-
+2101). 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+RN - Validar Saldos Finais 
+Eventos Auxiliares e 
+Balancete 
+INCLUSÃO Executa a validação de saldos finais informados nos 
+eventos auxiliares (D-1106, D-2101) com os saldos 
+informados no Balancete Mensal (D-1101). 
+• D-1199 – Fechamento Mensal. 
+ULTIMO_RECIBO_ATIVO INCLUSÃO Exige que o recibo referenciado em Alteração ou 
+Exclusão seja a versão ativa na base da DeRE. 
+• D-1101 – Balancete Mensal; 
+• D-1106 – Identificação de Aplicações Financeiras; e 
+• D-2101 – Débito em Operações com Títulos de 
+Dívida com Oferta Pública. 
+ 

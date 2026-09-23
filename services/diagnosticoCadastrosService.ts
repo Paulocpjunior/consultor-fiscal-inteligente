@@ -24,8 +24,20 @@ export interface EmpresaCadastro {
     pendencias: Pendencia[];
 }
 
+/** Uma CAUSA e quantas empresas a têm — a fila de trabalho de verdade. */
+export interface PendenciaPorCampo {
+    campo: string;
+    descricao: string;
+    impacto: string;
+    qtd: number;
+    /** Amostra (teto de 50); a contagem em `qtd` é inteira. */
+    empresas: string[];
+}
+
 export interface DiagnosticoCadastrosResposta {
     resumo: { total: number; criticos: number; altos: number; medios: number; ok: number };
+    /** Pendências agrupadas por campo, da mais frequente para a menos. */
+    porCampo?: PendenciaPorCampo[];
     empresas: EmpresaCadastro[];
     geradoEm: string;
 }

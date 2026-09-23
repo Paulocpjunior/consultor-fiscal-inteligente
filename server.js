@@ -1,3 +1,4 @@
+import ebefRouter from './sefaz-backend/ebef-routes.js';
 import express from 'express';
 import { secretsMatch } from './sefaz-backend/cron-secret.js';
 import cors from 'cors';
@@ -30,6 +31,7 @@ import cronHealthRouter from './sefaz-backend/cron-health-routes.js';
 import vencimentosRouter from './sefaz-backend/vencimentos-routes.js';
 import sefazManifestoRouter from './sefaz-backend/manifesto-routes.js';
 import sefazNfseSpRouter from './sefaz-backend/nfse-sp-routes.js';
+import competenciaAcervoRouter from './sefaz-backend/competencia-acervo-routes.js';
 import spedFiscalRouter from './sefaz-backend/sped-fiscal-routes.js';
 import spedContribRouter from './sefaz-backend/sped-contrib-routes.js';
 import caixaPostalRouter from './sefaz-backend/caixa-postal-routes.js';
@@ -46,6 +48,7 @@ import relatoriosRouter from './sefaz-backend/relatorios-routes.js';
 import migracaoProntidaoRouter from './sefaz-backend/migracao-prontidao-routes.js';
 import filaMigracaoRouter from './sefaz-backend/fila-migracao-routes.js';
 import carteiraObservacoesRouter from './sefaz-backend/carteira-observacoes-routes.js';
+import carteiraAcessosRouter from './sefaz-backend/carteira-acessos-routes.js';
 import creditoAcumuladoRouter from './sefaz-backend/credito-acumulado-routes.js';
 import difalRouter from './sefaz-backend/difal-routes.js';
 import provaCapturaRouter from './sefaz-backend/prova-captura-routes.js';
@@ -360,6 +363,7 @@ app.use('/api/admin/vencimentos', vencimentosRouter);
 app.use('/api/admin/sefaz', sefazManifestoRouter);
 app.use('/api/admin/sae-nfce', saeNfceRouter);
 app.use('/api/admin/sefaz', sefazNfseSpRouter);
+app.use('/api/admin/competencia-acervo', competenciaAcervoRouter);
 app.use('/api/admin/sped-fiscal', spedFiscalRouter);
 app.use('/api/admin/sped-contrib', spedContribRouter);
 app.use('/api/admin/caixa-postal', caixaPostalRouter);
@@ -377,6 +381,7 @@ app.use('/api/admin/relatorios', relatoriosRouter);
 app.use('/api/admin/sped', migracaoProntidaoRouter);
 app.use('/api/admin/sped', filaMigracaoRouter);
 app.use('/api/admin/carteira', carteiraObservacoesRouter);
+app.use('/api/admin/carteira', carteiraAcessosRouter);
 app.use('/api/admin/sped', creditoAcumuladoRouter);
 app.use('/api/admin/difal', difalRouter);
 app.use('/api/admin/empresas-merge', empresasMergeRouter);
@@ -424,6 +429,7 @@ app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
 app.use('/api/admin/cadastro-contabil', cadastroContabilRouter);
+app.use('/api/admin/ebef', ebefRouter);
 // O cron e chamado pelo Cloud Scheduler com header X-Cron-Secret — fica fora
 // do prefixo /api/admin pra preservar o padrao dos outros crons.
 app.use('/api/internal/cron', healthAlertaCronRouter);
@@ -441,8 +447,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // payload do PGDAS-D e do codigo 9 do ISS fixo).
 //
 // Precedencia: env do Cloud Run (pino humano) > familia alvo listada pela API
-// > alias -latest. Enquanto a 3.7 nao aparecer para a conta, o app segue no
-// alias FUNCIONANDO e a tela diz que o alvo nao foi encontrado.
+// > alias -latest. Enquanto a familia alvo (FAMILIA_ALVO_GEMINI — 3.8 desde
+// 06/09, pedido do Paulo) nao aparecer para a conta, o app pina no mais novo
+// que existe e a tela diz que a linha esta atras.
 let GEMINI_MODEL_PRO = process.env.GEMINI_MODEL_PRO || ALIAS_PRO;
 let GEMINI_MODEL_FLASH = process.env.GEMINI_MODEL_FLASH || ALIAS_FLASH;
 let geminiResolucao = {
@@ -2313,7 +2320,7 @@ app.get('/api/admin/calendario/:ano/:mes', requireAuthOrColab, async (req, res) 
 });
 
 // ─── Dashboard CEO — endpoint de KPIs + insights IA ─────────────────────────
-// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE — e REPINAR na 3.7 ─────────────
+// ─── QUAL GEMINI ESTÁ RESPONDENDO DE VERDADE — e REPINAR na família alvo ─────
 //
 // Paulo, 15/08: *"pedi para você atualizar p a versão 3.7"*.
 //
@@ -3165,6 +3172,52 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[tarefas/cron-mensal]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
+// POST /api/admin/tarefas/reaplicar-prazos
+//   📅 Reaplica o prazo ATUAL do catálogo (e dos cadastros do admin) nas
+//   tarefas ABERTAS e automáticas de uma competência (22/09, AFFITTARE: a
+//   regra mudou e a tarefa ficou com o dia velho). Admin, com token.
+//   Body: { competencia: "MM/AAAA", empresaId? }
+app.post('/api/admin/tarefas/reaplicar-prazos', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (!/^\d{2}\/\d{4}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'competencia obrigatoria (MM/AAAA)' });
+        }
+        const { reaplicarPrazosDoCatalogo } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await reaplicarPrazosDoCatalogo(competencia, {
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/reaplicar-prazos]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
+// POST /api/admin/tarefas/cancelar-dp
+//   👥 Cancela em lote as tarefas ABERTAS e automáticas de FGTS/INSS patronal
+//   (Paulo, 22/09: "é do DP"). Body: { competencia?: "MM/AAAA", empresaId? }
+//   Sem competência = todas as competências.
+app.post('/api/admin/tarefas/cancelar-dp', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        const { cancelarTarefasDoDp } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarTarefasDoDp({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-dp]', err);
         return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });

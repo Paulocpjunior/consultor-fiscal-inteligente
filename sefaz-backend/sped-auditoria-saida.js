@@ -40,6 +40,9 @@ export const DETALHES_VIGIADOS = {
     // é legítima em CST sem crédito, e vigiar isso encheria a tela de alarme
     // falso — que é o caminho pra ninguém mais ler alarme nenhum.
     A170: { rotulo: 'itens de serviço (Contribuições)', campos: { 5: 'VL_ITEM' } },
+    // C175 — a consolidação da NFC-e por CFOP/CST/alíquota (14/09, HYPE). Só o
+    // VL_OPR: base zerada é legítima em CST sem incidência (04/06), como no A170.
+    C175: { rotulo: 'resumo da NFC-e por CFOP/CST/alíquota (Contribuições)', campos: { 3: 'VL_OPR' } },
     // 🚨 A100 FALTAVA — e foi por isso que um arquivo com 37 documentos de
     // serviço, TODOS com VL_DOC 0,00, passou pela auditoria (17/08, CLINICA
     // MEDICA MANTOAN 07/2026). Só o A170 estava vigiado, e aquele arquivo não
@@ -59,7 +62,14 @@ export const DETALHES_VIGIADOS = {
     // famílias (Guia da EFD-Contribuições 1.35 e Guia 3.2.3 do EFD ICMS/IPI —
     // os 23 primeiros campos são idênticos). É a MESMA classe do 0500: trava
     // que existe, roda e olha o lugar errado dá sensação de cobertura.
-    D100: { rotulo: 'conhecimentos de transporte (Contribuições)', campos: { 15: 'VL_DOC' } },
+    // 🚨 NUM_DOC (campo 09) — VAZIO em 100% dos D100 (18/09, EDUARDO GUERRA):
+    // a captura lia `nNF` e o CT-e traz `nCT`. A contagem fechava, o PVA
+    // importava e quebrava o relatório de entradas. Número vazio em toda linha
+    // não tem caso legítimo — é leitura que não achou o campo.
+    D100: { rotulo: 'conhecimentos de transporte', campos: { 9: 'NUM_DOC', 15: 'VL_DOC' } },
+    // C100 pelo mesmo motivo (campo 08): a mesma tag lida do jeito errado num
+    // trilho novo deixaria a nota sem número — e a cancelada MANTÉM o NUM_DOC.
+    C100: { rotulo: 'documentos de mercadoria', campos: { 8: 'NUM_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     // F600 — retenção na fonte (Contribuições, 19/08 · caso HS PROJETOS).
     // Posições provadas contra arquivo aceito do E-Fiscal:
@@ -130,6 +140,176 @@ export function linhasMalformadas(linhas) {
 }
 
 /**
+ * O BLOCO 9 FECHA COM O ARQUIVO — a aritmética que o PVA confere PRIMEIRO.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, literal:
+ *  · **9900**, campo 03 (QTD_REG_BLC), Validação: *"verifica se o número de
+ *    linhas no arquivo do tipo informado no campo REG_BLC do registro 9900 é
+ *    igual ao valor informado neste campo"*; e o cabeçalho do registro: *"Todos
+ *    os registros referenciados neste arquivo, **inclusive os posteriores a
+ *    este registro**, devem ter uma linha totalizadora"*;
+ *  · **9990**, campo 02: a quantidade de linhas do Bloco 9;
+ *  · **9999**, campo 02, Validação: *"o número de linhas (registros)
+ *    existentes no arquivo inteiro é igual ao valor informado no campo
+ *    QTD_LIN"*, e *"deve considerar também o próprio registro 9999"*.
+ *
+ * 🚨 **POR QUE ELA MORA AQUI, e não na prevalidação de uma família só**: o
+ * bloco 9 é o MESMO mecanismo nos dois arquivos — contagem de linhas, sem
+ * leiaute nenhum de permeio. É a casa da `linhasMalformadas`, e pelo mesmo
+ * motivo. Deixá-la numa família protegeria um arquivo e deixaria o outro
+ * descoberto (a "meia trava" do COD_MUN do 0150, 22/08).
+ *
+ * 🚨 **E O RISCO É O MAIOR DE TODOS: o PVA não IMPORTA o arquivo.** Não é uma
+ * recusa de campo que se conserta e reenvia — é o arquivo inteiro recusado na
+ * porta. Em 24/08 (AFFITTARE) a lição ficou escrita: *"acrescentar UMA linha
+ * ao bloco 1 mexe em QUATRO contadores"*, e naquele dia a conferência foi
+ * feita à mão. Aqui ela passa a ser automática, em todo arquivo gerado.
+ *
+ * ⚠️ **A CONTAGEM INCLUI O PRÓPRIO BLOCO 9** — é o que o Guia manda, e é
+ * exatamente onde um contador se perde: o 9900 conta as linhas 9900, o 9990 e
+ * o 9999 que ainda vão ser escritas.
+ */
+export function conferirBloco9(linhas) {
+    const lista = (linhas || []).map(String).filter((l) => String(l).trim());
+    const noves = lista.filter((l) => registroDe(l) === '9999');
+    // Arquivo sem bloco 9 não é "arquivo errado": é arquivo PARCIAL (um bloco
+    // isolado num teste, por exemplo). Acusar ali seria alarme sobre recorte.
+    if (!noves.length) return [];
+
+    const suspeitas = [];
+    const contagemReal = new Map();
+    for (const l of lista) {
+        const r = registroDe(l);
+        if (!r) continue;
+        contagemReal.set(r, (contagemReal.get(r) || 0) + 1);
+    }
+
+    // ── 9900: o que ele declara × o que o arquivo tem ───────────────────────
+    const declarado = new Map();
+    for (const l of lista) {
+        if (registroDe(l) !== '9900') continue;
+        const reg = String(campo(l, 2) || '').trim();
+        const qtd = Number(String(campo(l, 3) || '').replace(/\D/g, ''));
+        if (reg) declarado.set(reg, (declarado.get(reg) || 0) + (Number.isFinite(qtd) ? qtd : 0));
+    }
+    if (declarado.size) {
+        const divergentes = [];
+        for (const [reg, real] of contagemReal) {
+            const dec = declarado.get(reg);
+            if (dec === undefined) { divergentes.push(`${reg}: o 9900 não totaliza (o arquivo tem ${real})`); continue; }
+            if (dec !== real) divergentes.push(`${reg}: 9900 diz ${dec}, o arquivo tem ${real}`);
+        }
+        for (const [reg, dec] of declarado) {
+            if (!contagemReal.has(reg)) divergentes.push(`${reg}: o 9900 totaliza ${dec} e o arquivo não tem nenhum`);
+        }
+        if (divergentes.length) {
+            suspeitas.push({
+                registro: '9900', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `O 9900 não bate com o arquivo em ${divergentes.length} tipo(s) de registro: `
+                    + `${divergentes.slice(0, 6).join(' · ')}${divergentes.length > 6 ? ' · …' : ''}. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+            });
+        }
+    }
+
+    // ── 9990: linhas do bloco 9 ─────────────────────────────────────────────
+    const l9990 = lista.find((l) => registroDe(l) === '9990');
+    if (l9990) {
+        const doBloco9 = lista.filter((l) => /^9\d{3}$/.test(registroDe(l))).length;
+        const dec = Number(String(campo(l9990, 2) || '').replace(/\D/g, ''));
+        if (Number.isFinite(dec) && dec !== doBloco9) {
+            suspeitas.push({
+                registro: '9990', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `O 9990 declara ${dec} linha(s) no bloco 9 e o arquivo tem ${doBloco9}. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO.',
+            });
+        }
+    }
+
+    // ── 9999: o arquivo INTEIRO, incluindo a própria linha ──────────────────
+    const dec9999 = Number(String(campo(noves[0], 2) || '').replace(/\D/g, ''));
+    if (Number.isFinite(dec9999) && dec9999 !== lista.length) {
+        suspeitas.push({
+            registro: '9999', tipo: 'bloco9-nao-fecha', gravidade: 'bloqueia',
+            detalhe: `O 9999 declara ${dec9999} linha(s) e o arquivo tem ${lista.length}. `
+                + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+        });
+    }
+    return suspeitas;
+}
+
+/**
+ * CADA BLOCO FECHA CONSIGO MESMO — o contador que o `conferirBloco9` não vê.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3: todo registro **X990** traz, no campo 02
+ * (QTD_LIN_X), *"a quantidade total de linhas do Bloco X"*, e a contagem
+ * **inclui o próprio X990**.
+ *
+ * 🚨 **O `conferirBloco9` (29/08) fecha o ARQUIVO e NÃO fecha os blocos.** Ele
+ * confere o 9900 (quantas linhas de cada TIPO), o 9990 (o bloco 9) e o 9999 (o
+ * arquivo inteiro) — e nenhum dos três olha o **0990**, o **C990**, o **G990**,
+ * o **K990**… Um 9900 correto convive com um G990 errado: o 9900 conta que
+ * existe 1 linha de G990, não o que ela DECLARA.
+ *
+ * 🚨 **É a MESMA recusa mais cara de todas: o PVA não IMPORTA o arquivo.** E a
+ * casa já pagou por ela à mão — em 24/08 (AFFITTARE) ficou escrito que
+ * *"acrescentar UMA linha ao bloco 1 mexe em QUATRO contadores"*, e a
+ * conferência daquele dia foi feita a olho, registro a registro.
+ *
+ * ⚠️ **ELA PROTEGE O BLOCO ISOLADO, e é por isso que ela vale a pena mesmo
+ * depois do bloco 9**: o contador de bloco é auto-contido, então ela acusa num
+ * recorte que nem tem 9999 — que é exatamente onde os defeitos de 29/08
+ * moravam (o bloco G, que UM cliente gera; o C197, que ninguém cadastrou). A
+ * lição daquele dia foi *"trava que roda sobre o ARQUIVO só protege o bloco que
+ * alguém GEROU"*; esta roda sobre o BLOCO.
+ *
+ * ⚠️ **O 9990 fica de FORA, de propósito**: ele já tem dono no
+ * `conferirBloco9`, e dois alarmes para o mesmo defeito é o caminho conhecido
+ * para a equipe ignorar os dois.
+ *
+ * ⚠️ **E ela é por VARREDURA, nunca por lista** (`^[0-9A-Z]990$`): lista de
+ * blocos envelhece no primeiro bloco novo — e envelhece em SILÊNCIO, que é o
+ * jeito mais caro. O bloco K entrou em 29/08 e teria ficado de fora de uma.
+ */
+export function conferirContadoresDeBloco(linhas) {
+    const lista = (linhas || []).map(String).filter((l) => String(l).trim());
+    const suspeitas = [];
+
+    for (const l of lista) {
+        const reg = registroDe(l);
+        // O 9990 tem dono (conferirBloco9). Duplicar alarme desliga os dois.
+        if (!reg || reg === '9990' || !/^[0-9A-Z]990$/.test(reg)) continue;
+
+        const bloco = reg[0];
+        // Linhas do bloco = as que começam pela letra/dígito dele, inclusive o
+        // próprio X990 — é o que o Guia manda contar.
+        const doBloco = lista.filter((x) => {
+            const r = registroDe(x);
+            return r && r[0] === bloco && /^[0-9A-Z]\d{3}$/.test(r);
+        }).length;
+
+        const dec = Number(String(campo(l, 2) || '').replace(/\D/g, ''));
+        if (!Number.isFinite(dec)) {
+            suspeitas.push({
+                registro: reg, tipo: 'contador-de-bloco-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `${reg}: a quantidade de linhas do bloco ${bloco} está ilegível. `
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO.',
+            });
+            continue;
+        }
+        if (dec !== doBloco) {
+            suspeitas.push({
+                registro: reg, tipo: 'contador-de-bloco-nao-fecha', gravidade: 'bloqueia',
+                detalhe: `${reg} declara ${dec} linha(s) no bloco ${bloco} e o arquivo tem ${doBloco}. `
+                    + 'A contagem inclui o próprio ' + reg + '. '
+                    + 'O PVA NÃO IMPORTA o arquivo assim — é defeito de GERAÇÃO, reporte com o print.',
+            });
+        }
+    }
+    return suspeitas;
+}
+
+/**
  * @param {string[]} linhas  arquivo gerado, linha a linha
  * @returns {{suspeitas: Array<{registro:string, tipo:string, gravidade:'bloqueia'|'atencao', detalhe:string}>}}
  */
@@ -151,6 +331,18 @@ export function auditarSaidaSped(linhas) {
     // enquanto o defeito é do MECANISMO (módulo formando linha fora do
     // buildLine), não do leiaute.
     for (const suspeita of linhasMalformadas(lista)) suspeitas.push(suspeita);
+
+    // ── 0b. O BLOCO 9 FECHA COM O ARQUIVO ───────────────────────────────────
+    // Mesma casa e mesmo motivo da forma da linha: é MECANISMO (contagem), não
+    // leiaute, e vale igual nas duas famílias. E é o erro mais caro de todos —
+    // o PVA não IMPORTA o arquivo, então não há recusa de campo para consertar.
+    for (const suspeita of conferirBloco9(lista)) suspeitas.push(suspeita);
+
+    // ── 0c. CADA BLOCO FECHA CONSIGO MESMO ──────────────────────────────────
+    // O bloco 9 fecha o ARQUIVO; o X990 fecha o BLOCO, e um não substitui o
+    // outro — um 9900 correto convive com um G990 errado. Esta alcança o
+    // recorte que nem tem 9999, que é onde mora o bloco de um cliente só.
+    for (const suspeita of conferirContadoresDeBloco(lista)) suspeitas.push(suspeita);
 
     // ── 1. Coluna de valor zerada em TODAS as linhas de um detalhe ──────────
     // Esta é a assinatura do bloco H: 400 itens, todos com QTD 0,00. Um item

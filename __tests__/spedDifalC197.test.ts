@@ -95,17 +95,36 @@ describe('montarC197Difal', () => {
         expect(r.avisos.join(' ')).toContain('não se inventa');
     });
 
+    // 🚨 ESTAS DUAS FIXTURES FORAM TROCADAS EM 29/08 — elas DOCUMENTAVAM o
+    // defeito. As linhas eram montadas à mão (`join('|')`), sem o `|` inicial e
+    // sem o `\r\n`, e o orquestrador junta os blocos com `join('')`: o
+    // C195/C197 saía COLADO na linha anterior do bloco C.
+    //
+    // É a SEGUNDA instância viva do caso REALITY (21/08) achada no mesmo dia —
+    // a primeira foi o bloco G —, e ela nunca apareceu porque o C197 só sai com
+    // o COD_AJ da tabela 5.3 CADASTRADO, e ninguém cadastrou ainda. A mesma
+    // sorte do IPI em E200/E210.
     it('com o código cadastrado, gera a linha C197 da nota', () => {
         const r = montarC197Difal({ ...base, codigoAjuste: 'SP50000001' });
         expect(r.linhasPorChave.CH1).toEqual([
-            'C197|SP50000001|DIFAL aquisicao interestadual||1000,00|18,00|60,00|0,00|',
+            '|C197|SP50000001|DIFAL aquisicao interestadual||1000,00|18,00|60,00|0,00|\r\n',
         ]);
     });
 
     it('com COD_OBS cadastrado, o C195 vem antes do C197', () => {
         const r = montarC197Difal({ ...base, codigoAjuste: 'SP50000001', codObservacao: '001' });
-        expect(r.linhasPorChave.CH1[0]).toBe('C195|001|DIFAL aquisicao interestadual|');
+        expect(r.linhasPorChave.CH1[0]).toBe('|C195|001|DIFAL aquisicao interestadual|\r\n');
         expect(r.linhasPorChave.CH1).toHaveLength(2);
+    });
+
+    // 🔒 A TRAVA DA CLASSE, não da linha: nenhuma linha do C195/C197 escapa do
+    // buildLine. É a mesma pergunta que a R15 (`linhasMalformadas`) faz sobre o
+    // arquivo — aqui ela nasce dentro do módulo, para o próximo registro não
+    // repetir o atalho do `join('|')`.
+    it('🔒 nenhuma linha do C195/C197 escapa do buildLine', () => {
+        const r = montarC197Difal({ ...base, codigoAjuste: 'SP50000001', codObservacao: '001' });
+        expect(r.linhasPorChave.CH1.length).toBeGreaterThan(0);
+        for (const l of r.linhasPorChave.CH1) expect(l).toMatch(/^\|C19[57]\|.*\|\r\n$/);
     });
 
     it('lembra que o débito do E110 vem do E111, não do C197', () => {

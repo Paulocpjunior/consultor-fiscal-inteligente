@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
+import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 
 const so = (v) => String(v || '').replace(/\D/g, '');
 
@@ -106,10 +107,49 @@ export function cfopNaOticaDeEntrada(cfop) {
  */
 export function participanteDoDocumento(d, empresaCnpj) {
     if (!d) return null;
+    // 🚨 AS DUAS FORMAS, AQUI DENTRO (11/09, Paulo: *"deu erros de cod de
+    // participante nas entradas … 493 só de código de participante"*).
+    //
+    // A captura pela SEFAZ grava o participante ACHATADO (`cnpjEmit`,
+    // `xNomeEmit`, `codMunEmit`…) e esta função lia só o ANINHADO
+    // (`d.emitente`). O EFD-Contribuições normalizava a nota ANTES de chamar
+    // aqui (21/08); o EFD ICMS/IPI não — então TODA entrada capturada
+    // automaticamente saía no C100 com **COD_PART VAZIO** e ficava FORA do
+    // 0150 (o coletor recebia null e pulava). Medido em 11/09 rodando o
+    // `buildBlocoC` com uma entrada achatada: `|C100|0|1||55|…|`. A PWR
+    // (20/08) passou porque as entradas dela tinham entrado pelo NAVEGADOR,
+    // que grava o objeto.
+    //
+    // A régua de LEITURA mora no dono (`normalizarParticipantesDoc`), e é
+    // idempotente: nota já aninhada passa intacta. Quem chama continua
+    // recebendo o MESMO objeto de sempre — só deixa de receber null onde o
+    // documento tem o lado na outra forma.
+    const n = normalizarParticipantesDoc(d);
+    const temLado = (p) => !!(p && (p.cnpjCpf || p.cnpj || p.cpf || p.nome || p.razaoSocial || p.xNome));
+    const escolher = (...cands) => cands.find(temLado) || null;
     if (ladoDaContraparte(d, empresaCnpj) === 'destinatario') {
-        return d.destinatario || d.tomador || (d.direcao === 'saida' ? null : d.emitente) || null;
+        return escolher(n.destinatario, d.tomador, d.direcao === 'saida' ? null : n.emitente);
     }
-    return d.emitente || d.prestador || null;
+    return escolher(n.emitente, d.prestador);
+}
+
+/**
+ * O **COD_PART** do documento — o CNPJ/CPF da contraparte, só dígitos.
+ *
+ * 📌 Existe porque o recorte "`cnpjCpf || cnpj || CNPJ` + `replace(/\D/g,'')`"
+ * estava escrito à mão no C100 **e** no A100 do EFD-Contribuições, e é este
+ * número que o 0150 cadastra. Três leituras do mesmo campo é como o registro
+ * passa a referenciar um participante que a Tabela de Cadastro não declara.
+ *
+ * ⚠️ Devolve **''** quando o documento não traz o lado — e o vazio é a
+ * RESPOSTA, não um default: na ENTRADA o PVA recusa o arquivo por ele
+ * (*"Campo obrigatório na entrada · 4 - COD_PART"*), e quem decide o que fazer
+ * com a ausência é quem monta o bloco. Inventar participante é o `PARTSEM`.
+ */
+export function codPartDoDocumento(d, empresaCnpj) {
+    const p = participanteDoDocumento(d, empresaCnpj);
+    if (!p) return '';
+    return String(p.cnpjCpf || p.cnpj || p.CNPJ || p.cpf || '').replace(/\D/g, '');
 }
 
 /**

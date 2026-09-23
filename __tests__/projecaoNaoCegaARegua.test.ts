@@ -80,8 +80,14 @@ function projecoes(src: string): Array<{ linha: number; campos: Set<string> }> {
 }
 
 describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () => {
-    it('os três sinais do cancelamento estão declarados junto do dono', () => {
-        expect([...CAMPOS_PARA_DOC_CANCELADO]).toEqual(['status', 'cStat', 'eventos']);
+    it('os sinais do cancelamento estão declarados junto do dono', () => {
+        // O QUARTO nasceu em 10/09 (JG SOLUCOES · Barueri): o cancelamento
+        // aconteceu no portal da PREFEITURA depois da captura, e o documento
+        // veio `autorizado`. A declaração humana entra na régua da LEITURA —
+        // e projeção que não a carrega devolve a nota cancelada ao faturamento,
+        // que é exatamente o defeito que esta trava existe para pegar.
+        expect([...CAMPOS_PARA_DOC_CANCELADO])
+            .toEqual(['status', 'cStat', 'eventos', 'cancelamentoDeclarado']);
     });
 
     it('nenhuma consulta de documentos_fiscais cega a régua sem declarar por quê', () => {

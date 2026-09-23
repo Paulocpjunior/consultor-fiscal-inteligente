@@ -18,6 +18,7 @@ import { getAuth } from 'firebase/auth';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { sanitizeForFirestore } from './firestoreSanitize';
 import { mesclarAnaliseComRemota } from './nfpAnaliseMerge';
+import { fetchAllDocs } from './firestorePaginate';
 import type { User, NfpAnaliseEmpresa, NfpDebito } from '../types';
 
 const COLLECTION = 'nfp_analises';
@@ -149,9 +150,8 @@ export async function listarAnalises(user: User): Promise<NfpAnaliseEmpresa[]> {
     if (!isFirebaseConfigured || !db) return [];
     if (!auth?.currentUser) return [];
 
-    const q = query(collection(db, COLLECTION), fbLimit(500));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ ...d.data() } as NfpAnaliseEmpresa));
+    const snaps = await fetchAllDocs(COLLECTION);
+    return snaps.map(d => ({ ...d.data() } as NfpAnaliseEmpresa));
 }
 
 /**

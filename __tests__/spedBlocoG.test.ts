@@ -75,20 +75,47 @@ describe('CIAP — caso real EXPERTE 06/2026', () => {
         })).toBe(117.5);
     });
 
+    // 🚨 ESTA FIXTURE FOI TROCADA EM 29/08, e o motivo é o de sempre: ela
+    // DOCUMENTAVA o defeito em vez de pegá-lo.
+    //
+    // As linhas eram travadas SEM o `|` inicial e SEM o `\r\n` — e o
+    // orquestrador junta os blocos com `join('')`, então o bloco G inteiro saía
+    // **grudado numa linha só**, colado na cauda do bloco E. É o caso REALITY
+    // de 21/08 (E200/E210/E220/E250) vivo aqui, e a lição daquele dia estava
+    // escrita: *"módulo novo que bypassar o buildLine cai na R15"*. O bloco G
+    // nunca tinha passado por ela porque a ÚNICA empresa com CIAP (EXPERTE)
+    // está bloqueada na captura — a mesma sorte do IPI em E200/E210.
+    //
+    // Trocar a fixture é o certo; trocar a régua para o teste passar seria
+    // manter o arquivo que o PVA não importa.
     it('gera G110 com os valores do relatório e um G125 por bem', () => {
         const linhas = montarLinhasBlocoG({
             apuracao: apurarCiap(APURACAO_EXPERTE),
             dtIni: '2026-06-01', dtFin: '2026-06-30',
         });
 
-        expect(linhas[0]).toBe('G001|0|');
+        expect(linhas[0]).toBe('|G001|0|\r\n');
         expect(linhas[1]).toBe(
-            'G110|01062026|30062026|25321,33|527,53|425472,59|494550,91|0,86032111|453,85|0,00|',
+            '|G110|01062026|30062026|25321,33|527,53|425472,59|494550,91|0,86032111|453,85|0,00|\r\n',
         );
-        expect(linhas.filter((l: string) => l.startsWith('G125'))).toHaveLength(4);
-        expect(linhas[2]).toBe('G125|CHAPAS|01062026|SI|955,50|0,00|0,00|0,00|12|19,91|');
+        expect(linhas.filter((l: string) => l.startsWith('|G125|'))).toHaveLength(4);
+        expect(linhas[2]).toBe('|G125|CHAPAS|01062026|SI|955,50|0,00|0,00|0,00|12|19,91|\r\n');
         // G990 conta TODAS as linhas do bloco, inclusive ele mesmo.
-        expect(linhas[linhas.length - 1]).toBe(`G990|${linhas.length}|`);
+        expect(linhas[linhas.length - 1]).toBe(`|G990|${linhas.length}|\r\n`);
+    });
+
+    // 🔒 A TRAVA DA CLASSE, não da linha: TODA linha do bloco G abre com `|` e
+    // fecha com `|\r\n`. É a mesma pergunta que a R15 (`linhasMalformadas`) faz
+    // sobre o arquivo inteiro — aqui ela nasce dentro do módulo, para o próximo
+    // registro do bloco não repetir o atalho do `join('|')`.
+    it('🔒 nenhuma linha do bloco G escapa do buildLine', () => {
+        for (const bens of [APURACAO_EXPERTE, { ...APURACAO_EXPERTE, bens: [] }]) {
+            const linhas = montarLinhasBlocoG({
+                apuracao: apurarCiap(bens), dtIni: '2026-06-01', dtFin: '2026-06-30',
+            });
+            expect(linhas.length).toBeGreaterThan(0);
+            for (const l of linhas) expect(l).toMatch(/^\|[0-9A-Z]{4}\|.*\|\r\n$/);
+        }
     });
 });
 
@@ -132,7 +159,9 @@ describe('CIAP — regras que protegem o crédito', () => {
             apuracao: apurarCiap({ bens: [], saldoInicial: 0, saidasTributadas: 0, saidasTotais: 0 }),
             dtIni: '2026-06-01', dtFin: '2026-06-30',
         });
-        expect(linhas).toEqual(['G001|1|', 'G990|2|']);
+        // Trocada junto com a fixture acima, pelo MESMO motivo: o bloco vazio
+        // também saía sem o `|` inicial e sem o `\r\n`.
+        expect(linhas).toEqual(['|G001|1|\r\n', '|G990|2|\r\n']);
     });
 });
 
@@ -195,5 +224,100 @@ describe('🚨 índice do CIAP — o valor sai da régua, nas duas formas', () =
         ]);
         expect(r.total).toBe(2000);
         expect(r.tributadasEExportacao).toBe(1000);   // antes: 1000/1000 = índice 1,0
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 O 0300 — O CADASTRO QUE O G125 REFERENCIA E O ARQUIVO NÃO TRAZIA
+//
+// 📖 Guia 3.2.3, G125 campo 02: *"o código informado neste campo deve constar
+// de um registro 0300"*; e o 0300 abre dizendo que existe *"para identificar e
+// caracterizar TODOS os bens ou componentes arrolados no registro G125"*.
+//
+// 🔴 O app emitia o G125 e NENHUM 0300: todo bem do CIAP saía órfão. É a
+// família do item órfão do 0200 (PWR, 19/08) e do participante órfão do 0150.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🚨 o 0300 cadastra o bem que o G125 referencia', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { montarRegistros0300 } = require('../sefaz-backend/sped-bloco-g.js');
+
+    const CONTA = { contaContabil: '1231001', contaContabilNome: 'MAQUINAS E EQUIP', contaContabilNivel: '5' };
+
+    it('um 0300 por bem, com o código que o G125 usa', () => {
+        const r = montarRegistros0300([
+            { codigo: 'FRESA', descricao: 'FRESA FERRAMENTEIRA', tipo: 'bem', ...CONTA },
+            {
+                codigo: 'ROLAMENTOS', descricao: 'ROLAMENTOS', tipo: 'componente',
+                codigoBemPrincipal: 'FRESA', ...CONTA,
+            },
+        ], '01072026');
+        expect(r.linhas).toHaveLength(2);
+        expect(r.linhas[0]).toBe('|0300|FRESA|1|FRESA FERRAMENTEIRA||1231001|48|\r\n');
+        // IDENT_MERC: 1 = bem · 2 = componente; e o componente leva o COD_PRNC.
+        expect(r.linhas[1]).toBe('|0300|ROLAMENTOS|2|ROLAMENTOS|FRESA|1231001|48|\r\n');
+        expect(r.avisos).toEqual([]);
+    });
+
+    // 🚨 O COD_CTA APONTA PARA O 0500 — e o EFD ICMS/IPI não emitia 0500
+    // NENHUM (ele só existia no EFD-Contribuições). Era o órfão que o próprio
+    // app criou ao passar a emitir o 0300, achado no mesmo dia, medindo de novo.
+    //
+    // ✅ O que a régua DERIVA, com o motivo: COD_NAT_CC = 01 (Contas de ativo),
+    // porque o bem do CIAP É ativo imobilizado; IND_CTA = A, porque o próprio
+    // 0300 chama o campo de "conta ANALÍTICA"; e DT_ALT = 1º de janeiro do ano,
+    // como o 0500 do EFD assinado do CF BANK.
+    it('a conta do 0300 vira um 0500 — e duas iguais viram UM só', () => {
+        const r = montarRegistros0300([
+            { codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', ...CONTA },
+            { codigo: 'TORNO', descricao: 'TORNO', tipo: 'bem', ...CONTA },
+        ], '01072026');
+        // O Guia proíbe dois 0500 com a mesma combinação DT_ALT + COD_CTA.
+        expect(r.linhas0500).toEqual(['|0500|01012026|01|A|5|1231001|MAQUINAS E EQUIP|\r\n']);
+    });
+
+    // 🚨 COERÊNCIA É TUDO OU NADA (a régua do F100/0500, 24/08): o 0500 exige
+    // NÍVEL e NOME, que são do plano de contas e o app não deduz. Sem os TRÊS,
+    // o COD_CTA também não sai — emitir a referência sem a declaração é
+    // justamente a recusa.
+    it('conta INCOMPLETA não emite 0500 e nem carimba o COD_CTA', () => {
+        const r = montarRegistros0300(
+            [{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem', contaContabil: '1231001' }],
+            '01072026',
+        );
+        expect(r.linhas[0]).toBe('|0300|FRESA|1|FRESA|||48|\r\n');
+        expect(r.linhas0500).toEqual([]);
+        expect(r.avisos).toHaveLength(1);
+        expect(r.avisos[0]).toContain('FRESA');
+        expect(r.avisos[0]).toContain('NÍVEL e o NOME');
+    });
+
+    // 🚨 O COD_CTA NÃO SE INVENTA — é a conta analítica do plano de contas da
+    // empresa, e o app não a deduz (a mesma disciplina do F100 e do 0002).
+    // Sai VAZIO e a falta vai DITA, com o lugar de preencher.
+    it('sem conta contábil o campo sai VAZIO e a falta é NOMEADA', () => {
+        const r = montarRegistros0300([{ codigo: 'FRESA', descricao: 'FRESA', tipo: 'bem' }], '01072026');
+        expect(r.linhas[0]).toBe('|0300|FRESA|1|FRESA|||48|\r\n');
+        expect(r.linhas0500).toEqual([]);
+        expect(r.avisos).toHaveLength(1);
+        expect(r.avisos[0]).toContain('FRESA');
+        expect(r.avisos[0]).toContain('CIAP (Bloco G)');
+    });
+
+    // ⚠️ Bem sem código não vira um 0300 anônimo — seria cadastro fabricado, e
+    // `apurarCiap` já acusa a falta do COD_IND_BEM.
+    it('bem sem código não gera 0300', () => {
+        expect(montarRegistros0300([{ codigo: '', descricao: 'X' }], '01072026').linhas).toEqual([]);
+    });
+
+    it('sem bens (o caso da maioria) não sai 0300 nenhum', () => {
+        expect(montarRegistros0300([], '01072026').linhas).toEqual([]);
+        expect(montarRegistros0300(null, '01072026').linhas).toEqual([]);
+    });
+
+    // 🔒 A mesma trava de forma do bloco G: nenhuma linha escapa do buildLine.
+    it('🔒 toda linha do 0300 e do 0500 passa pelo buildLine', () => {
+        const r = montarRegistros0300([{ codigo: 'A', descricao: 'A', tipo: 'bem', ...CONTA }], '01072026');
+        for (const l of r.linhas) expect(l).toMatch(/^\|0300\|.*\|\r\n$/);
+        for (const l of r.linhas0500) expect(l).toMatch(/^\|0500\|.*\|\r\n$/);
     });
 });

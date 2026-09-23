@@ -77,7 +77,7 @@ describe('montagem — o silêncio nunca passa por "nada aconteceu"', () => {
         });
         expect(r.total).toBe(3);
         expect(r.eventos[0].id).toBe('imposto-enviado:b');   // mais recente primeiro
-        expect(r.porPessoa[0]).toEqual({ quem: 'ju@sp', quantidade: 2 });
+        expect(r.porPessoa[0]).toMatchObject({ quem: 'ju@sp', quantidade: 2 });
         expect(r.porTrilha.find((t: any) => t.trilha === 'dctfweb-transmissao')?.quantidade).toBe(1);
     });
 

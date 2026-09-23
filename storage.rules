@@ -5,27 +5,64 @@ rules_version = '2';
 //
 // Cobre o caminho /xmls/{empresaId}/{file} usado pelo xmlStorageService.
 // Bloqueia o restante do bucket por padrão.
+//
+// 🚨 ESTE ARQUIVO SÓ VALE DEPOIS DE PUBLICADO — e por muito tempo ele NÃO era.
+//
+// Em 31/08 a regra de `/nfse_pdfs/` foi escrita para destravar a importação de
+// NFS-e em PDF, o teste passou verde, e em 01/09 o colaborador levou
+// EXATAMENTE o mesmo `storage/unauthorized`: o `deploy-firestore.yml` subia
+// `--only firestore:rules,firestore:indexes` e nem escutava `storage.rules` no
+// `paths:`. A correção existia e nunca chegou à produção — *"regra escrita não
+// é regra IMPLANTADA"*.
+//
+// ⚠️ QUEM PUBLICA É O `.github/workflows/deploy-firestore.yml`, e ele dispara
+// por MUDANÇA NESTE ARQUIVO. Editar a regra e não ver o workflow rodar é a
+// mesma coisa que não ter editado.
 // =============================================================================
 
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function adminUser() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function companyAccess(id) {
+      return request.auth != null && (adminUser()
+        || (firestore.exists(/databases/(default)/documents/carteira_acessos/$(request.auth.uid))
+          && id in firestore.get(/databases/(default)/documents/carteira_acessos/$(request.auth.uid)).data.empresaIds)
+        || (firestore.exists(/databases/(default)/documents/simples_empresas/$(id))
+          && firestore.get(/databases/(default)/documents/simples_empresas/$(id)).data.get('createdBy', '') == request.auth.uid)
+        || (firestore.exists(/databases/(default)/documents/lucro_empresas/$(id))
+          && firestore.get(/databases/(default)/documents/lucro_empresas/$(id)).data.get('createdBy', '') == request.auth.uid));
+    }
+
     // XMLs originais da Central de Documentos Fiscais.
-    // - Leitura: usuários autenticados (necessário para baixar pela UI).
-    // - Escrita: usuários autenticados, limitada a 10 MB e content-type XML.
+    // Leitura pela carteira; upload autenticado pelo backend sem token publico.
     match /xmls/{empresaId}/{file} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-                   && request.resource.size < 10 * 1024 * 1024
-                   && (request.resource.contentType == 'application/xml'
-                       || request.resource.contentType == 'text/xml');
-      allow delete: if request.auth != null
-                    && (
-                      // Master admin
-                      request.auth.token.email == 'junior@spassessoriacontabil.com.br'
-                      // ou perfil admin no Firestore
-                      || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                    );
+      allow read: if companyAccess(empresaId);
+      // Upload pela API autenticada: evita tokens permanentes do Firebase.
+      allow create, update: if false;
+      allow delete: if adminUser();
+    }
+
+    // 🚨 PDFs da importação de NFS-e (NfsePdfImportacao).
+    //
+    // 31/08, Paulo, importando uma NFS-e da Prefeitura de Santo André:
+    //   "Firebase Storage: User does not have permission to access
+    //    'nfse_pdfs/…' (storage/unauthorized)"
+    //
+    // A tela existe desde sempre e a regra NUNCA foi escrita — o caminho caía
+    // no default deny abaixo, então **nenhum PDF de NFS-e jamais foi gravado**.
+    // É a "rota sem botão" (13/08) do lado do Storage: o caminho existe no
+    // código, a permissão não existe, e a falha só aparece no clique.
+    //
+    // Mesmo desenho de /xmls: carteira, upload pelo backend e exclusao admin.
+    match /nfse_pdfs/{empresaId}/{file} {
+      allow read: if companyAccess(empresaId);
+      allow create, update: if false;
+      allow delete: if adminUser();
     }
 
     // Default deny — nenhum outro caminho é acessível.

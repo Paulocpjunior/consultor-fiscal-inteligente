@@ -1,10 +1,13 @@
 // ============================================================================
-// GEMINI 3.7 — pinar PERGUNTANDO, nunca chutando o ID.
+// GEMINI 3.8 — pinar PERGUNTANDO, nunca chutando o ID.
+//
+// Paulo, 06/09: *"precisamos alterar nosso motor em todos os apps, do gemini,
+// 3.7 para 3.8 em todos"*. O PISO subiu; o desenho de 15-16/08 continua:
 //
 // Paulo, 15/08: *"pedi para você atualizar p a versão 3.7"*.
 //
 // O que estes testes protegem não é o número: é a diferença entre PINAR e
-// APOSTAR. Escrever 'gemini-3.7-pro' na mão derruba a IA do escritório inteiro
+// APOSTAR. Escrever 'gemini-3.8-pro' na mão derruba a IA do escritório inteiro
 // no dia em que o nome real for outro — e derruba CALADO, no deploy.
 // ============================================================================
 import {
@@ -16,54 +19,55 @@ import { join } from 'path';
 
 const m = (name: string, acoes: string[] = ['generateContent']) => ({ name, supportedActions: acoes });
 
-const CONTA_COM_37 = [
+const CONTA_COM_38 = [
     m('models/gemini-2.5-pro'),
-    m('models/gemini-3.7-pro'),
-    m('models/gemini-3.7-pro-preview-11-20'),
-    m('models/gemini-3.7-flash'),
-    m('models/gemini-3.7-flash-lite'),
+    m('models/gemini-3.8-pro'),
+    m('models/gemini-3.8-pro-preview-11-20'),
+    m('models/gemini-3.8-flash'),
+    m('models/gemini-3.8-flash-lite'),
     m('models/text-embedding-004', ['embedContent']),
 ];
 
-describe('o alvo é a família 3.7', () => {
-    it('pina o Pro e o Flash da 3.7 quando a API os lista', () => {
-        const r = resolverModelosGemini({ modelos: CONTA_COM_37 });
-        expect(r.familiaAlvo).toBe('3.7');
-        expect(r.pro.modelo).toBe('gemini-3.7-pro');
-        expect(r.flash.modelo).toBe('gemini-3.7-flash');
+describe('o alvo é a família 3.8', () => {
+    it('pina o Pro e o Flash da 3.8 quando a API os lista', () => {
+        const r = resolverModelosGemini({ modelos: CONTA_COM_38 });
+        expect(r.familiaAlvo).toBe('3.8');
+        expect(r.pro.modelo).toBe('gemini-3.8-pro');
+        expect(r.flash.modelo).toBe('gemini-3.8-flash');
         expect(r.pro.origem).toBe('familia-alvo');
         expect(r.alvoEncontrado).toBe(true);
     });
 
     it('GA vence preview — nome estável antes do datado', () => {
-        expect(escolherModeloDaFamilia(CONTA_COM_37, { familia: '3.7', tipo: 'pro' }).modelo)
-            .toBe('gemini-3.7-pro');
+        expect(escolherModeloDaFamilia(CONTA_COM_38, { familia: '3.8', tipo: 'pro' }).modelo)
+            .toBe('gemini-3.8-pro');
     });
 
     it('🚨 `-lite` NÃO ocupa a vaga do Flash', () => {
         // Outro degrau de preço/qualidade. O roteador Pro×Flash manda prompt de
         // trabalho ao Flash — cair no lite rebaixaria o app em silêncio.
-        const soLite = [m('models/gemini-3.7-flash-lite')];
-        expect(escolherModeloDaFamilia(soLite, { familia: '3.7', tipo: 'flash' }).modelo).toBeNull();
+        const soLite = [m('models/gemini-3.8-flash-lite')];
+        expect(escolherModeloDaFamilia(soLite, { familia: '3.8', tipo: 'flash' }).modelo).toBeNull();
     });
 
     it('modelo que não gera conteúdo fica de fora', () => {
-        const emb = [m('models/gemini-3.7-pro-embedding', ['embedContent'])];
-        expect(escolherModeloDaFamilia(emb, { familia: '3.7', tipo: 'pro' }).modelo).toBeNull();
+        const emb = [m('models/gemini-3.8-pro-embedding', ['embedContent'])];
+        expect(escolherModeloDaFamilia(emb, { familia: '3.8', tipo: 'pro' }).modelo).toBeNull();
     });
 
-    it('🚨 O CASO REAL DA CONTA (print 16/08): Flash no 3.7, Pro no 3.1', () => {
-        // O seletor do Gemini do Paulo mostra, na MESMA lista: "3.5 Flash Lite",
-        // "3.7 Flash" e "3.1 Pro". As linhas NÃO andam no mesmo número — e era
-        // isso que fazia o app procurar um "3.7 Pro" inexistente e concluir,
-        // errado, que "a família 3.7 não aparece para esta conta".
+    it('🚨 O CASO REAL DA CONTA: Flash no 3.8, Pro no 3.1 — as linhas NÃO andam juntas', () => {
+        // O print de 16/08 mostrava "3.5 Flash Lite", "3.7 Flash" e "3.1 Pro";
+        // em 06/09 o Paulo pediu o 3.8 ("alterar nosso motor ... 3.7 para 3.8").
+        // A forma é a mesma: as linhas NÃO andam no mesmo número — e era isso
+        // que fazia o app procurar um "3.8 Pro" inexistente e concluir, errado,
+        // que "a família 3.8 não aparece para esta conta".
         const contaReal = [
             m('models/gemini-3.5-flash-lite'),
-            m('models/gemini-3.7-flash'),
+            m('models/gemini-3.8-flash'),
             m('models/gemini-3.1-pro'),
         ];
         const r = resolverModelosGemini({ modelos: contaReal });
-        expect(r.flash.modelo).toBe('gemini-3.7-flash');
+        expect(r.flash.modelo).toBe('gemini-3.8-flash');
         expect(r.flash.atingiuPiso).toBe(true);
         // O Pro pina no mais novo DELE, e o app DIZ que a linha está atrás —
         // em vez de fingir que não achou nada.
@@ -75,11 +79,11 @@ describe('o alvo é a família 3.7', () => {
 
     it('dentro da mesma linha, o mais novo vence', () => {
         const versoes = [m('models/gemini-2.5-pro'), m('models/gemini-3.1-pro'), m('models/gemini-1.5-pro')];
-        expect(escolherModeloDaFamilia(versoes, { familia: '3.7', tipo: 'pro' }).modelo).toBe('gemini-3.1-pro');
+        expect(escolherModeloDaFamilia(versoes, { familia: '3.8', tipo: 'pro' }).modelo).toBe('gemini-3.1-pro');
     });
 
     it('modelo sem versão no nome não entra — não dá para dizer se é novo', () => {
-        expect(escolherModeloDaFamilia([m('models/gemini-pro')], { familia: '3.7', tipo: 'pro' }).modelo).toBeNull();
+        expect(escolherModeloDaFamilia([m('models/gemini-pro')], { familia: '3.8', tipo: 'pro' }).modelo).toBeNull();
     });
 });
 
@@ -91,7 +95,7 @@ describe('🚨 sem a lista, NÃO se inventa o ID', () => {
         expect(r.pro.origem).toBe('alias-sem-lista');
         expect(r.pro.motivo).toMatch(/não foi conferido/i);
         // O que NÃO pode acontecer: o app pedir um nome que ninguém viu existir.
-        expect(r.pro.modelo).not.toMatch(/3\.7/);
+        expect(r.pro.modelo).not.toMatch(/3\.8/);
     });
 
     it('🚨 conta atrás do piso PINA NO MAIS NOVO — não volta pro alias', () => {
@@ -107,17 +111,17 @@ describe('🚨 sem a lista, NÃO se inventa o ID', () => {
 });
 
 describe('o env do operador vence a regra automática', () => {
-    it('pino à mão não é sobrescrito nem quando a 3.7 existe', () => {
-        const r = resolverModelosGemini({ modelos: CONTA_COM_37, envPro: 'gemini-2.5-pro' });
+    it('pino à mão não é sobrescrito nem quando a 3.8 existe', () => {
+        const r = resolverModelosGemini({ modelos: CONTA_COM_38, envPro: 'gemini-2.5-pro' });
         expect(r.pro.modelo).toBe('gemini-2.5-pro');
         expect(r.pro.origem).toBe('env');
-        expect(r.flash.modelo).toBe('gemini-3.7-flash'); // o outro segue a regra
+        expect(r.flash.modelo).toBe('gemini-3.8-flash'); // o outro segue a regra
     });
 });
 
-describe('"estamos no 3.7?" se responde pelo que a API DEVOLVEU', () => {
+describe('"estamos no 3.8?" se responde pelo que a API DEVOLVEU', () => {
     it('modelVersion da família alvo confirma, mesmo via alias', () => {
-        expect(versaoAtendeAlvo('gemini-3.7-pro')).toBe(true);
+        expect(versaoAtendeAlvo('gemini-3.8-pro')).toBe(true);
         expect(versaoAtendeAlvo('gemini-2.5-pro')).toBe(false);
     });
 
@@ -129,7 +133,7 @@ describe('"estamos no 3.7?" se responde pelo que a API DEVOLVEU', () => {
     });
 
     it('normaliza o prefixo models/', () => {
-        expect(normalizarNomeModelo('models/gemini-3.7-pro')).toBe('gemini-3.7-pro');
+        expect(normalizarNomeModelo('models/gemini-3.8-pro')).toBe('gemini-3.8-pro');
     });
 });
 
@@ -153,7 +157,7 @@ describe('o servidor usa o resolvedor — não uma constante escrita à mão', (
     });
 
     it('a família alvo mora no módulo, não espalhada', () => {
-        expect(FAMILIA_ALVO_GEMINI).toBe('3.7');
+        expect(FAMILIA_ALVO_GEMINI).toBe('3.8');
     });
 
     it('🚨 nenhum router tem a SEGUNDA CÓPIA da escolha de modelo', () => {
@@ -174,31 +178,31 @@ describe('o servidor usa o resolvedor — não uma constante escrita à mão', (
 // ═══ O PRINT DE PRODUÇÃO (15/08) DERRUBOU O PRÓPRIO PAINEL ══════════════════
 //
 // Paulo abriu o ⚙️ Config Admin e a tela mostrou, LADO A LADO:
-//   ⚠ A família 3.7 ainda não aparece para esta conta — o app segue no alias.
-//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
-//   ✓ gemini-flash-latest → gemini-3.7-flash · na família alvo
+//   ⚠ A família 3.8 ainda não aparece para esta conta — o app segue no alias.
+//   ✓ gemini-flash-latest → gemini-3.8-flash · na família alvo
+//   ✓ gemini-flash-latest → gemini-3.8-flash · na família alvo
 //
-// O cabeçalho dizia que NÃO estamos na 3.7 enquanto as duas sondas mostravam a
+// O cabeçalho dizia que NÃO estamos na 3.8 enquanto as duas sondas mostravam a
 // conta sendo atendida POR ELA. Eu reproduzi, no meu próprio painel, a
 // armadilha que este projeto mais pagou.
-describe('🚨 quem responde "estamos no 3.7?" é a SONDA, não a listagem', () => {
+describe('🚨 quem responde "estamos no 3.8?" é a SONDA, não a listagem', () => {
     const { vereditoDaFamilia, conferirRoteador } = require('../sefaz-backend/gemini-modelo.js');
 
     it('o caso REAL do print: fora da listagem, mas ATENDIDA pela família', () => {
         const v = vereditoDaFamilia(
-            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true },
-             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true }],
+            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.8-flash', naFamiliaAlvo: true },
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.8-flash', naFamiliaAlvo: true }],
             false, // a listagem NÃO trouxe a família
         );
         expect(v.situacao).toBe('atendida');
         expect(v.cor).toBe('ok');
-        expect(v.texto).toMatch(/Estamos na família 3\.7/);
+        expect(v.texto).toMatch(/Estamos na família 3\.8/);
         // E explica a aparente contradição em vez de escondê-la.
         expect(v.texto).toMatch(/quem responde é o resultado, não a listagem/);
     });
 
     it('atendida E listada: sem a ressalva, que aí não há o que explicar', () => {
-        const v = vereditoDaFamilia([{ modelVersion: 'gemini-3.7-pro', naFamiliaAlvo: true }], true);
+        const v = vereditoDaFamilia([{ modelVersion: 'gemini-3.8-pro', naFamiliaAlvo: true }], true);
         expect(v.situacao).toBe('atendida');
         expect(v.texto).not.toMatch(/listagem/);
     });
@@ -218,7 +222,7 @@ describe('🚨 quem responde "estamos no 3.7?" é a SONDA, não a listagem', () 
 
     it('metade dentro, metade fora ⇒ PARCIAL, não verde', () => {
         const v = vereditoDaFamilia([
-            { modelo: 'a', modelVersion: 'gemini-3.7-pro', naFamiliaAlvo: true },
+            { modelo: 'a', modelVersion: 'gemini-3.8-pro', naFamiliaAlvo: true },
             { modelo: 'b', modelVersion: 'gemini-2.5-flash', naFamiliaAlvo: false },
         ], false);
         expect(v.situacao).toBe('parcial');
@@ -259,14 +263,14 @@ describe('🚨 o ⚠ da família NÃO pode brigar com o ✓ da versão na mesma 
     const { vereditoDaFamilia, conferirEstabilidade } = require('../sefaz-backend/gemini-modelo.js');
     // Print real do Paulo, 16/08: as duas linhas coladas, ambas verdadeiras e
     // lendo como contradição — e a de cima SEM AÇÃO POSSÍVEL, porque não existe
-    // Pro 3.7 para ninguém pinar.
+    // Pro 3.8 para ninguém pinar.
     const SONDAS = [
         { modelo: 'gemini-3.1-pro-preview', modelVersion: 'gemini-3.1-pro-preview', naFamiliaAlvo: false },
-        { modelo: 'gemini-3.7-flash', modelVersion: 'gemini-3.7-flash', naFamiliaAlvo: true },
+        { modelo: 'gemini-3.8-flash', modelVersion: 'gemini-3.8-flash', naFamiliaAlvo: true },
     ];
 
     it('cada linha no teto da conta ⇒ VERDE, e a frase diz que não há o que fazer', () => {
-        const v = vereditoDaFamilia(SONDAS, false, '3.7', { situacao: 'atual' });
+        const v = vereditoDaFamilia(SONDAS, false, '3.8', { situacao: 'atual' });
         expect(v.situacao).toBe('no-teto-da-conta');
         expect(v.cor).toBe('ok');
         expect(v.texto).toMatch(/mais novo que a conta oferece/);
@@ -274,13 +278,13 @@ describe('🚨 o ⚠ da família NÃO pode brigar com o ✓ da versão na mesma 
     });
 
     it('🚨 mas se a conta TEM algo mais novo, o ⚠ volta — aí existe ação', () => {
-        const v = vereditoDaFamilia(SONDAS, false, '3.7', { situacao: 'atrasado' });
+        const v = vereditoDaFamilia(SONDAS, false, '3.8', { situacao: 'atrasado' });
         expect(v.cor).toBe('atencao');
         expect(v.situacao).toBe('parcial');
     });
 
     it('sem saber do teto, o comportamento antigo continua (nada quebra)', () => {
-        expect(vereditoDaFamilia(SONDAS, false, '3.7').situacao).toBe('parcial');
+        expect(vereditoDaFamilia(SONDAS, false, '3.8').situacao).toBe('parcial');
     });
 
     it('🚨 o build -preview é NOMEADO — a Google retira sem aviso', () => {
@@ -294,7 +298,7 @@ describe('🚨 o ⚠ da família NÃO pode brigar com o ✓ da versão na mesma 
     });
 
     it('só estáveis ⇒ nada a dizer', () => {
-        const e = conferirEstabilidade([{ modelVersion: 'gemini-3.7-flash' }, { modelVersion: 'gemini-3.1-pro' }]);
+        const e = conferirEstabilidade([{ modelVersion: 'gemini-3.8-flash' }, { modelVersion: 'gemini-3.1-pro' }]);
         expect(e.instavel).toBe(false);
         expect(e.texto).toBeNull();
     });
@@ -303,17 +307,17 @@ describe('🚨 o ⚠ da família NÃO pode brigar com o ✓ da versão na mesma 
 describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a última versão"', () => {
     const { conferirAtualizacao, linhaDoModelo } = require('../sefaz-backend/gemini-modelo.js');
     const LISTA = [
-        { name: 'models/gemini-3.7-flash' },
+        { name: 'models/gemini-3.8-flash' },
         { name: 'models/gemini-3.5-flash-lite' },
         { name: 'models/gemini-3.1-pro' },
     ];
 
-    it('Flash na 3.7 com a conta listando 3.7 = ATUAL, mesmo com o Pro atrás', () => {
-        // É o caso do Paulo hoje: os dois degraus no Flash 3.7. A condição dele
+    it('Flash na 3.8 com a conta listando 3.8 = ATUAL, mesmo com o Pro atrás', () => {
+        // É o caso do Paulo hoje: os dois degraus no Flash 3.8. A condição dele
         // está cumprida, e a tela tem que DIZER isso — não acusar.
         const r = conferirAtualizacao(
-            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' },
-             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' }],
+            [{ modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.8-flash' },
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.8-flash' }],
             LISTA,
         );
         expect(r.situacao).toBe('atual');
@@ -323,9 +327,9 @@ describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a últim
 
     it('🚨 ficar para trás é que é VERMELHO — e acontece sozinho', () => {
         // No dia em que a Google publicar a 3.9, a conta lista e o env pinado
-        // continua no 3.7. Ninguém mexeu em nada e o app envelheceu.
+        // continua no 3.8. Ninguém mexeu em nada e o app envelheceu.
         const r = conferirAtualizacao(
-            [{ modelo: 'gemini-3.7-flash', modelVersion: 'gemini-3.7-flash' }],
+            [{ modelo: 'gemini-3.8-flash', modelVersion: 'gemini-3.8-flash' }],
             [...LISTA, { name: 'models/gemini-3.9-flash' }],
         );
         expect(r.situacao).toBe('atrasado');
@@ -339,7 +343,7 @@ describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a últim
         // As linhas não andam no mesmo número (print da conta dele, 16/08).
         const r = conferirAtualizacao(
             [{ modelo: 'gemini-pro-latest', modelVersion: 'gemini-3.1-pro' },
-             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.7-flash' }],
+             { modelo: 'gemini-flash-latest', modelVersion: 'gemini-3.8-flash' }],
             LISTA,
         );
         expect(r.situacao).toBe('atual');
@@ -350,7 +354,7 @@ describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a últim
         // Afirmar atraso por falha de rede faria alguém pinar à mão um modelo
         // que já estava certo.
         for (const lista of [null, [], undefined]) {
-            const r = conferirAtualizacao([{ modelVersion: 'gemini-3.7-flash' }], lista as any);
+            const r = conferirAtualizacao([{ modelVersion: 'gemini-3.8-flash' }], lista as any);
             expect(r.situacao).toBe('indeterminado');
             expect(r.cor).toBe('neutro');
         }
@@ -363,10 +367,10 @@ describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a últim
     });
 
     it('🐛 `-lite` não ocupa a vaga do Flash — senão o piso seria o degrau errado', () => {
-        // Se o lite entrasse na comparação, um lite 4.0 faria o Flash 3.7
+        // Se o lite entrasse na comparação, um lite 4.0 faria o Flash 3.8
         // aparecer como atrasado e mandaria trocar para um modelo mais fraco.
         const r = conferirAtualizacao(
-            [{ modelVersion: 'gemini-3.7-flash' }],
+            [{ modelVersion: 'gemini-3.8-flash' }],
             [...LISTA, { name: 'models/gemini-4.0-flash-lite' }],
         );
         expect(r.situacao).toBe('atual');
@@ -374,14 +378,14 @@ describe('🚨 a régua agora é a CONDIÇÃO do Paulo: "desde que seja a últim
 
     it('modelo que não gera conteúdo não vira o "mais novo"', () => {
         const r = conferirAtualizacao(
-            [{ modelVersion: 'gemini-3.7-flash' }],
+            [{ modelVersion: 'gemini-3.8-flash' }],
             [...LISTA, { name: 'models/gemini-9.9-flash', supportedActions: ['embedContent'] }],
         );
         expect(r.situacao).toBe('atual');
     });
 
     it('a linha sai do nome, e nome sem linha não é julgado', () => {
-        expect(linhaDoModelo('gemini-3.7-flash')).toBe('flash');
+        expect(linhaDoModelo('gemini-3.8-flash')).toBe('flash');
         expect(linhaDoModelo('models/gemini-3.1-pro')).toBe('pro');
         expect(linhaDoModelo('text-embedding-004')).toBeNull();
         expect(linhaDoModelo(null)).toBeNull();

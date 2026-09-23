@@ -10,7 +10,7 @@
  * A Saúde Geral é a landing (rollup); o drill-down "Ver detalhes →" dela
  * agora troca a SUB-ABA interna em vez de navegar no menu raiz.
  */
-import React, { lazy, Suspense, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import type { User } from '../../types';
 import { SearchType } from '../../types';
 
@@ -24,6 +24,15 @@ const AnomaliasView = lazy(() => import('../Anomalias'));
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
+    /**
+     * Sub-aba em que o hub ABRE, quando o menu aponta direto para ela.
+     *
+     * 🚪 28/08, Paulo: *"não acho aonde"* — ele procurou "Cadastros" e o card
+     * se chama "Diagnóstico & Saúde". É a família do card CFOP (18/08): a tela
+     * existia, funcionava, e a única pessoa que sabia onde era, era eu.
+     * Navegar para `DIAGNOSTICO_CADASTROS` não renderizava NADA até aqui.
+     */
+    subInicial?: SearchType;
 }
 
 type SubTab = 'saude' | 'docs' | 'cadastros' | 'certificados' | 'config' | 'anomalias';
@@ -49,8 +58,18 @@ const SEARCHTYPE_TO_SUBTAB: Partial<Record<SearchType, SubTab>> = {
     [SearchType.ANOMALIAS]: 'anomalias',
 };
 
-const DiagnosticoHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
-    const [sub, setSub] = useState<SubTab>('saude');
+const DiagnosticoHub: React.FC<Props> = ({ currentUser, onShowToast, subInicial }) => {
+    const [sub, setSub] = useState<SubTab>(
+        (subInicial && SEARCHTYPE_TO_SUBTAB[subInicial]) || 'saude',
+    );
+
+    // ⚠️ `useState` só lê o inicial no MOUNT. Trocar de card sem remontar
+    // deixaria o hub na aba anterior — o atalho levaria ao lugar errado, que é
+    // pior que não ter atalho.
+    useEffect(() => {
+        const alvo = subInicial && SEARCHTYPE_TO_SUBTAB[subInicial];
+        if (alvo) setSub(alvo);
+    }, [subInicial]);
 
     const irPara = (destino: SearchType) => {
         const alvo = SEARCHTYPE_TO_SUBTAB[destino];

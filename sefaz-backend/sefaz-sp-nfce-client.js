@@ -23,6 +23,7 @@ import tls from 'node:tls';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { pfxToPem } from './pfx-to-pem.js';
+import { recortarEventos, resumirEventos } from './sae-nfce-cancelamento.js';
 
 // Bundle de CAs da ICP-Brasil que assina o SSL dos webservices SEFAZ NF-e/NFC-e
 // (AC do SERPRO SSLv1 + AC Raiz Brasileira v10). O servidor da SEFAZ-SP encadeia
@@ -180,15 +181,36 @@ function parseListagem(body) {
   };
 }
 
+// 🚨 O CORPO PODIA TRAZER O EVENTO E ESTE LEITOR JOGAVA FORA (02/09, caso
+// NFC-e 1194 da ARMAZEM DE BICHOS — cancelada e aparecendo COM VALOR no app).
+//
+// Ele recortava SÓ `<nfeProc>` e descartava todo o resto do corpo. Se a SEFAZ
+// devolve o `<procEventoNFe>` do cancelamento junto (ou no lugar) da
+// autorizada, o app nunca ficaria sabendo — é a família do `localErroAviso`
+// (12/08) e do `dhEmisUltNfce`: **o dado chega e o leitor descarta**.
+//
+// ⚠️ Isto NÃO afirma que o SAE manda o evento — nada aqui foi medido contra
+// uma resposta real. O que muda é que, se vier, ele deixa de ser jogado fora;
+// e quando NÃO vier, o `cStat`/`xMotivo` sobem inteiros para quem perguntar
+// ver a resposta do órgão em vez de um "não achei" do app.
 function parseDownload(body) {
+  const texto = String(body);
   const cStat = pick(body, 'cStat');
   const xMotivo = pick(body, 'xMotivo');
   const nProt = pick(body, 'nProt');
   // O XML autorizado vem INLINE em <nfeProc>...</nfeProc> (sem gzip/base64).
-  const m = String(body).match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i);
+  const m = texto.match(/<nfeProc[\s>][\s\S]*?<\/nfeProc>/i);
   const nfeProcXml = m ? m[0] : null;
+  // Evento (cancelamento, CC-e). A ORDEM importa e ela foi medida contra o
+  // print do Paulo (02/09): `retEvento` — que carrega o cStat da HOMOLOGAÇÃO —
+  // é IRMÃO de `evento`, não filho. Um recorte `<evento>…</evento>` traz o
+  // pedido ASSINADO e deixa o protocolo de fora, e aí o leitor vê o tpEvento
+  // 110111 sem cStat nenhum. Por isso: embrulho completo > par evento+retEvento
+  // > evento solto.
+  const eventosXml = recortarEventos(texto);
+  const eventosResumo = resumirEventos(eventosXml);
   return {
-    cStat, xMotivo, nProt, nfeProcXml,
+    cStat, xMotivo, nProt, nfeProcXml, eventosXml, eventosResumo,
     ok: cStat === '200' && !!nfeProcXml,   // 200 = download com sucesso
   };
 }

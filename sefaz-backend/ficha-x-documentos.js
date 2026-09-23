@@ -43,12 +43,17 @@
  * @param {string} [p.rotulo]        como o número se chama na tela ('IPI', 'A apuração'…)
  * @param {boolean} [p.capturaPorAgenteLocal] a empresa tem certificado **A3**
  *   (`tipoCert === 'A3'` em `empresas_certificados`) — ver o bloco abaixo.
+ * @param {number} [p.receitaSemDocumento] receita da competência que NÃO GERA
+ *   documento por natureza — hoje a **locação** (é ela que vai ao F550). Ver o
+ *   bloco 🏠 lá embaixo: sem isto, a empresa de aluguel puro acende "sem
+ *   lastro" TODO mês, sobre um número que está certo.
  * @returns {{ situacao: 'sem-valor'|'sem-documento'|'sem-documento-agente-local'
- *                      |'com-lastro'|'contagem-indisponivel',
+ *                      |'lastro-sem-documento'|'com-lastro'|'contagem-indisponivel',
  *             cor: 'ok'|'atencao'|'falha'|'neutro', mensagem: string, acao: string|null }}
  */
 export function conferirFichaContraDocumentos({
     valorApurado, documentos, rotulo = 'IPI', capturaPorAgenteLocal = false,
+    receitaSemDocumento = 0,
 }) {
     const valor = Number(valorApurado) || 0;
 
@@ -72,6 +77,39 @@ export function conferirFichaContraDocumentos({
     }
 
     if (Number(documentos) === 0) {
+        // ═══════════════════════════════════════════════════════════════════
+        // 🏠 A AUSÊNCIA QUE É DESENHO, NÃO LACUNA (27/08, caso AC MASON)
+        //
+        // Empresa cujo faturamento é ALUGUEL não tem documento de receita — e
+        // isso não é buraco de captura, é a natureza da operação. É exatamente
+        // o caso que fez o **F550** nascer (AFFITTARE, 20/08): *"o faturamento
+        // dela é aluguel, então não tem captura de notas, apenas a informação
+        // do valor em Locação de Bens na ficha financeira"*.
+        //
+        // Sem esta porta, a empresa de locação pura acende **falha** todo mês,
+        // sobre um número CERTO, mandando "destravar a captura" de uma nota que
+        // nunca vai existir. É a família do `tipoTributacao` (26/08): alarme que
+        // a carteira recebe e ninguém consegue apagar ensina a equipe a ignorar
+        // o farol inteiro — inclusive as empresas que estão mesmo sem lastro.
+        //
+        // ⚠️ NEUTRO, nunca 'ok': não há documento para conferir, então dizer
+        // "com lastro" seria afirmar uma conferência que não houve. O que a
+        // frase faz é DIZER de onde vem o número.
+        //
+        // ⚠️ E quem decide se a receita é INTEIRAMENTE de locação é o chamador
+        // (`receitaSoDeLocacao`, na Rotina): empresa que também vende tem
+        // documento a capturar, e exemplá-la seria silenciar livro a menor.
+        // ═══════════════════════════════════════════════════════════════════
+        const semDoc = Number(receitaSemDocumento) || 0;
+        if (semDoc > 0) {
+            return {
+                situacao: 'lastro-sem-documento', cor: 'neutro',
+                mensagem: `${rotulo} sobre receita de LOCAÇÃO de ${fmtBRL(semDoc)} — ela não gera documento por `
+                    + 'natureza (é a receita que vai ao F550 do EFD-Contribuições). Não há nota a capturar.',
+                acao: null,
+            };
+        }
+
         // ═══════════════════════════════════════════════════════════════════
         // 🚨 A MESMA AUSÊNCIA, COM OUTRA CAUSA — e outra primeira parada
         //
@@ -118,4 +156,10 @@ export function conferirFichaContraDocumentos({
         mensagem: `${documentos} documento(s) na competência — há lastro. O VALOR se confere no E510 (🪞 CFI × E-Fiscal), não aqui.`,
         acao: null,
     };
+}
+
+function fmtBRL(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }

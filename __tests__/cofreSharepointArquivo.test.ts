@@ -13,20 +13,30 @@ describe('rotuloDirecao', () => {
   });
 });
 
-describe('buildFolderPathArquivo', () => {
-  it('monta a árvore exata do sync', () => {
-    const p = buildFolderPathArquivo('GRUPO X', 'APATEL', '2026-05', 'saida');
-    expect(p).toBe('Empresas/GRUPO X/DEPARTAMENTO FISCAL/2026/05-2026/APATEL/XML SAÍDA');
+// 🚨 FIXTURE TROCADA EM 02/09 — ela travava um caminho que NÃO EXISTE.
+//
+// O antigo exigia `Empresas/{grupo}/DEPARTAMENTO FISCAL/{ano}/{mês}-{ano}/
+// {empresa}/XML SAÍDA`. A árvore foi medida clique a clique pelo explorador e
+// ela não tem GRUPO, tem empresa ANTES do departamento e o mês é por NOME.
+// Ou seja: este teste passava VERDE descrevendo a pasta que produzia 404.
+//
+// ⚠️ E o `grupo` saiu da ASSINATURA de propósito — parâmetro que não existe na
+// árvore convida alguém a preenchê-lo de novo.
+describe('buildFolderPathArquivo — a árvore REAL, medida em 02/09', () => {
+  it('monta a árvore exata do sync, a partir da pasta REAL da empresa', () => {
+    const p = buildFolderPathArquivo('0040_Clinica Mantoan', '2026-05', 'saida');
+    expect(p).toBe('Empresas/0040_Clinica Mantoan/Departamento Fiscal/2026/Maio/XML SAÍDA');
   });
   it('entrada vai para XML ENTRADA', () => {
-    expect(buildFolderPathArquivo('G', 'E', '2026-01', 'entrada'))
-      .toBe('Empresas/G/DEPARTAMENTO FISCAL/2026/01-2026/E/XML ENTRADA');
+    expect(buildFolderPathArquivo('0001_BRISKA', '2026-01', 'entrada'))
+      .toBe('Empresas/0001_BRISKA/Departamento Fiscal/2026/Janeiro/XML ENTRADA');
   });
-  it('retorna null quando falta grupo/pasta/competência/direção', () => {
-    expect(buildFolderPathArquivo('', 'E', '2026-01', 'saida')).toBeNull();
-    expect(buildFolderPathArquivo('G', '', '2026-01', 'saida')).toBeNull();
-    expect(buildFolderPathArquivo('G', 'E', 'xxxx', 'saida')).toBeNull();
-    expect(buildFolderPathArquivo('G', 'E', '2026-01', 'desconhecida')).toBeNull();
+  // ⚠️ Ausência devolve null, nunca um caminho pela metade: `Empresas//…` foi
+  // exatamente o 404 de 02/09, com um segmento VAZIO no meio.
+  it('retorna null quando falta pasta/competência/direção', () => {
+    expect(buildFolderPathArquivo('', '2026-01', 'saida')).toBeNull();
+    expect(buildFolderPathArquivo('0001_BRISKA', 'xxxx', 'saida')).toBeNull();
+    expect(buildFolderPathArquivo('0001_BRISKA', '2026-01', 'desconhecida')).toBeNull();
   });
 });
 

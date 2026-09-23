@@ -44,7 +44,12 @@ export function municipiosSemCalendario(
 ): {
     municipios: Array<{
         codMunIBGE: string; municipioNome: string | null; situacao: string;
-        total: number; clientes: Array<{ id: string | null; nome: string; cnpj: string }>;
+        total: number;
+        clientes: Array<{ id: string | null; nome: string; cnpj: string; municipioNome?: string | null }>;
+        /** Nomes de município DISTINTOS que os clientes desta linha carregam no cadastro. */
+        nomesNoCadastro: string[];
+        /** true quando o MESMO código IBGE aparece com nomes diferentes — cadastro torto, não fila. */
+        divergencia: boolean;
         /** Clientes cobertos até esta linha, na ordem da fila. */
         acumulado: number;
         coberturaAcumuladaPct: number;
@@ -58,10 +63,16 @@ export function municipiosSemCalendario(
 };
 
 /** Escopo canônico do cadastro: 'IBGE:3550308' ou 'UF:PR'. */
-export function escopoDoPrazo(p: { codMunIBGE?: string; uf?: string }): string;
+export function escopoDoPrazo(p: { codMunIBGE?: string; uf?: string; esfera?: string }): string;
 export function escopoDoCliente(p: { esfera?: string; uf?: string; codMunIBGE?: string }): string;
 
 /** Prazo ESTADUAL do estado DO CLIENTE — o caminho que o alerta de UF cobrava. */
+/** Prazo FEDERAL cadastrado pelo admin (escopo 'BR'): vence o catálogo na vigência. */
+export function resolverPrazoFederal(
+    cadastros: any[],
+    p: { obrigacao: string; competencia: string },
+): { achou: boolean; prazo: any | null; situacao: string; motivo: string };
+
 export function resolverPrazoEstadual(
     cadastros: any[],
     p: { uf?: string; obrigacao: string; competencia: string },

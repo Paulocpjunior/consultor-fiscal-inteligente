@@ -28,6 +28,13 @@ import admin from 'firebase-admin';
 import { requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { montarRotinasDaCompetencia } from './rotina-fiscal-routes.js';
+// 🚨 O DONO DA APURAÇÃO — ele conhece as TRÊS fontes (ficha do Lucro,
+// faturamentoManual e faturamentoMensalDetalhado do Simples). O carimbo lia
+// só a ficha e bloqueava a carteira inteira do Simples.
+import { acharApuracaoDaCompetencia } from './rotina-fiscal.js';
+// 🚨 O DONO DO INSUMO — este bloco montava o objeto da empresa à mão e a tela
+// dizia "pronto" enquanto o botão recusava (27/08). Ver o módulo.
+import { empresaDaRotina, COLECOES_DA_ROTINA } from './rotina-empresa-insumo.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { normalizarCompetencia } from './competencia.js';
@@ -36,22 +43,34 @@ import {
     conferirReabertura, aplicarReabertura, descreverFechamento,
 } from './fim-de-mes.js';
 
+import { COLECAO_FECHAMENTOS as COLECAO, idDoFechamento, lerFechamentoDaCompetencia } from './fechamento-store.js';
+
 const router = Router();
-const COLECAO = 'fechamentos_competencia';
 
 function getDb() {
     if (!admin.apps.length) admin.initializeApp();
     return admin.firestore();
 }
 
-/** Id estável: fechar de novo sobrescreve a MESMA linha, nunca cria a segunda. */
-const idDoFechamento = (empresaId, competencia) => `${empresaId}_${competencia}`;
-
-/** As duas coleções de empresa — a ficha do Lucro é EMBUTIDA no documento. */
+/**
+ * As duas coleções de empresa — a ficha do Lucro é EMBUTIDA no documento.
+ *
+ * Devolve o doc CRU (o carimbo precisa da `fichaFinanceira` e do CNPJ para o
+ * cursor) **e** o recorte que a Rotina consome, montado pelo DONO
+ * (`empresaDaRotina`). Ver o comentário dele: montar esse recorte à mão aqui
+ * foi o que fez a tela dizer "pronto" e o botão recusar.
+ */
 async function carregarEmpresa(db, empresaId) {
-    for (const col of ['lucro_empresas', 'simples_empresas']) {
+    for (const [col] of COLECOES_DA_ROTINA) {
         const snap = await db.collection(col).doc(empresaId).get();
-        if (snap.exists) return { id: snap.id, colecao: col, ...(snap.data() || {}) };
+        if (!snap.exists) continue;
+        const dados = snap.data() || {};
+        return {
+            id: snap.id,
+            colecao: col,
+            ...dados,
+            paraRotina: empresaDaRotina(snap.id, col, dados),
+        };
     }
     return null;
 }
@@ -84,26 +103,28 @@ async function situacaoDaCompetencia(db, user, empresaId, competencia) {
     const comp = normalizarCompetencia(competencia);
     if (!comp) return { erro: 'Competência ilegível.' };
     if (!empresaId) return { erro: 'Informe a empresa.' };
-    if (!(await podeAcessarEmpresaId(user, empresaId))) {
+    if (!(await podeAcessarEmpresaId(user, empresaId)).ok) {
         return { erro: 'Esta empresa não está na sua carteira.', status: 403 };
     }
 
     const empresa = await carregarEmpresa(db, empresaId);
     if (!empresa) return { erro: 'Empresa não encontrada.', status: 404 };
 
-    const fechSnap = await db.collection(COLECAO).doc(idDoFechamento(empresaId, comp)).get();
-    const fechamento = fechSnap.exists ? (fechSnap.data() || null) : null;
+    // O carimbo sai do dono da leitura — o id é régua única (a competência
+    // circula em quatro formas, e `_07/2026` é outro id que `_2026-07`).
+    const fechamento = await lerFechamentoDaCompetencia(db, empresaId, comp);
 
-    // A rotina sai do MESMO dono do painel — segunda montagem divergiria, e a
-    // divergência apareceria como "a tela diz pronto e o botão recusa".
-    const { rotinas } = await montarRotinasDaCompetencia(db, [{
-        id: empresa.id, nome: empresa.nome || empresa.razaoSocial || null,
-        cnpj: String(empresa.cnpj || '').replace(/\D/g, ''),
-        colecao: empresa.colecao, regimePadrao: empresa.regimePadrao,
-        regime: empresa.regime, uf: empresa.dadosFiscais?.uf || empresa.uf,
-        codMunIBGE: empresa.dadosFiscais?.codMunIBGE || empresa.codMunIBGE,
-        capturaAtiva: empresa.capturarSefaz !== false,
-    }], comp);
+    // 🚨 A rotina sai do MESMO dono do painel — E COM O MESMO INSUMO.
+    //
+    // Até 27/08 este bloco montava o objeto da empresa **à mão**, e a mão
+    // esquecia `ccmSp` e as três fontes de apuração: a tela dizia
+    // "✓ Pronto para dar fim de mês" e o botão recusava com três etapas
+    // abertas, na MESMA tela (print da REGINA CELIA PIRES). Usar o mesmo
+    // `montarRotinasDaCompetencia` não bastava — o insumo é que divergia.
+    if (!empresa.paraRotina) {
+        return { erro: 'Cadastro da empresa incompleto (CNPJ ilegível, ou empresa excluída/fundida).', status: 400 };
+    }
+    const { rotinas } = await montarRotinasDaCompetencia(db, [empresa.paraRotina], comp);
     const rotina = rotinas[0] || null;
 
     return {
@@ -159,11 +180,20 @@ router.post('/fechar', requireAuth, async (req, res) => {
         // derruba o fechamento — ela só deixa o carimbo sem a ressalva, e o
         // núcleo grava `null`, que é "não conferi", nunca "está tudo certo".
         let lastro = null;
+        const apuracao = acharApuracaoDaCompetencia(r.empresa.paraRotina, r.competencia);
         try {
+            // ⚠️ O NÚMERO É O MESMO QUE A ETAPA 3 CRUZA: no Lucro o imposto da
+            // ficha, no Simples a RECEITA lançada (lá o `totalImpostos` é null
+            // porque o DAS não vive na ficha). Ler só a ficha deixava a maior
+            // parte da carteira com o lastro apagado — e apagado se lê como
+            // "conferido".
+            const temImposto = apuracao?.totalImpostos != null
+                && Number.isFinite(Number(apuracao.totalImpostos));
             lastro = conferirFichaContraDocumentos({
-                valorApurado: Number(ficha?.totalImpostos ?? 0),
+                valorApurado: temImposto ? apuracao.totalImpostos : (apuracao?.receita ?? Number(ficha?.totalImpostos ?? 0)),
                 documentos: eCaptura ? contagem.total : null,
-                rotulo: 'A apuração',
+                rotulo: temImposto ? 'A apuração' : 'A receita lançada',
+                receitaSemDocumento: 0,
             });
         } catch (e) {
             console.warn('[fim-de-mes] lastro indisponível:', e.message);
@@ -176,6 +206,9 @@ router.post('/fechar', requireAuth, async (req, res) => {
             regime: r.empresa.colecao === 'simples_empresas' ? 'SIMPLES' : (r.empresa.regimePadrao || null),
             rotina: r.rotina,
             ficha,
+            // A MESMA leitura que fechou a etapa 3 — perguntar de outro jeito
+            // aqui foi o que fez a tela dizer "pronto" e o botão recusar.
+            apuracao,
             corte: montarCorte({ agoraIso, state: cursor, documentos: contagem }),
             lastro,
             quem: { uid: req.user?.uid || null, email: req.user?.email || null, nome: req.user?.name || null },

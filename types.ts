@@ -1,5 +1,6 @@
 
 export enum SearchType {
+    EBEF = 'Beneficiários finais · e-BEF',
     ROTINA_FISCAL = 'Rotina do Mês',
     CFOP = 'CFOP',
     NCM = 'NCM',
@@ -1401,6 +1402,21 @@ export interface EmpresaDadosFiscais {
      */
     semFinsLucrativos?: boolean;
     /**
+     * 🏦 DeRE (02/09) — em qual REGIME ESPECÍFICO de IBS/CBS a empresa fornece
+     * (LC 214/2025, Título V: serviços financeiros, planos de saúde, loterias,
+     * imóveis, cooperativas…). `NENHUM` = olhei e não se aplica. Vazio = não
+     * informado (o app só SUGERE pelo CNAE, nunca decide). Vocabulário e régua
+     * em `sefaz-backend/dere-regimes.js`.
+     */
+    regimeEspecificoIbsCbs?: string | null;
+    /** 🏦 DeRE · D-1001: atividades (Tabelas 21/31/41, NNC), regimes secundários, natureza tributária, UFs credenciadas, validade. */
+    dereAtividades?: string[];
+    dereRegimesSecundarios?: string[];
+    dereIndNatTrib?: '0' | '1' | '';
+    dereUfsCredenciadas?: string[];
+    dereIniValid?: string;
+    dereFimValid?: string;
+    /**
      * Cod.Cliente — código da empresa no E-Fiscal (Paulo, 04/08). TEXTO de 4
      * dígitos com zero à esquerda ('0001'–'9999'), ÚNICO na carteira. É a
      * chave do confronto CNPJ ↔ schema e{código} na migração do PG12, e o
@@ -1501,7 +1517,30 @@ export interface EmpresaDadosFiscais {
      * código 9 do ISS fixo, que veio do cadastro).
      */
     contribuinteIpi?: 'sim' | 'nao' | '';
+    /** Apura ICMS? Vence a dedução pela inscrição estadual (E116). */
+    contribuinteIcms?: 'sim' | 'nao' | '';
     classEstabIpi?: string;
+    /**
+     * 🏭 **Bloco K — controle da produção e do estoque (EFD ICMS/IPI).**
+     *
+     * 📖 Guia Prático 3.2.3: o bloco é *"relativo aos estabelecimentos
+     * industriais ou a eles equiparados pela legislação federal e pelos
+     * atacadistas"*, e *"os contribuintes optantes pelo Simples Nacional estão
+     * dispensados de apresentarem este bloco, em virtude da Resolução Comitê
+     * Gestor do Simples Nacional nº 94"*.
+     *
+     * ⚠️ O app **NÃO DEDUZ** quem é industrial: a 🚦 Migração detecta produção
+     * pelos CFOPs, mas detectar movimento é SINAL, não enquadramento.
+     */
+    entregaBlocoK?: boolean;
+    /**
+     * Leiaute do K010 — **escolha do contribuinte** (Ajuste SINIEF 02/09):
+     * `0` simplificado · `1` completo · `2` restrito aos saldos de estoque.
+     *
+     * ⚠️ Escolher por ele faria o arquivo prometer detalhamento que o PVA
+     * cobra. Sem escolha, o bloco não sai e a falta vai nomeada.
+     */
+    leiauteBlocoK?: '0' | '1' | '2' | '';
     /**
      * 🚨 **Consolidação da receita no registro 1900 do EFD-Contribuições.**
      *
@@ -1648,6 +1687,16 @@ export interface DocumentoFiscalItem {
     vUnCom: number;
     vProd: number;
     vDesc?: number;
+    /**
+     * Frete, seguro e outras despesas acessórias POR ITEM (<prod>), e o FCP-ST
+     * do item — o VL_OPR do C190 (Guia 3.2.3, campo 05) soma os quatro. O
+     * importer do backend grava desde 04/08; o do navegador só passou a gravar
+     * em 12/09 (caso ELS: Livro 957.467,11 × PVA 955.593,91).
+     */
+    vFrete?: number;
+    vSeg?: number;
+    vOutro?: number;
+    vFCPST?: number;
     /** Base de cálculo do ICMS do item (extraído de <vBC> do bloco ICMS interno). */
     vBC?: number;
     /** Alíquota do ICMS em % (extraído de <pICMS>). */
@@ -1690,6 +1739,26 @@ export interface DocumentoFiscalItem {
     cstCofins?: string;
     /** Base de cálculo do COFINS no item. */
     vBcCofins?: number;
+    /**
+     * DIFAL da EC 87/2015 — grupo `<ICMSUFDest>` do item, presente na venda
+     * interestadual a consumidor final NÃO contribuinte. É daqui que saem o
+     * C101 (por documento) e o E300/E310/E316 (por UF de destino) do EFD
+     * ICMS/IPI. Ausente quando a operação não tem DIFAL — **nunca 0**: zero
+     * num campo que vira débito é uma afirmação à SEFAZ.
+     *
+     * Capturado desde 18/09 (caso VINATEX 08/2026). Nota anterior a essa data
+     * tem o grupo só nos totais; o ♻️ Reler itens dos XMLs recupera do XML
+     * guardado no Storage.
+     */
+    vBCUFDest?: number;
+    vBCFCPUFDest?: number;
+    pFCPUFDest?: number;
+    pICMSUFDest?: number;
+    pICMSInter?: number;
+    pICMSInterPart?: number;
+    vFCPUFDest?: number;
+    vICMSUFDest?: number;
+    vICMSUFRemet?: number;
     cst: string;
     orig: string;
 }
@@ -1714,6 +1783,14 @@ export interface DocumentoFiscalTotais {
     vCOFINS: number;
     vOutro: number;
     vNF: number;
+    /**
+     * DIFAL EC 87/15 no TOTAL do documento — reserva do que o item declara
+     * (`ICMSUFDest` por `<det>`), para a nota capturada antes de 18/09.
+     * Ausente = não há DIFAL declarado, nunca 0.
+     */
+    vFCPUFDest?: number | null;
+    vICMSUFDest?: number | null;
+    vICMSUFRemet?: number | null;
 }
 
 
@@ -1765,6 +1842,7 @@ export interface DocumentoFiscal {
      * o que já está no banco.
      */
     tpNF?: string | null;
+    modFrete?: string | null;
     /** Data/hora de emissão (ISO). */
     dhEmi: string;
     /** Competência calculada a partir da emissão (YYYY-MM). */

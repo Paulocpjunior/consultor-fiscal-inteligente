@@ -18,12 +18,19 @@
 // o 🔎 mudo.
 // ============================================================================
 
+import { refsDaChave } from './documento-lado-io.js';
+
 /**
  * Grava o EVENTO de cancelamento no documento (não um status órfão): assim
  * `docCancelado` decide na leitura como em todo o resto do app.
  */
 export async function gravarCancelamentoConfirmado({ db, FieldValue, docId, evento, origem, usuario }) {
-    await db.collection('documentos_fiscais').doc(docId).set({
+    // NOS DOIS LADOS DA CHAVE (11/09): a reconferência da LEGACY passa o id do
+    // documento DELA (o lado); o cancelamento é da NOTA e tem de chegar também
+    // no documento da Federação — e vice-versa. `refsDaChave` resolve a chave
+    // a partir de qualquer id e devolve principal + lados.
+    const { refs } = await refsDaChave(db, docId);
+    const patch = {
         status: 'cancelado',
         eventos: FieldValue.arrayUnion({
             ...(evento || {}),
@@ -31,7 +38,10 @@ export async function gravarCancelamentoConfirmado({ db, FieldValue, docId, even
             reconferidoPor: usuario || null,
             reconferidoEm: Date.now(),
         }),
-    }, { merge: true });
+    };
+    for (const ref of refs) {
+        await ref.set(patch, { merge: true });
+    }
 }
 
 /**

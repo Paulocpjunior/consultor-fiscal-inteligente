@@ -161,7 +161,7 @@ export async function requireAuth(req, res, next) {
             .collection('users').doc(decoded.uid).get();
         const dados = userDoc.exists ? userDoc.data() : {};
         const role = dados.role || null;
-        req.user = { uid: decoded.uid, role, email: decoded.email || null, horarioAcesso: dados.horarioAcesso || null };
+        req.user = { uid: decoded.uid, role, email: decoded.email || null, horarioAcesso: dados.horarioAcesso || null, departamentos: Array.isArray(dados.departamentos) ? dados.departamentos : [] };
         if (await barrarForaDoHorario(req, res)) return;
         next();
     } catch (e) {

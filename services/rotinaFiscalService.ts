@@ -49,17 +49,34 @@ export interface IssDaRotina {
 }
 
 export interface RotinaEmpresa {
+    /**
+     * 🔒 O carimbo do fim de mês desta empresa/competência — vem do PAINEL.
+     *
+     * Ele viaja aqui de propósito: cada card buscando o seu era ~400
+     * requisições simultâneas ao abrir a Rotina, e foi o **HTTP 429** de
+     * 27/08. `null` = competência aberta.
+     */
+    fechamento?: import('./fimDeMesService').FechamentoCompetencia | null;
     empresa: { id: string; nome: string; cnpj: string; regime: 'simples' | 'lucro' } | null;
     competencia: string;
     iss: IssDaRotina | null;
     etapas: EtapaRotina[];
     proximoPasso: { id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string } | null;
     progresso: { concluidas: number; total: number };
-    farol: 'ok' | 'atencao' | 'pendente';
+    /**
+     * `'fechado'` é FATO (o carimbo do fim de mês); `'ok'` quer dizer **pronto
+     * para fechar** desde 26/08 — as cinco etapas fecharam e ninguém deu o ato.
+     */
+    farol: 'fechado' | 'ok' | 'atencao' | 'pendente';
 }
 
 export interface FunilRotina {
     total: number;
+    /** Mês FECHADO pelo carimbo — fato, nada a fazer. */
+    fechados: number;
+    /** As cinco etapas fecharam e falta o clique do "Dar fim de mês". */
+    prontos: number;
+    /** `fechados + prontos` — quem não tem próximo passo. */
     completos: number;
     etapas: { id: string; ordem: number; nome: string; qtd: number; empresas: string[] }[];
     resumo: string;
@@ -103,7 +120,9 @@ export interface PainelRotina {
         abrangencia: string;
         status: string;
         dependeDe: string | null;
-        motivo: string;
+        motivo?: string;
+        /** O que falta conferir — é este campo que o backend devolve. */
+        oQueFalta?: string;
     }>;
     rotinas?: RotinaEmpresa[];
     lidos?: { documentos: number; tarefas: number; envios: number };
@@ -122,6 +141,31 @@ export async function carregarRotinaFiscal(competencia: string, empresaIds?: str
     const recorte = empresaIds?.length ? `&empresaIds=${encodeURIComponent(empresaIds.join(','))}` : '';
     const res = await fetch(`/api/admin/rotina-fiscal/painel?competencia=${encodeURIComponent(competencia)}${recorte}`, {
         headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
+
+/**
+ * 📋 DECLARAR QUE AS OBRIGAÇÕES FORA DO CATÁLOGO FORAM ENTREGUES POR FORA.
+ *
+ * ⚠️ **NENHUMA RÉGUA MORA AQUI.** O piso do texto, a recusa de data no futuro e
+ * a exigência do autor vivem no backend (`obrigacao-fora-do-catalogo.js`).
+ * Validar na tela criaria a segunda cópia — e ela divergiria no primeiro
+ * ajuste da régua.
+ */
+export async function declararCoberturaForaDoCatalogo(p: {
+    empresaId: string; empresaCnpj?: string; competencia: string;
+    obrigacoes: string[]; comoFoi: string; quando: string;
+}): Promise<{ ok: boolean; error?: string; declaracao?: { texto: string } }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/cobertura-declarada', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };

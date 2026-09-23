@@ -94,14 +94,28 @@ describe('farol honesto: o resultado responde POR CAUSA', () => {
         expect(rota).toMatch(/cadastro do produtor/);
     });
 
-    it('a tela conta o que foi recuperado, separado por dado', () => {
-        expect(painel).toMatch(/ganharam o fornecedor/);
-        expect(painel).toMatch(/ganharam o município/);
-        // "já tinham" virou "já relidas antes": o que o número realmente diz.
-        // (o comentário do arquivo cita a frase antiga de propósito — a régua é
-        // sobre o TEXTO QUE VAI À TELA, então ela olha a interpolação.)
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (18/09). Ela prendia o TEXTO dentro do
+    // `.tsx` do painel — e o texto MUDOU DE CASA: a mesma rota passou a ser
+    // chamada também pela ✏️ CFOP por nota (o botão não existia lá, e o aviso
+    // do gerador mandava a pessoa justamente para aquela aba). Duas telas
+    // descrevendo o mesmo retorno divergem no primeiro campo novo, então a
+    // frase virou `fraseDoResultado`, no dono.
+    //
+    // A INTENÇÃO que ela protege é a mesma e continua travada: o resultado
+    // conta POR DADO, e "já relido" não se confunde com "recuperado". O que
+    // mudou é QUEM responde.
+    it('a tela conta o que foi recuperado, separado por dado — pelo DONO da frase', () => {
+        const dono = ler('services/relerParticipantes.ts');
+        expect(dono).toMatch(/ganharam o participante/);
+        expect(dono).toMatch(/ganharam o município/);
+        // O ENDEREÇO entrou em 18/09 (VINATEX, 732 recusas no campo 10 do 0150)
+        // e é ele que responde a recusa — vem primeiro na frase.
+        expect(dono).toMatch(/ganharam o ENDEREÇO do 0150/);
+        expect(dono).toMatch(/já relida\(s\) nesta versão do leitor/);
+        // E as duas telas DELEGAM — nenhuma escreve a própria versão.
+        expect(painel).toMatch(/fraseDoResultado\(/);
         expect(painel).not.toMatch(/\$\{r\.jaTinham\} já tinham/);
-        expect(painel).toMatch(/já relidas antes/);
+        expect(ler('components/Relatorios/index.tsx')).toMatch(/fraseDoResultado\(/);
     });
 
     it('documento sem XML guardado continua nomeado — ali releitura não resolve', () => {

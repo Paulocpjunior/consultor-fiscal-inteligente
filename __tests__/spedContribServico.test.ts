@@ -189,9 +189,24 @@ describe('🚨 a nota digitada precisa do createdBy — sem ele o Firestore RECU
         expect(bloco).toMatch(/allow create: if isSignedIn\(\) && request\.resource\.data\.createdBy == request\.auth\.uid/);
     });
 
-    it('o objeto gravado leva createdBy nas DUAS formas (mercadoria e serviço)', () => {
-        const ocorrencias = (servico.match(/createdBy: i\.createdByUid \|\| null/g) || []).length;
-        expect(ocorrencias).toBe(2);
+    /**
+     * 📌 ASSERÇÃO TROCADA PELA INTENÇÃO (04/09).
+     *
+     * Ela cravava `toBe(2)` — mercadoria e serviço —, ou seja travava a FORMA
+     * de um mundo com duas espécies. Ao nascer a terceira (CT-e / CT-e OS, o
+     * caso J.P. PISSATO) o número virou 3 e o teste caiu sobre código CERTO.
+     *
+     * O que ela protege continua de pé, e agora sem envelhecer: **TODA
+     * montagem de documento leva o `createdBy`**. Sem ele o Firestore recusa o
+     * CREATE com "Missing or insufficient permissions" — a mensagem que manda
+     * procurar problema de permissão que não existe, e que fez a terceira porta
+     * não gravar nota nenhuma até 17/08. Espécie nova sem o campo quebra aqui.
+     */
+    it('TODA montagem de documento leva createdBy — nenhuma espécie fica de fora', () => {
+        const montagens = (servico.match(/\} as unknown as DocumentoFiscal;/g) || []).length;
+        const comCreatedBy = (servico.match(/createdBy: i\.createdByUid \|\| null/g) || []).length;
+        expect(montagens).toBeGreaterThanOrEqual(3);
+        expect(comCreatedBy).toBe(montagens);
     });
 
     it('e o formulário passa o UID de quem está logado', () => {

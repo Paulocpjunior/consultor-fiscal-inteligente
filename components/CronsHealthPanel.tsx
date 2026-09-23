@@ -42,6 +42,22 @@ function resumoLabel(l: CronSaudeLinha): string {
     return parts.join(' · ');
 }
 
+/**
+ * De quem foi a rodada, em português de tela.
+ *
+ * O heartbeat grava o nome do job do Scheduler no automático e
+ * `admin-manual`/`admin-dirigida` quando alguém clica. Quem lê o painel não
+ * conhece nome de job — o que ele precisa saber é se aquilo foi o sistema
+ * sozinho ou uma pessoa. ⚠️ Fonte desconhecida sai CRUA, nunca traduzida para
+ * "cron": rotular por dedução mandaria procurar no lugar errado.
+ */
+function rotuloFonte(fonte: string): string {
+    const f = String(fonte).toLowerCase();
+    if (f.startsWith('admin')) return 'rodada manual (alguém clicou)';
+    if (f.includes('cron') || f.includes('scheduler')) return 'rodada automática';
+    return fonte;
+}
+
 const CronsHealthPanel: React.FC = () => {
     const [data, setData] = useState<CronsHealth | null>(null);
     const [loading, setLoading] = useState(true);
@@ -115,6 +131,11 @@ const CronsHealthPanel: React.FC = () => {
                                 <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                                     {idadeLabel(l)}
                                     {resumo && <span> · {resumo}</span>}
+                                    {/* 🚨 QUEM DISPAROU — a pergunta que o painel não respondia
+                                        (30/08): o colaborador rodou uma captura, viu "1 falha(s)"
+                                        e não tinha como saber se era a dele ou a da madrugada.
+                                        O log grava a `fonte` desde sempre; faltava mostrar. */}
+                                    {l.fonte && <span> · {rotuloFonte(l.fonte)}</span>}
                                 </div>
                                 {/* Motivo dominante das falhas — sem isto "0 ok · 500 falhas"
                                     era número mudo; agora a causa aparece no card. */}

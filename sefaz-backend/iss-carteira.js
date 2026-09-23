@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { resumirCausasIssZerado, divergenciaRegimePelaNota } from './iss-zerado-causa.js';
-import { issDoDocumento, issRetidoDoDocumento } from './xml-metadata-helper.js';
+import { issDoDocumento, issRetidoDoDocumento, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -95,7 +95,12 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
         // ENTRADA com retenção = ISS que a empresa recolhe COMO TOMADORA.
         // Outra obrigação, outra guia — mas ela precisa APARECER, senão empresa
         // que só tem tomado fica como "sem movimento".
-        if (d.direcao === 'entrada') {
+        // 🚨 QUEM RESPONDE É A RÉGUA, NUNCA O CAMPO GRAVADO: a nota própria de
+        // entrada fica gravada como 'saida' até o backfill passar. Aqui a
+        // direção decide DUAS guias diferentes — ISS próprio (o que a empresa
+        // prestou) × ISS retido como tomadora — e trocá-las cobra a guia errada.
+        const direcaoDoDoc = direcaoEfetivaDoc(d);
+        if (direcaoDoDoc === 'entrada') {
             const flag = v.issRetido === true || d.issRetido === true;
             const ret = ouUndefined(issRetidoDoDocumento(d));
             const iss = ouUndefined(issDoDocumento(d));
@@ -106,7 +111,7 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
             a.tomadoNotas += 1;
             continue;
         }
-        if (d.direcao !== 'saida') continue;
+        if (direcaoDoDoc !== 'saida') continue;
 
         const devido = ouUndefined(issDoDocumento(d));
         const flag = v.issRetido === true || d.issRetido === true;

@@ -157,10 +157,22 @@ const CarteiraDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
         });
         setSalvando(null);
         if (r.ok) {
+            // 🚨 RECARREGA SEMPRE — inclusive (e principalmente) quando o
+            // vínculo JÁ EXISTIA. Paulo, 27/08: *"quando coloco a atribuição,
+            // ele indica que já responsável, mas não sai desse STATUS"*.
+            //
+            // O `if (!r.jaExistia)` que estava aqui partia de uma premissa que
+            // o defeito de hoje derrubou: "já existia ⇒ a tela já mostra". Ela
+            // é falsa exatamente quando a lista está desatualizada — e era esse
+            // o caso, porque a leitura vinha cortada em 500 vínculos. Resultado:
+            // a linha continuava "Sem responsável", e a única saída que sobrava
+            // para quem não vê efeito é repetir o clique.
+            //
+            // Recarregar sempre custa uma leitura e nunca mente.
+            await carregar();
             onShowToast?.(r.jaExistia
-                ? `${colab.name} já atende ${emp.nome}.`
+                ? `${colab.name} já atendia ${emp.nome} — a lista estava desatualizada e foi recarregada.`
                 : `${colab.name} atribuído a ${emp.nome}.`);
-            if (!r.jaExistia) await carregar();
         } else {
             onShowToast?.('Erro: ' + (r.error || 'falha ao atribuir'));
         }

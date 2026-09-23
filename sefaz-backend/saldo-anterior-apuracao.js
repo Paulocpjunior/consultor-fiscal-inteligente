@@ -13,11 +13,14 @@
 // Fui ler, e o estado é este — três apurações, três comportamentos diferentes,
 // e nenhum deles avisava:
 //
-//   ICMS próprio (E110 campo 10)   lê `saldoCredorIcms` da ficha da competência
+//   ICMS próprio (E110 campo 10)   lia `saldoCredorIcms` da ficha da competência
 //                                  ANTERIOR. Só que na ficha esse campo é o que
 //                                  ENTROU naquele mês, não o que SOBROU dele —
-//                                  ou seja, transporta o saldo DEFASADO e
-//                                  ignora a movimentação do próprio mês.
+//                                  ou seja, transportava o saldo DEFASADO.
+//                                  ✅ CORRIGIDO 11/09 (caso LEGACY): lê o campo
+//                                  "Saldo Credor ICMS (Mês Anterior)" da ficha
+//                                  DESTA competência — o mesmo número que abate
+//                                  a guia —, como o IPI já fazia desde 19/08.
 //   IPI (E520 VL_SD_ANT_IPI)       o gerador lê `saldoCredorIpiAnterior` e o
 //                                  orquestrador NUNCA passava esse campo ⇒ saía
 //                                  SEMPRE 0,00. ✅ LIGADO 19/08 (caso PWR): o
@@ -79,18 +82,23 @@ export function avisosDeSaldoAnterior({ icmsAnterior = 0, origemIcms = '', ipiAn
     } else if (num(icmsAnterior) > 0) {
         // Número que veio de outro lugar sai CARIMBADO com a origem — quem
         // confere precisa saber onde ele foi digitado para poder discordar.
+        // 11/09 (LEGACY): o valor sai do campo "Saldo Credor ICMS (Mês
+        // Anterior)" da ficha DESTA competência — o mesmo que abateu a guia. A
+        // origem vem carimbada de quem leu; a frase não afirma de qual ficha
+        // veio, senão mentiria no dia em que a reserva (o "a transportar" da
+        // anterior) for a fonte.
         avisos.push(
             `Saldo credor de ICMS do período anterior: ${num(icmsAnterior).toFixed(2)} `
-            + `(origem: ${origemIcms || 'não registrada'}). O CFI não calculou o transporte — `
-            + 'este valor é o campo "Saldo Credor ICMS (Mês Anterior)" da ficha da competência anterior, '
-            + 'não o saldo que sobrou dela. Para a cronologia de verdade, cole o último SPED ENTREGUE na '
-            + 'aba 🧮 Saldo de abertura do card SPED.',
+            + `(origem: ${origemIcms || 'não registrada'}). O valor foi digitado na ficha, não calculado — `
+            + 'confira contra o VL_SLD_CREDOR_TRANSPORTAR (E110 c.14) do último SPED entregue, ou cole-o na '
+            + 'aba 🧮 Saldo de abertura do card SPED para o transporte passar a ser calculado.',
         );
     } else {
         avisos.push(
             'O E110 está declarando saldo credor anterior de ICMS = 0,00. Isso é uma AFIRMAÇÃO à SEFAZ, não '
             + 'uma omissão: se esta empresa tem crédito acumulado de competências anteriores, o arquivo está '
-            + 'recolhendo a MAIOR. Lance o saldo na ficha da competência anterior antes de transmitir.',
+            + 'recolhendo a MAIOR. O valor sai do campo "Saldo Credor ICMS (Mês Anterior)" da ficha DESTA '
+            + 'competência — lance-o lá antes de transmitir.',
         );
     }
 

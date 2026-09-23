@@ -16,6 +16,10 @@
  *   🏢 Por Empresa → score + gaps (PGDAS/DCTFWeb/e-CAC) por empresa
  *   📋 Tarefas     → Kanban operacional (auto + manuais)
  *   📅 Calendário  → timeline mensal de vencimentos
+ *   📤 Envios (rito) → o rito de cada guia enviada (cópia na pasta IMPOSTOS +
+ *                    baixa) e o ♻️ Refazer o rito. Paulo, 22/09: "Não localizei
+ *                    esse ENVIOS - REFAZER RITO" — a fusão dos 3 hubs tinha
+ *                    deixado o painel sem porta nenhuma.
  *
  * Removido de propósito: o antigo FiscalObligationsDashboard (lista fixa de
  * ~25 obrigações que ignorava o regime da empresa — fonte de confusão).
@@ -27,21 +31,25 @@ import type { User } from '../../types';
 
 const VencimentosSemanaPanel = lazy(() => import('./VencimentosSemanaPanel'));
 const MinhaAgendaPanel = lazy(() => import('../MinhaAgenda/MinhaAgendaPanel'));
+const EbefAgenda = lazy(() => import('../Ebef/EbefAgenda'));
 const Tarefas = lazy(() => import('../Tarefas'));
 const CalendarioFiscal = lazy(() => import('../CalendarioFiscal'));
+const EnviosImpostoPainel = lazy(() => import('../EnviosImpostoPainel'));
 
 interface Props {
     currentUser: User;
     onShowToast?: (msg: string) => void;
 }
 
-type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario';
+type SubTab = 'proximos' | 'empresa' | 'tarefas' | 'calendario' | 'envios' | 'ebef';
 
 const SUBTABS: Array<{ id: SubTab; label: string }> = [
     { id: 'proximos', label: '⏰ Próximos Vencimentos' },
     { id: 'empresa', label: '🏢 Por Empresa' },
     { id: 'tarefas', label: '📋 Tarefas (Kanban)' },
     { id: 'calendario', label: '📅 Calendário' },
+    { id: 'envios', label: '📤 Envios (rito)' },
+    { id: 'ebef', label: 'Beneficiários finais · e-BEF' },
 ];
 
 const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
@@ -67,12 +75,14 @@ const VencimentosHub: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
             <ErrorBoundary modulo="VencimentosHub">
                 <Suspense fallback={<LoadingSpinner />}>
+                    {sub === 'ebef' && <EbefAgenda />}
                     {sub === 'proximos' && <VencimentosSemanaPanel onShowToast={onShowToast} />}
                     {sub === 'empresa' && <MinhaAgendaPanel onShowToast={onShowToast} />}
                     {sub === 'tarefas' && <Tarefas currentUser={currentUser} />}
                     {sub === 'calendario' && (
                         <CalendarioFiscal currentUser={currentUser} onShowToast={onShowToast || (() => {})} />
                     )}
+                    {sub === 'envios' && <EnviosImpostoPainel />}
                 </Suspense>
             </ErrorBoundary>
         </div>

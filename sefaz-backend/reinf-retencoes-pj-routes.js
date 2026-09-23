@@ -30,14 +30,20 @@
 // ============================================================================
 
 import { Router } from 'express';
+// Dono único do caminho (a árvore real foi medida em 02/09; não há nível de GRUPO).
+import { caminhoRecibos } from './caminho-sharepoint.js';
+import { resolverPastaDaEmpresa } from './sharepoint-pastas.js';
 import admin from 'firebase-admin';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { requireAdmin } from './require-admin.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { montarPayloadReinfPJ } from './reinf-retencoes-pj.js';
+import { validarAjusteRetencao, idAjustesDaCompetencia } from './retencao-pj-ajuste.js';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { montarPayloadR2055 } from './reinf-aquisicao-rural.js';
 import { montarPayloadR2010 } from './reinf-servicos-tomados.js';
+import { montarPayloadR2020 } from './reinf-servicos-prestados.js';
+import { montarMovimentoFiscalContabil } from './movimento-fiscal-contabil.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { conferirTotalizadorR2099, CODIGOS_RECEITA_FUNRURAL } from './reinf-aquisicao-rural.js';
@@ -58,10 +64,10 @@ const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHAR
  * ENTREGA da obrigação acessória. São artefatos diferentes, com públicos
  * diferentes — misturar faz alguém mandar recibo de entrega no lugar da guia.
  */
-export function pastaRecibosReinf(grupo, empresaPasta, competencia) {
+export function pastaRecibosReinf(pastaEmpresa, competencia) {
     const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || ''));
-    if (!grupo || !empresaPasta || !m) return null;
-    return `Empresas/${grupo}/DEPARTAMENTO FISCAL/${m[1]}/${m[2]}-${m[1]}/${empresaPasta}/RECIBOS`;
+    if (!pastaEmpresa || !m) return null;
+    return caminhoRecibos({ pastaEmpresa, ano: m[1], mes: m[2] });
 }
 
 async function uploadRecibo(folderPath, filename, contentBase64, mimeType) {
@@ -108,6 +114,33 @@ async function autorizar(req, res, next) {
     await requireAdmin(req, engolir, () => { passou = true; });
     if (passou) return next();
     return doContabil(req, res, next);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ✍️ AJUSTE DE RETENÇÃO — 1 doc por EMPRESA × COMPETÊNCIA, com um mapa por
+// CHAVE DA NOTA.
+//
+// 🚨 A GRAVAÇÃO É INCREMENTAL, e isso é trava, não detalhe (a lição do FUNRURAL
+// de 30/08): se o front mandasse o mapa inteiro, dois ajustes seguidos se
+// sobrescreveriam e o primeiro voltaria ao valor do documento SOZINHO — que é
+// exatamente o "total que muda sozinho" que este trilho existe para não ter.
+// ────────────────────────────────────────────────────────────────────────────
+// O id mora no dono (`retencao-pj-ajuste.js`): três lados o montam agora, e
+// forma diferente lê SEMPRE vazio — indistinguível de "não há ajuste".
+const idAjustes = idAjustesDaCompetencia;
+
+async function lerAjustesDeRetencao(db, cnpj, competencia) {
+    try {
+        const snap = await db.collection('reinf_retencoes_ajustadas').doc(idAjustes(cnpj, competencia)).get();
+        return snap.exists ? (snap.data()?.ajustes || {}) : {};
+    } catch (e) {
+        // ⚠️ Falha de leitura NÃO vira "não há ajuste": isso devolveria o valor
+        // do documento — justamente o número errado que o ajuste corrigiu.
+        console.error('[reinf-ajustes] leitura falhou', e);
+        throw new Error('Não consegui ler os ajustes de retenção desta competência. '
+            + 'Sem eles a lista mostraria o valor do documento, que pode ser o errado — '
+            + 'tente de novo em vez de transmitir.');
+    }
 }
 
 /** Documentos da competência de UMA empresa, pelas duas chaves de dono. */
@@ -191,7 +224,8 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
         }
 
         const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
-        const payload = montarPayloadReinfPJ({ cnpjTomador: cnpj, competencia, documentos });
+        const ajustes = await lerAjustesDeRetencao(db, cnpj, competencia);
+        const payload = montarPayloadReinfPJ({ cnpjTomador: cnpj, competencia, documentos, ajustes });
 
         return res.json({
             ok: true,
@@ -201,6 +235,91 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-retencoes-pj]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/admin/reinf/retencoes-pj/ajuste
+//
+// 🚨 31/08, Paulo: *"preciso ter a opção de ajustar as retenções para entregar
+// com o valor correto, com o novo layout estão emitindo errado"*.
+//
+// UM ajuste por chamada, sobre UMA nota. Ver o bloco `lerAjustesDeRetencao`
+// acima para por que a soma é incremental.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/retencoes-pj/ajuste', autorizar, express.json({ limit: '256kb' }), async (req, res) => {
+    try {
+        const { cnpj: cnpjBruto, competencia, chave, remover, motivo, autor } = req.body || {};
+        const cnpj = soDigitos(cnpjBruto);
+        if (!COMPETENCIA.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do tomador (14 dígitos).' });
+        }
+        // ⚠️ SEM CHAVE NÃO SE AJUSTA NADA: mudar o valor de uma declaração sem
+        // poder dizer QUAL nota mudou é o ajuste que ninguém consegue conferir
+        // depois — e a nota sem chave legível tem outra saída (reimportar o XML).
+        const alvo = String(chave || '').trim();
+        if (!alvo) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Sem a chave (ou número) da nota não dá para ajustar: o ajuste é da NOTA, '
+                    + 'não do prestador. Documento sem identificação legível precisa ser reimportado.',
+            });
+        }
+
+        const db = getDb();
+        const ref = db.collection('reinf_retencoes_ajustadas').doc(idAjustes(cnpj, competencia));
+
+        // ── ↩ DESFAZER: devolve a nota ao que o documento diz ───────────────
+        if (remover) {
+            await ref.set({
+                cnpj,
+                competencia: String(competencia),
+                ajustes: { [alvo]: admin.firestore.FieldValue.delete() },
+                atualizadoEm: new Date().toISOString(),
+                atualizadoPor: req.user?.email || null,
+            }, { merge: true });
+            return res.json({ ok: true, removido: alvo });
+        }
+
+        // 🚨 A AUTORIA É CARIMBADA COM A FONTE. Pelo túnel o autor é o que o app
+        // irmão AFIRMA — este servidor não tem como verificar —, e quem ler o
+        // registro daqui a três meses precisa saber a diferença. Fingir que
+        // verificou é o farol honesto ao contrário.
+        const doCfi = req.user?.email || null;
+        const autorFinal = doCfi || String(autor || '').trim();
+        const autorFonte = doCfi ? 'admin-cfi' : 'tunel-contabil';
+
+        const v = validarAjusteRetencao({
+            base: req.body?.base,
+            ir: req.body?.ir, pis: req.body?.pis, cofins: req.body?.cofins,
+            csll: req.body?.csll, inss: req.body?.inss,
+            motivo, autor: autorFinal,
+        });
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erros.join(' '), erros: v.erros });
+
+        const registro = {
+            ...v.valores,
+            autorFonte,
+            em: new Date().toISOString(),
+        };
+        delete registro.algum;
+        delete registro.soma;
+
+        await ref.set({
+            cnpj,
+            competencia: String(competencia),
+            ajustes: { [alvo]: registro },
+            atualizadoEm: registro.em,
+            atualizadoPor: autorFinal,
+        }, { merge: true });
+
+        return res.json({ ok: true, chave: alvo, ajuste: registro });
+    } catch (e) {
+        console.error('[reinf-retencoes-pj/ajuste]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -219,6 +338,14 @@ router.get('/retencoes-pj', autorizar, async (req, res) => {
 // REAL com recibo de SUCESSO da Receita (06/2026) — arquivo aceito vale mais
 // que leiaute deduzido. É de lá que veio o achado que manda no módulo: a BASE
 // de retenção NÃO é o valor bruto quando há dedução de material/insumo.
+//
+// 🚨 OS AJUSTES DECLARADOS ENTRAM AQUI (09/09, Paulo: *"corrige o r-2010
+// também"*), e a leitura vem ANTES da montagem: o INSS que o cliente esqueceu
+// de informar é corrigido por declaração, e é ele que o R-2010 tem de honrar.
+// Esta rota era a ÚNICA das três que não os carregava — a lacuna estava NOMEADA
+// no CLAUDE.md desde 09/09, esperando caso real. Falha de leitura NÃO vira "não
+// há ajuste": `lerAjustesDeRetencao` lança, senão o evento sairia com o zero do
+// documento sem ninguém saber.
 // ────────────────────────────────────────────────────────────────────────────
 router.get('/servicos-tomados', autorizar, async (req, res) => {
     try {
@@ -243,7 +370,8 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
         }
 
         const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
-        const payload = montarPayloadR2010({ cnpjTomador: cnpj, competencia, documentos });
+        const ajustes = await lerAjustesDeRetencao(db, cnpj, competencia);
+        const payload = montarPayloadR2010({ cnpjTomador: cnpj, competencia, documentos, ajustes });
 
         return res.json({
             ok: true,
@@ -253,6 +381,101 @@ router.get('/servicos-tomados', autorizar, async (req, res) => {
         });
     } catch (e) {
         console.error('[reinf-servicos-tomados]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/reinf/servicos-prestados?cnpj=...&competencia=AAAA-MM
+//
+// As NFS-e PRESTADAS com RETENÇÃO PREVIDENCIÁRIA SOFRIDA (11% do art. 31 da
+// Lei 8.212/91), prontas para o **R-2020** do EFD-Reinf — o espelho do R-2010.
+//
+// A régua vive em `reinf-servicos-prestados.js`, calibrada contra um
+// `evtServPrest` REAL aceito em produção (07/2026, mandado pelo Paulo em 08/09).
+//
+// 🚨 OS AJUSTES DECLARADOS ENTRAM AQUI (e é por isso que a leitura deles vem
+// ANTES da montagem): na nota de SAÍDA a retenção que o cliente esqueceu de
+// informar é corrigida por declaração (caso FRONTINI, 04/09), e o campo `inss`
+// dessa declaração é o que o R-2020 tem de honrar. Falha de leitura NÃO vira
+// "não há ajuste" — `lerAjustesDeRetencao` lança.
+// ────────────────────────────────────────────────────────────────────────────
+router.get('/servicos-prestados', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competência no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ do PRESTADOR (14 dígitos) — é ele quem declara o R-2020.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} não está cadastrado no CFI. Sem cadastro não há captura, e a ausência `
+                    + 'de notas aqui não prova ausência de retenção sofrida.',
+            });
+        }
+
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const ajustes = await lerAjustesDeRetencao(db, cnpj, competencia);
+        const payload = montarPayloadR2020({ cnpjPrestador: cnpj, competencia, documentos, ajustes });
+
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-servicos-prestados]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /api/admin/reinf/movimento-fiscal?cnpj=&competencia=&movimento=
+//
+// Fonte direta para o modal fiscal do CCI. E uma consulta pura: o CFI
+// normaliza portal/XML/ADN e o CCI continua responsavel pela previa e pela
+// gravacao contábil. Lista vazia vem acompanhada de documentosLidos para nao
+// ser confundida com prova de ausencia de movimento.
+router.get('/movimento-fiscal', autorizar, async (req, res) => {
+    try {
+        const competencia = String(req.query.competencia || '').trim();
+        const cnpj = soDigitos(req.query.cnpj);
+        const movimento = String(req.query.movimento || '').trim();
+        if (!COMPETENCIA.test(competencia)) {
+            return res.status(400).json({ ok: false, error: 'Informe a competencia no formato AAAA-MM.' });
+        }
+        if (cnpj.length !== 14) {
+            return res.status(400).json({ ok: false, error: 'Informe o CNPJ da empresa com 14 digitos.' });
+        }
+        if (!['servicos_prestados', 'servicos_tomados', 'entrada', 'saida'].includes(movimento)) {
+            return res.status(400).json({ ok: false, error: 'Selecione serviços prestados/tomados ou NF-e de entrada/saída.' });
+        }
+
+        const db = getDb();
+        const empresa = await acharEmpresa(db, cnpj);
+        if (!empresa) {
+            return res.status(404).json({
+                ok: false,
+                error: `O CNPJ ${cnpj} nao foi encontrado no cadastro do CFI. Sem cadastro nao ha captura, e lista vazia nao prova ausencia de movimento.`,
+            });
+        }
+        const documentos = await carregarDocumentos(db, { empresaId: empresa.empresaId, cnpj, competencia });
+        const payload = montarMovimentoFiscalContabil({ cnpjEmpresa: cnpj, competencia, movimento, documentos });
+        return res.json({
+            ok: true,
+            empresa: { empresaId: empresa.empresaId, nome: empresa.nome, regime: empresa.regime, cnpj },
+            documentosLidos: documentos.length,
+            ...payload,
+        });
+    } catch (e) {
+        console.error('[reinf-movimento-fiscal]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -413,7 +636,14 @@ router.get('/fechamento-competencia/preparar', requireAdmin, async (req, res) =>
             codigosFunrural: CODIGOS_RECEITA_FUNRURAL,
             // O SharePoint é a prova que fica — se não há onde arquivar, a tela
             // precisa dizer ANTES, não depois de montar o extrato.
-            temPastaSharePoint: Boolean(empresa._doc?.sharePointConfig?.grupo && empresa._doc?.sharePointConfig?.empresaPasta),
+            //
+            // 🚨 E A CAUSA VAI JUNTO (02/09). Isto lia `sharePointConfig.grupo`,
+            // que é o cadastro do caminho MORTO: a tela mandava preencher
+            // "grupo + pasta" em Integrações → SharePoint, e preencher lá não
+            // resolve mais nada — é o aviso que aponta um lugar que não
+            // resolve (achado 18, 21/08). Agora quem responde é o DONO, e o
+            // motivo dele já diz a AÇÃO de cada uma das três causas.
+            pastaSharePoint: await resolverPastaDaEmpresa(empresa._doc),
         });
     } catch (e) {
         console.error('[reinf/fechamento/preparar]', e);
@@ -490,13 +720,16 @@ router.post('/fechamento-competencia', requireAdmin, express.json({ limit: '12mb
         const arquivos = (Array.isArray(req.body?.arquivos) ? req.body.arquivos : [])
             .filter((a) => a && a.nome && a.base64);
         if (arquivos.length) {
-            const cfg = empresa._doc?.sharePointConfig;
-            const pasta = cfg ? pastaRecibosReinf(cfg.grupo, cfg.empresaPasta, competencia) : null;
+            // 🚨 A pasta da empresa é ACHADA pelo Cod.Cliente (02/09): a árvore
+            // real não tem grupo e o nome dela é humano. O motivo vem do DONO —
+            // frase nova aqui divergiria da que o auto-sync mostra no mesmo caso.
+            const achado = await resolverPastaDaEmpresa(empresa._doc);
+            const pasta = achado.ok ? pastaRecibosReinf(achado.pasta, competencia) : null;
             if (!pasta) {
                 resultado.sharePoint = {
                     status: 'sem-config',
-                    motivo: 'Empresa sem sharePointConfig (grupo + pasta) — preencha na Central de XMLs → '
-                        + 'Integrações → SharePoint. O extrato foi montado, mas não há onde arquivar.',
+                    motivo: `${achado.motivo || 'Competência ilegível.'} `
+                        + 'O extrato foi montado, mas não há onde arquivar.',
                 };
             } else {
                 const arquivados = [];

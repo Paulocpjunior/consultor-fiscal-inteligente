@@ -135,7 +135,9 @@ else
     echo "== Saída DESLIGADA (META_SIP_DESTINO vazio) — a entrada não é afetada."
 fi
 
-STARTUP=$(mktemp)
+# Template explícito funciona igualmente no GNU/Linux (CI/VM) e no BSD/macOS
+# (estações de desenvolvimento), respeitando TMPDIR quando informado.
+STARTUP=$(mktemp "${TMPDIR:-/tmp}/cfi-sbc-startup.XXXXXX")
 cat > "$STARTUP" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail

@@ -13,6 +13,41 @@ export interface ColunaPdf {
     /** Largura relativa (soma livre — normalizada pra área útil). */
     largura: number;
     alinhamento?: 'esquerda' | 'direita';
+    /**
+     * Texto maior que a coluna QUEBRA em linhas (e `\n` na célula é quebra
+     * pedida) em vez de ser cortado. Para a coluna de PARTICIPANTE: o corte
+     * honesto (`…(+N)`) é certo numa lista de notas, e ERRADO num nome de
+     * prestador — o relatório saía com nome abreviado e sem CNPJ (08/09).
+     */
+    quebra?: boolean;
+}
+
+/**
+ * As linhas que uma célula ocupa (PURO — a casca só desenha).
+ * Coluna com `quebra`: parte em `\n` e quebra cada parte pela largura;
+ * sem `quebra`: uma linha, com o corte HONESTO dizendo quanto sobrou.
+ */
+export function linhasDaCelula(txt: string, maxChars: number, quebra: boolean): string[] {
+    const t = String(txt ?? '');
+    if (!quebra) {
+        return [t.length > maxChars ? t.slice(0, Math.max(1, maxChars - 8)) + `…(+${t.length - (maxChars - 8)})` : t];
+    }
+    const out: string[] = [];
+    for (const parte of t.split('\n')) {
+        const palavras = parte.split(/\s+/).filter(Boolean);
+        if (!palavras.length) { out.push(''); continue; }
+        let atual = '';
+        for (const w of palavras) {
+            const cand = atual ? `${atual} ${w}` : w;
+            if (cand.length <= maxChars) { atual = cand; continue; }
+            if (atual) out.push(atual);
+            let resto = w;
+            while (resto.length > maxChars) { out.push(resto.slice(0, maxChars)); resto = resto.slice(maxChars); }
+            atual = resto;
+        }
+        if (atual) out.push(atual);
+    }
+    return out.length ? out : [''];
 }
 
 export interface RelatorioPdfParams {
@@ -95,21 +130,51 @@ async function carregarLogo(): Promise<string | null> {
         const r = await fetch('/sp-logo.png');
         if (!r.ok) throw new Error(String(r.status));
         const blob = await r.blob();
-        logoCache = await new Promise<string>((resolve, reject) => {
+        const original = await new Promise<string>((resolve, reject) => {
             const fr = new FileReader();
             fr.onload = () => resolve(String(fr.result));
             fr.onerror = reject;
             fr.readAsDataURL(blob);
         });
+        // 🚨 O LOGO É UM PNG DE 2.456 px e o jsPDF o guarda DECODIFICADO, uma
+        // vez por página: um relatório de 8 linhas saiu com **24 MB** (08/09,
+        // CLUDE tomados). Ele é desenhado com 11 mm — 320 px bastam.
+        logoCache = await reduzirLogo(original, 320);
     } catch {
         logoCache = null;
     }
     return logoCache;
 }
 
+/** Reduz o logo pela largura, no navegador; sem canvas devolve o original. */
+async function reduzirLogo(dataUrl: string, larguraMax: number): Promise<string> {
+    try {
+        if (typeof document === 'undefined' || typeof Image === 'undefined') return dataUrl;
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = reject;
+            i.src = dataUrl;
+        });
+        if (!img.width || img.width <= larguraMax) return dataUrl;
+        const escala = larguraMax / img.width;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return dataUrl;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
+    } catch {
+        return dataUrl;
+    }
+}
+
 export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
     const { default: jsPDF } = await import('jspdf');
-    const pdf = new jsPDF({ orientation: p.orientacao || 'landscape', unit: 'mm', format: 'a4' });
+    // `compress: true`: sem ele os fluxos saem sem Flate — é a outra metade
+    // dos 24 MB.
+    const pdf = new jsPDF({ orientation: p.orientacao || 'landscape', unit: 'mm', format: 'a4', compress: true });
     const W = pdf.internal.pageSize.getWidth();
     const H = pdf.internal.pageSize.getHeight();
     const M = 10;
@@ -167,36 +232,45 @@ export async function gerarRelatorioPdf(p: RelatorioPdfParams): Promise<void> {
         pdf.text('Gerado pelo Consultor Fiscal Inteligente — conferir antes de protocolar.', M, H - 5);
     };
 
+    const ALTURA_LINHA = 4.6;
+    const PASSO_QUEBRA = 3.1;
     const linhaTabela = (valores: (string | number)[], destaque = false) => {
-        if (y > H - 14) { rodape(); pdf.addPage(); cabecalho(); }
-        if (destaque) {
-            pdf.setFillColor(226, 232, 240);
-            pdf.rect(M, y - 3.2, areaUtil, 4.6, 'F');
-            pdf.setFont('helvetica', 'bold');
-        }
-        let x = M;
-        valores.forEach((v, i) => {
+        // Cada célula pode ocupar mais de uma linha (coluna com `quebra`); a
+        // altura da LINHA é a da célula mais alta, e a quebra de página olha
+        // essa altura — senão a segunda linha do nome cairia no rodapé.
+        const celulas = valores.map((v, i) => {
             const w = larguras[i] ?? 10;
-            const txt = fmtCell(v);
             const maxChars = Math.floor(w / 1.55);
             // CORTE HONESTO: o "…" sozinho não diz que sobrou coisa nem quanto —
             // e num relatório fiscal isso vira conclusão errada (caso LAV,
             // 12/08: a lista de notas faltantes cortada pela largura da coluna,
             // sem nada avisando). Quando corta, o texto DIZ que cortou.
-            const recortado = txt.length > maxChars
-                ? txt.slice(0, Math.max(1, maxChars - 8)) + `…(+${txt.length - (maxChars - 8)})`
-                : txt;
+            return linhasDaCelula(fmtCell(v), maxChars, !!p.colunas[i]?.quebra);
+        });
+        const extras = Math.max(0, ...celulas.map(c => c.length - 1));
+        const altura = ALTURA_LINHA + extras * PASSO_QUEBRA;
+        if (y + altura - ALTURA_LINHA > H - 14) { rodape(); pdf.addPage(); cabecalho(); }
+        if (destaque) {
+            pdf.setFillColor(226, 232, 240);
+            pdf.rect(M, y - 3.2, areaUtil, altura, 'F');
+            pdf.setFont('helvetica', 'bold');
+        }
+        let x = M;
+        celulas.forEach((linhas, i) => {
+            const w = larguras[i] ?? 10;
             pdf.setFontSize(6.8);
-            pdf.text(recortado, p.colunas[i]?.alinhamento === 'direita' ? x + w - 1.5 : x + 1.5, y, {
-                align: p.colunas[i]?.alinhamento === 'direita' ? 'right' : 'left',
+            linhas.forEach((txt, k) => {
+                pdf.text(txt, p.colunas[i]?.alinhamento === 'direita' ? x + w - 1.5 : x + 1.5, y + k * PASSO_QUEBRA, {
+                    align: p.colunas[i]?.alinhamento === 'direita' ? 'right' : 'left',
+                });
             });
             x += w;
         });
         if (destaque) pdf.setFont('helvetica', 'normal');
         pdf.setDrawColor(...BORDA);
         pdf.setLineWidth(0.1);
-        pdf.line(M, y + 1.3, W - M, y + 1.3);
-        y += 4.6;
+        pdf.line(M, y + altura - ALTURA_LINHA + 1.3, W - M, y + altura - ALTURA_LINHA + 1.3);
+        y += altura;
     };
 
     cabecalho();

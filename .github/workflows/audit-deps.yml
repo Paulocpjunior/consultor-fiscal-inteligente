@@ -96,6 +96,7 @@ jobs:
           npm run build
 
       - name: Abrir PR com a correção
+        id: abrir_pr
         if: steps.correcao.outputs.mudou == 'true' && steps.validacao.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -186,6 +187,10 @@ jobs:
           else
             gh issue create --title "$TITULO" --body "$CORPO_ISSUE"
           fi
+          # Já avisei com a causa NOMEADA — a rede de segurança não precisa
+          # abrir a issue genérica por cima. Dois alarmes para o mesmo fato é
+          # o caminho conhecido para a equipe ignorar os dois.
+          echo "avisado=true" >> "$GITHUB_OUTPUT"
           exit 1
 
       # Sem correção possível: avisa ANTES de virar bloqueio de deploy.
@@ -220,6 +225,108 @@ jobs:
             gh issue create --title "$TITULO" --body "$CORPO"
           fi
 
+      # ═══ SONDA: PERMISSÃO SE MEDE, NÃO SE CONFERE NA TELA ════════════════
+      # O CASO (04/09): o robô ficou 27 dias sem conseguir abrir PR. A caixa
+      # de Settings foi marcada em 08/08 e o CLAUDE.md registrou isso como
+      # resolvido — mas a recusa de 07/08 voltou IDÊNTICA nos runs de 03 e
+      # 04/09. Configuração salva é STATUS; quem responde é o RESULTADO.
+      #
+      # E o que fez os 27 dias passarem não foi falta de alarme: foi o VERDE.
+      # Sem advisory, o robô sai limpo no primeiro step e NUNCA chega ao
+      # `gh pr create` — então o verde diário dizia "auditei", nunca "eu
+      # conseguiria entregar a correção". Ausência de alarme indistinguível
+      # de "está tudo certo" é a doença que esta casa mais paga.
+      #
+      # A sonda pergunta ao GitHub o que a tela de Settings não responde:
+      # abre um PR DE VERDADE e fecha no mesmo run. É o desenho do
+      # `✉️ Testar credencial do e-mail` e do `forma-do-segredo` (02/09) —
+      # um botão que MEDE em vez de um campo que afirma.
+      #
+      # Ela só roda quando NÃO há correção a entregar: havendo, o caminho
+      # real já mede (foi o que aconteceu em 04/09), e rodar as duas daria
+      # dois PRs e dois alarmes para o mesmo fato.
+      - name: Sonda — o robô consegue mesmo abrir PR?
+        id: sonda
+        if: steps.auditoria.outputs.limpo == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Branch PRÓPRIA da sonda. Reusar `chore/audit-deps` destruiria uma
+          # correção real esperando merge — a branch do robô é uma MINA
+          # (a lição de 17/08, em que ela travou o próprio robô por 3 dias).
+          SONDA="chore/sonda-permissao-pr"
+          TITULO="Robô de auditoria não consegue abrir PR"
+
+          # A limpeza é a PRIMEIRA coisa armada: sonda que deixa rastro vira o
+          # problema que ela veio medir.
+          limpar() {
+            gh pr close "$SONDA" --delete-branch >/dev/null 2>&1 || true
+            git push origin --delete "$SONDA" >/dev/null 2>&1 || true
+          }
+          trap limpar EXIT
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "+refs/heads/$SONDA:refs/remotes/origin/$SONDA" || true
+          git checkout -B "$SONDA"
+          # Commit VAZIO: se a limpeza falhar, o que sobra não muda uma linha
+          # do app — não há nada que alguém possa mesclar por engano.
+          git commit --allow-empty -m "sonda: o robo consegue abrir PR? (nao mesclar)"
+          git push --force-with-lease origin "$SONDA" || git push origin "$SONDA"
+
+          if gh pr create --draft \
+              --head "$SONDA" \
+              --base main \
+              --title "sonda: o robô consegue abrir PR? (fecha sozinha)" \
+              --body "Sonda do robô de auditoria: commit VAZIO, fechada no mesmo run. Não mesclar."; then
+            echo "✓ A permissão VALE — medido abrindo um PR de verdade, não lendo a caixa em Settings."
+            exit 0
+          fi
+
+          echo "::warning::A sonda não abriu PR — no dia em que houver advisory, a correção não sai."
+          CORPO_SONDA=$(cat <<CORPO
+          **A auditoria de hoje está limpa** — e mesmo assim o robô está quebrado.
+
+          A sonda tentou abrir um PR (commit vazio, para fechar em seguida) e o
+          GitHub recusou. Ou seja: **no dia em que aparecer um advisory, a correção
+          não vai ser entregue.**
+
+          ⚠️ **Não procure correção parada**: hoje não havia o que corrigir. O que
+          está quebrado é a capacidade de ENTREGAR, não a de achar.
+
+          **Causa mais provável** (é a de 07/08 e a de 04/09): o repositório não
+          permite que o GitHub Actions abra pull requests.
+
+          **Como resolver, uma vez só:**
+          Settings → Actions → General → Workflow permissions → **Read and write
+          permissions** + marcar **"Allow GitHub Actions to create and approve pull
+          requests"** → **Save** (o botão Save é o passo que mais escapa).
+
+          **Como CONFERIR que resolveu** — sem esperar o próximo advisory:
+          Actions → *Auditoria diária de dependências* → **Run workflow**. Verde
+          nesta sonda é a prova; caixa marcada não é.
+
+          Se continuar recusando com a caixa marcada e salva, o caminho é um PAT
+          fine-grained (\`contents: write\` + \`pull requests: write\`, só neste repo)
+          em Secrets → Actions — a recusa é contra o *Actions*, não contra um usuário.
+
+          · Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          CORPO
+          )
+          EXISTE=$(gh issue list --search "$TITULO in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTE" ]; then
+            # NÃO comenta: ao contrário do caminho real, aqui nada novo aconteceu
+            # hoje (não há correção parada). A issue ABERTA já é o estado, e
+            # comentar todo dia é o ruído que faz a equipe parar de ler.
+            echo "→ Issue #$EXISTE já aberta; nada a acrescentar hoje."
+          else
+            gh issue create --title "$TITULO" --body "$CORPO_SONDA"
+          fi
+          echo "avisado=true" >> "$GITHUB_OUTPUT"
+          # VERMELHO de propósito: verde aqui diria que a entrega está garantida.
+          exit 1
+
       # ═══ REDE DE SEGURANÇA ═══════════════════════════════════════════════
       # O robô caiu por um motivo que ele mesmo não previu (git, rede, cota)?
       # Então NADA acima abriu issue, e o run vermelho fica num painel que
@@ -229,8 +336,19 @@ jobs:
       # com exit 1 ANTES do passo que abre issue, e o robô de SEGURANÇA ficou
       # três dias quebrado sem ninguém saber. Só apareceu porque o Paulo olhou
       # a lista de runs.
+      #
+      # ⚠️ ELA É A REDE DO *IMPREVISTO*, e só. Quando um passo acima já avisou
+      # com a causa NOMEADA, ele carimba `avisado=true` e esta aqui SAI DE
+      # CENA: em 04/09 o mesmo fato abriu DUAS issues (#777 específica e #778
+      # genérica), e com a sonda o #778 ganharia comentário todo dia útil —
+      # o ruído que faz a equipe parar de ler as duas.
+      # Passo que nunca rodou devolve string vazia, então a rede continua
+      # disparando no caso que ela existe para cobrir.
       - name: Robô falhou por outro motivo — abrir/atualizar issue
-        if: failure()
+        if: |
+          failure()
+          && steps.abrir_pr.outputs.avisado != 'true'
+          && steps.sonda.outputs.avisado != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

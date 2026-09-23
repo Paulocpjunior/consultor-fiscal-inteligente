@@ -25,6 +25,8 @@
 import { createHmac } from 'crypto';
 import { secretsMatch } from './cron-secret.js';
 import { respostaDePermissaoLigacao } from './whatsapp-chamadas.js';
+import { saiuPorOutraPlataforma } from '../services/sp-connect-message-origin.js';
+export { saiuPorOutraPlataforma } from '../services/sp-connect-message-origin.js';
 
 /** Config do webhook — envs próprias, separadas das do envio. */
 export function configWebhook(env = process.env) {
@@ -215,13 +217,6 @@ export function traduzirStatusEntrega(status) {
  * faria o colaborador ignorar uma falha que é dele — erro na direção cara. O
  * contrário só custa uma frase inútil.
  */
-export function saiuPorOutraPlataforma(mensagem) {
-    if (!mensagem || typeof mensagem !== 'object') return false;
-    if ((mensagem.direcao || 'saida') !== 'saida') return false;
-    if (mensagem.enviadoPor) return false;
-    return !mensagem.texto && !mensagem.midia;
-}
-
 /**
  * 🚨 O DOCUMENTO QUE `interpretarErroEntrega` DEVE ENXERGAR, dado o que a
  * rota leu do Firestore para este `metaMessageId` (caso real, print do

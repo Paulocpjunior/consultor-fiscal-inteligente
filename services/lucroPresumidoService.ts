@@ -8,6 +8,10 @@ import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, whe
 // 🔒 O dono da pergunta "qual é a competência?" — a ficha grava `mesReferencia`
 // em quatro formas, e `===` perderia a competência fechada em silêncio.
 import { normalizarCompetencia } from '../sefaz-backend/competencia.js';
+// 🔒 O ID do carimbo é RÉGUA ÚNICA — o I/O difere (aqui é o SDK modular, lá é o
+// admin), mas `${id}_07/2026` e `${id}_2026-07` seriam DOIS carimbos para o
+// mesmo mês. Montá-lo à mão aqui foi pego pela varredura.
+import { idDoFechamento, COLECAO_FECHAMENTOS } from '../sefaz-backend/fechamento-store.js';
 
 const STORAGE_KEY_LUCRO_EMPRESAS = 'lucro_presumido_empresas';
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
@@ -55,7 +59,19 @@ export interface LucroEmpresaResumo {
     nome: string | null;
     cnpj: string | null;
     uf: string | null;
+    /**
+     * ⚠️ CAMPO ANTIGO — não é a resposta sobre o regime. Uma entidade IMUNE
+     * tem `regimePadrao` vazio, e a lista escrevia "Presumido" em cima dele.
+     * Quem responde é `regime`, abaixo.
+     */
     regimePadrao: 'Presumido' | 'Real' | null;
+    /** A resposta do DONO (`regimeDaEmpresa`), com a origem. */
+    regime?: {
+        codigo: string;
+        rotulo: string;
+        origem: 'cadastro' | 'regimePadrao' | 'colecao' | 'nenhuma';
+        apuracaoDefinida: boolean;
+    } | null;
     codCliente: string | null;
     /**
      * CONTAGEM de fichas — nunca o array.
@@ -106,6 +122,7 @@ export const getEmpresasResumo = async (currentUser?: User | null): Promise<Lucr
                 cnpj: String((e as any).cnpj || '').replace(/\D/g, '') || null,
                 uf: String((e as any).uf || '').toUpperCase() || null,
                 regimePadrao: (e as any).regimePadrao || null,
+                regime: (e as any).regime || null,
                 codCliente: String((e as any).codCliente ?? (e as any).dadosFiscais?.codCliente ?? '') || null,
                 fichas: ((e as any).fichaFinanceira || []).length,
                 capturarSefaz: (e as any).capturarSefaz !== false,
@@ -369,8 +386,9 @@ export const addFichaFinanceira = async (empresaId: string, registro: FichaFinan
             // lançamento, e `===` perderia a competência fechada em silêncio —
             // exatamente o descasamento que mordeu três vezes em 15/08.
             const comp = normalizarCompetencia(registro.mesReferencia);
-            if (comp) {
-                const fechSnap = await getDoc(doc(db, 'fechamentos_competencia', `${empresaId}_${comp}`));
+            const idFech = idDoFechamento(empresaId, comp);
+            if (comp && idFech) {
+                const fechSnap = await getDoc(doc(db, COLECAO_FECHAMENTOS, idFech));
                 const fech = fechSnap.exists() ? (fechSnap.data() as any) : null;
                 // 'reaberta' é competência ABERTA de novo — travá-la impediria
                 // justamente a correção que a reabertura veio permitir.

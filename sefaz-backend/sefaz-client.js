@@ -142,11 +142,10 @@ export function descomprimirDocZip(base64) {
  * Se certOverride for null, usa loadCertificate() (cert do escritorio).
  */
 export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride = null, uf }) {
-  // DRY-RUN: loga o envelope que seria enviado e retorna mock sem chamar SEFAZ.
+  // DRY-RUN: registra apenas metadados e retorna mock sem chamar SEFAZ.
   if (DRY_RUN) {
     const envelopeDry = montaEnvelope({ cnpj, ultNSU, uf });
-    console.log('[sefaz-client DRY-RUN] envelope que SERIA enviado:');
-    console.log(envelopeDry);
+    console.log('[sefaz-client DRY-RUN] envelope omitido; bytes=', envelopeDry.length);
     return {
       ok: true, cStat: 'DRY-RUN', xMotivo: 'Envelope logado, SEFAZ não chamada',
       ultNSU, maxNSU: ultNSU, dhResp: new Date().toISOString(),
@@ -157,9 +156,7 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
   const envelope = montaEnvelope({ cnpj, ultNSU, uf });
 
   if (process.env.SEFAZ_DEBUG === '1') {
-    console.log('[sefaz-client DEBUG] ENVELOPE ENVIADO:');
-    console.log(envelope);
-    console.log('[sefaz-client DEBUG] cert CNPJ:', cert.cnpj || '?');
+    console.log('[sefaz-client DEBUG] ENVELOPE ENVIADO bytes:', envelope.length);
   }
 
   let response;
@@ -181,12 +178,11 @@ export async function consultaDistDFeComCert({ cnpj, ultNSU = '0', certOverride 
       response = await postSefaz(envelope, cert.pfxBuffer, cert.password);
     } else throw err;
   }
-  if (response.statusCode !== 200) throw new Error(`SEFAZ HTTP ${response.statusCode}: ${response.body.slice(0, 500)}`);
+  if (response.statusCode !== 200) throw new Error(`SEFAZ HTTP ${response.statusCode}; conteúdo fiscal omitido; bytes=${response.body?.length || 0}`);
 
   if (process.env.SEFAZ_DEBUG === '1') {
     console.log('[sefaz-client DEBUG] RESPONSE STATUS:', response.statusCode);
-    console.log('[sefaz-client DEBUG] RESPONSE BODY (primeiros 2000 chars):');
-    console.log(response.body.slice(0, 2000));
+    console.log('[sefaz-client DEBUG] RESPONSE BODY bytes:', response.body?.length || 0);
   }
 
   const parsed = parseRetorno(response.body);
@@ -227,7 +223,7 @@ export async function consultaDistDFe({ cnpj, ultNSU = '0', uf }) {
 export async function consultaNFePorChave({ chave, cnpjInteressado, uf, certOverride = null }) {
   if (DRY_RUN) {
     const envelopeDry = montaEnvelopeConsChNFe({ chave, cnpjInteressado, uf });
-    console.log('[sefaz-client DRY-RUN consChNFe] envelope:', envelopeDry);
+    console.log('[sefaz-client DRY-RUN consChNFe] envelope omitido; bytes=', envelopeDry.length);
     return { ok: true, cStat: 'DRY-RUN', xMotivo: 'envelope logado', xmls: [] };
   }
   const envelope = montaEnvelopeConsChNFe({ chave, cnpjInteressado, uf });
@@ -248,7 +244,7 @@ export async function consultaNFePorChave({ chave, cnpjInteressado, uf, certOver
     } else throw err;
   }
   if (response.statusCode !== 200) {
-    throw new Error(`SEFAZ HTTP ${response.statusCode}: ${response.body.slice(0, 500)}`);
+    throw new Error(`SEFAZ HTTP ${response.statusCode}; conteúdo fiscal omitido; bytes=${response.body?.length || 0}`);
   }
   const parsed = parseRetorno(response.body);
   const xmls = parsed.docs.map(d => {

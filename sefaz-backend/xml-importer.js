@@ -12,9 +12,21 @@ import { classificarTipoDoc } from './xml-tipo-doc.js';
 import { competenciaFromDhEmi, extrairParticipantesNfe, extrairAutXml, docCancelado, decidirDirecaoPorTpNF, CSTAT_EVENTO_CANCELAMENTO } from './xml-metadata-helper.js';
 import { decidirDonoPorParticipantes } from './atribuicao-participantes.js';
 import { decidirPosseDocumento } from './documento-posse.js';
+// O OUTRO LADO da mesma chave (11/09, LEGACY × FEDERAÇÃO): a contraparte que
+// também é cliente grava documento PRÓPRIO, com o id do dono.
+import { idDoDocumentoDoLado, carimboDoLado } from './documento-lado.js';
+import { refsDaChave } from './documento-lado-io.js';
 import { mesclarItensRelidos, CAMPOS_RECUPERAVEIS } from './backfill-itens-fiscais.js';
 import { classificarParaReleitura, patchDaReleitura, numeroDaChave } from './releitura-notas-vazias.js';
+import {
+  lerCabecalhoCte, classificarCteParaCabecalho, patchDoCabecalhoCte, VERSAO_RELEITURA_CTE,
+} from './cte-cabecalho.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+// A fila que ANDA (18/09, VINATEX · 159 recusas do 0150 depois de reler): os
+// quatro ♻️ do acervo cortavam a fila num `limit()` ANTES do filtro do carimbo,
+// e a rodada seguinte relia os MESMOS documentos. Quem pagina por cursor e
+// gasta o orçamento só no trabalho caro é o dono, em `firestore-paginate.js`.
+import { varrerComOrcamento, restaramDaVarredura } from './firestore-paginate.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 // CNPJ do escritório — é ele que o cliente põe no autXML da nota dele.
@@ -134,6 +146,35 @@ export function extrairItens(xml) {
     const cofinsInnerMatch = cofins.match(/<(COFINS\w+)\b[^>]*>([\s\S]*?)<\/\1>/);
     const cofinsInner = cofinsInnerMatch ? cofinsInnerMatch[2] : '';
 
+    // ── DIFAL DE SAÍDA (EC 87/2015) — o grupo <ICMSUFDest> ────────────────
+    //
+    // 🚨 18/09, VINATEX: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, precisa
+    // ajustar isso também, que vai no SPED"*. O relatório do e-Fiscal dela
+    // (08/2026) lista venda a venda por UF de destino — BA 323,29 de DIFAL e
+    // 44,54 de FCP, CE 162,06, MG 1.428,99, MS 160,84 — e o app declarava
+    // **nada**: nem C101, nem E300/E310/E316.
+    //
+    // 📖 O NÚMERO ESTÁ NA PRÓPRIA NOTA. Na venda interestadual a consumidor
+    // final NÃO contribuinte, a NF-e traz o grupo `ICMSUFDest` em CADA item
+    // (irmão de `<ICMS>` dentro de `<imposto>`), com a partilha já calculada
+    // pelo emitente. Nenhum dos dois parsers o lia — é a MESMA família do
+    // logradouro do 0150 (18/09, de manhã) e do CFOP do cabeçalho do CT-e
+    // (17/09): **o dado chega e o leitor descarta**.
+    //
+    // ⚠️ O GRUPO É DO ITEM, NUNCA DO TOTAL. Uma nota pode ter item tributado
+    // e item isento, e o C101 soma o que os itens declaram. `<ICMSTot>` traz
+    // os mesmos três valores e serve de RESERVA quando o item não os tem
+    // (captura antiga), nunca de fonte primária.
+    //
+    // ⚠️ AUSENTE = null, NUNCA 0: "esta venda não tem DIFAL" e "o leitor não
+    // achou" pedem ações opostas, e zero num campo que vira débito de imposto
+    // é uma AFIRMAÇÃO à SEFAZ (regra de 06/08).
+    const icmsUfDest = pickFirstBlock(det.inner, 'ICMSUFDest');
+    const difalOuNull = (tag) => {
+      const v = pickTag(icmsUfDest, tag);
+      return v === '' || v === undefined || v === null ? null : num(v);
+    };
+
     // CST de PIS e de COFINS — o campo que decide se a ENTRADA gera crédito no
     // regime não-cumulativo (Lei 10.637/02 art. 3º e Lei 10.833/03 art. 3º):
     // 50-56 dão direito, 70-75 não dão, 98/99 são "outras operações".
@@ -188,6 +229,17 @@ export function extrairItens(xml) {
       aliqCOFINS: num(pickTag(cofinsInner, 'pCOFINS')),
       cstCofins,
       vBcCofins: num(pickTag(cofinsInner, 'vBC')),
+      // DIFAL da EC 87/15 (venda interestadual a consumidor final não
+      // contribuinte) — o que alimenta o C101 e o E310 por UF de destino.
+      vBCUFDest: difalOuNull('vBCUFDest'),
+      vBCFCPUFDest: difalOuNull('vBCFCPUFDest'),
+      pFCPUFDest: difalOuNull('pFCPUFDest'),
+      pICMSUFDest: difalOuNull('pICMSUFDest'),
+      pICMSInter: difalOuNull('pICMSInter'),
+      pICMSInterPart: difalOuNull('pICMSInterPart'),
+      vFCPUFDest: difalOuNull('vFCPUFDest'),
+      vICMSUFDest: difalOuNull('vICMSUFDest'),
+      vICMSUFRemet: difalOuNull('vICMSUFRemet'),
       cst,
       orig,
     });
@@ -220,6 +272,12 @@ function extrairTotais(xml) {
     vCOFINS: num(pickTag(icmsTot, 'vCOFINS')),
     vOutro: num(pickTag(icmsTot, 'vOutro')),
     vNF: num(pickTag(icmsTot, 'vNF')),
+    // DIFAL EC 87/15 no total do documento — RESERVA do que o item declara
+    // (`ICMSUFDest` por `<det>`). Serve para a nota capturada antes de
+    // 18/09, que não tem o grupo no item. Ausente = null, nunca 0.
+    vFCPUFDest: pickTag(icmsTot, 'vFCPUFDest') ? num(pickTag(icmsTot, 'vFCPUFDest')) : null,
+    vICMSUFDest: pickTag(icmsTot, 'vICMSUFDest') ? num(pickTag(icmsTot, 'vICMSUFDest')) : null,
+    vICMSUFRemet: pickTag(icmsTot, 'vICMSUFRemet') ? num(pickTag(icmsTot, 'vICMSUFRemet')) : null,
   };
 }
 
@@ -286,8 +344,22 @@ export function extrairMetadados(xml, schema) {
   // com CFOP **'5352' CRAVADO** em 100% dos conhecimentos e CST '000' — dado
   // fiscal INVENTADO, a mesma família do 'PARTSEM'. A natureza da operação de
   // transporte não se adivinha; ela está no XML e faltava LER.
-  const cfopCabecalho = pickTag(xml, 'CFOP') || null;
-  const cstCabecalho = pickTag(xml, 'CST') || null;
+  //
+  // 📌 QUEM LÊ É O DONO (17/09): a MESMA pergunta é feita pelo backfill do
+  // cabeçalho (`relerCabecalhoCtes`), e duas leituras divergiriam no primeiro
+  // ajuste — o `cfop` da captura e o da releitura têm de ser o mesmo campo.
+  // ⚠️ E ele devolve `null` fora do CT-e de propósito: a busca solta por
+  // `<CFOP>`/`<CST>` que estava aqui achava os do PRIMEIRO ITEM de uma NF-e e
+  // os gravava na RAIZ, como se fossem do documento — falso em nota mista.
+  // Medido antes de trocar: só `cfopDoCte` (bloco D) lê esses campos na raiz,
+  // e ele nem chega a ver NF-e.
+  const cabecalhoCte = lerCabecalhoCte(xml);
+  const cfopCabecalho = cabecalhoCte?.cfop || null;
+  const cstCabecalho = cabecalhoCte?.cstIcms || null;
+  // Municípios da PRESTAÇÃO (cMunIni/cMunFim) — campos 24 e 25 do D100 do EFD
+  // ICMS/IPI, obrigatórios nas entradas. Não são o município dos participantes.
+  const codMunIniCte = cabecalhoCte?.codMunIni || null;
+  const codMunFimCte = cabecalhoCte?.codMunFim || null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
@@ -342,7 +414,13 @@ export function extrairMetadados(xml, schema) {
 
   // 23/05 — extracao expandida pra Frente 1 (NCM/CFOP/CST)
   const ide = pickFirstBlock(xml, 'ide');
-  const numero = pickTag(ide, 'nNF') || null;
+  // 🚨 `nNF` É A TAG DA NF-e; O CT-e TRAZ `nCT` (18/09, EDUARDO GUERRA · 08/2026).
+  // Esta linha lia só `nNF`, então TODO CT-e capturado ficou gravado com
+  // `numero: null` — e o D100 saía com o NUM_DOC vazio (campo 09, obrigatório
+  // e conferido contra a chave), num arquivo que o PVA importava e depois
+  // quebrava ao gerar o relatório de entradas. Quem lê o cabeçalho do CT-e é o
+  // dono (`lerCabecalhoCte`, abaixo), e o 🚚 recupera o acervo pelo mesmo dono.
+  const numero = pickTag(ide, 'nNF') || cabecalhoCte?.numero || null;
   const serie = pickTag(ide, 'serie') || null;
   const natOp = pickTag(ide, 'natOp') || null;
   const infProt = pickFirstBlock(xml, 'infProt');
@@ -351,11 +429,11 @@ export function extrairMetadados(xml, schema) {
   return {
     chave, cnpjEmit, cnpjDest, xNome, dhEmi,
     vNF: vNF ? Number(vNF) : null,
-    tpNF, tipoDoc, tipoNormalizado, schema, evento,
+    tpNF, modFrete: pickTag(xml, 'modFrete'), tipoDoc, tipoNormalizado, schema, evento,
     numero, serie, natOp, cStat,
     // CFOP/CST do CABEÇALHO — é onde o CT-e os guarda (o D190 os exige e
     // estava inventando '5352'/'000' porque a captura só lia <prod>).
-    cfopCabecalho, cstCabecalho,
+    cfopCabecalho, cstCabecalho, codMunIniCte, codMunFimCte,
     // Endereço dos DOIS participantes. Vem daqui (e não de uma variável solta
     // no importer) porque `participantes` só existe NESTE escopo — usá-la lá
     // fora quebrou a captura inteira com "participantes is not defined"
@@ -366,6 +444,17 @@ export function extrairMetadados(xml, schema) {
     ieDest: participantes.destinatario.ie || null,
     ufEmit: participantes.emitente.uf || null,
     codMunEmit: participantes.emitente.codMunIBGE || null,
+    // 🚨 O LOGRADOURO — campo 10 do 0150, **obrigatório sem condição**, e que
+    // este extrator descartava (18/09, VINATEX: 732 recusas). Ele vem no MESMO
+    // `<enderDest>`/`<enderEmit>` de onde a UF e o município já saíam.
+    logradouroEmit: participantes.emitente.logradouro || null,
+    nroEmit: participantes.emitente.numero || null,
+    complementoEmit: participantes.emitente.complemento || null,
+    bairroEmit: participantes.emitente.bairro || null,
+    logradouroDest: participantes.destinatario.logradouro || null,
+    nroDest: participantes.destinatario.numero || null,
+    complementoDest: participantes.destinatario.complemento || null,
+    bairroDest: participantes.destinatario.bairro || null,
     // PROVA de que o cliente autorizou o escritório no emissor dele.
     autXml: extrairAutXml(xml),
   };
@@ -384,7 +473,7 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor, tipoDocNormalizado }) {
+export async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath, xmlHash, schema, nsu, capturadoPor, tipoDocNormalizado }) {
   // Persiste evento como subdoc/array dentro da NFe original.
   // Se a NFe original não existir ainda, cria um "stub" com status pendente.
   const docRef = db.collection('documentos_fiscais').doc(chaveNFe);
@@ -415,51 +504,71 @@ async function anexarEventoNaNFe({ db, chaveNFe, empresaId, evento, storagePath,
   // liam o mesmo 'eventos=[E1]', ambos faziam append e um sobrescrevia o outro
   // — evento perdido (a classe do bug "3630 NSUs perdidos"). runTransaction
   // serializa por docId e re-tenta em conflito.
+  // 🚨 O EVENTO É DA NOTA, NÃO DE UM LADO (11/09): a mesma chave pode ter o
+  // documento do destinatário (id = chave) E o do emitente (o OUTRO LADO,
+  // `ladoDe.chave`). O cancelamento anexado só no principal deixaria a saída
+  // da LEGACY contando no faturamento com a nota cancelada — calado.
+  // As referências são resolvidas ANTES da transação (query não entra em
+  // txn); dentro dela, leitura de todos primeiro, escrita depois.
+  const { refs } = await refsDaChave(db, chaveNFe);
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(docRef);
-    if (snap.exists) {
-      // Anexa ao array de eventos (sem duplicar). Preferimos o nProt (chave
-      // natural do protocolo); quando ausente, usamos tpEvento+nSeqEvento+
-      // dhEvento como chave composta — senão o reprocessamento (ex.: reset NSU)
-      // duplicaria eventos sem protocolo no array.
-      const data = snap.data();
-      const eventosExistentes = data.eventos || [];
-      const jaExiste = eventoData.nProt
-        ? eventosExistentes.some(e => e.nProt === eventoData.nProt)
-        : eventosExistentes.some(e =>
-            !e.nProt &&
-            e.tpEvento === eventoData.tpEvento &&
-            String(e.nSeqEvento ?? '') === String(eventoData.nSeqEvento ?? '') &&
-            e.dhEvento === eventoData.dhEvento);
-      if (jaExiste) {
-        return { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
-      }
-      const updates = {
-        eventos: [...eventosExistentes, eventoData],
-      };
-      // Se cancelamento REGISTRADO, atualiza status da NFe. 135 = registrado e
-      // vinculado; 155 = homologado FORA DE PRAZO — cancelamento igual (o gate
-      // só em '135' deixou cancelada de fora de prazo contando no Livro e no
-      // fechamento; bug 11/08, MV LIDER 639).
-      if (evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || ''))) {
-        updates.status = 'cancelado';
-        updates.canceladoEm = evento.dhEvento;
-        updates.canceladoProtocolo = evento.nProt;
-      }
-      // 23/05 — defesa contra Update() requires...:
-      // garante que todos os valores do updates sao definidos antes de chamar.
-      for (const [k, v] of Object.entries(updates)) {
-        if (v === undefined) {
-          console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
-          delete updates[k];
+    const snaps = [];
+    for (const ref of refs) snaps.push({ ref, snap: await tx.get(ref) });
+    const existentes = snaps.filter((x) => x.snap.exists);
+    if (existentes.length > 0) {
+      let resultado = null;
+      for (const { ref, snap } of existentes) {
+        // Anexa ao array de eventos (sem duplicar). Preferimos o nProt (chave
+        // natural do protocolo); quando ausente, usamos tpEvento+nSeqEvento+
+        // dhEvento como chave composta — senão o reprocessamento (ex.: reset NSU)
+        // duplicaria eventos sem protocolo no array.
+        const data = snap.data();
+        const eventosExistentes = data.eventos || [];
+        const jaExiste = eventoData.nProt
+          ? eventosExistentes.some(e => e.nProt === eventoData.nProt)
+          : eventosExistentes.some(e =>
+              !e.nProt &&
+              e.tpEvento === eventoData.tpEvento &&
+              String(e.nSeqEvento ?? '') === String(eventoData.nSeqEvento ?? '') &&
+              e.dhEvento === eventoData.dhEvento);
+        if (jaExiste) {
+          resultado = resultado || { status: 'duplicado_evento', chave: chaveNFe, tipo: evento.tipo };
+          continue;
+        }
+        const updates = {
+          eventos: [...eventosExistentes, eventoData],
+        };
+        // Se cancelamento REGISTRADO, atualiza status da NFe. 135 = registrado e
+        // vinculado; 155 = homologado FORA DE PRAZO — cancelamento igual (o gate
+        // só em '135' deixou cancelada de fora de prazo contando no Livro e no
+        // fechamento; bug 11/08, MV LIDER 639).
+        if (evento.tipo === 'cancelamento' && CSTAT_EVENTO_CANCELAMENTO.has(String(evento.cStat || ''))) {
+          updates.status = 'cancelado';
+          updates.canceladoEm = evento.dhEvento;
+          updates.canceladoProtocolo = evento.nProt;
+        }
+        // 23/05 — defesa contra Update() requires...:
+        // garante que todos os valores do updates sao definidos antes de chamar.
+        for (const [k, v] of Object.entries(updates)) {
+          if (v === undefined) {
+            console.warn(`[xml-importer] anexarEventoNaNFe: campo ${k} undefined em updates, removendo`);
+            delete updates[k];
+          }
+        }
+        if (Object.keys(updates).length === 0) {
+          console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando update');
+          resultado = resultado || { status: 'evento_skip_vazio', chave: chaveNFe };
+          continue;
+        }
+        tx.update(ref, updates);
+        // O status que sai é o do documento que de fato recebeu o evento
+        // (o principal vem primeiro; o lado só entra no lugar dele se o
+        // principal já o tinha).
+        if (!resultado || resultado.status !== 'evento_anexado') {
+          resultado = { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo, lados: existentes.length - 1 };
         }
       }
-      if (Object.keys(updates).length === 0) {
-        console.warn('[xml-importer] anexarEventoNaNFe: updates vazio, pulando update');
-        return { status: 'evento_skip_vazio', chave: chaveNFe };
-      }
-      tx.update(docRef, updates);
-      return { status: 'evento_anexado', chave: chaveNFe, tipo: evento.tipo };
+      return resultado;
     }
     // Stub: cria um doc parcial pra quando o documento-pai chegar, ela faz merge.
     // 23/05 — adicionado defaults pra campos undefined (numero, serie, etc)
@@ -618,9 +727,12 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   }
 
   // ── NFE / RESNFE: caminho original ──────────────────────────────────
-  const docId = meta.chave;
+  let docId = meta.chave;
   const storagePath = buildStoragePath(empresaId, meta.chave, meta.tipoDoc);
-  const docRef = db.collection('documentos_fiscais').doc(docId);
+  let docRef = db.collection('documentos_fiscais').doc(docId);
+  // Preenchido quando este documento é o OUTRO LADO de uma chave que já tem
+  // dono na carteira (as duas empresas são partes).
+  let ladoDe = null;
 
   // Fast-path: lê o doc atual e, se for duplicado óbvio, sai SEM gravar storage
   // (economia). A decisão AUTORITATIVA é refeita dentro da transação de escrita
@@ -632,7 +744,40 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   } catch (e) {
     console.warn('[xml-importer] erro lendo doc existente:', e.message);
   }
-  const existingData = existing?.exists ? existing.data() : null;
+  let existingData = existing?.exists ? existing.data() : null;
+
+  // ═══ O OUTRO LADO ═════════════════════════════════════════════════════════
+  // A chave já tem dono, e a empresa desta captura TAMBÉM é parte do documento
+  // (saída de uma cliente, entrada da outra — KROYA × GOLDLOG, LEGACY ×
+  // FEDERAÇÃO). Até 11/09 isto era RECUSADO nomeado; agora o documento desta
+  // empresa é OUTRO, com id derivado (dono: documento-lado.js), e daqui em
+  // diante o fluxo é o normal sobre ELE (duplicado/upgrade/merge).
+  if (existingData && empresaId && existingData.empresaId && existingData.empresaId !== empresaId) {
+    const posseLado = decidirPosseDocumento({
+      existente: existingData,
+      pretendente: { empresaId, empresaCnpj: empresaCnpj?.replace(/\D/g, '') || null },
+      documento: { cnpjEmit: meta.cnpjEmit, cnpjDest: meta.cnpjDest },
+    });
+    const idLado = posseLado.situacao === 'contraparte-legitima'
+      ? idDoDocumentoDoLado(meta.chave, empresaCnpj)
+      : '';
+    if (idLado) {
+      ladoDe = carimboDoLado({
+        chave: meta.chave,
+        outroLadoCnpj: existingData.empresaCnpj,
+        outroLadoEmpresaId: existingData.empresaId,
+      });
+      docId = idLado;
+      docRef = db.collection('documentos_fiscais').doc(docId);
+      try {
+        const snapLado = await docRef.get();
+        existingData = snapLado.exists ? snapLado.data() : null;
+      } catch (e) {
+        console.warn('[xml-importer] erro lendo doc do lado:', e.message);
+        existingData = null;
+      }
+    }
+  }
 
   if (decidirGravacaoNFe({ existingData, tipoDoc: meta.tipoDoc, schema, chave: meta.chave }).duplicado) {
     // Duplicado SEM DONO (ou de outra empresa) ainda precisa ser reatribuído —
@@ -769,6 +914,17 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     ieDest: meta.ieDest,
     ufEmit: meta.ufEmit,
     codMunEmit: meta.codMunEmit,
+    // Endereço dos dois lados — é o campo 10 do 0150 (ENDERECO), obrigatório
+    // sem condição. Ficava de fora e o arquivo dependia da BrasilAPI (que
+    // responde o cadastro da Receita, não o que a nota declara).
+    logradouroEmit: meta.logradouroEmit,
+    nroEmit: meta.nroEmit,
+    complementoEmit: meta.complementoEmit,
+    bairroEmit: meta.bairroEmit,
+    logradouroDest: meta.logradouroDest,
+    nroDest: meta.nroDest,
+    complementoDest: meta.complementoDest,
+    bairroDest: meta.bairroDest,
     // Lista de autorizados + o atalho que a Cobertura de Saída consulta.
     autXml: meta.autXml || [],
     autXmlEscritorio: (meta.autXml || []).includes(CNPJ_ESCRITORIO_DIGITOS),
@@ -776,10 +932,13 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     competencia: competenciaFromDhEmi(meta.dhEmi),
     valorTotal: meta.vNF,
     tpNF: meta.tpNF,
+    modFrete: meta.modFrete,
     // Só gravam quando o XML os traz no cabeçalho (CT-e) — em NF-e eles moram
     // no item e continuam vindo de lá.
     ...(meta.cfopCabecalho ? { cfop: meta.cfopCabecalho } : {}),
     ...(meta.cstCabecalho ? { cstIcms: meta.cstCabecalho } : {}),
+    ...(meta.codMunIniCte ? { codMunIniCte: meta.codMunIniCte } : {}),
+    ...(meta.codMunFimCte ? { codMunFimCte: meta.codMunFimCte } : {}),
     tipoDoc: tipoDocFinal,
     tipo: meta.tipoNormalizado,
     schema: meta.schema,
@@ -801,6 +960,9 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     createdBy: capturadoPor?.uid || null,
     capturadoPor: capturadoPor || null,
     eventosBeforeNFe: false,
+    // O carimbo do lado: é por `ladoDe.chave` que a propagação de eventos
+    // (cancelamento, CC-e, manifestação) acha este documento.
+    ...(ladoDe ? { ladoDe } : {}),
   };
   // Escrita AUTORITATIVA em transação: re-lê o doc DENTRO da txn e decide
   // duplicado/upgrade/merge de forma atômica. Sem isso, um .set() não-merge
@@ -856,6 +1018,9 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       chave: meta.chave,
       tipoDoc: meta.tipoDoc,
       upgrade: dec.upgrade || undefined,
+      // Entrou como o OUTRO LADO de uma chave que já tinha dono — vai dito no
+      // resultado, senão o log do cron não distingue o lado de uma nota nova.
+      outroLado: ladoDe ? true : undefined,
     };
   });
 
@@ -996,7 +1161,7 @@ export async function corrigirStatusCanceladoPorEvento({ competencias = [], maxD
     try {
       const snap = await db.collection('documentos_fiscais')
         .where('competencia', '==', competencia)
-        .select('status', 'cStat', 'eventos')
+        .select('status', 'cStat', 'eventos', 'cancelamentoDeclarado')
         .limit(maxDocs)
         .get();
       for (const docSnap of snap.docs) {
@@ -1082,13 +1247,16 @@ export async function preencherEnderecoDestinatario(opts = {}) {
  * à fila; subir o número reprocessa a base quando o extrator aprender a ler
  * mais. É o que substitui o sentinela por campo de dado.
  */
-export const VERSAO_RELEITURA_PARTICIPANTES = 2;
+export const VERSAO_RELEITURA_PARTICIPANTES = 3;
 
 export async function preencherEnderecoParticipantes({ limit = 200, empresaId = null, competencia = null, direcao = 'saida' } = {}) {
   const db = fa().firestore();
   let examinadas = 0, preenchidas = 0, semXml = 0, jaTinham = 0;
   // Contagem POR CAUSA — "0 recuperadas" sem dizer o quê não responde nada.
-  let ganharamMunicipio = 0, ganharamFornecedor = 0, semDadoNoXml = 0;
+  let ganharamMunicipio = 0, ganharamFornecedor = 0, ganharamEndereco = 0, semDadoNoXml = 0;
+  // Documentos da fila que NÃO couberam neste lote. `-1` = há mais e a
+  // contagem falhou. Zero é resposta ("a fila acabou"), nunca default.
+  let restaram = 0;
   try {
     // ARMADILHA DO FIRESTORE: `where('ufDest', '==', null)` NÃO devolve os
     // documentos em que o campo simplesmente NÃO EXISTE — e é esse o caso de
@@ -1099,71 +1267,104 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
 
-    const snap = await q.limit(empresaId || competencia ? Math.max(limit, 1000) : limit).get();
-
+    // 🚨 O ORÇAMENTO É DE TRABALHO CARO, E A FILA ANDA POR CURSOR (18/09, à
+    // noite — VINATEX: "continua com os erros mesmo relendo", 159 recusas). A
+    // forma antiga era `q.limit(teto).get()` + filtro do carimbo EM MEMÓRIA:
+    // a query devolvia SEMPRE os mesmos 1000 primeiros documentos, a rodada 1
+    // os carimbava e a rodada 2 recebia os MESMOS 1000 ("já relidos"),
+    // examinava zero e parava — os 2501 restantes da competência nunca eram
+    // alcançados, com a rota mandando "rode de novo até a fila zerar".
+    // Agora o já-relido é pulado DE GRAÇA página a página (não consome
+    // orçamento) e a rodada só para quando gastou o orçamento em downloads
+    // ou chegou ao FIM da fila. É o dono `varrerComOrcamento` — a régua da
+    // fila da reconferência (20/08), aplicada ao backfill.
+    const orcamento = empresaId || competencia ? Math.max(limit, 1000) : limit;
     const bucket = storage.bucket(STORAGE_BUCKET);
-    for (const docSnap of snap.docs) {
-      const d = docSnap.data() || {};
-      // Já relido NESTA versão do extrator — não volta à fila. O que decide é
-      // "já passei por aqui?", nunca "tem UF?": a UF vem em toda nota e fazia
-      // o backfill pular justamente as que faltavam município e fornecedor.
-      if (Number(d.participantesRelidos || 0) >= VERSAO_RELEITURA_PARTICIPANTES) { jaTinham++; continue; }
-      examinadas++;
-      if (!d.storagePath) { semXml++; continue; }
-      try {
-        const [buf] = await bucket.file(d.storagePath).download();
-        const p = extrairParticipantesNfe(buf.toString('utf8'));
-        // Grava os DOIS lados: a nota própria de entrada (tpNF=0) tem o
-        // produtor no bloco destinatário, e a compra normal tem no emitente.
-        // Preencher só um lado deixaria metade das notas rurais sem município.
-        //
-        // BACKFILL NÃO APAGA. Campo que o XML não trouxe não pode sobrescrever
-        // o que o importer já gravou — seria destruir dado bom pra "corrigir"
-        // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
-        // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
-        const patch = {};
-        // Preenche só o que está VAZIO. O que o importer já gravou não é
-        // sobrescrito nem apagado: este backfill recupera ausência, não corrige
-        // divergência — divergência entre fonte e cadastro é ALERTA, e alerta
-        // não se resolve por escrita silenciosa.
-        const por = (campo, valor) => {
-          const atual = d[campo];
-          if (valor && (atual === undefined || atual === null || atual === '')) patch[campo] = valor;
-        };
-        // A IDENTIDADE do participante vem junto: sem `cnpjEmit` a nota cai em
-        // "fornecedor indefinido" para sempre, e era o buraco das 427.
-        por('cnpjEmit', p.emitente.cnpj);
-        por('xNomeEmit', p.emitente.nome);
-        por('codMunEmit', p.emitente.codMunIBGE);
-        por('ieEmit', p.emitente.ie);
-        por('cnpjDest', p.destinatario.cnpj);
-        por('xNomeDest', p.destinatario.nome);
-        por('codMunDest', p.destinatario.codMunIBGE);
-        por('ieDest', p.destinatario.ie);
-        por('ufEmit', p.emitente.uf);
-        por('ufDest', p.destinatario.uf);
-        patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
-        patch.participantesRelidosEm = new Date().toISOString();
+    const varredura = await varrerComOrcamento(q, {
+      orcamento,
+      aoDoc: async (docSnap) => {
+        const d = docSnap.data() || {};
+        // Já relido NESTA versão do extrator — não volta à fila. O que decide é
+        // "já passei por aqui?", nunca "tem UF?": a UF vem em toda nota e fazia
+        // o backfill pular justamente as que faltavam município e fornecedor.
+        // ⚠️ Pular é de graça (`false`): não gasta o orçamento da rodada.
+        if (Number(d.participantesRelidos || 0) >= VERSAO_RELEITURA_PARTICIPANTES) { jaTinham++; return false; }
+        examinadas++;
+        if (!d.storagePath) { semXml++; return false; }
+        try {
+          const [buf] = await bucket.file(d.storagePath).download();
+          const p = extrairParticipantesNfe(buf.toString('utf8'));
+          // Grava os DOIS lados: a nota própria de entrada (tpNF=0) tem o
+          // produtor no bloco destinatário, e a compra normal tem no emitente.
+          // Preencher só um lado deixaria metade das notas rurais sem município.
+          //
+          // BACKFILL NÃO APAGA. Campo que o XML não trouxe não pode sobrescrever
+          // o que o importer já gravou — seria destruir dado bom pra "corrigir"
+          // dado ausente. Só a UF do lado varrido recebe '' quando o XML não tem:
+          // ela é o SENTINELA (sem ela o mesmo doc voltaria pra fila pra sempre).
+          const patch = {};
+          // Preenche só o que está VAZIO. O que o importer já gravou não é
+          // sobrescrito nem apagado: este backfill recupera ausência, não corrige
+          // divergência — divergência entre fonte e cadastro é ALERTA, e alerta
+          // não se resolve por escrita silenciosa.
+          const por = (campo, valor) => {
+            const atual = d[campo];
+            if (valor && (atual === undefined || atual === null || atual === '')) patch[campo] = valor;
+          };
+          // A IDENTIDADE do participante vem junto: sem `cnpjEmit` a nota cai em
+          // "fornecedor indefinido" para sempre, e era o buraco das 427.
+          por('cnpjEmit', p.emitente.cnpj);
+          por('xNomeEmit', p.emitente.nome);
+          por('codMunEmit', p.emitente.codMunIBGE);
+          por('ieEmit', p.emitente.ie);
+          por('cnpjDest', p.destinatario.cnpj);
+          por('xNomeDest', p.destinatario.nome);
+          por('codMunDest', p.destinatario.codMunIBGE);
+          por('ieDest', p.destinatario.ie);
+          por('ufEmit', p.emitente.uf);
+          por('ufDest', p.destinatario.uf);
+          // 🚨 O ENDEREÇO — campo 10 do 0150, obrigatório sem condição, e que o
+          // extrator descartava até 18/09 (VINATEX: 732 recusas do PVA). Está no
+          // MESMO `<enderDest>`/`<enderEmit>` de onde a UF já saía, então o
+          // acervo inteiro se recupera com o ♻️ — subir a VERSÃO acima é o que
+          // recoloca a base na fila.
+          por('logradouroEmit', p.emitente.logradouro);
+          por('nroEmit', p.emitente.numero);
+          por('complementoEmit', p.emitente.complemento);
+          por('bairroEmit', p.emitente.bairro);
+          por('logradouroDest', p.destinatario.logradouro);
+          por('nroDest', p.destinatario.numero);
+          por('complementoDest', p.destinatario.complemento);
+          por('bairroDest', p.destinatario.bairro);
+          patch.participantesRelidos = VERSAO_RELEITURA_PARTICIPANTES;
+          patch.participantesRelidosEm = new Date().toISOString();
 
-        const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
-        if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
-        if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
-        // Relido e o XML REALMENTE não tinha — resposta diferente de "já
-        // tinha", e é ela que manda procurar o dado no cadastro do produtor.
-        const recuperouAlgo = Object.keys(patch).length > 2;
-        if (!recuperouAlgo) semDadoNoXml++;
-        await docSnap.ref.update(patch);
-        if (recuperouAlgo) preenchidas++;
-      } catch (e) {
-        console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
-        semXml++;
-      }
-    }
+          const ladoQueInteressa = direcao === 'entrada' ? 'Emit' : 'Dest';
+          if (patch[`codMun${ladoQueInteressa}`]) ganharamMunicipio++;
+          if (patch[`cnpj${ladoQueInteressa}`] || patch[`xNome${ladoQueInteressa}`]) ganharamFornecedor++;
+          // Contado à parte porque a AÇÃO é outra: é este número que responde
+          // "quantos dos 732 participantes sem ENDERECO o XML resolveu".
+          if (patch[`logradouro${ladoQueInteressa}`]) ganharamEndereco++;
+          // Relido e o XML REALMENTE não tinha — resposta diferente de "já
+          // tinha", e é ela que manda procurar o dado no cadastro do produtor.
+          const recuperouAlgo = Object.keys(patch).length > 2;
+          if (!recuperouAlgo) semDadoNoXml++;
+          await docSnap.ref.update(patch);
+          if (recuperouAlgo) preenchidas++;
+        } catch (e) {
+          console.warn(`[preencherEnderecoDestinatario] falha em ${docSnap.id}:`, e.message);
+          semXml++;
+        }
+        return true;   // gastou o orçamento: baixou (ou tentou baixar) o XML
+      },
+    });
+    // O que a rodada NÃO viu — fila esgotada é 0 (resposta), contagem caída é -1.
+    restaram = await restaramDaVarredura(q, varredura);
   } catch (e) {
     console.warn('[preencherEnderecoDestinatario] query falhou:', e.message);
-    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml, erro: e.message };
+    return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, restaram, erro: e.message };
   }
-  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, semDadoNoXml };
+  return { examinadas, preenchidas, semXml, jaTinham, ganharamMunicipio, ganharamFornecedor, ganharamEndereco, semDadoNoXml, restaram };
 }
 
 /**
@@ -1175,7 +1376,12 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
  * notas que precisavam dele, respondendo "0 recuperadas · 664 já tinham"
  * enquanto o painel do lado acusava 427 sem fornecedor.
  */
-export const VERSAO_RELEITURA_ITENS = 1;
+// v2 (12/09): frete/seguro/outras/FCP-ST por item entraram em CAMPOS_RECUPERAVEIS —
+// nota já carimbada v1 precisa passar de novo, senão o campo novo nunca chega.
+// v3 (18/09): o grupo `<ICMSUFDest>` (DIFAL de SAÍDA da EC 87/15) entrou. Sem
+// subir a versão, a saída interestadual já capturada ficaria para sempre sem o
+// C101 e sem o E310 — é a fila inteira que precisa passar de novo.
+export const VERSAO_RELEITURA_ITENS = 3;
 
 /**
  * BACKFILL — campos de ITEM que o extrator aprendeu depois (`cstIpi`,
@@ -1195,6 +1401,8 @@ export const VERSAO_RELEITURA_ITENS = 1;
 export async function relerItensFiscais({ limit = 200, empresaId = null, competencia = null } = {}) {
   const db = fa().firestore();
   let examinadas = 0, atualizadas = 0, semXml = 0, jaRelidas = 0, semItens = 0, naoPareadas = 0, semDadoNoXml = 0;
+  // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = há mais e não sei quantos.
+  let restaram = 0;
   const porCampo = {};
   const naoPareadasDetalhe = [];
   try {
@@ -1205,53 +1413,60 @@ export async function relerItensFiscais({ limit = 200, empresaId = null, compete
     let q = db.collection('documentos_fiscais');
     if (empresaId) q = q.where('empresaId', '==', String(empresaId));
     if (competencia) q = q.where('competencia', '==', String(competencia));
-    const snap = await q.limit(Math.max(limit, 1)).get();
-
+    // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+    // `preencherEnderecoParticipantes`): o `q.limit(N).get()` cortava a fila
+    // antes do filtro do carimbo, e competência maior que o lote ficava com o
+    // resto para sempre "a reler", sem nenhuma rodada chegar nele.
     const bucket = storage.bucket(STORAGE_BUCKET);
-    for (const docSnap of snap.docs) {
-      const d = docSnap.data() || {};
-      if (Number(d.itensRelidos || 0) >= VERSAO_RELEITURA_ITENS) { jaRelidas++; continue; }
-      examinadas++;
-      if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; continue; }
-      if (!d.storagePath) { semXml++; continue; }
-      try {
-        const [buf] = await bucket.file(d.storagePath).download();
-        const doXml = extrairItens(buf.toString('utf8'));
-        const r = mesclarItensRelidos(d.itens, doXml, CAMPOS_RECUPERAVEIS);
+    const varredura = await varrerComOrcamento(q, {
+      orcamento: Math.max(limit, 1),
+      aoDoc: async (docSnap) => {
+        const d = docSnap.data() || {};
+        if (Number(d.itensRelidos || 0) >= VERSAO_RELEITURA_ITENS) { jaRelidas++; return false; }
+        examinadas++;
+        if (!Array.isArray(d.itens) || !d.itens.length) { semItens++; return false; }
+        if (!d.storagePath) { semXml++; return false; }
+        try {
+          const [buf] = await bucket.file(d.storagePath).download();
+          const doXml = extrairItens(buf.toString('utf8'));
+          const r = mesclarItensRelidos(d.itens, doXml, CAMPOS_RECUPERAVEIS);
 
-        // NÃO PAREOU: a nota fica INTACTA e NOMEADA. Gravar por índice quando
-        // as contagens divergem escreveria o CST de um produto em outro, e o
-        // arquivo sairia ACEITO declarando outra coisa — não volta recusa.
-        // Também NÃO carimba: ela tem de voltar à fila quando alguém olhar.
-        if (r.motivo) {
-          naoPareadas++;
-          if (naoPareadasDetalhe.length < 20) {
-            naoPareadasDetalhe.push({ chave: d.chave || docSnap.id, numero: d.numero || null, motivo: r.motivo });
+          // NÃO PAREOU: a nota fica INTACTA e NOMEADA. Gravar por índice quando
+          // as contagens divergem escreveria o CST de um produto em outro, e o
+          // arquivo sairia ACEITO declarando outra coisa — não volta recusa.
+          // Também NÃO carimba: ela tem de voltar à fila quando alguém olhar.
+          if (r.motivo) {
+            naoPareadas++;
+            if (naoPareadasDetalhe.length < 20) {
+              naoPareadasDetalhe.push({ chave: d.chave || docSnap.id, numero: d.numero || null, motivo: r.motivo });
+            }
+            return true;
           }
-          continue;
-        }
 
-        const patch = { itensRelidos: VERSAO_RELEITURA_ITENS, itensRelidosEm: new Date().toISOString() };
-        if (r.alterados > 0) {
-          patch.itens = r.itens;
-          for (const [campo, n] of Object.entries(r.campos)) porCampo[campo] = (porCampo[campo] || 0) + n;
-        } else {
-          // Relida e o XML REALMENTE não tinha o campo — resposta DIFERENTE de
-          // "já relida", e é ela que diz que não adianta clicar de novo.
-          semDadoNoXml++;
+          const patch = { itensRelidos: VERSAO_RELEITURA_ITENS, itensRelidosEm: new Date().toISOString() };
+          if (r.alterados > 0) {
+            patch.itens = r.itens;
+            for (const [campo, n] of Object.entries(r.campos)) porCampo[campo] = (porCampo[campo] || 0) + n;
+          } else {
+            // Relida e o XML REALMENTE não tinha o campo — resposta DIFERENTE de
+            // "já relida", e é ela que diz que não adianta clicar de novo.
+            semDadoNoXml++;
+          }
+          await docSnap.ref.update(patch);
+          if (r.alterados > 0) atualizadas++;
+        } catch (e) {
+          console.warn(`[relerItensFiscais] falha em ${docSnap.id}:`, e.message);
+          semXml++;
         }
-        await docSnap.ref.update(patch);
-        if (r.alterados > 0) atualizadas++;
-      } catch (e) {
-        console.warn(`[relerItensFiscais] falha em ${docSnap.id}:`, e.message);
-        semXml++;
-      }
-    }
+        return true;
+      },
+    });
+    restaram = await restaramDaVarredura(q, varredura);
   } catch (e) {
     console.warn('[relerItensFiscais] query falhou:', e.message);
-    return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, erro: e.message };
+    return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, restaram, erro: e.message };
   }
-  return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe };
+  return { examinadas, atualizadas, semXml, jaRelidas, semItens, naoPareadas, semDadoNoXml, porCampo, naoPareadasDetalhe, restaram };
 }
 
 /**
@@ -1279,21 +1494,28 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
   const res = {
     examinadas: 0, preenchidas: 0, ganharamNumero: 0, soResumo: 0,
     semArquivo: 0, foraDoEscopo: 0, jaCompletas: 0, semItemNoXml: 0, falhas: 0,
+    // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = contagem caída.
+    restaram: 0,
   };
   let q = db.collection('documentos_fiscais');
   if (empresaId) q = q.where('empresaId', '==', String(empresaId));
   if (competencia) q = q.where('competencia', '==', String(competencia));
-  const snap = await q.limit(Math.max(limit, 1)).get();
 
+  // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+  // `preencherEnderecoParticipantes`, 18/09): o `q.limit(N).get()` cortava a
+  // fila antes da classificação, e competência maior que o lote nunca era
+  // alcançada além dos N primeiros.
   const bucket = storage.bucket(STORAGE_BUCKET);
-  for (const docSnap of snap.docs) {
+  const varredura = await varrerComOrcamento(q, {
+    orcamento: Math.max(limit, 1),
+    aoDoc: async (docSnap) => {
     const d = docSnap.data() || {};
-    if (d._merged_into || d._deleted) continue;
+    if (d._merged_into || d._deleted) return false;
     res.examinadas++;
 
     const causa = classificarParaReleitura(d);
-    if (causa === 'fora-do-escopo') { res.foraDoEscopo++; continue; }
-    if (causa === 'completa') { res.jaCompletas++; continue; }
+    if (causa === 'fora-do-escopo') { res.foraDoEscopo++; return false; }
+    if (causa === 'completa') { res.jaCompletas++; return false; }
 
     // Resumo/sem-arquivo: a releitura não cria item, mas o Nº sai da CHAVE —
     // a linha da tela deixa de ficar cega mesmo antes do XML completo chegar.
@@ -1309,7 +1531,7 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
           res.falhas++;
         }
       }
-      continue;
+      return false;
     }
 
     // alvo: XML guardado — reler da FONTE.
@@ -1324,7 +1546,7 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
           await docSnap.ref.update({ numero, numeroOrigem: 'chave-de-acesso' });
           res.ganharamNumero++;
         }
-        continue;
+        return true;
       }
       const itens = extrairItens(xml);
       let numero = null;
@@ -1345,7 +1567,94 @@ export async function relerNotasVazias({ empresaId, competencia, limit = 3000 } 
       console.warn(`[relerNotasVazias] falha em ${docSnap.id}:`, e.message);
       res.falhas++;
     }
-  }
+    return true;
+    },
+  });
+  res.restaram = await restaramDaVarredura(q, varredura);
+  return res;
+}
+
+/**
+ * ♻️ RELEITURA DO CABEÇALHO DOS CT-e — o frete que não entra no bloco D
+ * (17/09, EDUARDO GUERRA · 08/2026: o `|D001|0|` foi corrigido, o PVA passou a
+ * IMPORTAR o arquivo, e o bloco D saiu VAZIO — registro D100 em branco na tela
+ * do validador).
+ *
+ * Quem decide o destino de cada documento é a régua PURA `cte-cabecalho.js`;
+ * aqui é só o I/O. O resultado responde POR CAUSA, porque cada uma tem ação
+ * própria — e um número só ("0 recuperadas") seria o alarme sem ação de 13/08:
+ *   recuperados     CFOP/CST/alíquota/ICMS relidos do XML guardado e gravados
+ *   jaCompletos     nada a fazer
+ *   jaRelidos       já passaram por esta versão do leitor
+ *   semArquivo      sem storagePath — buraco de CAPTURA, não de leitura
+ *   xmlSemCfop      o XML está lá e NÃO declara CFOP: não há o que recuperar
+ *   foraDoEscopo    não é CT-e
+ *
+ * ⚠️ O CARIMBO É DE VERSÃO, nunca "tem campo preenchido": a condição-alvo não
+ * se limpa sozinha (CT-e isento nunca terá `vICMS`), então julgar pela presença
+ * faria o backfill rebaixar o mesmo documento para sempre.
+ */
+export async function relerCabecalhoCtes({ empresaId, competencia, limit = 3000 } = {}) {
+  const db = fa().firestore();
+  const res = {
+    examinados: 0, recuperados: 0, jaCompletos: 0, jaRelidos: 0,
+    semArquivo: 0, xmlSemCfop: 0, foraDoEscopo: 0, semMudanca: 0, falhas: 0,
+    campos: {},
+    // O que a rodada NÃO viu: 0 = fila esgotada (resposta), -1 = contagem caída.
+    restaram: 0,
+  };
+  let q = db.collection('documentos_fiscais');
+  if (empresaId) q = q.where('empresaId', '==', String(empresaId));
+  if (competencia) q = q.where('competencia', '==', String(competencia));
+
+  // Paginação por CURSOR com orçamento de downloads (a fila que ANDA — ver
+  // `preencherEnderecoParticipantes`, 18/09).
+  const bucket = storage.bucket(STORAGE_BUCKET);
+  const varredura = await varrerComOrcamento(q, {
+    orcamento: Math.max(limit, 1),
+    aoDoc: async (docSnap) => {
+    const d = docSnap.data() || {};
+    if (d._merged_into || d._deleted) return false;
+
+    const causa = classificarCteParaCabecalho(d);
+    if (causa === 'fora-do-escopo') return false;   // não é CT-e: nem conta como examinado
+    res.examinados++;
+    if (causa === 'completo') { res.jaCompletos++; return false; }
+    if (causa === 'ja-relido') { res.jaRelidos++; return false; }
+    if (causa === 'sem-arquivo') { res.semArquivo++; return false; }
+
+    try {
+      const [buf] = await bucket.file(d.storagePath).download();
+      const lido = lerCabecalhoCte(buf.toString('utf8'));
+      const patch = patchDoCabecalhoCte(d, lido);
+
+      // Sem CFOP no documento E sem CFOP no XML: o conhecimento não declara, e
+      // o app NÃO inventa. Sai NOMEADO — é aqui que a ação deixa de ser nossa.
+      if (!lido?.cfop && !String(d.cfop || '').replace(/\D/g, '')) res.xmlSemCfop++;
+
+      const carimbo = {
+        cabecalhoCteVersao: VERSAO_RELEITURA_CTE,
+        cabecalhoCteRelidoEm: new Date().toISOString(),
+      };
+      if (Object.keys(patch).length) {
+        await docSnap.ref.update({ ...patch, ...carimbo });
+        res.recuperados++;
+        for (const campo of Object.keys(patch)) {
+          res.campos[campo] = (res.campos[campo] || 0) + 1;
+        }
+      } else {
+        // Nada a preencher — mas o carimbo entra, senão ele volta à fila toda vez.
+        await docSnap.ref.update(carimbo);
+        res.semMudanca++;
+      }
+    } catch (e) {
+      console.warn(`[relerCabecalhoCtes] falha em ${docSnap.id}:`, e.message);
+      res.falhas++;
+    }
+    return true;
+    },
+  });
+  res.restaram = await restaramDaVarredura(q, varredura);
   return res;
 }
 

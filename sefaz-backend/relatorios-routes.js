@@ -78,7 +78,7 @@ router.get('/faturamento', requireAuth, async (req, res) => {
                 // 🚨 O VALOR também tem duas formas: o import pelo NAVEGADOR
                 // grava só `totais.vNF` — nunca `valorTotal`. Lendo o campo cru,
                 // essas notas entravam valendo ZERO no faturamento da carteira.
-                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal', 'eventos', 'cStat',
+                .select('empresaId', 'direcao', 'tpNF', 'status', 'valorTotal', 'eventos', 'cStat', 'cancelamentoDeclarado',
                     'valor', 'totalNota', 'totais.vNF', 'valores.total', 'vNF'),
             { label: `relatorio-faturamento ${competencia}`, maxDocs: 80000 },
         );
@@ -173,7 +173,7 @@ router.get('/faturamento-mensal', requireAuth, async (req, res) => {
                     // 🚨 Este número vai num documento ASSINADO ao banco. O
                     // import pelo navegador grava só `totais.vNF`, então ler o
                     // campo cru declarava faturamento A MENOR — e nada acusa.
-                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc', 'eventos', 'cStat',
+                    .select('direcao', 'tpNF', 'status', 'valorTotal', 'tipo', 'tipoDoc', 'eventos', 'cStat', 'cancelamentoDeclarado',
                         'valor', 'totalNota', 'totais.vNF', 'valores.total', 'vNF'),
                 { label: `declaracao-faturamento ${empresaId} ${competencia}`, maxDocs: 20000 },
             );

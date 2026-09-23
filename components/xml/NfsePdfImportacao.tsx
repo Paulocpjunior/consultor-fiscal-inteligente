@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getApp } from 'firebase/app';
-import { ref as storageRef, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage';
+import { uploadArquivoOriginal } from '../../services/xmlStorageService';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../services/firebaseConfig';
 import { getEmpresasDisponiveis } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 import { parseNfsePdf, matchNfseEmpresa, NfsePdfParseError } from '../../services/nfsePdfParserService';
+import { recorteDaNfsePdf, idDaNfsePdf } from '../../services/nfsePdfRecorte';
+// "Este PDF é MESMO da empresa escolhida?" — reconferido no SALVAR, porque os
+// campos de prestador/tomador desta tela são editáveis depois do drop.
+import { conferirPosseDaNfsePdf } from '../../services/nfsePdfPosse';
+// 📌 A CHAVE NACIONAL carrega o PRESTADOR — e o PDF que não nomeia os dois
+// lados subia "apenas com valores" (08/09, LEGACY). O que a chave e a
+// empresa selecionada respondem entra CARIMBADO com a origem.
+import { completarParticipantesDaNfsePdf, type ParticipantesCompletados } from '../../services/nfsePdfChaveNacional';
+// Serviço 0,00 com líquido positivo não se escritura — o leitor errou o
+// leiaute e a tela tem de DIZER antes do clique, não gravar zero calada.
+import { conferirValoresDaNfsePdf } from '../../services/nfsePdfValores';
 import type { NfsePdfParsed } from '../../services/nfsePdfParserService';
 import type { User } from '../../types';
 
@@ -18,7 +28,6 @@ type EmpresaXmlOption = {
     createdBy?: string;
 };
 
-const storage = (() => { try { return getStorage(getApp()); } catch { return null as any; } })();
 
 interface Props {
     currentUser: User | null;
@@ -40,6 +49,11 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     const [file, setFile] = useState<File | null>(null);
     const [parsed, setParsed] = useState<NfsePdfParsed | null>(null);
     const [direcao, setDirecao] = useState<'entrada' | 'saida'>('entrada');
+    // ⚠️ A direção saiu da POSIÇÃO no texto, não de um campo nomeado pelo
+    // documento: ela é palpite, e a tela pede confirmação em vez de afirmar.
+    const [direcaoDerivada, setDirecaoDerivada] = useState(false);
+    /** De onde saiu cada participante (documento · chave · empresa selecionada). */
+    const [origens, setOrigens] = useState<ParticipantesCompletados | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -69,10 +83,28 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
         setFile(f);
         setLoading(true);
         try {
-            const result = await parseNfsePdf(f);
+            const lido = await parseNfsePdf(f);
+            // O que o papel não nomeou, a CHAVE e a empresa respondem — só o
+            // que está VAZIO, nunca por cima do que foi lido.
+            const comp = completarParticipantesDaNfsePdf({
+                prestadorCnpj: lido.prestador.cnpj,
+                tomadorCnpj: lido.tomador.cnpj,
+                tomadorNome: lido.tomador.nome,
+                chaveAcesso: lido.chaveAcesso,
+                empresaCnpj: empresaSelecionada.cnpj,
+                empresaNome: empresaSelecionada.nome,
+            });
+            const result: NfsePdfParsed = {
+                ...lido,
+                prestador: { ...lido.prestador, cnpj: comp.prestadorCnpj || lido.prestador.cnpj },
+                tomador: { ...lido.tomador, cnpj: comp.tomadorCnpj || lido.tomador.cnpj, nome: comp.tomadorNome || lido.tomador.nome },
+            };
             const match = matchNfseEmpresa(result, empresaSelecionada.cnpj);
             if (!match.ok) throw new Error(match.motivo || 'CNPJ nao bate com a empresa.');
-            setDirecao(match.direcao);
+            // Direção que a chave permite AFIRMAR vence o palpite por posição.
+            setDirecao(comp.direcao || match.direcao);
+            setDirecaoDerivada(comp.direcao ? false : Boolean(match.derivada));
+            setOrigens(comp);
             setParsed(result);
         } catch (err: any) {
             const msg = err instanceof NfsePdfParseError ? err.message : (err?.message || 'Erro ao extrair PDF.');
@@ -106,19 +138,57 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
     const handleSalvar = async () => {
         if (!parsed || !file || !empresaSelecionada || !currentUser) return;
         if (!auth?.currentUser?.uid) { setError('Sessao expirada. Faca login novamente.'); return; }
-        if (!db || !storage) { setError('Firebase nao configurado.'); return; }
+        if (!db) { setError('Firebase nao configurado.'); return; }
 
         setSaving(true);
         setError(null);
         try {
             const uid = auth.currentUser.uid;
-            const docId = parsed.chaveAcesso || `${empresaSelecionada.id}_${parsed.numero}_${parsed.serie}_${Date.now()}`;
+            // 🚨 A COMPETÊNCIA E A DATA SAEM DO DONO, nunca do texto do PDF.
+            // O papel escreve `08/2026` ou `18/08/2026`; o banco é `AAAA-MM`, e
+            // a consulta é por IGUALDADE — gravar a forma do papel põe a nota
+            // no banco e fora de todo recorte de mês (caso 0257, 01/09).
+            const recorte = recorteDaNfsePdf(parsed);
+            if (recorte.impedimento) { setError(recorte.impedimento); setSaving(false); return; }
+
+            // 🚨 Serviço 0,00 com líquido positivo NÃO grava (08/09, LEGACY
+            // 41943): o leitor errou o leiaute e a nota entraria no livro, no
+            // SPED e no R-4020 valendo zero. Quem digita o valor é quem lê o papel.
+            const valores = conferirValoresDaNfsePdf(parsed);
+            if (valores.bloquear) { setError(valores.motivo); setSaving(false); return; }
+
+            // 🚨 A CONFERÊNCIA DE POSSE SE REFAZ NO SALVAR (03/09, Paulo:
+            // *"lancei uma nota da J.P. PISSATO na empresa SILVIO FREIRE, e o
+            // consultor não deu nenhum erro"*). O `matchNfseEmpresa` roda no
+            // DROP — e os campos de prestador e tomador desta tela são
+            // EDITÁVEIS depois dele: entre a conferência e a gravação o CNPJ
+            // pode ter virado outro, e nada reconferia. Conferência que roda
+            // antes da edição não protege o que foi editado.
+            //
+            // ⚠️ E ela usa a RAIZ, não o CNPJ inteiro: matriz e filial são a
+            // mesma empresa em todo o resto do app (a régua do certificado e a
+            // do lote de XML). Nota da filial com a matriz ativa é legítima.
+            const posse = conferirPosseDaNfsePdf({
+                prestadorCnpj: parsed.prestador.cnpj,
+                prestadorNome: parsed.prestador.nome,
+                tomadorCnpj: parsed.tomador.cnpj,
+                tomadorNome: parsed.tomador.nome,
+                empresaCnpj: empresaSelecionada.cnpj,
+                empresaNome: empresaSelecionada.nome,
+                empresas,
+            });
+            if (posse.bloquear) { setError(posse.mensagem); setSaving(false); return; }
+
+            const docId = idDaNfsePdf({
+                chaveAcesso: parsed.chaveAcesso,
+                empresaId: empresaSelecionada.id,
+                numero: parsed.numero,
+                serie: parsed.serie,
+            });
             const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `nfse_pdfs/${empresaSelecionada.id}/${docId}_${safeFileName}`;
 
-            const sref = storageRef(storage, path);
-            const uploadResult = await uploadBytes(sref, file, { contentType: 'application/pdf' });
-            const url = await getDownloadURL(uploadResult.ref);
+            await uploadArquivoOriginal(empresaSelecionada.id, path, new Blob([file], { type: 'application/pdf' }));
 
             // Campos compativeis com o schema XML (emitente/destinatario/totais.vNF/dhEmi)
             // para que XmlDocumentosList consiga renderizar NFSe lado a lado com NF-e.
@@ -140,7 +210,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 vFCPST: 0, vProd: parsed.valorServicos || 0, vFrete: 0, vSeg: 0,
                 vDesc: (parsed.valorDescIncondicional || 0) + (parsed.valorDescCondicional || 0),
                 vII: 0, vIPI: 0, vIPIDevol: 0, vPIS: parsed.valorPis || 0,
-                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorLiquido || 0,
+                // 🚨 vNF é o valor do DOCUMENTO (o bruto do serviço), não o
+                // líquido depois das retenções — `valorDoDocumento` lê daqui, e
+                // com o líquido o A100 do EFD-Contribuições declararia VL_DOC a
+                // MENOR em toda nota com retenção. O líquido tem campo próprio.
+                vCOFINS: parsed.valorCofins || 0, vOutro: 0, vNF: parsed.valorServicos || 0,
+                vServ: parsed.valorServicos || 0,
             };
 
             const payload = {
@@ -149,7 +224,12 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 direcao,
                 modelo: '',
                 status: 'autorizado',
-                dhEmi: parsed.dataEmissao || new Date().toISOString(),
+                // ⚠️ Sem `|| new Date()`: data de HOJE num documento de outro mês
+                // é a nota escriturada na competência errada, e na virada do mês
+                // o PVA recusa (a régua de 22/08 — campo de data não recebe
+                // default). Aqui ela nunca falta: o recorte já recusou o PDF em
+                // que nem a data nem a competência são legíveis.
+                dhEmi: recorte.dhEmi,
                 emitente: emitenteCompat,
                 destinatario: destinatarioCompat,
                 totais: totaisCompat,
@@ -157,7 +237,13 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 numero: parsed.numero,
                 serie: parsed.serie,
                 chave: parsed.chaveAcesso,
-                competencia: parsed.competencia,
+                competencia: recorte.competencia,
+                competenciaOrigem: recorte.competenciaOrigem,
+                // O DIA do campo "Competência da NFS-e" é o FATO GERADOR — é por
+                // ele que a 📅 Competência do acervo confere o mês gravado. Sem
+                // ele toda nota importada por PDF saía da fila como "sem fato
+                // gerador" (21/09, Osasco 1039). Só entra quando é um dia.
+                ...(recorte.dataFatoGerador ? { dataFatoGerador: recorte.dataFatoGerador } : {}),
                 dataEmissao: parsed.dataEmissao,
                 codigoVerificacao: parsed.codigoVerificacao,
                 municipioPrestacao: parsed.municipioPrestacao,
@@ -167,11 +253,31 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 empresaNome: empresaSelecionada.nome,
                 prestador: parsed.prestador,
                 tomador: parsed.tomador,
+                // As formas ACHATADAS que os leitores de participante leem
+                // (`contraparteDoc`, o R-4020, o 0150) — o aninhado acima é o
+                // que a tela mostra; sem estas o relatório saía com "—".
+                prestadorCnpj: parsed.prestador.cnpj || '',
+                prestadorNome: parsed.prestador.nome || '',
+                tomadorCnpj: parsed.tomador.cnpj || '',
+                tomadorNome: parsed.tomador.nome || '',
+                // Origem carimbada: o que veio da chave ou da empresa selecionada
+                // não se apresenta como lido do papel.
+                participantesOrigem: {
+                    prestador: origens?.prestadorOrigem || (parsed.prestador.cnpj ? 'documento' : null),
+                    tomador: origens?.tomadorOrigem || (parsed.tomador.cnpj ? 'documento' : null),
+                },
+                // 🚨 O BRUTO DO SERVIÇO nas formas que a apuração lê: o R-4020 lia
+                // `valorServicos`/`valorTotal` e este payload só gravava
+                // `valores.servicos` — a nota chegava ao Contábil com BRUTO 0,00 e
+                // a Receita recusava o evento (MS1042, 08/09, PREVERMED).
+                valorServicos: parsed.valorServicos,
+                valorTotal: parsed.valorServicos,
                 codigoServico: parsed.codigoServico,
                 discriminacao: parsed.discriminacao,
                 naturezaOperacao: parsed.naturezaOperacao,
                 valores: {
                     servicos: parsed.valorServicos,
+                    valorServicos: parsed.valorServicos,
                     baseCalculo: parsed.baseCalculo,
                     aliquotaIss: parsed.aliquotaIss,
                     iss: parsed.valorIss,
@@ -188,7 +294,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     liquido: parsed.valorLiquido,
                 },
                 storagePath: path,
-                storageUrl: url,
+                storageUrl: '',
                 fileName: file.name,
                 tamanhoBytes: file.size,
                 createdBy: uid,
@@ -208,7 +314,13 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                 : payload;
             await setDoc(docRef, payloadFinal, { merge: true });
 
-            onShowToast?.(`NFSe ${parsed.numero}/${parsed.serie} importada com sucesso.`);
+            // 📌 A COMPETÊNCIA VAI NA FRASE porque é ela que decide ONDE a nota
+            // aparece. "Importada com sucesso" sobre uma nota que não entra em
+            // recorte nenhum foi exatamente o relato de 01/09 — o app afirmava
+            // a gravação e a lista negava a nota.
+            const mes = String(recorte.competencia || '').split('-').reverse().join('/');
+            onShowToast?.(`NFSe ${parsed.numero}/${parsed.serie} importada em ${mes}`
+                + ` — procure em XMLs (Entrada/Saída) com a competência ${mes}.`);
             setParsed(null);
             setFile(null);
             onImported?.();
@@ -220,7 +332,7 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
         }
     };
 
-    const handleCancel = () => { setParsed(null); setFile(null); setError(null); };
+    const handleCancel = () => { setParsed(null); setFile(null); setError(null); setOrigens(null); };
 
     if (!currentUser) {
         return <p className="text-center text-xs text-slate-400 py-6">Faca login para importar NFSe.</p>;
@@ -281,9 +393,28 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                         <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                             Validar dados extraidos - NFSe {parsed.numero}/{parsed.serie}
                         </h3>
-                        <span className={`text-xs font-bold px-2 py-1 rounded ${direcao === 'saida' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'}`}>
-                            {direcao === 'saida' ? 'SAIDA (somos prestador)' : 'ENTRADA (somos tomador)'}
-                        </span>
+                        {/* 🚨 PALPITE NÃO SE APRESENTA COMO FATO (02/09, RADIO E TV
+                            SUL AMERICANA): o PDF veio com prestador e tomador VAZIOS
+                            e o app afirmou "ENTRADA (somos tomador)" numa nota em que
+                            a empresa é a PRESTADORA. A direção decide em QUAL LIVRO a
+                            nota entra — quando ela foi DERIVADA (posição no texto, e
+                            não um campo que o documento nomeia), quem confirma é a
+                            pessoa, e o selo vira uma ESCOLHA. */}
+                        {direcaoDerivada ? (
+                            <select
+                                value={direcao}
+                                onChange={e => setDirecao(e.target.value as 'entrada' | 'saida')}
+                                className="text-xs font-bold px-2 py-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-400"
+                                title="O PDF não nomeia o prestador e o tomador neste leiaute — o app deduziu pela posição no texto. Confirme antes de salvar."
+                            >
+                                <option value="saida">⚠ confirme: SAIDA (somos prestador)</option>
+                                <option value="entrada">⚠ confirme: ENTRADA (somos tomador)</option>
+                            </select>
+                        ) : (
+                            <span className={`text-xs font-bold px-2 py-1 rounded ${direcao === 'saida' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'}`}>
+                                {direcao === 'saida' ? 'SAIDA (somos prestador)' : 'ENTRADA (somos tomador)'}
+                            </span>
+                        )}
                     </div>
 
                     <div>
@@ -303,8 +434,8 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Prestador</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <Field label="CNPJ" value={parsed.prestador.cnpj} onChange={v => updateField('prestador', { ...parsed.prestador, cnpj: v })} />
-                            <Field label="Nome" value={parsed.prestador.nome} fullCol onChange={v => updateField('prestador', { ...parsed.prestador, nome: v })} />
+                            <Field label={origens?.prestadorOrigem === 'chave-nacional' ? 'CNPJ (da chave nacional)' : 'CNPJ'} value={parsed.prestador.cnpj} onChange={v => updateField('prestador', { ...parsed.prestador, cnpj: v })} />
+                            <Field label={origens?.prestadorOrigem === 'chave-nacional' && !parsed.prestador.nome ? 'Nome (digite do papel — a chave não traz)' : 'Nome'} value={parsed.prestador.nome} fullCol onChange={v => updateField('prestador', { ...parsed.prestador, nome: v })} />
                             <Field label="Insc. Municipal" value={parsed.prestador.inscricaoMunicipal} onChange={v => updateField('prestador', { ...parsed.prestador, inscricaoMunicipal: v })} />
                             <Field label="Municipio" value={parsed.prestador.municipio} onChange={v => updateField('prestador', { ...parsed.prestador, municipio: v })} />
                             <Field label="UF" value={parsed.prestador.uf} onChange={v => updateField('prestador', { ...parsed.prestador, uf: v })} />
@@ -314,12 +445,18 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Tomador</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <Field label="CNPJ/CPF" value={parsed.tomador.cnpj} onChange={v => updateField('tomador', { ...parsed.tomador, cnpj: v })} />
-                            <Field label="Nome" value={parsed.tomador.nome} fullCol onChange={v => updateField('tomador', { ...parsed.tomador, nome: v })} />
+                            <Field label={origens?.tomadorOrigem === 'empresa-selecionada' ? 'CNPJ/CPF (empresa selecionada — confira)' : 'CNPJ/CPF'} value={parsed.tomador.cnpj} onChange={v => updateField('tomador', { ...parsed.tomador, cnpj: v })} />
+                            <Field label={origens?.tomadorOrigem === 'empresa-selecionada' ? 'Nome (empresa selecionada — confira)' : 'Nome'} value={parsed.tomador.nome} fullCol onChange={v => updateField('tomador', { ...parsed.tomador, nome: v })} />
                             <Field label="Municipio" value={parsed.tomador.municipio} onChange={v => updateField('tomador', { ...parsed.tomador, municipio: v })} />
                             <Field label="UF" value={parsed.tomador.uf} onChange={v => updateField('tomador', { ...parsed.tomador, uf: v })} />
                         </div>
                     </div>
+
+                    {origens && origens.avisos.length > 0 && (
+                        <ul className="text-[11px] text-amber-700 dark:text-amber-400 space-y-0.5">
+                            {origens.avisos.map((a, i) => <li key={i}>⚠ {a}</li>)}
+                        </ul>
+                    )}
 
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Discriminacao</p>
@@ -345,14 +482,26 @@ const NfsePdfImportacao: React.FC<Props> = ({ currentUser, onShowToast, onImport
                             <NumField label="Desc. cond." value={parsed.valorDescCondicional} onChange={v => updateNumber('valorDescCondicional', v)} />
                             <NumField label="Valor liquido" value={parsed.valorLiquido} onChange={v => updateNumber('valorLiquido', v)} highlight />
                         </div>
+                        {(() => {
+                            const c = conferirValoresDaNfsePdf(parsed);
+                            if (!c.bloquear && c.avisos.length === 0) return null;
+                            return (
+                                <ul className={`mt-2 text-[11px] space-y-0.5 ${c.bloquear ? 'text-rose-700 dark:text-rose-400 font-semibold' : 'text-amber-700 dark:text-amber-400'}`}>
+                                    {c.bloquear && <li>⛔ {c.motivo}</li>}
+                                    {c.avisos.map((a, i) => <li key={i}>⚠ {a}</li>)}
+                                </ul>
+                            );
+                        })()}
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
                         <p className="text-xs text-slate-500">Arquivo: <code>{file?.name}</code> ({((file?.size || 0) / 1024).toFixed(1)} KB)</p>
                         <div className="flex gap-2">
                             <button onClick={handleCancel} disabled={saving} className="text-xs px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">Cancelar</button>
-                            <button onClick={handleSalvar} disabled={saving} className="text-xs px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50">
-                                {saving ? 'Salvando...' : `Confirmar e salvar (${fmtBRL(parsed.valorLiquido)})`}
+                            <button onClick={handleSalvar} disabled={saving || conferirValoresDaNfsePdf(parsed).bloquear}
+                                title={conferirValoresDaNfsePdf(parsed).bloquear ? 'Digite o valor dos serviços do papel antes de salvar.' : undefined}
+                                className="text-xs px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50">
+                                {saving ? 'Salvando...' : `Confirmar e salvar (serviços ${fmtBRL(parsed.valorServicos)} · líquido ${fmtBRL(parsed.valorLiquido)})`}
                             </button>
                         </div>
                     </div>

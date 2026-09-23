@@ -3,13 +3,19 @@
 // Uses native fetch (Node 20+). No extra npm dependencies.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { recorteDoCaminho } from './sharepoint-caminho.js';
+
 const TENANT_ID = process.env.SHAREPOINT_TENANT_ID || 'spassessoriacontabilcombr.onmicrosoft.com';
 const CLIENT_ID = process.env.SHAREPOINT_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GRAPH_CLIENT_SECRET || '';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-const SHAREPOINT_HOST = 'spassessoriacontabilcombr.sharepoint.com';
-const SITE_PATH = '/sites/ClientesSP2';
+// ⚠️ Host e site eram CRAVADOS aqui. O site é o que decide ONDE a pasta é
+// procurada, e em 02/09 isso apareceu como "pasta não existe": o proxy resolve
+// `/sites/ClientesSP2` e o link que a equipe usa é de `/sites/GRUPOFISCAL`.
+// Env com o valor de hoje como padrão — nada muda para quem não setar.
+const SHAREPOINT_HOST = process.env.SHAREPOINT_HOST || 'spassessoriacontabilcombr.sharepoint.com';
+const SITE_PATH = process.env.SHAREPOINT_SITE_PATH || '/sites/ClientesSP2';
 
 // ─── Token cache (in-memory, single-process) ────────────────────────────────
 let _tokenCache = { token: null, expiresAt: 0 };
@@ -86,6 +92,31 @@ async function cachedSiteId(accessToken) {
 }
 
 /**
+ * Resolve um link de compartilhamento do SharePoint no item que ele aponta.
+ *
+ * O Graph faz isso em `/shares/{id}/driveItem`; daí saem o `driveId` e o `id`
+ * do item, que servem para listar os filhos em QUALQUER site — inclusive um
+ * diferente do que este proxy resolve.
+ */
+async function resolverLinkCompartilhado(accessToken, recorte) {
+    const url = `${GRAPH_BASE}/shares/${recorte.shareId}/driveItem`
+        + '?$select=id,name,folder,parentReference';
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Failed to resolve shared link (${resp.status}): ${err}`);
+    }
+    const data = await resp.json();
+    // ⚠️ Link de ARQUIVO não é link de PASTA — listar os filhos de um arquivo
+    // devolve o 400 do Graph, que manda procurar erro no lugar errado.
+    if (!data.folder) {
+        throw new Error(`O link aponta para o arquivo "${data.name}", não para uma pasta. `
+            + 'Abra a PASTA no SharePoint e copie o link dela.');
+    }
+    return { id: data.id, driveId: data.parentReference?.driveId, nome: data.name };
+}
+
+/**
  * List XML files inside a SharePoint folder via Microsoft Graph.
  *
  * @param {string} accessToken - Bearer token
@@ -94,17 +125,31 @@ async function cachedSiteId(accessToken) {
  * @returns {Promise<Array<{id,name,webUrl,size,lastModified}>>}
  */
 export async function listXmlFiles(accessToken, folderPath) {
-    const siteId = await cachedSiteId(accessToken);
+    const recorte = recorteDoCaminho(folderPath);
 
-    // Encode path for URL (Graph API expects `:` path syntax)
-    const encodedPath = folderPath
-        .split('/')
-        .map(segment => encodeURIComponent(segment))
-        .join('/');
+    // 🚨 LINK DE COMPARTILHAMENTO é o gesto natural de quem copia do
+    // SharePoint — e ele carrega o site, a biblioteca e a pasta de uma vez,
+    // então NÃO depende do site que este proxy resolve.
+    let nextUrl;
+    let ondeProcurou;
+    if (recorte.tipo === 'link') {
+        const item = await resolverLinkCompartilhado(accessToken, recorte);
+        nextUrl = `${GRAPH_BASE}/drives/${item.driveId}/items/${item.id}/children`
+            + '?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file';
+        ondeProcurou = `link compartilhado → "${item.nome}"`;
+    } else {
+        const siteId = await cachedSiteId(accessToken);
+        // Encode path for URL (Graph API expects `:` path syntax)
+        const encodedPath = recorte.valor
+            .split('/')
+            .map(segment => encodeURIComponent(segment))
+            .join('/');
+        nextUrl = `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodedPath}:/children?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file`;
+        ondeProcurou = `${SHAREPOINT_HOST}${SITE_PATH} → "${recorte.valor}"`;
+    }
 
     // Get children of the folder, paging through all results
     const allItems = [];
-    let nextUrl = `${GRAPH_BASE}/sites/${siteId}/drive/root:/${encodedPath}:/children?$top=200&$select=id,name,webUrl,size,lastModifiedDateTime,file`;
 
     while (nextUrl) {
         const resp = await fetch(nextUrl, {
@@ -113,7 +158,10 @@ export async function listXmlFiles(accessToken, folderPath) {
 
         if (!resp.ok) {
             const err = await resp.text();
-            throw new Error(`Failed to list folder (${resp.status}): ${err}`);
+            // ⚠️ A resposta do Graph não diz ONDE ele procurou, e sem isso
+            // "pasta não existe" manda conferir o nome da pasta quando o
+            // problema pode ser o SITE. Causa junto do número.
+            throw new Error(`Failed to list folder (${resp.status}) em ${ondeProcurou}: ${err}`);
         }
 
         const data = await resp.json();
@@ -266,6 +314,16 @@ export async function uploadXmlToFolder(accessToken, folderPath, filename, conte
 
 /**
  * Check whether the required SharePoint/Graph credentials are present.
+ *
+ * ⚠️ **`configured` responde "as variáveis estão preenchidas?", NÃO "funciona?"**
+ * — e ele nem olha o TENANT. Foi essa a raiz do verde mentiroso de 28/08: o
+ * tenant estava cravado errado no workflow do proxy, a Microsoft respondia
+ * `AADSTS90002: Tenant not found`, e o card do CFI mostrava
+ * `✓ Conectado` porque `CLIENT_ID` e `CLIENT_SECRET` estavam lá.
+ *
+ * Quem responde "funciona?" é `checkAuth()`, abaixo. Este campo fica, porque
+ * distinguir "faltou preencher" de "preencheram errado" é justamente o que dá
+ * a ação certa — mas ele deixou de ser o veredito.
  */
 export function checkCredentials() {
     return {
@@ -275,5 +333,135 @@ export function checkCredentials() {
         clientSecretSet: Boolean(CLIENT_SECRET),
         sharepointHost: SHAREPOINT_HOST,
         sitePath: SITE_PATH,
+    };
+}
+
+/**
+ * 🚦 A PERGUNTA HONESTA: **a Microsoft aceita este token?**
+ *
+ * Validação por RESULTADO, não por status — a primeira regra permanente deste
+ * projeto. Ela TENTA o token de verdade; o `_tokenCache` faz a chamada seguinte
+ * sair de graça, então o /health não vira custo por requisição.
+ *
+ * Nunca lança: health que explode é health que não responde, e aí a tela não
+ * consegue nem dizer o que está errado.
+ */
+export async function checkAuth() {
+    const base = checkCredentials();
+    if (!base.configured) {
+        return {
+            ...base,
+            tokenOk: false,
+            tokenErro: 'Credenciais não configuradas (SHAREPOINT_CLIENT_ID / GRAPH_CLIENT_SECRET).',
+        };
+    }
+    try {
+        await getAccessToken();
+        return { ...base, tokenOk: true, tokenErro: null };
+    } catch (e) {
+        // A mensagem da Microsoft vai INTEIRA: foi ela que resolveu o caso de
+        // 28/08 (o `AADSTS90002` nomeia o tenant recusado na cara).
+        return { ...base, tokenOk: false, tokenErro: String(e?.message || e).slice(0, 600) };
+    }
+}
+
+// ============================================================================
+// 🔎 "A ÁRVORE ESTÁ EM QUAL SITE?" — quem responde é o app, não uma pessoa
+//
+// 02/09. O erro passou a dizer ONDE procurou
+// (`/sites/ClientesSP2 → "Empresas/…"` · 404 itemNotFound), e daí sobrou uma
+// pergunta factual: a pasta `Empresas/…/XML SAÍDA` existe nesse site ou no
+// `/sites/GRUPOFISCAL`, que é o do link que a equipe usa?
+//
+// 📌 A lição do dia é não devolver essa pergunta para o dono. O token já
+// funciona; então o próprio app pode LISTAR o que existe e mostrar. É a mesma
+// virada do `forma-do-segredo.js`: parar de perguntar e MEDIR.
+//
+// ⚠️ Ele lista NOMES de pasta e nada mais — não baixa arquivo, não grava, não
+// entra em conteúdo. É diagnóstico.
+// ============================================================================
+
+/**
+ * Os sites do SharePoint que esta credencial enxerga.
+ *
+ * ⚠️ Depende da permissão `Sites.Read.All` no app do Azure. Sem ela o Graph
+ * responde 403 — e isso vai DITO, nunca como "não há sites", que faria
+ * concluir que o SharePoint está vazio.
+ */
+export async function listarSites(accessToken, busca = '*') {
+    const url = `${GRAPH_BASE}/sites?search=${encodeURIComponent(busca)}&$select=id,name,displayName,webUrl`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Failed to list sites (${resp.status}): ${err}`);
+    }
+    const data = await resp.json();
+    return (data.value || []).map(s => ({
+        id: s.id,
+        nome: s.displayName || s.name,
+        // O caminho que vai na env `SHAREPOINT_SITE_PATH` — é ele que a
+        // pessoa precisa, não o GUID.
+        caminho: (() => { try { return new URL(s.webUrl).pathname; } catch { return s.webUrl; } })(),
+        url: s.webUrl,
+    }));
+}
+
+/**
+ * As PASTAS que existem num nível — para descer a árvore sem adivinhar nome.
+ *
+ * `caminho` vazio = raiz da biblioteca. `sitePath` vazio = o site que este
+ * proxy resolve hoje; passar outro permite conferir o vizinho SEM mexer na
+ * configuração, que é justamente a dúvida de 02/09.
+ */
+export async function listarPastas(accessToken, caminho = '', sitePath = '') {
+    const alvo = sitePath || SITE_PATH;
+    const siteResp = await fetch(`${GRAPH_BASE}/sites/${SHAREPOINT_HOST}:${alvo}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!siteResp.ok) {
+        const err = await siteResp.text();
+        throw new Error(`Failed to resolve site (${siteResp.status}) em ${SHAREPOINT_HOST}${alvo}: ${err}`);
+    }
+    const siteId = (await siteResp.json()).id;
+
+    const recorte = recorteDoCaminho(caminho);
+    const rota = recorte.tipo === 'caminho' && recorte.valor
+        ? `${GRAPH_BASE}/sites/${siteId}/drive/root:/${recorte.valor.split('/').map(encodeURIComponent).join('/')}:/children`
+        : `${GRAPH_BASE}/sites/${siteId}/drive/root/children`;
+
+    // 🚨 TODAS AS PÁGINAS (22/09). O Graph devolve no máximo `$top` itens por
+    // resposta e manda o resto em `@odata.nextLink`. Esta função lia SÓ a
+    // primeira página: com ~430 subpastas em `Empresas`, as pastas depois da
+    // 200ª (por ordem de nome, que começa pelo código) simplesmente não
+    // existiam para o app — e o auto-sync acusou "264 empresas cuja pasta não
+    // foi encontrada", mandando criar no SharePoint pastas que estão lá. O
+    // laço de `listFolderXmls` já paginava; este ficou para trás.
+    // Teto de 50 páginas (10.000 itens): pasta maior que isso é outro problema.
+    let nextUrl = `${rota}?$top=200&$select=id,name,folder,file`;
+    const itens = [];
+    let paginas = 0;
+    while (nextUrl && paginas < 50) {
+        const resp = await fetch(nextUrl, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error(`Failed to list folder (${resp.status}) em ${SHAREPOINT_HOST}${alvo} → `
+                + `"${recorte.valor}": ${err}`);
+        }
+        const data = await resp.json();
+        itens.push(...(data.value || []));
+        nextUrl = data['@odata.nextLink'] || null;
+        paginas++;
+    }
+    return {
+        site: `${SHAREPOINT_HOST}${alvo}`,
+        caminho: recorte.valor,
+        pastas: itens.filter(i => i.folder).map(i => ({ nome: i.name, filhos: i.folder.childCount ?? null })),
+        // ⚠️ A contagem de ARQUIVOS vai junto: pasta com 0 subpastas e 300
+        // arquivos é o fim da árvore, e sem esse número ela parece vazia.
+        arquivos: itens.filter(i => i.file).length,
+        // Quantas páginas o Graph devolveu — é o número que prova a leitura inteira.
+        paginas,
     };
 }

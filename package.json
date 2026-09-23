@@ -1,6 +1,6 @@
 {
   "name": "consultor-fiscal-inteligente",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "type": "module",
   "description": "Uma ferramenta de consulta de CFOP e NCM com IA para escritórios de contabilidade.",
   "engines": {
@@ -16,12 +16,14 @@
     "test": "jest",
     "test:cadastro-contabil": "node scripts/test-cadastro-contabil.mjs",
     "typecheck": "tsc --noEmit",
-    "precommit": "npm run typecheck && npm run lint:strict"
+    "precommit": "npm run typecheck && npm run lint:strict",
+    "test:ebef:api": "node scripts/test-ebef-api.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@testing-library/jest-dom": "^6.4.5",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.2",

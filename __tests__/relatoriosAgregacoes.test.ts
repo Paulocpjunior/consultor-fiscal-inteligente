@@ -5,7 +5,7 @@
  */
 import {
     resumoPorCfop, resumoImpostos, linhasServicos, linhasRetencoes, resumoPorUf,
-    nfCanceladasFaltantes, formatarFaixas, lerFaltantes, resumoPorParticipante,
+    nfCanceladasFaltantes, formatarFaixas, lerFaltantesPorSerie, resumoPorParticipante,
     resumoPorAliquota, resumoPorProduto, servicosPorCodigo,
 } from '../services/relatoriosAgregacoes';
 
@@ -335,41 +335,79 @@ describe('nfCanceladasFaltantes', () => {
      * buracos do que notas, a lista não é o produto: a captura da saída é que
      * não está trazendo as notas, e a ação é outra.
      */
-    describe('lerFaltantes — a causa junto do número', () => {
+    describe('lerFaltantesPorSerie — a causa junto do número, POR TALÃO', () => {
         const serie = (over: any) => ({
             modelo: '55', serie: '1', primeiro: 1, ultimo: 100, autorizadas: 0,
             canceladas: [], faltantes: [], faltantesTotal: 0, ...over,
         });
 
         it('mais buracos que notas ⇒ é CAPTURA, e manda para a Cobertura de Saída', () => {
-            const r = lerFaltantes([serie({ primeiro: 1, ultimo: 1000, faltantesTotal: 900 })] as any);
+            const [r] = lerFaltantesPorSerie([serie({ primeiro: 1, ultimo: 1000, faltantesTotal: 900 })] as any);
             expect(r.causa).toBe('captura-incompleta');
             expect(r.faltantes).toBe(900);
             expect(r.capturadas).toBe(100);
             expect(r.acao).toMatch(/Cobertura de Saída/);
-            expect(r.acao).toMatch(/não é uma lista para conferir uma a uma|não é\s*\n?\s*uma lista/);
+            expect(r.acao).toMatch(/não é uma lista para conferir uma a uma/);
             expect(r.acao).toMatch(/641/);
         });
 
         it('poucos buracos num talão capturado ⇒ AÍ SIM se confere número a número', () => {
-            const r = lerFaltantes([serie({ primeiro: 1, ultimo: 100, faltantesTotal: 3 })] as any);
+            const [r] = lerFaltantesPorSerie([serie({ primeiro: 1, ultimo: 100, faltantesTotal: 3 })] as any);
             expect(r.causa).toBe('buraco-pontual');
             expect(r.acao).toMatch(/número a número/);
             expect(r.acao).toMatch(/inutilização/);
         });
 
-        it('sem buraco não inventa alarme', () => {
-            expect(lerFaltantes([serie({})] as any).causa).toBe('continua');
-            expect(lerFaltantes([]).causa).toBe('continua');
+        it('sem buraco não inventa alarme — série sem falta nem aparece', () => {
+            expect(lerFaltantesPorSerie([serie({})] as any)).toEqual([]);
+            expect(lerFaltantesPorSerie([])).toEqual([]);
         });
 
-        it('soma as séries antes de decidir — a causa é da EMPRESA, não da série', () => {
-            const r = lerFaltantes([
-                serie({ serie: '1', primeiro: 1, ultimo: 500, faltantesTotal: 480 }),
-                serie({ serie: '3', primeiro: 900, ultimo: 985, faltantesTotal: 1 }),
+        /**
+         * 🚨 J.N. VINATEX (Paulo, 10/09 · 08/2026) — os números REAIS da tela.
+         *
+         * A versão anterior SOMAVA as séries ("a causa é da EMPRESA"), e é isso
+         * que este caso derruba: somados, 1175 faltantes contra 1999 capturadas
+         * dão `buraco-pontual`, e a tela mandava conferir 1175 números um a um.
+         * Só que 1073 deles (91%) são do modelo 65, onde há MAIS buraco do que
+         * nota — ali o trilho não trouxe, e conferir é trabalho jogado fora.
+         *
+         * A série que precisava do alarme ficava escondida atrás da série
+         * grande e bem capturada.
+         */
+        it('não soma séries: o talão bem capturado NÃO esconde o que faltou no outro', () => {
+            const r = lerFaltantesPorSerie([
+                // 55 · série 10 — 11194–12712: 1368 autorizadas + 49 canceladas
+                { modelo: '55', serie: '10', primeiro: 11194, ultimo: 12712, autorizadas: 1368, canceladas: [], faltantes: [], faltantesTotal: 102 },
+                // 65 · série 10 — 11745–13399: 582 capturadas
+                { modelo: '65', serie: '10', primeiro: 11745, ultimo: 13399, autorizadas: 582, canceladas: [], faltantes: [], faltantesTotal: 1073 },
             ] as any);
-            expect(r.causa).toBe('captura-incompleta');
-            expect(r.faltantes).toBe(481);
+
+            expect(r).toHaveLength(2);
+            expect(r[0]).toMatchObject({ modelo: '55', causa: 'buraco-pontual', faltantes: 102, capturadas: 1417 });
+            expect(r[1]).toMatchObject({ modelo: '65', causa: 'captura-incompleta', faltantes: 1073, capturadas: 582 });
+            // O que mudou na prática: a NFC-e deixou de mandar conferir a mão.
+            expect(r[1].acao).not.toMatch(/número a número/);
+        });
+
+        /**
+         * ⚠️ Mandar a NFC-e para a Cobertura de Saída seria o achado 18 (21/08):
+         * aviso apontando o lugar de OUTRO problema. O cofre/autXML é o trilho
+         * da NF-e — a NFC-e nem passa por ele.
+         */
+        it('a ação nomeia o trilho DAQUELE modelo: NFC-e não vai para o cofre/autXML', () => {
+            const [nfe] = lerFaltantesPorSerie([serie({ modelo: '55', primeiro: 1, ultimo: 1000, faltantesTotal: 900 })] as any);
+            const [nfce] = lerFaltantesPorSerie([serie({ modelo: '65', primeiro: 1, ultimo: 1000, faltantesTotal: 900 })] as any);
+
+            expect(nfe.acao).toMatch(/cofre de e-mail ou por autXML/);
+            expect(nfe.acao).toMatch(/Cobertura de Saída/);
+
+            expect(nfce.acao).toMatch(/SAE-NFC-e/);
+            expect(nfce.acao).toMatch(/Agente A3/);
+            expect(nfce.acao).not.toMatch(/Cobertura de Saída/);
+            // Ela CITA o cofre/autXML — para dizer que a NFC-e não vem por ali.
+            // O que não pode é mandar resolver lá (achado 18).
+            expect(nfce.acao).toMatch(/não vem pelo cofre nem por autXML/);
         });
     });
 });

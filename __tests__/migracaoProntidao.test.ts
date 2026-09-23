@@ -2,7 +2,7 @@
  * F0 automático da migração (03/08): as notas dizem quem tem ST/IPI/
  * interestadual, e o painel aponta candidatos a piloto do SPED.
  */
-import { montarProntidaoMigracao } from '../sefaz-backend/migracao-prontidao.js';
+import { montarProntidaoMigracao, contribuinteIcms } from '../sefaz-backend/migracao-prontidao.js';
 
 // IE preenchida = contribuinte de ICMS (entrega EFD ICMS/IPI). Empresa de
 // SERVIÇO não tem IE e por isso NÃO é alvo do piloto do SPED Fiscal —
@@ -391,5 +391,31 @@ describe('bloco K: produção se prova pelo CFOP, não pelo IPI', () => {
         const txt = [...r.linhas[0].bloqueios, ...r.linhas[0].atencoes].join(' ');
         expect(txt).not.toMatch(/PRODUÇÃO detectada/);
         expect(r.resumo.comProducaoParaBlocoK).toBe(0);
+    });
+});
+
+// 🏛️ O CADASTRO VENCE A INSCRIÇÃO ESTADUAL (28/08) — e o dono é UM SÓ, senão
+// a fila de migração e o diagnóstico de cadastros respondem diferente sobre a
+// mesma empresa.
+describe('contribuinteIcms — cadastro vence a dedução', () => {
+    it('marcada "não" com IE gravada → não apura ICMS', () => {
+        expect(contribuinteIcms({ inscricaoEstadual: '123', contribuinteIcms: 'nao' })).toBe(false);
+        expect(contribuinteIcms({ dadosFiscais: { inscricaoEstadual: '123', contribuinteIcms: 'nao' } })).toBe(false);
+    });
+
+    it('marcada "sim" sem IE → apura', () => {
+        expect(contribuinteIcms({ contribuinteIcms: 'sim' })).toBe(true);
+    });
+
+    // ⚠️ AS DUAS FORMAS: a rota da fila projeta no topo, o diagnóstico tem
+    // `dadosFiscais`. Ler uma só faria a mesma empresa ter duas respostas.
+    it('lê a forma achatada e a aninhada', () => {
+        expect(contribuinteIcms({ inscricaoEstadual: '123456' })).toBe(true);
+        expect(contribuinteIcms({ dadosFiscais: { inscricaoEstadual: '123456' } })).toBe(true);
+    });
+
+    it('sem marcação e sem IE → não apura (comportamento de antes)', () => {
+        expect(contribuinteIcms({})).toBe(false);
+        expect(contribuinteIcms({ inscricaoEstadual: 'ISENTO' })).toBe(false);
     });
 });

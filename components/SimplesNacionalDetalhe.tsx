@@ -19,6 +19,7 @@ import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
 import { montarChamadoSerpro } from '../services/chamadoSerpro';
+import { ccmSpDaEmpresa } from '../sefaz-backend/ccm-sp.js';
 
 interface SimplesNacionalDetalheProps {
     empresa: SimplesNacionalEmpresa;
@@ -1202,7 +1203,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         <NfseSpAdminPanel
                             empresaId={empresa.id}
                             colecao="simples_empresas"
-                            ccmSpAtual={empresa.dadosFiscais?.ccmSp || empresa.ccmSp}
+                            ccmSpAtual={ccmSpDaEmpresa(empresa) || undefined}
                             nfseSpAutorizadoEmAtual={empresa.nfseSpAutorizadoEm}
                             onSalvarConfig={async ({ ccmSp, nfseSpAutorizadoEm }) => {
                                 // Grava no cadastro UNICO (dadosFiscais.ccmSp). Passa o

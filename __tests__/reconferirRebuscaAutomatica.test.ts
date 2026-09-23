@@ -28,10 +28,22 @@ describe('a reconferência real rebusca o recorte sozinha', () => {
         expect(src).toMatch(/const AbaCanceladas: React\.FC<AbaDocsProps & \{ onRebuscar\?: \(\) => void \}>/);
     });
 
+    // ⚠️ ASSERÇÃO TROCADA PELA INTENÇÃO (02/09): ela prendia o TEXTO
+    // `if (r?.ok && !simular) await onRebuscar?.()`, e a rodada passou a
+    // ENCADEAR (o teto por rodada virava 3 cliques do colaborador — caso MV
+    // LIDER). Teste que trava a FORMA impede a correção que a régua manda
+    // fazer; o que ele protege é a INTENÇÃO, e ela continua inteira:
+    //   · o simulado sai ANTES, por early return — prévia não rebusca nada;
+    //   · a rodada real rebusca DEPOIS de a drenagem terminar com sucesso.
     it('🚨 reconferir(false) CHAMA onRebuscar após sucesso — nunca no simulado', () => {
         const inicio = src.indexOf('const reconferir = async (simular: boolean) => {');
-        const corpo = src.slice(inicio, inicio + 600);
-        expect(corpo).toMatch(/if \(r\?\.ok && !simular\) await onRebuscar\?\.\(\);/);
+        const corpo = src.slice(inicio, inicio + 1600);
+        // O caminho da PRÉVIA termina em `return` antes de qualquer rebusca.
+        const trechoSimulado = corpo.slice(corpo.indexOf('if (simular)'), corpo.indexOf('const resultados'));
+        expect(trechoSimulado).toMatch(/return;/);
+        expect(trechoSimulado).not.toMatch(/onRebuscar/);
+        // E a rodada real rebusca só com sucesso.
+        expect(corpo).toMatch(/if \(ultima\?\.ok\) await onRebuscar\?\.\(\);/);
     });
 
     it('a mensagem deixou de mandar o colaborador recarregar manualmente quando há rebusca automática', () => {

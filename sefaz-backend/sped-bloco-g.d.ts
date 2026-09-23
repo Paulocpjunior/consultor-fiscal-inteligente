@@ -11,6 +11,12 @@ export interface BemCiapEntrada {
     creditoIcmsDifal?: number;
     numeroParcela?: number;
     funcao?: string;
+    /** COD_CTA do 0300 — conta analítica do plano de contas (o app não deduz). */
+    contaContabil?: string;
+    /** NIVEL do 0500 (campo 05). */
+    contaContabilNivel?: string;
+    /** NOME_CTA do 0500 (campo 07). */
+    contaContabilNome?: string;
 }
 
 export interface BemCiapApurado extends BemCiapEntrada {
@@ -52,3 +58,12 @@ export function montarLinhasBlocoG(p: {
     dtIni: string;
     dtFin: string;
 }): string[];
+export function contaContabilCompleta(bem: BemCiapEntrada | null | undefined): boolean;
+export function montarRegistros0300(
+    bens: BemCiapEntrada[] | null | undefined,
+    dtIni?: string,
+): {
+    linhas: string[];
+    linhas0500: string[];
+    avisos: string[];
+};

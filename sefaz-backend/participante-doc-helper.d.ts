@@ -19,6 +19,15 @@ export function participanteDoDocumento(
 ): Record<string, unknown> | null;
 
 /**
+ * O COD_PART (CNPJ/CPF da contraparte, só dígitos) — dono único do recorte que
+ * o C100 e o A100 escreviam à mão.
+ *
+ * ⚠️ '' quando o documento não traz o lado, e o vazio é a RESPOSTA: na ENTRADA
+ * o PVA recusa o arquivo por ele. Inventar participante é o `PARTSEM`.
+ */
+export function codPartDoDocumento(d: unknown, empresaCnpj?: string): string;
+
+/**
  * EM QUAL LADO está a contraparte — a MESMA régua acima, na forma que a TELA
  * precisa (escolher entre as duas colunas já normalizadas da view).
  *

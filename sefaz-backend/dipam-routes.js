@@ -187,7 +187,7 @@ router.get('/varredura', requireAuth, async (req, res) => {
                     // formas, mas sem `totais` na projeção o fallback nunca
                     // dispara — a nota importada pelo navegador (que grava SÓ
                     // `totais.vNF`) entrava valendo ZERO na base do FUNRURAL.
-                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'emitente', 'destinatario', 'tpNF',
+                    'empresaId', 'direcao', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado', 'emitente', 'destinatario', 'tpNF',
                     'valorTotal', 'totais.vNF', 'totais.vProd',
                     'cnpjEmit', 'xNomeEmit', 'ufEmit', 'codMunEmit',
                     'cnpjDest', 'xNomeDest', 'ieDest', 'ufDest', 'codMunDest',
@@ -328,7 +328,17 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
             semXml: soma('semXml'), jaTinham: soma('jaTinham'),
             ganharamMunicipio: soma('ganharamMunicipio'),
             ganharamFornecedor: soma('ganharamFornecedor'),
+            // 🚨 ELE JÁ ERA CONTADO NO BACKFILL E A ROTA O JOGAVA FORA — a flag
+            // que ninguém lê (18/09, VINATEX · 732 recusas 0150.10). O
+            // comentário do próprio backfill diz que é ESTE número que responde
+            // "quantos dos 732 o XML resolveu", e ele parava aqui.
+            ganharamEndereco: soma('ganharamEndereco'),
             semDadoNoXml: soma('semDadoNoXml'),
+            // Corte não é mudo: `-1` de um dos lados quer dizer "há mais e não
+            // sei quantos" — somar com 0 daria -1, que é a resposta certa.
+            restaram: (entrada.restaram === -1 || saida.restaram === -1)
+                ? -1
+                : soma('restaram'),
         };
 
         // A AÇÃO SEGUE A CAUSA. "0 recuperadas" sozinho não responde nada — e
@@ -345,6 +355,19 @@ router.post('/reler-municipios', requireAdmin, async (req, res) => {
         }
         if (total.jaTinham && !total.preenchidas && !total.semXml && !total.semDadoNoXml) {
             partes.push('Nada mudou porque todos já haviam sido relidos nesta versão do leitor.');
+        }
+        // A FILA MAIOR QUE O LOTE VAI DITA — e com o caminho. ⚠️ "Rode de novo"
+        // só passou a ser VERDADE em 18/09 à noite: até então o backfill cortava
+        // a fila num `limit(1000)` ANTES do filtro do carimbo, e a rodada
+        // seguinte recebia os MESMOS 1000 (VINATEX: 159 recusas do 0150 depois
+        // de reler). Agora ele pagina por cursor e pula o já-relido de graça
+        // (`varrerComOrcamento`), então a rodada seguinte avança de fato.
+        if (total.restaram === -1) {
+            partes.push('Ainda há documentos desta competência que não couberam nesta rodada — rode de novo '
+                + 'até a fila zerar (o que já foi relido é pulado).');
+        } else if (total.restaram > 0) {
+            partes.push(`${total.restaram} documento(s) desta competência não couberam nesta rodada — rode de novo `
+                + 'até a fila zerar (o que já foi relido é pulado).');
         }
         return res.json({ ok: true, ...total, acao: partes.join(' ') || null });
     } catch (e) {
@@ -373,6 +396,34 @@ router.get('/produtores', requireAuth, async (req, res) => {
 router.post('/produtor', requireAdmin, async (req, res) => {
     try {
         const { doc, ...dados } = req.body || {};
+        // 🚨 A DECISÃO DE UMA NOTA É INCREMENTAL, E O BACKEND É QUEM SOMA.
+        //
+        // Se o front mandasse a lista inteira, dois cliques seguidos se
+        // sobrescreveriam: o segundo gravaria a lista que ele leu ANTES do
+        // primeiro, e a nota tirada voltaria ao total sozinha — que é
+        // exatamente o tipo de "total que muda sozinho" que esta tela existe
+        // para não ter. Quem lê o estado atual e soma/remove é aqui.
+        if (dados.tirarNota || dados.voltarNota) {
+            // Reusa o leitor que já existe (dono único) em vez de uma consulta
+            // nova — duas leituras do mesmo cadastro divergiriam no primeiro
+            // campo novo.
+            const mapa = await carregarProdutoresRurais([doc]);
+            const atual = mapa[String(doc || '').replace(/\D/g, '')];
+            const lista = new Set(
+                Array.isArray(atual?.notasForaDoFunrural) ? atual.notasForaDoFunrural : [],
+            );
+            if (dados.tirarNota) lista.add(String(dados.tirarNota).trim());
+            // `voltarNota` aceita UMA chave ou VÁRIAS: o ↩ da linha desfaz o
+            // grupo inteiro daquele produtor, que é exatamente o que a linha
+            // mostra ("2 nota(s)"). Devolver só uma faria o número da tela
+            // desmentir o efeito do clique.
+            for (const c of [].concat(dados.voltarNota || [])) {
+                if (c) lista.delete(String(c).trim());
+            }
+            dados.notasForaDoFunrural = [...lista].filter(Boolean);
+            delete dados.tirarNota;
+            delete dados.voltarNota;
+        }
         const registro = await salvarProdutorRural(doc, dados, req.user);
         return res.json({ ok: true, produtor: registro });
     } catch (e) {

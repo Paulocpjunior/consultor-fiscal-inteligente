@@ -71,6 +71,128 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O DIFAL de SAÍDA da EC 87/15 — o que a NF-e DECLARA, nunca uma conta nova',
+        dono: 'sefaz-backend/difal-ec87-saida.js',
+        comoUsar: "import { difalDoDocumento, montarLinhasDifalBlocoE } from 'sefaz-backend/difal-ec87-saida.js'",
+        porque: '18/09, Paulo, VINATEX 08/2026: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, precisa ajustar isso '
+            + 'também, que vai no SPED"*. Na venda interestadual a consumidor final não contribuinte o valor JÁ '
+            + 'está na nota que a própria empresa emitiu (grupo `ICMSUFDest`), e ele alimenta DOIS registros que '
+            + 'o PVA cruza: o C101 (por documento) e o E310 campo 04 (Σ dos C101, por UF de destino). Uma segunda '
+            + 'leitura em outro lugar faria o documento e a apuração declararem números diferentes para o MESMO '
+            + 'fato — e recalcular a partilha produziria um valor diferente do que o cliente já transmitiu à '
+            + 'SEFAZ. É o TERCEIRO desenho de DIFAL desta casa (por FORA no Simples, por DENTRO no art. 117, e '
+            + 'este, em registro próprio): a régua de um não serve para o outro.',
+        assinaturas: [
+            // A leitura do grupo escrita à mão fora do dono e da captura.
+            /\bvICMSUFDest\b/,
+            /\bvFCPUFDest\b/,
+            /\bvICMSUFRemet\b/,
+        ],
+        permitido: [
+            // A CAPTURA é quem lê o XML — é dela que o dono depende.
+            'sefaz-backend/xml-importer.js',
+            'services/xmlParserService.ts',
+            // O backfill recupera os campos do XML guardado (lista de nomes).
+            'sefaz-backend/backfill-itens-fiscais.js',
+            // Os tipos declaram os campos do item e dos totais.
+            'types.ts',
+        ],
+    },
+    {
+        nome: 'A BASE POR DENTRO do DIFAL de aquisição na apuração (RICMS/SP art. 117 + art. 37 §5º)',
+        dono: 'sefaz-backend/difal-art117-apuracao.js',
+        comoUsar: "import { baseDifalPorDentro, consolidarDifalArt117 } from 'sefaz-backend/difal-art117-apuracao.js'",
+        porque: '14/09, Paulo, HYPE CAFÉ (Lucro Presumido): *"o diferencial de alíquota nas aquisições dela é dentro '
+            + 'da apuração"*. A base é (valor − ICMS da origem) ÷ (1 − alíquota interna) — corroborada centavo a centavo '
+            + 'pelo e-Fiscal (166,10 → 178,26 → débito 32,09 / crédito 19,93). Uma segunda fórmula em outro lugar faria '
+            + 'a tela prometer uma base e o E110 sair com outra, e o DIFAL do Simples (que é por FORA, em guia) '
+            + 'engoliria a régua do Lucro ou vice-versa.',
+        assinaturas: [
+            // A divisão "por dentro" escrita à mão fora do dono.
+            /\/\s*\(\s*1\s*-\s*\w*[aA]liq\w*\s*\/\s*100\s*\)/,
+        ],
+    },
+    {
+        nome: 'O OUTRO LADO da mesma chave — o id do documento da contraparte que também é cliente',
+        dono: 'sefaz-backend/documento-lado.js',
+        comoUsar: "import { idDoDocumentoDoLado, carimboDoLado } from 'sefaz-backend/documento-lado.js'",
+        porque: '11/09, Paulo, LEGACY × FEDERAÇÃO: *"são notas emitidas para Federação, porém no consultor diz que '
+            + 'esse XML já está gravado em outra empresa"*. A mesma NF-e é saída de uma cliente e entrada da outra, '
+            + 'e o id do documento é a CHAVE — então o outro lado ganha um id DERIVADO (chave + separador + CNPJ). '
+            + 'Quem montar essa string à mão em outro lugar e divergir um caractere faz o mesmo lado existir com '
+            + 'DOIS ids — a venda contando duas vezes — e a propagação de eventos (cancelamento, CC-e, '
+            + 'manifestação) deixa de achar o documento pela chave.',
+        assinaturas: [
+            // O separador do id escrito fora do dono.
+            /__lado_/,
+        ],
+    },
+    {
+        nome: 'A IDENTIDADE da nota digitada — o id que carrega número, série e competência',
+        dono: 'services/notaDigitada.ts',
+        comoUsar: "import { idDigitadaSemChave } from 'services/notaDigitada'",
+        porque: '10/09, Paulo, HANAMI: *"O correto seria 9792, oq eu posso fazer nesse caso?"* — a nota estava '
+            + 'digitada como 792. O id de uma nota sem chave é `digitada_{empresa}_{número}_{série}_{AAAA-MM}`, '
+            + 'ou seja o NÚMERO é a identidade: quem monta essa string em outro lugar e diverge um caractere faz '
+            + 'a mesma nota existir com DOIS ids, e a venda conta duas vezes no livro, na competência e no SPED — '
+            + 'sem nenhum validador acusar, porque os dois documentos são formalmente corretos. É a duplicidade '
+            + 'do art. 136 com outra roupa, agora pela porta da digitação.',
+        assinaturas: [
+            // A fórmula escrita à mão fora do dono.
+            /`digitada_\$\{/,
+        ],
+    },
+    {
+        nome: 'A DeRE — em qual regime ESPECÍFICO de IBS/CBS a empresa fornece',
+        dono: 'sefaz-backend/dere-regimes.js',
+        comoUsar: "import { REGIMES_ESPECIFICOS_IBS_CBS, decidirDereNoCadastro } from 'sefaz-backend/dere-regimes.js'",
+        porque: '02/09, Paulo: *"crie uma nova função capaz de atender esta obrigação chamada DERE"*. A pergunta '
+            + '"esta empresa está na DeRE?" tem TRÊS leitores desde o primeiro dia — o catálogo que monta o mês, a '
+            + 'fila da carteira e o modal do cadastro — e o alcance da declaração só está confirmado para três '
+            + 'regimes (serviços financeiros, planos de saúde, loterias). Uma segunda cópia do vocabulário faria a '
+            + 'tela oferecer um regime que o mês não conhece, ou o mês cobrar quem a fila diz que está fora. E o '
+            + 'manual (MOD 1.0.1) não foi lido nesta rede: quando alguém o ler, a coluna `dereConfirmada` muda num '
+            + 'lugar só.',
+        assinaturas: [
+            // Os códigos do vocabulário escritos como literal fora do dono.
+            /'SERVICOS_FINANCEIROS'/,
+            /'CONCURSOS_PROGNOSTICOS'/,
+            // A coluna que decide o alcance — reescrevê-la é reescrever a régua.
+            /dereConfirmada\s*:/,
+        ],
+        permitido: [
+            // O tipo é a DECLARAÇÃO do dono, não uma segunda cópia (regra do .d.ts).
+            'sefaz-backend/dere-regimes.d.ts',
+        ],
+    },
+    {
+        nome: 'O CCM DE SP — duas formas, e os SÓ-ZEROS como vazio',
+        dono: 'sefaz-backend/ccm-sp.js',
+        comoUsar: "import { ccmSpDaEmpresa, temCcmSp, ccmSpParaGravar, soZerosComoVazio } from 'sefaz-backend/ccm-sp.js'",
+        porque: '29/08, LAV COMERCIO DE AUTOPECAS: *"não está capturando as NFS-e de serviços tomados pelo '
+            + 'cliente"* — a MESMA empresa do caso dos oito zeros de 21/08, voltando com outro sintoma. A régua '
+            + 'nasceu no `.ts` do sanitize e FICOU LÁ, então o backend — que lê o CCM em nove lugares — não a '
+            + 'conhecia. E `\'00000000\'` é **truthy**: o `if (!ccm)` de cada leitor recebia "sim, tem CCM" '
+            + 'sobre um campo que significa "não tem". O 0000 dos DOIS SPED declarava `00000000` no campo '
+            + 'Inscrição Municipal (afirmação falsa num arquivo fiscal); o portal de SP indexava a empresa sob '
+            + 'a chave `00000000`, nunca casava com o dropdown de prestadores e a pulava **sem gerar uma linha '
+            + 'de erro**; e a tela pintava `✓ NFSe SP` engolindo o bloqueio *"falta Inscrição Municipal (CCM)"*, '
+            + 'que era justamente a frase que resolveria o caso.',
+        assinaturas: [
+            // A leitura crua das duas formas — como os nove leitores estavam.
+            /ccmSp\s*\|\|\s*\w+\.ccmSp/,
+            // A régua dos zeros reimplementada (o modal tinha a terceira cópia:
+            // `.replace(/\D/g,'').replace(/0/g,'') !== ''`).
+            /replace\(\/0\/g/,
+        ],
+        permitido: [
+            // A gravação valida o TAMANHO do CCM (6-11 dígitos) além de aplicar
+            // a régua dos zeros — é outra pergunta, e ela já delega o "é vazio?"
+            // ao dono.
+            'sefaz-backend/empresa-status-routes.js',
+        ],
+    },
+    {
         nome: 'A COMPETÊNCIA ESTÁ FECHADA? — o fim de mês (DAR FIM DE MÊS)',
         dono: 'sefaz-backend/fim-de-mes.js',
         comoUsar: "import { competenciaFechada, podeDarFimDeMes } from 'sefaz-backend/fim-de-mes.js'",
@@ -269,6 +391,9 @@ const REGUAS_VIGIADAS: Regua[] = [
             /function valorOperacaoDoItem\s*\(/,
             /function pisoDoValorOperacaoDoC170\s*\(/,
             /function faixaDoValorOperacao\s*\(/,
+            // 12/09 (ELS): a RESERVA dos totais quando o item não traz o campo.
+            /function reservaDosTotais\s*\(/,
+            /function valorOperacaoDosItens\s*\(/,
         ],
     },
     {
@@ -379,8 +504,8 @@ const REGUAS_VIGIADAS: Regua[] = [
     },
     {
         nome: 'De quem é a mensagem que falhou (nossa × da outra plataforma)',
-        dono: 'sefaz-backend/whatsapp-webhook.js',
-        comoUsar: "import { saiuPorOutraPlataforma } from 'sefaz-backend/whatsapp-webhook.js'",
+        dono: 'services/sp-connect-message-origin.js',
+        comoUsar: "import { saiuPorOutraPlataforma } from 'services/sp-connect-message-origin.js'",
         porque: 'Print do Paulo em 17/08 (conversa da Agatha): a falha de mídia apareceu num balão que a '
             + 'própria tela rotulava "mensagem enviada por outra plataforma" — e a linha de baixo mandava '
             + 'o colaborador converter um PDF que ele nunca enviou. Eram DUAS réguas pro mesmo fato, e '

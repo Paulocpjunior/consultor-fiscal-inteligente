@@ -134,7 +134,15 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                             ? `NF ${res.documento.numero} COMPLETADA — estava na base como resumo, sem itens/CST; agora tem tudo.`
                             : res.substituiu
                                 ? `NF ${res.documento.numero} SUBSTITUÍDA pelo conteúdo deste arquivo (${res.documento.direcao}).`
-                                : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
+                                : res.outroLado
+                                    // A contraparte também é cliente: a mesma
+                                    // chave já tinha dono e ESTE documento é o
+                                    // lado desta empresa. Sem a frase, um
+                                    // documento "a mais" na base é susto.
+                                    ? `NF ${res.documento.numero} importada como o OUTRO LADO (${res.documento.direcao}) — a mesma `
+                                      + `chave já está gravada em ${res.outroLado.outroLadoCnpj || 'outra empresa da carteira'}, `
+                                      + 'que é a contraparte; cada empresa fica com o seu documento.'
+                                    : `NF ${res.documento.numero} importada (${res.documento.direcao}).`,
                     });
                     onImported?.(res.documento);
                 } else {
@@ -154,7 +162,11 @@ const XmlImportacaoManual: React.FC<Props> = ({ currentUser, onShowToast, onImpo
                 let msg = err?.message || 'Falha desconhecida.';
                 if (err instanceof XmlParseError) msg = `XML inválido: ${msg}`;
                 if (err instanceof DocumentoDuplicadoError) msg = `Duplicado: ${msg}`;
-                out.push({ fileName: file.name, status: 'erro', mensagem: msg });
+                // 🚨 A RECUSA VEM COM A MEDIÇÃO JUNTO (02/09, caso do Ivan): o
+                // app procurou o CNPJ da empresa DENTRO do XML e diz onde ele
+                // está — ou que não está. Sem isso a saída era pedir o arquivo
+                // a alguém, que é passar o problema adiante (régua de 24/08).
+                out.push({ fileName: file.name, status: 'erro', mensagem: msg, acao: err?.acao });
             }
         }
         setResults(prev => [...out, ...prev]);

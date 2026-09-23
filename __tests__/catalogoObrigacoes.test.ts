@@ -163,13 +163,21 @@ describe('mesDoCliente — o farol do mês', () => {
         expect(geradas).toContain('SPED');
     });
 
-    it('obrigação que depende de condição não avaliável NÃO gera, mas é NOMEADA', () => {
+    it('obrigação que depende de condição não avaliável NÃO gera, mas é NOMEADA (ISS: calendário municipal)', () => {
         const m = mesDoCliente(presumido, '07/2026');
-        // INSS patronal só existe com folha, e a folha mora no módulo de DP.
-        expect(codigos(m.obrigacoes)).not.toContain('INSS_CPP');
-        expect(codigos(m.propostas)).toContain('INSS_CPP');
+        expect(codigos(m.obrigacoes)).not.toContain('ISS');
+        expect(codigos(m.propostas)).toContain('ISS');
         const alerta = m.alertas.find((a: any) => a.tipo === 'obrigacoes-a-confirmar')!;
-        expect(alerta.texto).toMatch(/depende de folha/i);
+        expect(alerta.texto).toMatch(/ISS/);
+    });
+
+    it('👥 FGTS e INSS patronal são do DP (22/09): não geram, não propõem, em regime nenhum', () => {
+        for (const c of [simples, presumido, semRegime]) {
+            const m = mesDoCliente(c, '07/2026');
+            expect(codigos(m.obrigacoes)).not.toContain('FGTS');
+            expect(codigos(m.obrigacoes)).not.toContain('INSS_CPP');
+            expect(codigos(m.propostas)).not.toContain('INSS_CPP');
+        }
     });
 
     it('cliente sem regime ACENDE e diz onde arrumar', () => {
@@ -196,7 +204,7 @@ describe('pendenciasDeConfirmacao — o checklist que impede o "sync manual" de 
     it('lista as propostas e as que precisam de conferência de prazo, sem repetir', () => {
         const p = pendenciasDeConfirmacao();
         const cods = p.map((x: any) => x.obrigacao);
-        expect(cods).toContain('INSS_CPP');             // proposta (depende de folha)
+        expect(cods).not.toContain('INSS_CPP');         // do DP (22/09) — nem proposta
         expect(cods).toContain('ISS');                  // proposta (calendário municipal)
         // O FGTS do Lucro/Simples continua RESOLVIDO (direção decidida em
         // 11/08) e NÃO aparece. E ele também não entra pela IMUNE/ISENTA: Paulo,
@@ -314,7 +322,7 @@ describe('🚨 o catálogo admitir que não cobre o cliente TRAVA a etapa 4', ()
         //  próprio — ele vai no DAS, LC 123 art. 13.)
         const cob = mesDoCliente({ colecao: 'lucro_empresas', regimePadrao: 'presumido' }, '06/2026');
         expect(cob.regime).toBe('LUCRO_PRESUMIDO');
-        expect(cob.coberturaIncompleta).toBe(true); // ISS (município) e INSS patronal (folha)
+        expect(cob.coberturaIncompleta).toBe(true); // ISS (município)
         const e = rodar(cob);
         expect(e.status).toBe('atencao');
         expect(e.resumo).toMatch(/catálogo NÃO cobre/);
@@ -407,9 +415,26 @@ describe('🚨 prazo ESTADUAL só vale para a UF dele', () => {
         expect(e.prazoDeOutraUf.length).toBeGreaterThan(0);
     });
 
-    it('a rota manda a UF do cliente — sem ela a régua não roda', () => {
+    // 🐛 ESTA TRAVA PRENDIA A FORMA, NÃO A INTENÇÃO — e reprovou a correção que
+    // a régua mandava fazer (27/08). Ela exigia o texto
+    // `uf: d.dadosFiscais?.uf || d.uf` DENTRO de `rotina-fiscal-routes.js`; a
+    // leitura mudou de casa para o módulo PURO `rotina-empresa-insumo.js`
+    // (rota não carrega no jest — régua dentro de rota é régua sem prova), e o
+    // teste quebrou com o código CERTO. É a família do `IND_REG_CUM` e do
+    // `cfopPorNota`: teste que trava a FONTE impede a correção.
+    //
+    // Agora ela pergunta pelo COMPORTAMENTO — o dono do insumo entrega a UF,
+    // nas duas formas em que ela é gravada — e só o repasse à régua continua
+    // sendo conferido no texto da rota.
+    it('a UF do cliente chega à régua — sem ela o prazo estadual não vale', () => {
+        const { empresaDaRotina } = require('../sefaz-backend/rotina-empresa-insumo.js');
+        const base = { cnpj: '11222333000181' };
+        expect(empresaDaRotina('e1', 'lucro_empresas', { ...base, dadosFiscais: { uf: 'PR' } }).uf).toBe('PR');
+        expect(empresaDaRotina('e1', 'lucro_empresas', { ...base, uf: 'MG' }).uf).toBe('MG');
+        // Sem UF cadastrada NÃO se inventa: é a `uf-desconhecida`, que acende.
+        expect(empresaDaRotina('e1', 'lucro_empresas', base).uf).toBe('');
+
         const rota = readFileSync(join(__dirname, '..', 'sefaz-backend/rotina-fiscal-routes.js'), 'utf8');
         expect(rota).toMatch(/uf: e\.uf/);
-        expect(rota).toMatch(/uf: d\.dadosFiscais\?\.uf \|\| d\.uf/);
     });
 });
