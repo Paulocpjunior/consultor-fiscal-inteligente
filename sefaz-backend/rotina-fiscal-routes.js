@@ -30,6 +30,8 @@ import { lerFechamentosDaCompetencia } from './fechamento-store.js';
 // 📋 A entrega DECLARADA das obrigações fora do catálogo — UMA query para a
 // competência inteira, pelo mesmo motivo do carimbo: ler por card foi o 429.
 import { lerCoberturasDaCompetencia, gravarCoberturaDeclarada } from './cobertura-declarada-store.js';
+import { lerSemMovimentoDaCompetencia, gravarSemMovimentoDeclarado } from './sem-movimento-store.js';
+import { conferirDeclaracaoSemMovimento, textoDaDeclaracaoSemMovimento } from './sem-movimento-declarado.js';
 // A régua da declaração é PURA e mora no dono — a rota só faz I/O.
 import { conferirDeclaracaoCobertura, textoDaDeclaracaoCobertura } from './obrigacao-fora-do-catalogo.js';
 import { normalizarCompetencia } from './competencia.js';
@@ -324,6 +326,8 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
     // UMA query para os carimbos da competência inteira — nunca uma por empresa.
     const carimbos = await lerFechamentosDaCompetencia(db, competencia);
     const coberturasDeclaradas = await lerCoberturasDaCompetencia(db, competencia);
+    // 📭 Idem para o "sem movimento": uma query, mapa por empresa.
+    const semMovimentoDeclarados = await lerSemMovimentoDaCompetencia(db, competencia);
 
     const rotinas = empresas.map((e) => montarRotinaFiscal({
         // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
@@ -350,6 +354,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
         // 📋 A declaração entra no NÚCLEO, como o carimbo: é ela que decide
         // se a etapa 4 ainda trava por obrigação que o catálogo não cobre.
         declaracaoCobertura: coberturasDeclaradas.get(String(e.id || '')) || null,
+        declaracaoSemMovimento: semMovimentoDeclarados.get(String(e.id || '')) || null,
     }));
 
     // 🔒 O carimbo viaja JUNTO da rotina: é ele que o bloco "Dar fim de mês"
@@ -483,6 +488,52 @@ router.post('/cobertura-declarada', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[rotina-fiscal/cobertura-declarada]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /sem-movimento-declarado — 📭 a empresa NÃO teve movimento no mês.
+//
+// Paulo, 23/09 (E7 ASSESSORIA ESPORTIVA 08/2026): etapas 1 e 2 vermelhas para
+// sempre numa empresa que não emitiu nem recebeu nada. A régua é do módulo
+// puro (texto com piso, data não futura, autor); a porta só aparece com zero
+// documento, e a declaração cai sozinha se documento chegar depois.
+// ────────────────────────────────────────────────────────────────────────────
+router.post('/sem-movimento-declarado', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, competencia, comoFoi, quando } = req.body || {};
+        const comp = normalizarCompetencia(competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        if (!comp) return res.status(400).json({ ok: false, error: 'Competência ilegível.' });
+        if (!(await podeAcessarEmpresaId(req.user, empresaId)).ok) {
+            return res.status(403).json({ ok: false, error: 'Esta empresa não está na sua carteira.' });
+        }
+        const conf = conferirDeclaracaoSemMovimento({
+            comoFoi, quando, quem: req.user?.email || req.user?.uid || null,
+        });
+        if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+
+        // ⚠️ Com documento na competência NÃO se grava: "sem movimento" sobre
+        // nota capturada é declaração falsa, e a tela nem oferece a porta —
+        // esta é a trava de quem chamar a rota direto.
+        const docsSnap = await getDb().collection('documentos_fiscais')
+            .where('empresaId', '==', String(empresaId)).limit(2000).get();
+        const daComp = docsSnap.docs.filter((d) => normalizarCompetencia(d.data()?.competencia) === comp).length;
+        if (daComp > 0) {
+            return res.status(409).json({
+                ok: false,
+                error: `Esta empresa tem ${daComp} documento(s) em ${comp} — não é "sem movimento". Conclua a captura e a validação.`,
+            });
+        }
+
+        const doc = await gravarSemMovimentoDeclarado(getDb(), {
+            empresaId, empresaCnpj, competencia: comp, declaracao: conf.declaracao,
+        });
+        console.log(`[rotina-fiscal] sem movimento declarado ${empresaId} ${comp} por ${conf.declaracao.declaradoPor}`);
+        return res.json({ ok: true, declaracao: { ...doc, texto: textoDaDeclaracaoSemMovimento(conf.declaracao) } });
+    } catch (e) {
+        console.error('[rotina-fiscal/sem-movimento-declarado]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

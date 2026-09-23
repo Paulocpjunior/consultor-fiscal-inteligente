@@ -38,6 +38,7 @@ import { OBRIGACOES_DO_DP } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
+import { podeDeclararSemMovimento, aplicarSemMovimentoDeclarado } from './sem-movimento-declarado.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -213,6 +214,10 @@ export function montarRotinaFiscal({
     // 📋 A declaração de que as obrigações FORA DO CATÁLOGO foram entregues por
     // fora (empresa + competência). Ausente, nada muda.
     declaracaoCobertura = null,
+    // 📭 A declaração de que a empresa NÃO TEVE MOVIMENTO na competência
+    // (23/09, E7). Fecha as etapas 1 e 2 como 'na' enquanto não chegar
+    // documento nenhum; chegando, ela cai — dito.
+    declaracaoSemMovimento = null,
 }) {
     const docs = documentos || [];
     // 🚨 A DIREÇÃO SAI DA RÉGUA, NUNCA DO CAMPO GRAVADO. A nota PRÓPRIA de
@@ -627,6 +632,17 @@ export function montarRotinaFiscal({
     eCaptura = ajusteIss.captura;
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
+
+    // 📭 SEM MOVIMENTO DECLARADO (Paulo, 23/09: *"fechamento de mês de empresas
+    // sem movimento"*). Zero nota não é zero movimento — ausência ≠ zero —,
+    // então a etapa 1 nunca fecharia sozinha. Quem sabe é a pessoa, e ela
+    // DECLARA (autor, data, texto). A porta só aparece com ZERO documento;
+    // a declaração vence o vermelho da captura e da validação, NOMEADA, e cai
+    // sozinha se documento chegar depois.
+    eCaptura = { ...eCaptura, podeDeclararSemMovimento: podeDeclararSemMovimento({ documentos: docs, captura: eCaptura }) };
+    const semMov = aplicarSemMovimentoDeclarado({ captura: eCaptura, validacao: eValidacao, documentos: docs, declaracao: declaracaoSemMovimento });
+    eCaptura = semMov.captura;
+    eValidacao = semMov.validacao;
 
     // 📋 DECLARAR ENVIO POR FORA só faz sentido para guia que o app NÃO enviou.
     //

@@ -35,6 +35,8 @@ export interface BloqueioFimDeMes {
      * prazo de outra UF e UF ausente TÊM conserto — ali a porta não aparece.
      */
     podeDeclararCobertura?: boolean | null;
+    /** 📭 Declarar "sem movimento" resolve ESTE bloqueio? Só com zero documento (etapa 1). */
+    podeDeclararSemMovimento?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
     /**
