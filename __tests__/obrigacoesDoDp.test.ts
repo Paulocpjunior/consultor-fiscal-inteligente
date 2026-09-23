@@ -64,3 +64,11 @@ describe('etapa 4 da Rotina ignora as tarefas do DP e diz quantas', () => {
         expect(readFileSync(join(raiz, 'components', 'Tarefas.tsx'), 'utf8')).toContain('Cancelar tarefas do DP (FGTS/INSS)');
     });
 });
+
+// ── 23/09: "pode tirar eSocial também, é do DP" ─────────────────────────────
+describe('👥 eSocial também é do DP', () => {
+    it('o calendário do Fiscal não lista eSocial', () => {
+        const tipos = Object.values(OBRIGACOES as any).map((o: any) => o.tipo);
+        expect(tipos).not.toContain('ESOCIAL');
+    });
+});

@@ -49,6 +49,61 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   advisory para corrigir. A branch `chore/audit-deps` tem commit de **09/09**
   parado, que é exatamente a correção que nunca virou PR. Segue sendo
   configuração do repo (Settings → Actions → Workflow permissions).
+- **🔒 "SÓ ESTÁ ENCERRANDO DEPOIS DE FAZER O MESMO PROCESSO 2X" + "PODE
+  TIRAR ESOCIAL TAMBÉM, É DO DP"** (23/09, Paulo, print do "Dar fim de mês").
+  (1) O fechamento GRAVAVA no primeiro clique (a rota não tem passo duplo);
+  a tela só mudava quando o painel INTEIRO (centenas de empresas) terminasse
+  de recarregar — até lá o card dizia "Pronto para dar fim de mês" e
+  convidava o segundo clique, que caía em "já fechada" (400 mudo).
+  CORREÇÃO: `FimDeMesBloco` guarda o carimbo que o backend devolve como
+  estado local (`fechamentoLocal`; o do painel vence quando chega); a rota
+  `/fechar` responde 409 com `jaFechada + fechamento` quando já está
+  fechada, e o card mostra o carimbo em vez de erro; `chamar()` do
+  `fimDeMesService` repassa os campos extras da recusa. Mesmo tratamento no
+  reabrir. (2) `ESOCIAL_S1299` saiu de `calendario-obrigacoes.js`. REGRA:
+  ato que grava precisa refletir na tela COM a resposta do próprio ato —
+  depender do recarregar do painel inteiro é convite ao clique duplo.
+
+- **🧾 "ESTÁ FALANDO QUE A NOTA ESTÁ SEM VALOR PARA MANIFESTAR CIÊNCIA, MAS
+  ESTÁ CERTINHA … ATÉ REIMPORTEI O XML"** (23/09, Paulo, RADIO E TV IBIRAPUERA
+  08/2026, NFS-e nacional de Brasília, R$ 2.000). CAUSA (três pontas da mesma
+  armadilha das duas formas): o import de XML pelo navegador
+  (`xmlParserService` → `DocumentoFiscal`) grava **só `totais.vNF`**, nunca
+  `valorTotal`; `ehResumoSemCompleta` lia `d.valorTotal == null` → toda NFS-e
+  (e NF-e) importada à mão virava "resumo da SEFAZ, aguardando a completa"
+  com a ação "manifeste a ciência"; e a projeção `.select()` da Rotina nem
+  carregava `totais.vNF`. CORREÇÃO: a régua passa a usar o DONO
+  (`valorDoDocumento`, que conhece todas as formas — a lição do CIAP de
+  21/08); a projeção da Rotina carrega `valor`, `totalNota`, `totais.vNF`,
+  `totais.vServ`, `valores.valorServicos`, `valores.total`, `vNF`; a
+  importação manual passa a gravar `valorTotal` (só quando `totais.vNF` é
+  número — ausente continua ausente). E NFS-e sem valor legível ganhou
+  mensagem própria ("abra a nota e confira; reimporte o XML completo — não é
+  caso de manifestação"): NFS-e não tem "resumo da SEFAZ". REGRA: quem
+  pergunta "quanto vale este documento?" chama `valorDoDocumento`; e toda
+  projeção `.select()` que alimenta uma régua de valor precisa carregar as
+  formas que o dono lê.
+
+- **📭 "O QUE PRECISAMOS AGORA É O FECHAMENTO DE MÊS DE EMPRESAS SEM
+  MOVIMENTO"** (23/09, Paulo, E7 ASSESSORIA ESPORTIVA 08/2026: etapas 1 e 2
+  vermelhas — "nenhuma nota capturada", "sem notas para validar" — num mês em
+  que a empresa não emitiu nem recebeu nada; fim de mês trancado para sempre).
+  Zero nota ≠ zero movimento (ausência ≠ zero): o app não distingue "não
+  emitiu" de "não capturei", então não fecha sozinho. SAÍDA, no molde do
+  envio e da cobertura declarados: `sem-movimento-declarado.js` (PURO) +
+  `sem-movimento-store.js` (`rotina_sem_movimento_declarado`, id do
+  `idDoFechamento`, UMA query por competência) + POST
+  /api/admin/rotina-fiscal/sem-movimento-declarado (texto ≥ 15, data não
+  futura, autor; a rota RECUSA com 409 se houver documento na competência) +
+  botão "📭 Esta empresa não teve movimento no mês — declarar" no bloco de
+  fim de mês, só quando a etapa 1 trava com ZERO documento
+  (`podeDeclararSemMovimento`, decidido no backend e projetado em
+  `bloqueioDaEtapa`). A declaração fecha as etapas 1 e 2 como 'na', NOMEADA
+  (quem, quando, texto, "não tem prova de que nada foi emitido"), aplicada
+  DEPOIS do ajuste do ISS. E CAI sozinha se documento chegar depois: a etapa
+  volta à régua normal com a ressalva "havia declaração … N documento(s)
+  chegaram depois". REGRA: declaração nunca é quitação eterna — ela vale
+  enquanto o fato que a justificou (zero documento) continuar verdadeiro.
 
 - **👥 "PODE TIRAR, INSS, FGTS, CPP É DO DP"** (22/09, Paulo, decisão sobre a
   AFFITTARE 08/2026 cobrando FGTS/INSS na etapa 4). A regra de 18/08 valia só

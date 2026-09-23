@@ -171,3 +171,24 @@ export async function declararCoberturaForaDoCatalogo(p: {
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return data;
 }
+
+/**
+ * 📭 DECLARAR QUE A EMPRESA NÃO TEVE MOVIMENTO NA COMPETÊNCIA (23/09).
+ * Nenhuma régua mora aqui — piso do texto, data e autor vivem no backend
+ * (`sem-movimento-declarado.js`), e a rota recusa se houver documento no mês.
+ */
+export async function declararSemMovimento(p: {
+    empresaId: string; empresaCnpj?: string; competencia: string; comoFoi: string; quando: string;
+}): Promise<{ ok: boolean; error?: string; declaracao?: { texto: string } }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/sem-movimento-declarado', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}

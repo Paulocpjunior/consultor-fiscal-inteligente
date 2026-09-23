@@ -148,6 +148,9 @@ export function bloqueioDaEtapa(e) {
         // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
         // conserto, e declarar por cima apagaria o caminho.
         podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
+        // 📭 E a porta do SEM MOVIMENTO, pela mesma régua: só com zero documento
+        // (etapa 1). Com nota capturada não é "sem movimento".
+        podeDeclararSemMovimento: typeof e.podeDeclararSemMovimento === 'boolean' ? e.podeDeclararSemMovimento : null,
         // As obrigações NOMEADAS: é essa lista que a declaração precisa
         // mencionar, e é ela que a leitura compara depois.
         propostas: Array.isArray(e.propostas) ? e.propostas : null,

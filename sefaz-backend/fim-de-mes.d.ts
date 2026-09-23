@@ -77,6 +77,8 @@ export interface Bloqueio {
     podeDeclararEnvio: boolean | null;
     /** Idem para a obrigação que o catálogo não cobre (etapa 4). */
     podeDeclararCobertura: boolean | null;
+    /** 📭 Declarar "sem movimento" resolve? Só com zero documento (etapa 1). */
+    podeDeclararSemMovimento: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — o que a declaração cobre. */
     propostas: string[] | null;
     /** As causas do rito, nomeadas pelo dono do painel de envios. */

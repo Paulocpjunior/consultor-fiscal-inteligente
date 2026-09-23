@@ -35,6 +35,8 @@ export interface BloqueioFimDeMes {
      * prazo de outra UF e UF ausente TÊM conserto — ali a porta não aparece.
      */
     podeDeclararCobertura?: boolean | null;
+    /** 📭 Declarar "sem movimento" resolve ESTE bloqueio? Só com zero documento (etapa 1). */
+    podeDeclararSemMovimento?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
     /**
@@ -87,7 +89,9 @@ async function chamar(caminho: string, init?: RequestInit): Promise<any> {
     const data = await res.json().catch(() => ({}));
     // A recusa do backend vem COM os bloqueios nomeados — repassar só o texto
     // faria a tela perder justamente o que diz onde resolver.
-    if (!res.ok) return { ok: false, erro: data.erro || `HTTP ${res.status}`, bloqueios: data.bloqueios || [] };
+    // E os campos extras da recusa viajam junto (`jaFechada` + `fechamento`,
+    // 23/09): a tela precisa deles para mostrar o carimbo, não um erro.
+    if (!res.ok) return { ...data, ok: false, erro: data.erro || `HTTP ${res.status}`, bloqueios: data.bloqueios || [] };
     return data;
 }
 
