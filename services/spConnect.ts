@@ -196,12 +196,22 @@ export function filtrarConversas(
     const b = busca.trim().toLowerCase();
     return lista.filter((c) => {
         if (aba === 'nao-lidas' && !(c.naoLidas > 0)) return false;
+        // ✅ 'encerrados' é RECORTE DO BANCO (a rota devolve só as resolvidas),
+        // não um id de fila. Sem esta linha ela cairia no filtro de fila logo
+        // abaixo, `fila !== 'encerrados'` daria falso em TODAS, e a aba
+        // apareceria vazia — com o servidor tendo devolvido a lista certa.
+        if (aba === 'encerrados') return !b || casaBusca(c, b);
         if (aba !== 'todas' && aba !== 'nao-lidas' && (c.fila || 'recepcao') !== aba) return false;
         if (!b) return true;
-        return (c.nome || '').toLowerCase().includes(b)
-            || c.numero.includes(b.replace(/\D/g, '') || '§')
-            || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
+        return casaBusca(c, b);
     });
+}
+
+/** O texto casa com a conversa? Dono único — a aba de encerrados usa a MESMA. */
+function casaBusca(c: ConversaResumo, b: string): boolean {
+    return (c.nome || '').toLowerCase().includes(b)
+        || c.numero.includes(b.replace(/\D/g, '') || '§')
+        || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
 }
 
 /**

@@ -27,7 +27,11 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
     return data;
 }
 
-export const listarConversas = () =>
+/**
+ * `encerrados: true` pede a ABA DE ENCERRADOS (Paulo, 23/09) — **só admin**,
+ * e quem recusa é a ROTA (403), nunca o fato de o chip estar escondido.
+ */
+export const listarConversas = (encerrados = false) =>
     req<{
         conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null;
         papel: 'admin' | 'gestor' | 'colaborador';
@@ -35,7 +39,11 @@ export const listarConversas = () =>
         limiteLeitura?: number | null;
         /** ⚡ Frases do composer (config resolvida — vai de carona porque todo atendente já lê esta rota). */
         respostasRapidas?: string[];
-    }>('/api/admin/whatsapp/conversas');
+        /** Esta resposta É a aba de encerrados. */
+        encerradas?: boolean;
+        /** Quantas saíram da caixa nesta leitura — o número não some (farol honesto). */
+        encerradasOcultas?: number;
+    }>(`/api/admin/whatsapp/conversas${encerrados ? '?situacao=resolvida' : ''}`);
 
 /**
  * Mensagens de uma conversa — as 500 mais recentes. `antesDe` (o timestamp da
