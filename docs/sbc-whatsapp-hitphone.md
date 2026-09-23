@@ -580,12 +580,18 @@ eles: ele afrouxa para texto claro, não para DTLS. Se a oferta vier em
 `Couldn't negotiate ... (nothing)`.
 
 ⚠️ **ISSO É HIPÓTESE, NÃO CAUSA CARIMBADA.** Quem responde é **uma linha**: o
-`m=audio` do SDP que a Meta manda. Com o INVITE no log, ela se lê assim, dentro
-do SBC:
+`m=audio` do SDP que a Meta manda — e ela sai na **seção 7 do
+`sbc-diagnostico.sh`**, junto da contagem de falhas de negociação:
 
 ```bash
-sudo grep -A 25 "INVITE sip:" /var/log/asterisk/full | grep -m 5 "^m=audio"
+cd ~/consultor-fiscal-inteligente && gcloud compute ssh sbc-whatsapp \
+  --project=consultorfiscalapp --zone=us-west1-a \
+  --command='sudo bash -s --' < scripts/sbc-diagnostico.sh
 ```
+
+⚠️ **A seção 7 varre o log INTEIRO, não a janela** — de propósito: o erro de
+28/08 é das 11:03 e a varredura daquele dia olhou `08:0`. Recortar pela janela
+esconderia justamente a evidência que inverteu o caso.
 
 - Voltou `UDP/TLS/RTP/SAVPF` ⇒ é DTLS, e a correção é
   `media_encryption=dtls` (com `dtls_verify`, `dtls_cert_file` e
@@ -633,10 +639,15 @@ As três primeiras rodadas não valeram nada porque o SBC nasceu sem gravar —
 o silêncio não distinguia "não chegou" de "chegou e ninguém anotou". Só depois
 de provar que o gravador estava ligado é que o vazio virou prova.
 
-📌 **E O DIAGNÓSTICO MEDE A COISA ERRADA AGORA.** O `sbc-diagnostico.sh` conta
-INVITE — pergunta que já foi respondida (**chega**). O que decide hoje é o
-CONTEÚDO do INVITE: a linha `m=audio`. Enquanto ele não ler isso, uma rodada
-verde dele não quer dizer que a chamada completa.
+✅ **E O DIAGNÓSTICO PASSOU A MEDIR A PERGUNTA DE HOJE** (seção 7, 23/09): ele
+contava INVITE — dúvida que 28/08 encerrou. Agora conta as falhas de negociação
+e mostra o `m=audio`, e o **veredito parou de mandar à Meta**: janela vazia com
+falha de negociação no log diz *"há PROVA CONTRÁRIA neste mesmo log — a causa é
+NOSSA"* e lembra que o texto do chamado está suspenso.
+📌 **REGRA QUE FICA: quando o achado muda a pergunta, a FERRAMENTA muda junto.**
+Deixar o script contando INVITE manteria de pé a medição que produziu a
+conclusão errada — e ela responderia 🟡 com toda a confiança, apontando o
+suporte da Meta.
 
 ### ⛔ Texto do chamado (Meta / suporte da WABA) — SUSPENSO, NÃO ENVIAR
 

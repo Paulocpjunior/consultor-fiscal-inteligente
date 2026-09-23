@@ -295,6 +295,84 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
         expect(porBashS('--ao-vivo')).toMatch(/relógio DESTA VM/);
     });
 
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 23/09 — O DIAGNÓSTICO MEDIA UMA DÚVIDA MORTA.
+    //
+    // Ele contava INVITE, e em 28/08 o log respondeu isso de vez: a linha
+    // `meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)` só
+    // existe DEPOIS de um INVITE aceito no nosso endpoint. A chamada CHEGA e
+    // morre na mídia.
+    //
+    // 🚨 O CUSTO DE NÃO MEDIR ISSO ERA UM CHAMADO ERRADO: a varredura daquele
+    // dia olhou a janela "08:0", deu zero, e o veredito mandava a pessoa ao
+    // suporte da Meta — com o erro das 11:03 no MESMO arquivo. Medição de
+    // JANELA não vira conclusão sobre o OUTRO LADO.
+    // ════════════════════════════════════════════════════════════════════════
+    describe('🔴 a mídia é a pergunta de hoje — e o zero da janela não manda mais à Meta', () => {
+        const dirM = mkdtempSync(join(tmpdir(), 'sbc-midia-'));
+        const logM = join(dirM, 'full');
+        const envM = {
+            ...process.env,
+            LOG_FULL: logM,
+            LOGGER_CONF: join(dirM, 'logger.conf'),
+            ASTERISK_CONF: join(dirM, 'asterisk.conf'),
+            CDR_CSV: join(dirM, 'nao-existe.csv'),
+        };
+        // O log REAL de 28/08: o INVITE e o erro estão às 11:03, e quem
+        // procurar na janela das 08:0 não acha nada.
+        writeFileSync(logM, [
+            '[2026-08-28 11:03:37] VERBOSE[1] Received SIP request INVITE from meta',
+            'm=audio 5004 UDP/TLS/RTP/SAVPF 111 0 8',
+            "[2026-08-28 11:03:38] ERROR[35904] res_pjsip_session.c: meta: Couldn't"
+                + ' negotiate stream 0:audio-0:audio:sendrecv (nothing)',
+            '',
+        ].join('\n'));
+        writeFileSync(join(dirM, 'logger.conf'), 'full => notice,warning,error,verbose\n');
+        writeFileSync(join(dirM, 'asterisk.conf'), 'verbose = 3\n');
+
+        const rodar = (...args: string[]) =>
+            execFileSync('bash', ['-s', '--', ...args], {
+                input: script, env: envM, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+            });
+
+        it('mostra o m=audio, que é a ÚNICA linha que decide a causa', () => {
+            // Sem ela, trocar `media_encryption` é chute — e chute aqui já
+            // custou três rodadas.
+            expect(rodar('11:0')).toMatch(/UDP\/TLS\/RTP\/SAVPF/);
+        });
+
+        it('conta a falha de negociação e DIZ que o problema é nosso', () => {
+            const saida = rodar('11:0');
+            expect(saida).toMatch(/A META ENTREGA/);
+            expect(saida).toMatch(/falha\(s\) de negociação/);
+            expect(saida).toMatch(/NÃO é caso de Meta/);
+        });
+
+        it('🚨 e a janela VAZIA não manda mais abrir chamado na Meta', () => {
+            // ESTE é o caso de 28/08. Antes, zero na janela virava "o fato que
+            // falta no chamado da Meta"; agora ele diz que o log INTEIRO
+            // desmente isso, e que o texto do chamado está suspenso.
+            const saida = rodar('08:0');
+            expect(saida).toMatch(/NENHUM INVITE na janela/);
+            expect(saida).toMatch(/PROVA CONTRÁRIA/);
+            expect(saida).toMatch(/SUSPENSO/);
+        });
+
+        it('⚠️ e "não consegui contar" nunca vira "a mídia está boa"', () => {
+            // Mesma disciplina da seção 4: sem log, a seção 7 DIZ que não
+            // olhou — zero inventado aqui afirmaria áudio negociado sobre
+            // medição nenhuma.
+            const saida = execFileSync('bash', ['-s', '--', '11:0'], {
+                input: script,
+                env: { ...envM, LOG_FULL: join(dirM, 'sumiu') },
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/sem o log, não há como ver a negociação/);
+            expect(saida).not.toMatch(/0 falha\(s\) de negociação/);
+        });
+    });
+
     it('🚨 o desfecho "rodou no lugar errado" NÃO usa o helper — de propósito', () => {
         // Ali `$0` É um `.sh` que existe (é o Mac), e o helper devolveria o
         // MESMO comando que acabou de falhar. Unificar por elegância criaria
