@@ -55,7 +55,7 @@ import {
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
-import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario, podeVerEncerrados } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../services/sp-connect-message-origin.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
 import { interpretarConversaTxt } from '../../services/ultrafox-browser-parser.js';
@@ -416,6 +416,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    // ✅ Quem vê a aba de encerrados — a MESMA função que a rota usa para
+    // recusar. Ler `papel === 'admin' || papel === 'gestor'` aqui seria a
+    // segunda cópia da regra, e no dia em que ela mudar num lado só o chip
+    // acende contra um 403.
+    const veEncerrados = podeVerEncerrados(papel);
     // ✅ Quantas conversas encerradas saíram da caixa nesta leitura. O número
     // NÃO some: lista que encolhe sem dizer por quê vira suspeita de conversa
     // perdida (farol honesto).
@@ -4234,14 +4239,17 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {chip('todas', `Todas · ${conversas.length}`)}
                             {chip('nao-lidas', `Não lidas · ${naoLidasTotal}`)}
                             {filasChip.map((f) => chip(f.id, `${rotuloCurtoFila(f.id)} · ${contagemFila(f.id)}`))}
-                            {/* ✅ ENCERRADOS — só admin (Paulo, 23/09). Esconder o chip
-                                é conveniência; quem RECUSA é a rota, com 403. */}
-                            {papel === 'admin' && chip('encerrados', '✅ Encerrados')}
+                            {/* ✅ ENCERRADOS — admin e GESTOR (Paulo, 23/09: "gestor vê
+                                ABAS encerramos"). A pergunta tem dono no backend
+                                (`podeVerEncerrados`) e a tela lê o MESMO: chip aceso
+                                contra rota que recusa é o que dá "não funciona".
+                                Esconder o chip é conveniência; quem RECUSA é o 403. */}
+                            {veEncerrados && chip('encerrados', '✅ Encerrados')}
                         </div>
                         {/* O número não some: lista que encolhe sem dizer por quê vira
                             suspeita de conversa perdida. Só para quem PODE abrir a aba —
                             para o colaborador seria alarme sem ação. */}
-                        {papel === 'admin' && aba !== 'encerrados' && encerradasOcultas > 0 && (
+                        {veEncerrados && aba !== 'encerrados' && encerradasOcultas > 0 && (
                             <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {encerradasOcultas} atendimento(s) encerrado(s) fora desta lista — veja em <strong>✅ Encerrados</strong>.
                             </p>

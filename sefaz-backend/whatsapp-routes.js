@@ -56,7 +56,7 @@ import { registrarToken } from './whatsapp-push.js';
 import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
-    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada,
+    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada, podeVerEncerrados,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
@@ -507,16 +507,21 @@ router.get('/conversas', requireAuth, async (req, res) => {
             .catch(() => ({ data: () => null }));
         const cfgAtendimento = resolverConfig(cfgDoc.data());
         const respostasRapidas = cfgAtendimento.respostasRapidas;
-        // ═══ ✅ ABA DE ENCERRADOS — SÓ ADMIN (Paulo, 23/09) ═════════════════
+        // ═══ ✅ ABA DE ENCERRADOS — ADMIN E GESTOR (Paulo, 23/09) ═══════════
         // "uma ABA em especial com acesso aos admin somente para atendimentos
-        // encerrados/finalizados para que não ocupe a caixa do colaborador".
+        // encerrados/finalizados para que não ocupe a caixa do colaborador" —
+        // e, na sequência: *"gestor vê ABAS encerramos"*. Quem FECHA vê o que
+        // fechou (gestor encerra qualquer atendimento desde 16/08).
         //
         // 🔒 A trava é DA ROTA, não da tela: esconder o chip no navegador
         // deixaria `?situacao=resolvida` aberto para qualquer colaborador com
         // o link — é a régua do `allow write: if false` do fim de mês.
+        // A pergunta "quem pode?" tem DONO (`podeVerEncerrados`), lido também
+        // pela tela — regra repetida aqui e no React vira chip que acende
+        // contra rota que recusa.
         const soEncerradas = String(req.query?.situacao || '') === 'resolvida';
-        if (soEncerradas && papel !== 'admin') {
-            return res.status(403).json({ ok: false, error: 'A aba de encerrados é só para admin.' });
+        if (soEncerradas && !podeVerEncerrados(papel)) {
+            return res.status(403).json({ ok: false, error: 'A aba de encerrados é para admin e gestor.' });
         }
         let docsConversas = [];
         if (soEncerradas) {

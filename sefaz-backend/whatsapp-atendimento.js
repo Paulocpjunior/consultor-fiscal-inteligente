@@ -788,6 +788,32 @@ export function conversaEncerrada(conversa) {
 }
 
 /**
+ * Quem pode ABRIR a aba de encerrados.
+ *
+ * 📌 Paulo, 23/09, corrigindo a primeira versão ("admin somente"): *"gestor vê
+ * ABAS encerramos"*. A régua é a mesma do `podeEncerrar` logo acima — **quem
+ * FECHA tem de conseguir ver o resultado do próprio ato**. Gestor encerra
+ * qualquer atendimento desde 16/08; deixá-lo sem a aba era mandá-lo fechar no
+ * escuro.
+ *
+ * ⚠️ DONO ÚNICO de propósito: a rota recusa e a tela esconde o chip lendo
+ * ESTA função. Duas cópias de `'admin' || 'gestor'` — uma no Express, outra no
+ * React — é a duplicação que esta casa mais paga: um dia alguém muda a regra
+ * num lado, o chip acende e a rota devolve 403.
+ *
+ * 🔒 E a trava continua sendo a da ROTA. Esconder o chip é conveniência de
+ * tela; o que impede o colaborador com o link é o 403.
+ *
+ * (Sem preocupação de escopo por fila: `filasVisiveis` devolve `null` para
+ * gestor — ele já vê tudo —, então a aba dele é a mesma do admin, sem recorte
+ * a mais e sem teto mordendo só para ele.)
+ */
+export function podeVerEncerrados(papel) {
+    const p = String(papel || '').toLowerCase();
+    return p === 'admin' || p === 'gestor';
+}
+
+/**
  * Mensagem DE ENTRADA do cliente numa conversa encerrada REABRE o atendimento.
  *
  * ⚠️ Só a entrada reabre. Eco de saída (resposta nossa por outra plataforma) e

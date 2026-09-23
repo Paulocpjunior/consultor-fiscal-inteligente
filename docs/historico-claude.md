@@ -46,11 +46,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   `[]` e roda no timer de 30s — ler `aba` direto congelaria o valor da primeira
   renderização, e o refresh silencioso voltaria a pedir a caixa normal enquanto
   a pessoa olha os encerrados.
-  🚩 **DECISÃO A CONFIRMAR COM O PAULO**: ele disse *"admin somente"*, e é isso
-  que está no ar. Mas **gestor PODE encerrar** (`podeEncerrar`, decisão de
-  16/08) e não vê a aba — ou seja, fecha o atendimento e perde de vista o
-  resultado do próprio ato. Não mudei por conta própria: a fala dele é
-  explícita.
+  ✅ **DECISÃO DO PAULO, na sequência: *"gestor vê ABAS encerramos"***. A
+  primeira versão subiu "admin somente" porque era a fala literal, e eu marquei
+  a dúvida em vez de mudar por conta própria: **gestor PODE encerrar**
+  (`podeEncerrar`, 16/08) e ficaria fechando no escuro, sem ver o resultado do
+  próprio ato. Ele confirmou, e a regra virou **admin + gestor**.
+  📌 **E a permissão ganhou DONO (`podeVerEncerrados`), lido pela rota E pela
+  tela.** A primeira versão tinha `papel !== 'admin'` no Express e
+  `papel === 'admin'` no React — duas cópias da MESMA regra, e a mudança de
+  hoje provou o custo: mexer num lado só deixaria o chip aceso contra um 403,
+  que chega como *"não funciona"* sem erro nenhum no log. Ausência de papel
+  **não** vira permissão: perfil que não carrega dá porta fechada.
+  📌 **Sem recorte por fila para o gestor**: `filasVisiveis` já devolve `null`
+  para ele (*"gestor vê tudo"*, linha 90), então a aba dele é a mesma do admin
+  — nada de teto mordendo só para um dos dois.
   📌 **A trava é por VARREDURA dos ESCRITORES**, não por lista: eram três
   caminhos que recebem do cliente e só um reabria. Lista envelheceria no
   próximo canal — e envelheceria em silêncio, que é como este buraco nasceu.

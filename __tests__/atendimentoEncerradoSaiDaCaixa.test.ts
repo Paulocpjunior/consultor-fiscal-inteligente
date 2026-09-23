@@ -17,7 +17,7 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { conversaEncerrada, patchDeReabertura } from '../sefaz-backend/whatsapp-atendimento.js';
+import { conversaEncerrada, patchDeReabertura, podeVerEncerrados } from '../sefaz-backend/whatsapp-atendimento.js';
 import { filtrarConversas } from '../services/spConnect';
 import type { ConversaResumo } from '../services/spConnect';
 
@@ -107,16 +107,51 @@ describe('🚨 todo caminho que recebe do cliente sabe reabrir', () => {
     });
 });
 
+describe('✅ quem ABRE a aba de encerrados', () => {
+    it('admin e GESTOR abrem; colaborador não', () => {
+        // 📌 Paulo, 23/09, corrigindo o primeiro desenho ("admin somente"):
+        // *"gestor vê ABAS encerramos"*. É a régua do `podeEncerrar`: gestor
+        // encerra qualquer atendimento desde 16/08 — sem a aba ele fecharia
+        // no escuro, sem ver o resultado do próprio ato.
+        expect(podeVerEncerrados('admin')).toBe(true);
+        expect(podeVerEncerrados('gestor')).toBe(true);
+        expect(podeVerEncerrados('colaborador')).toBe(false);
+    });
+
+    it('e papel ausente ou desconhecido NÃO abre', () => {
+        // Ausência não vira permissão: se o perfil não carregar, o padrão é
+        // a porta fechada, nunca a lista de encerrados da carteira inteira.
+        expect(podeVerEncerrados(null)).toBe(false);
+        expect(podeVerEncerrados(undefined)).toBe(false);
+        expect(podeVerEncerrados('')).toBe(false);
+        expect(podeVerEncerrados('Gerente')).toBe(false);
+    });
+});
+
 describe('🔒 a aba de encerrados é recusada pela ROTA, não pela tela', () => {
     const rotas = readFileSync(join(raiz, 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+    const tela = readFileSync(join(raiz, 'components/SpConnect/index.tsx'), 'utf8');
 
-    it('pedir ?situacao=resolvida sem ser admin devolve 403', () => {
+    it('pedir ?situacao=resolvida sem poder devolve 403', () => {
         // Esconder o chip no navegador é conveniência. Se a trava fosse só da
         // tela, qualquer colaborador com o link leria os atendimentos
         // encerrados da carteira inteira — é a régua do `allow write: if false`
         // do fim de mês.
-        expect(rotas).toMatch(/soEncerradas && papel !== 'admin'/);
-        expect(rotas).toMatch(/A aba de encerrados é só para admin/);
+        expect(rotas).toMatch(/soEncerradas && !podeVerEncerrados\(papel\)/);
+        expect(rotas).toMatch(/A aba de encerrados é para admin e gestor/);
+    });
+
+    it('🚨 e a TELA lê o MESMO dono — não uma segunda cópia da regra', () => {
+        // ⚠️ Esta é a trava que importa no dia em que a regra mudar de novo
+        // (ela já mudou uma vez, hoje). Com `papel === 'admin' || papel ===
+        // 'gestor'` escrito também no React, mexer só no backend deixa o chip
+        // aceso contra uma rota que recusa — e isso chega como "não
+        // funciona", sem erro nenhum no log.
+        expect(tela).toMatch(/podeVerEncerrados/);
+        expect(tela).toMatch(/veEncerrados && chip\('encerrados'/);
+        // O rodapé do farol segue a MESMA permissão: número que o colaborador
+        // vê sem poder abrir a aba é alarme sem ação.
+        expect(tela).toMatch(/veEncerrados && aba !== 'encerrados'/);
     });
 
     it('e a lista normal exclui as encerradas pelo DONO, não por comparação solta', () => {
