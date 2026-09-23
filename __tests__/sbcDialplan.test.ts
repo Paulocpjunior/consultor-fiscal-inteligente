@@ -157,7 +157,14 @@ describe('a ENTRADA cai na URA que o Paulo decidiu', () => {
 
     it('🚨 trocar o destino NÃO é dito como conserto do bloqueio da Meta', () => {
         // Sem isto, quem ler "URA decidida" conclui que a ligação passou a
-        // funcionar — e ela não passou: o INVITE não chega ao tronco.
+        // funcionar — e ela não passou.
+        // ⚠️ ATUALIZADO EM 23/09: a CAUSA mudou, a trava não. Até 28/08 o
+        // motivo escrito aqui era "o INVITE não chega ao tronco"; o log do
+        // Asterisk provou que ele CHEGA e a sessão morre na negociação de
+        // mídia (`Couldn't negotiate stream ... (nothing)`, endpoint `meta`).
+        // Comentário que afirma um fato superado é a pior das duas: a próxima
+        // pessoa lê e acredita. O que a trava garante segue igual — o
+        // documento não pode vender a URA como conserto do bloqueio.
         const doc = readFileSync(join(process.cwd(), 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
         expect(doc).toMatch(/NÃO destrava a ligação/);
     });
