@@ -45,6 +45,19 @@ LOG_FULL="${LOG_FULL:-/var/log/asterisk/full}"
 CDR_CSV="${CDR_CSV:-/var/log/asterisk/cdr-csv/Master.csv}"
 LOGGER_CONF="${LOGGER_CONF:-/etc/asterisk/logger.conf}"
 ASTERISK_CONF="${ASTERISK_CONF:-/etc/asterisk/asterisk.conf}"
+# ☎️ A GRADE DE ATENDIMENTO DA META — fora dela a chamada NÃO é entregue, e
+# "nenhum INVITE" é a resposta CERTA, não um defeito.
+#
+# 🚨 23/09: duas rodadas foram gastas por causa disto. O teste saiu às 07:50
+# BRT e a janela abre às 08:00 — dez minutos antes. O script disse "nenhum
+# INVITE" e deixou a conclusão por conta de quem lia. As QUATRO falhas reais
+# do log (21/09 15:43, 22/09 11:07 e 13:52 BRT) caem todas DENTRO da grade.
+#
+# ⚠️ O valor NÃO é deduzido: é o `call_hours` que o `GET /settings` da Meta
+# devolve, registrado em docs/sbc-whatsapp-hitphone.md. Mudou lá, muda aqui
+# (ou passa por env) — carimbar horário de memória seria inventar cadastro.
+META_GRADE="${META_GRADE:-08:00-12:00,13:00-17:30}"
+META_TZ="${META_TZ:-America/Sao_Paulo}"
 # 🚨 A FLAG NÃO PODE VIRAR FILTRO DE BUSCA — 26/08, na primeira rodada de
 # verdade. `JANELA="$1"` engolia o `--ao-vivo`, ele descia até o `grep` e a
 # saída trazia TRÊS vezes `grep: unrecognized option '--ao-vivo'`. As buscas
@@ -102,6 +115,30 @@ if grep -qs '^full =>.*verbose' "$LOGGER_CONF"; then
 else
     echo "   ✗ logger.conf SEM verbose no 'full' — a linha do dialplan não é escrita."
     GRAVANDO="nao"
+fi
+# 🚨 23/09 — O GRAVADOR TEM DOIS INTERRUPTORES, E ESTA SEÇÃO SÓ VIA UM.
+# O `logger.conf` liga o log VERBOSE; quem escreve as MENSAGENS SIP (as linhas
+# de INVITE que a seção 4 conta) é o `pjsip set logger`, que é OUTRO botão e
+# some a cada restart. Sem ele, "0 INVITE" não é "não chegou" — é "ninguém
+# anotou o SIP", exatamente a armadilha de 25/08 um nível abaixo.
+#
+# ⚠️ E a pergunta é por RESULTADO, não por status: em vez de perguntar ao
+# Asterisk se o botão está ligado (resposta que varia de versão para versão),
+# procuro o RASTRO que ele deixa. Log de dias inteiros sem UMA linha de trace
+# SIP responde sozinho.
+TRACE_SIP="sim"
+if [ -f "$LOG_FULL" ]; then
+    TRACES=$(grep -cE "(Received|Transmitting) SIP (request|response)" "$LOG_FULL" 2>/dev/null)
+    [ "$?" -ge 2 ] && TRACES=""
+    if [ -z "$TRACES" ]; then
+        echo "   ⚪ não consegui contar as linhas de trace SIP"
+    elif [ "$TRACES" = "0" ]; then
+        echo "   ✗ ZERO linha de trace SIP no log — o 'pjsip set logger' está"
+        echo "     DESLIGADO. O INVITE não é escrito, então contá-lo não mede nada."
+        TRACE_SIP="nao"
+    else
+        echo "   ✓ trace SIP ligado ($TRACES linha(s) de mensagem SIP no log)"
+    fi
 fi
 if grep -qs '^verbose' "$ASTERISK_CONF"; then
     echo "   ✓ verbose persistido no asterisk.conf (sobrevive a restart)"
@@ -208,10 +245,92 @@ else
     echo "   🚨 NÃO CONSEGUI OLHAR: sem o log, não há como ver recusa."
 fi
 
-# ── 7. ARMAR A PRÓXIMA ──────────────────────────────────────────────────────
+# ── 6b. A HORA DE AGORA ESTÁ DENTRO DA GRADE DA META? ───────────────────────
+# Fora dela a Meta não entrega, e o silêncio do log é CORRETO. Sem esta
+# pergunta, "nenhum INVITE" às 07:50 parece defeito de entrega — foi o que
+# custou duas rodadas em 23/09.
+echo
+echo "── 6b. A hora de agora está dentro da grade de atendimento da Meta?"
+DENTRO_GRADE="indeterminado"
+AGORA_BRT=$(TZ="$META_TZ" date +%H:%M 2>/dev/null)
+DIA_SEMANA=$(TZ="$META_TZ" date +%u 2>/dev/null)   # 1=segunda ... 7=domingo
+if [ -z "$AGORA_BRT" ] || [ -z "$DIA_SEMANA" ]; then
+    echo "   ⚪ não consegui ler a hora em $META_TZ — grade não conferida."
+elif [ "$DIA_SEMANA" -gt 5 ] 2>/dev/null; then
+    echo "   ✗ HOJE É FIM DE SEMANA ($AGORA_BRT em $META_TZ) — a grade é seg-sex."
+    DENTRO_GRADE="nao"
+else
+    DENTRO_GRADE="nao"
+    # A comparação é de TEXTO "HH:MM", que ordena igual ao relógio — e é a
+    # única que não depende de aritmética de fuso (a armadilha de 22/08).
+    for FAIXA in $(echo "$META_GRADE" | tr ',' ' '); do
+        DE="${FAIXA%%-*}"; ATE="${FAIXA##*-}"
+        if [ "$AGORA_BRT" ">" "$DE" ] || [ "$AGORA_BRT" = "$DE" ]; then
+            if [ "$AGORA_BRT" "<" "$ATE" ] || [ "$AGORA_BRT" = "$ATE" ]; then
+                DENTRO_GRADE="sim"
+            fi
+        fi
+    done
+    if [ "$DENTRO_GRADE" = "sim" ]; then
+        echo "   ✓ $AGORA_BRT em $META_TZ — DENTRO da grade ($META_GRADE)"
+    else
+        echo "   ✗ $AGORA_BRT em $META_TZ — FORA da grade ($META_GRADE)."
+        echo "     A Meta NÃO entrega fora dela: 'nenhum INVITE' aqui é a"
+        echo "     resposta certa, não um defeito. Refaça dentro do horário."
+    fi
+fi
+
+# ── 7. A MÍDIA NEGOCIOU? ────────────────────────────────────────────────────
+# 🚨 ESTA É A PERGUNTA DE HOJE — 28/08 respondeu a anterior. O log trouxe
+#    `meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)`, e
+#    `meta` é o NOSSO endpoint pjsip: a sessão só existe depois de um INVITE
+#    ACEITO. Ou seja, "chegou INVITE?" está respondido (CHEGA) e contar linha
+#    de INVITE virou medição de uma dúvida morta.
+#
+# ⚠️ O QUE DECIDE A CAUSA É UMA LINHA: o `m=audio` do SDP que a Meta oferece.
+#    Ela separa as duas famílias — perfil de TRANSPORTE × CODEC — e sem ela
+#    qualquer conclusão é chute. O script MOSTRA a linha e diz o que cada
+#    resposta significa; ele NÃO escolhe, porque escolher aqui seria trocar
+#    `media_encryption` no escuro (o chute que já custou três rodadas).
+echo
+echo "── 7. A mídia negociou? (é AQUI que a chamada morre desde 28/08)"
+MIDIA_ERRO=""
+if [ -f "$LOG_FULL" ]; then
+    # Mesma disciplina da seção 4: exit 1 do grep é "contei e deu zero",
+    # exit >= 2 é "não consegui contar" — e os dois NÃO podem virar o mesmo
+    # número. Zero inventado aqui diria "a mídia está boa" sobre log nenhum.
+    MIDIA_ERRO=$(grep -ic "Couldn't negotiate stream" "$LOG_FULL" 2>/dev/null)
+    [ "$?" -ge 2 ] && MIDIA_ERRO=""
+
+    if [ -z "$MIDIA_ERRO" ]; then
+        echo "   ⚪ NÃO CONSEGUI CONTAR as falhas de negociação (a busca não rodou)."
+    else
+        echo "   ${MIDIA_ERRO} falha(s) de negociação de mídia no log INTEIRO"
+        grep -i "negotiate stream" "$LOG_FULL" 2>/dev/null | tail -5 | sed 's/^/   /'
+    fi
+
+    # ⚠️ A LINHA VEM DO LOG INTEIRO, não da janela, e é de propósito: o erro de
+    # 28/08 é das 11:03 e a varredura daquele dia olhou 08:0 — recortar pela
+    # janela esconderia justamente a evidência que inverteu o caso.
+    echo
+    echo "   O que a Meta OFERECE no SDP (linha m=audio):"
+    grep -i "m=audio" "$LOG_FULL" 2>/dev/null | tail -5 | sed 's/^/   /' \
+        || echo "   (nenhuma linha m=audio no log)"
+    echo "   ↳ UDP/TLS/RTP/SAVPF  ⇒ DTLS-SRTP. O endpoint está em"
+    echo "     media_encryption=sdes, que é OUTRO perfil — e o 'optimistic'"
+    echo "     NÃO faz ponte para DTLS, ele só afrouxa para texto claro."
+    echo "   ↳ RTP/SAVP ou RTP/AVP ⇒ NÃO é transporte. A conta volta para"
+    echo "     codec/direção, e aí o SDP INTEIRO é que responde."
+    echo "   ↳ nenhuma linha ⇒ o logger do pjsip estava desligado nesta"
+    echo "     tentativa. Rode com --ao-vivo, refaça a ligação e volte."
+else
+    echo "   🚨 NÃO CONSEGUI OLHAR: sem o log, não há como ver a negociação."
+fi
+
+# ── 8. ARMAR A PRÓXIMA ──────────────────────────────────────────────────────
 if [ "$AO_VIVO" = "sim" ]; then
     echo
-    echo "── 7. Captura ARMADA para a próxima ligação"
+    echo "── 8. Captura ARMADA para a próxima ligação"
     asterisk -rx "pjsip set logger on" 2>/dev/null | sed 's/^/   /'
     echo "   Faça a ligação AGORA pelo celular e depois rode (a janela sai do"
     echo "   relógio DESTA VM, não do Mac — os dois podem estar em fusos diferentes):"
@@ -248,16 +367,59 @@ elif [ -z "${ACHADOS:-}" ]; then
     echo "     seção 4 e rode de novo."
 elif [ "$ACHADOS" != "0" ]; then
     echo "  🔴 A META ENTREGA — chegou INVITE ($ACHADOS linha(s) na janela)."
-    echo "     Então o problema é NOSSO: roteamento até o ramal. Olhe a seção 6"
-    echo "     (recusas) e a seção 3 (o endpoint casou?). NÃO é caso de Meta."
+    echo "     Então o problema é NOSSO. NÃO é caso de Meta."
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "     E a seção 7 diz ONDE: $MIDIA_ERRO falha(s) de negociação de"
+        echo "     mídia. A chamada é aceita e morre no áudio — leia o m=audio"
+        echo "     da seção 7 ANTES de mexer em qualquer configuração."
+    else
+        echo "     Olhe a seção 7 (mídia), a 6 (recusas) e a 3 (o endpoint casou?)."
+    fi
+elif [ "$TRACE_SIP" = "nao" ]; then
+    # 🚨 O DESFECHO QUE FALTAVA. Antes, este caso caía no 🟡 e mandava abrir
+    # chamado na Meta — sobre um log em que o INVITE não teria sido escrito
+    # nem se tivesse chegado. É o "0 INVITEs com o gravador desligado" de
+    # 25/08, na metade do gravador que ninguém tinha conferido.
+    echo "  ⚪ NÃO DÁ PARA CONCLUIR — o trace SIP estava DESLIGADO."
+    echo "     O 'logger.conf' liga o verbose; quem escreve as mensagens SIP é"
+    echo "     o 'pjsip set logger', e ele some a cada restart do Asterisk."
+    echo "     Zero INVITE aqui não é 'a Meta não entregou': é 'o INVITE não"
+    echo "     seria escrito de qualquer jeito'. ⛔ NÃO abra chamado com isto."
+    echo "     Arme e refaça a ligação:"
+    comando_de_rodar "--ao-vivo"
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "  🔴 E MESMO ASSIM há $MIDIA_ERRO falha(s) de negociação de mídia no"
+        echo "     log (seção 7) — esse erro NÃO depende do trace SIP. Houve"
+        echo "     INVITE: a causa é NOSSA."
+    fi
+elif [ "$DENTRO_GRADE" = "nao" ]; then
+    # 🚨 23/09: sem este desfecho, teste às 07:50 BRT saía 🟡 apontando a Meta.
+    echo "  ⚪ NÃO DÁ PARA CONCLUIR — a rodada está FORA da grade da Meta."
+    echo "     Agora são $AGORA_BRT em $META_TZ, e a grade é $META_GRADE"
+    echo "     (seg-sex). Fora dela a Meta NÃO entrega, então zero INVITE é a"
+    echo "     resposta CERTA. ⛔ Não é defeito e não vira chamado."
+    echo "     Refaça a ligação dentro do horário e rode de novo."
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "  🔴 E o log guarda $MIDIA_ERRO falha(s) de negociação de mídia de"
+        echo "     tentativas ANTERIORES (seção 7): quando ela é entregue, ela"
+        echo "     chega e morre no áudio. A causa é NOSSA."
+    fi
 else
     echo "  🟡 NENHUM INVITE na janela, com o gravador LIGADO."
-    echo "     Isso aponta para a Meta não entregar — MAS só vale se a hora da"
-    echo "     tentativa estiver dentro do log, que vai de:"
+    echo "     ⚠️  E isto NÃO quer mais dizer 'a Meta não entrega': em 28/08 o"
+    echo "     log provou INVITE chegando (seção 7). Zero AQUI é zero NESTA"
+    echo "     janela — medição de janela não vira conclusão sobre o outro lado."
+    echo "     A janela conferida vai de:"
     echo "       ${LOG_DE:-?}"
     echo "       ${LOG_ATE:-?}"
-    echo "     Estando dentro, é ESTE o fato que falta no chamado da Meta"
-    echo "     (texto pronto em docs/sbc-whatsapp-hitphone.md)."
+    echo "     Antes de concluir: confira a hora da tentativa e olhe a seção 7,"
+    echo "     que varre o log INTEIRO. ⛔ O texto do chamado da Meta em"
+    echo "     docs/sbc-whatsapp-hitphone.md está SUSPENSO — não envie."
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "  🔴 E JÁ HÁ PROVA CONTRÁRIA NESTE MESMO LOG: $MIDIA_ERRO falha(s)"
+        echo "     de negociação de mídia. Houve INVITE fora desta janela — a"
+        echo "     causa é NOSSA, não da entrega."
+    fi
     if [ ! -f "$CDR_CSV" ]; then
         echo "  ⚠️  E o CDR NÃO existe nesta VM — ele é a prova que não depende de"
         echo "     verbose, e sem ele o log é a única testemunha. Vale conferir"
