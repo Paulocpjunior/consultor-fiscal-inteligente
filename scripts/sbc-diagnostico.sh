@@ -45,6 +45,19 @@ LOG_FULL="${LOG_FULL:-/var/log/asterisk/full}"
 CDR_CSV="${CDR_CSV:-/var/log/asterisk/cdr-csv/Master.csv}"
 LOGGER_CONF="${LOGGER_CONF:-/etc/asterisk/logger.conf}"
 ASTERISK_CONF="${ASTERISK_CONF:-/etc/asterisk/asterisk.conf}"
+# ☎️ A GRADE DE ATENDIMENTO DA META — fora dela a chamada NÃO é entregue, e
+# "nenhum INVITE" é a resposta CERTA, não um defeito.
+#
+# 🚨 23/09: duas rodadas foram gastas por causa disto. O teste saiu às 07:50
+# BRT e a janela abre às 08:00 — dez minutos antes. O script disse "nenhum
+# INVITE" e deixou a conclusão por conta de quem lia. As QUATRO falhas reais
+# do log (21/09 15:43, 22/09 11:07 e 13:52 BRT) caem todas DENTRO da grade.
+#
+# ⚠️ O valor NÃO é deduzido: é o `call_hours` que o `GET /settings` da Meta
+# devolve, registrado em docs/sbc-whatsapp-hitphone.md. Mudou lá, muda aqui
+# (ou passa por env) — carimbar horário de memória seria inventar cadastro.
+META_GRADE="${META_GRADE:-08:00-12:00,13:00-17:30}"
+META_TZ="${META_TZ:-America/Sao_Paulo}"
 # 🚨 A FLAG NÃO PODE VIRAR FILTRO DE BUSCA — 26/08, na primeira rodada de
 # verdade. `JANELA="$1"` engolia o `--ao-vivo`, ele descia até o `grep` e a
 # saída trazia TRÊS vezes `grep: unrecognized option '--ao-vivo'`. As buscas
@@ -232,6 +245,41 @@ else
     echo "   🚨 NÃO CONSEGUI OLHAR: sem o log, não há como ver recusa."
 fi
 
+# ── 6b. A HORA DE AGORA ESTÁ DENTRO DA GRADE DA META? ───────────────────────
+# Fora dela a Meta não entrega, e o silêncio do log é CORRETO. Sem esta
+# pergunta, "nenhum INVITE" às 07:50 parece defeito de entrega — foi o que
+# custou duas rodadas em 23/09.
+echo
+echo "── 6b. A hora de agora está dentro da grade de atendimento da Meta?"
+DENTRO_GRADE="indeterminado"
+AGORA_BRT=$(TZ="$META_TZ" date +%H:%M 2>/dev/null)
+DIA_SEMANA=$(TZ="$META_TZ" date +%u 2>/dev/null)   # 1=segunda ... 7=domingo
+if [ -z "$AGORA_BRT" ] || [ -z "$DIA_SEMANA" ]; then
+    echo "   ⚪ não consegui ler a hora em $META_TZ — grade não conferida."
+elif [ "$DIA_SEMANA" -gt 5 ] 2>/dev/null; then
+    echo "   ✗ HOJE É FIM DE SEMANA ($AGORA_BRT em $META_TZ) — a grade é seg-sex."
+    DENTRO_GRADE="nao"
+else
+    DENTRO_GRADE="nao"
+    # A comparação é de TEXTO "HH:MM", que ordena igual ao relógio — e é a
+    # única que não depende de aritmética de fuso (a armadilha de 22/08).
+    for FAIXA in $(echo "$META_GRADE" | tr ',' ' '); do
+        DE="${FAIXA%%-*}"; ATE="${FAIXA##*-}"
+        if [ "$AGORA_BRT" ">" "$DE" ] || [ "$AGORA_BRT" = "$DE" ]; then
+            if [ "$AGORA_BRT" "<" "$ATE" ] || [ "$AGORA_BRT" = "$ATE" ]; then
+                DENTRO_GRADE="sim"
+            fi
+        fi
+    done
+    if [ "$DENTRO_GRADE" = "sim" ]; then
+        echo "   ✓ $AGORA_BRT em $META_TZ — DENTRO da grade ($META_GRADE)"
+    else
+        echo "   ✗ $AGORA_BRT em $META_TZ — FORA da grade ($META_GRADE)."
+        echo "     A Meta NÃO entrega fora dela: 'nenhum INVITE' aqui é a"
+        echo "     resposta certa, não um defeito. Refaça dentro do horário."
+    fi
+fi
+
 # ── 7. A MÍDIA NEGOCIOU? ────────────────────────────────────────────────────
 # 🚨 ESTA É A PERGUNTA DE HOJE — 28/08 respondeu a anterior. O log trouxe
 #    `meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)`, e
@@ -343,6 +391,18 @@ elif [ "$TRACE_SIP" = "nao" ]; then
         echo "  🔴 E MESMO ASSIM há $MIDIA_ERRO falha(s) de negociação de mídia no"
         echo "     log (seção 7) — esse erro NÃO depende do trace SIP. Houve"
         echo "     INVITE: a causa é NOSSA."
+    fi
+elif [ "$DENTRO_GRADE" = "nao" ]; then
+    # 🚨 23/09: sem este desfecho, teste às 07:50 BRT saía 🟡 apontando a Meta.
+    echo "  ⚪ NÃO DÁ PARA CONCLUIR — a rodada está FORA da grade da Meta."
+    echo "     Agora são $AGORA_BRT em $META_TZ, e a grade é $META_GRADE"
+    echo "     (seg-sex). Fora dela a Meta NÃO entrega, então zero INVITE é a"
+    echo "     resposta CERTA. ⛔ Não é defeito e não vira chamado."
+    echo "     Refaça a ligação dentro do horário e rode de novo."
+    if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
+        echo "  🔴 E o log guarda $MIDIA_ERRO falha(s) de negociação de mídia de"
+        echo "     tentativas ANTERIORES (seção 7): quando ela é entregue, ela"
+        echo "     chega e morre no áudio. A causa é NOSSA."
     fi
 else
     echo "  🟡 NENHUM INVITE na janela, com o gravador LIGADO."

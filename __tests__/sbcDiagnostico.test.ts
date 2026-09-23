@@ -400,6 +400,47 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             expect(saida).not.toMatch(/NENHUM INVITE na janela, com o gravador LIGADO/);
         });
 
+        // ════════════════════════════════════════════════════════════════════
+        // ☎️ 23/09 — DUAS RODADAS GASTAS POR CAUSA DA GRADE DE ATENDIMENTO.
+        //
+        // O teste saiu às 07:50 BRT e a janela da Meta abre às 08:00. Ela NÃO
+        // entrega fora da grade, então "nenhum INVITE" era a resposta CERTA —
+        // e o script deixou a conclusão por conta de quem lia. As quatro
+        // falhas reais do log caem todas DENTRO (21/09 15:43, 22/09 11:07 e
+        // 13:52 BRT).
+        //
+        // É a mesma classe do trace SIP: concluir sobre uma medição que não
+        // tinha como acontecer.
+        // ════════════════════════════════════════════════════════════════════
+        it('🚨 rodada FORA da grade da Meta não vira defeito de entrega', () => {
+            // ⚠️ A JANELA NÃO EXISTE NO LOG, DE PROPÓSITO. Com uma janela que
+            // casa, o veredito para no 🔴 ("a Meta entrega") antes de chegar
+            // na grade, e a trava passaria sem medir nada.
+            // 🐛 DUAS FIXTURES MINHAS FALHARAM ANTES DESTA: '11:0' casava o
+            // INVITE, e '03:3' casava DENTRO de "11:03:37" — o filtro é
+            // substring, não hora. Fixture que não alcança o ramo é teste
+            // verde sobre código não exercitado.
+            const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
+                input: script,
+                // Grade impossível de casar: qualquer hora cai fora.
+                env: { ...envM, META_TZ: 'UTC', META_GRADE: '23:58-23:59' },
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/FORA da grade/);
+            expect(saida).toMatch(/NÃO DÁ PARA CONCLUIR — a rodada está FORA/);
+            expect(saida).toMatch(/não vira chamado/);
+        });
+
+        it('⚠️ e a grade NÃO é carimbada de memória — é parâmetro com fonte', () => {
+            // O valor vem do `call_hours` que o GET /settings da Meta devolve,
+            // registrado no documento. Cravar horário no código seria inventar
+            // cadastro de terceiro.
+            expect(script).toMatch(/META_GRADE="\$\{META_GRADE:-/);
+            expect(script).toMatch(/META_TZ="\$\{META_TZ:-/);
+            expect(script).toMatch(/call_hours/);
+        });
+
         it('⚠️ e "não consegui contar" nunca vira "a mídia está boa"', () => {
             // Mesma disciplina da seção 4: sem log, a seção 7 DIZ que não
             // olhou — zero inventado aqui afirmaria áudio negociado sobre
