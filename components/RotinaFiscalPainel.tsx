@@ -12,6 +12,7 @@
  * fechada — e vem com a ação e o botão que leva à tela certa.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import CredencialEmailFaixa from './CredencialEmailFaixa';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
@@ -141,6 +142,10 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
 
     return (
         <div className="space-y-4">
+            {/* 🛡️ O vigia da credencial do e-mail (24/09): acende para todo mundo
+                enquanto a Microsoft recusar — o alerta por e-mail não alcança
+                quem precisa quando é o e-mail que está morto. */}
+            <CredencialEmailFaixa />
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
