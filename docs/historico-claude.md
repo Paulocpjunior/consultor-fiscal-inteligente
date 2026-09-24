@@ -5,6 +5,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🖼️ LOGO GIGANTE NO E-MAIL — width="52" não basta** (24/09, e-mail de
+  prova do CCI, mesma casca do CFI: o leitor de e-mail do Paulo ignorou o
+  atributo e mostrou o PNG de 226×320 no tamanho natural). Régua tripla em
+  `sefaz-backend/email-layout.js`: atributo `width`+`height`, CSS inline
+  `width:52px;height:74px`, e a PRÓPRIA imagem pequena
+  (`sefaz-backend/assets/sp-logo-email-2x.png`, 104×147, 2× para retina —
+  arquivo NOVO; o `sp-logo-email.png` antigo ficou sem uso). Trava em
+  `__tests__/emailLayout.test.ts` lê o IHDR do PNG e confere a proporção da
+  altura declarada. O CCI recebeu a mesma correção no mesmo dia.
+
 - **🛡️ "PODE TRAVAR E PASSAR O MATA-BURROS! ISSO NÃO PODE VOLTAR A
   ACONTECER" + PORTE DO E-MAIL PARA O CCI** (24/09, Paulo, após o e-mail
   voltar). O defeito de fundo: o alerta noturno de saúde sai POR E-MAIL,

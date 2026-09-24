@@ -16,6 +16,28 @@ describe('montarLayoutEmail', () => {
         expect(html).toContain(CORES_FAROL.marca.de);
     });
 
+    // 24/09, e-mail de prova no CCI (mesma casca): o cliente de e-mail ignorou
+    // o width="52" e mostrou o PNG no tamanho natural (226×320) — logo gigante.
+    // A régua é tripla, porque cada cliente ignora uma das três: atributo
+    // width/height, CSS inline, e a PRÓPRIA imagem pequena (2× de 52 px).
+    it('o logo tem tamanho fixado por atributo, por CSS e pela própria imagem', () => {
+        const html = montarLayoutEmail({ titulo: 'T', conteudoHtml: '' });
+        const img = /<img [^>]*cid:sp-logo[^>]*>/.exec(html)?.[0] || '';
+        expect(img).toMatch(/\swidth="52"/);
+        expect(img).toMatch(/\sheight="\d+"/);
+        expect(img).toMatch(/width:52px/);
+        expect(img).toMatch(/height:\d+px/);
+        const { readFileSync } = require('fs');
+        const { join } = require('path');
+        const png = readFileSync(join(process.cwd(), 'sefaz-backend', 'assets', 'sp-logo-email-2x.png'));
+        const largura = png.readUInt32BE(16);
+        const altura = png.readUInt32BE(20);
+        expect(largura).toBeLessThanOrEqual(120);
+        expect(altura).toBeLessThanOrEqual(160);
+        const declarada = Number(/height="(\d+)"/.exec(img)?.[1]) / 52;
+        expect(Math.abs(altura / largura - declarada)).toBeLessThan(0.05);
+    });
+
     it('CTA só entra com URL http(s) — javascript: é descartado', () => {
         const html = montarLayoutEmail({
             titulo: 'T', conteudoHtml: '',
