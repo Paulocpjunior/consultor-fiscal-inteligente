@@ -678,6 +678,8 @@ export interface AuditoriaAviso {
     teams: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number; erros: { email: string; etapa: string | null; erro: string }[] };
 }
 export interface StatusAvisosResposta {
+    /** Token do Graph emitido de verdade (cacheado) — a AUDIÊNCIA certa não prova a credencial. */
+    credencialGraph: { ok: boolean; erro: string | null };
     agora: string; noExpediente: boolean; horario: unknown; avisoTeamsAtivo: boolean;
     teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
     dispositivos: number; prefs: Record<string, boolean>; filaSimulada: string;

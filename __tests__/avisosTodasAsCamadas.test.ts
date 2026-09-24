@@ -114,3 +114,27 @@ describe('🚨 o servidor responde "por que eu não recebi?" com a MESMA régua 
         expect(r).toMatch(/return res\.json\(\{ ok: true, teams, push/);
     });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔑 24/09, PRIMEIRO "TESTAR TUDO" REAL: a simulação disse "o sino tocaria" e o
+// envio caiu em AADSTS7000215 (segredo do app Notificacoes inválido no Secret
+// Manager). A AUDIÊNCIA estava certa; a CREDENCIAL, não — e a tela deixava
+// ler a primeira como garantia da segunda. Agora a credencial é medida por um
+// token de verdade e tem linha própria, antes da audiência.
+// ════════════════════════════════════════════════════════════════════════════
+describe('🔑 a credencial do Graph é PROVADA, não deduzida da audiência', () => {
+    it('/avisos/status emite um token de verdade (cacheado) e devolve o erro CRU quando falha', () => {
+        const r = rotas.slice(rotas.indexOf("router.get('/avisos/status'"), rotas.indexOf("router.post('/avisos/testar-tudo'"));
+        expect(r).toMatch(/await getGraphToken\(\)/);
+        expect(r).toMatch(/credencialGraph = \{ ok: false, erro: String\(e\?\.message \|\| e\)/);
+        expect(r).toMatch(/credencialGraph,/);
+    });
+
+    it('a tela mostra a credencial em linha PRÓPRIA, antes da audiência — e diz o raio do estrago', () => {
+        expect(tela).toMatch(/Credencial do Graph \(app Notificacoes\)/);
+        expect(tela.indexOf('Credencial do Graph (app Notificacoes)')).toBeLessThan(tela.indexOf('Audiência: se chegasse mensagem AGORA'));
+        // e-mail de guia e alertas usam o MESMO token: a pessoa precisa saber
+        expect(tela).toMatch(/nem e-mail de guia, nem alerta por e-mail/);
+    });
+});
+

@@ -3816,10 +3816,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </div>
                                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
                                         {avisosStatus && (
+                                            /* 🔑 A credencial vem ANTES da audiência, de propósito: no primeiro
+                                               teste real (24/09) a linha de baixo disse "tocaria" e o envio caiu
+                                               em AADSTS7000215 — a audiência estava certa, o segredo não. Ler a
+                                               simulação como garantia foi exatamente o erro; agora cada fato tem
+                                               a sua linha. */
+                                            <p className={`text-[10px] mb-0.5 ${avisosStatus.credencialGraph.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                                                {avisosStatus.credencialGraph.ok
+                                                    ? '🔑 Credencial do Graph (app Notificacoes): ✅ o Azure emitiu token.'
+                                                    : `🔑 Credencial do Graph (app Notificacoes): ❌ ${avisosStatus.credencialGraph.erro} — sem isto NENHUM aviso no Teams sai (nem e-mail de guia, nem alerta por e-mail).`}
+                                            </p>
+                                        )}
+                                        {avisosStatus && (
                                             <p className={`text-[10px] mb-1 ${avisosStatus.simulacao.teams.receberia ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
                                                 {avisosStatus.simulacao.teams.receberia
-                                                    ? `✅ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams tocaria.`
-                                                    : `❌ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams NÃO tocaria: ${avisosStatus.simulacao.teams.motivo}.`}
+                                                    ? `✅ Audiência: se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, você estaria na lista do sino${avisosStatus.credencialGraph.ok ? '' : ' — mas a credencial acima barra o envio'}.`
+                                                    : `❌ Audiência: se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams NÃO tocaria: ${avisosStatus.simulacao.teams.motivo}.`}
                                             </p>
                                         )}
                                         <label className="mb-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
