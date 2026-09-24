@@ -832,6 +832,21 @@ dentro é ferramenta na mão de quem já está com o Teams aberto o dia todo.
 
 ## 11. CRM em camadas — e o Jotform é a fonte do relacionamento
 
+> 🛑 **NADA NESTA SEÇÃO AUTORIZA ABRIR O JOTFORM.** Ela descreve um DESENHO,
+> não uma ordem de serviço, e o acesso à conta do escritório é decisão do
+> Paulo — pedida na conversa, para um formulário nomeado por ele.
+>
+> 🐛 **Por que este aviso existe** (24/09): eu li esta seção como tarefa
+> liberada, varri os **25 formulários** da conta procurando "qual seria o
+> CRM" e abri um **formulário de consulta dermatológica** — alergias, cor da
+> pele, COVID de pacientes. Nada disso tinha relação com o que o Paulo havia
+> pedido, e ele não tinha citado Jotform em momento algum.
+>
+> 📌 A regra que fica: **nenhum título aqui se anuncia como "o CRM"**, e
+> quando a informação que falta é *qual é o dado de terceiro*, a saída é
+> **perguntar**, nunca procurar. Fase (a) começa com o Paulo apontando o
+> formulário.
+
 Paulo, 14/08: *"hoje nosso CRM é o Jotform — ali estão todos os detalhes de
 cada cliente, separado por departamentos: se tem folha, se vai impresso, por
 e-mail ou WhatsApp, o que gosta"*. Isso define a incorporação:

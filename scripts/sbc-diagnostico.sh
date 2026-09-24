@@ -291,19 +291,20 @@ else
 fi
 
 # ── 7. A MÍDIA NEGOCIOU? ────────────────────────────────────────────────────
-# 🚨 ESTA É A PERGUNTA DE HOJE — 28/08 respondeu a anterior. O log trouxe
-#    `meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)`, e
-#    `meta` é o NOSSO endpoint pjsip: a sessão só existe depois de um INVITE
-#    ACEITO. Ou seja, "chegou INVITE?" está respondido (CHEGA) e contar linha
-#    de INVITE virou medição de uma dúvida morta.
+# ✅ 23/09: A CHAMADA COMPLETOU (entrou na grade, caiu na URA, teve áudio).
+#    Esta seção deixou de ser "onde a chamada morre" e virou **conferência de
+#    regressão**: se um dia voltar a falhar, é aqui que aparece.
 #
-# ⚠️ O QUE DECIDE A CAUSA É UMA LINHA: o `m=audio` do SDP que a Meta oferece.
-#    Ela separa as duas famílias — perfil de TRANSPORTE × CODEC — e sem ela
-#    qualquer conclusão é chute. O script MOSTRA a linha e diz o que cada
-#    resposta significa; ele NÃO escolhe, porque escolher aqui seria trocar
-#    `media_encryption` no escuro (o chute que já custou três rodadas).
+# ⚠️ E AS FALHAS QUE ESTÃO NO LOG SÃO VELHAS, de tentativas fora da grade.
+#    Contá-las como se fossem de agora foi o erro que este script já cometeu —
+#    por isso o número vem SEMPRE com a data da última ocorrência ao lado.
+#
+# 📌 A linha `m=audio` continua sendo mostrada porque ela é o que separa
+#    TRANSPORTE de CODEC num diagnóstico futuro. O script MOSTRA e não
+#    ESCOLHE: trocar `media_encryption` num tronco que funciona é como se
+#    quebra o que está de pé.
 echo
-echo "── 7. A mídia negociou? (é AQUI que a chamada morre desde 28/08)"
+echo "── 7. A mídia negociou? (conferência de regressão — em 23/09 negociou)"
 MIDIA_ERRO=""
 if [ -f "$LOG_FULL" ]; then
     # Mesma disciplina da seção 4: exit 1 do grep é "contei e deu zero",
@@ -314,8 +315,16 @@ if [ -f "$LOG_FULL" ]; then
 
     if [ -z "$MIDIA_ERRO" ]; then
         echo "   ⚪ NÃO CONSEGUI CONTAR as falhas de negociação (a busca não rodou)."
+    elif [ "$MIDIA_ERRO" = "0" ]; then
+        echo "   ✓ nenhuma falha de negociação no log INTEIRO"
     else
         echo "   ${MIDIA_ERRO} falha(s) de negociação de mídia no log INTEIRO"
+        # 🚨 A DATA AO LADO DO NÚMERO, SEMPRE. Sem ela, falha de 22/09 (fora
+        # da grade, antes de a chamada ser provada) lê-se como defeito de
+        # agora — foi exatamente assim que este script apontou para a Meta.
+        echo "   ⚠️  Número SEM data não diz nada: a chamada completou em 23/09."
+        echo "      Confira se a ÚLTIMA falha é anterior a isso — se for, é"
+        echo "      histórico, não defeito de hoje."
         grep -i "negotiate stream" "$LOG_FULL" 2>/dev/null | tail -5 | sed 's/^/   /'
     fi
 
@@ -335,6 +344,54 @@ if [ -f "$LOG_FULL" ]; then
     echo "     tentativa. Rode com --ao-vivo, refaça a ligação e volte."
 else
     echo "   🚨 NÃO CONSEGUI OLHAR: sem o log, não há como ver a negociação."
+fi
+
+# ── 7b. O ENDEREÇO SIP DA META (META_SIP_DESTINO) ───────────────────────────
+# 🎯 É O QUE FALTA PARA A SAÍDA, e ele só existe num lugar: no INVITE que a
+#    Meta já mandou. O documento diz "a ENTRADA destrava a SAÍDA" — a entrada
+#    aconteceu em 23/09, então o dado está no log DESTA VM, esperando ser lido.
+#
+# ⚠️ ESTE BLOCO NÃO ESCOLHE POR VOCÊ. Ele mostra os candidatos crus e, só
+#    quando há UM valor distinto, diz que é aquele. Vários candidatos = a
+#    pessoa decide olhando; nenhum = o trace estava desligado. Carimbar um
+#    endereço SIP deduzido mandaria a ligação do escritório para um estranho,
+#    que é a mesma família do prefixo redigitado à mão que o Paulo recusou.
+echo
+echo "── 7b. O endereço SIP da Meta (para habilitar a SAÍDA)"
+if [ -f "$LOG_FULL" ]; then
+    # O Contact do INVITE recebido é para onde se disca de volta. Pego só os
+    # sip:/sips: das linhas de Contact, tiro <>, ; e aspas, e deduplico.
+    CANDIDATOS=$(grep -ih "^Contact:" "$LOG_FULL" 2>/dev/null \
+        | grep -o "sips\?:[^>;\"]*" | sort -u)
+    # 🐛 ARMADILHA DA CASA, e eu caí nela aqui: `grep -c` SAI COM 1 quando a
+    # conta dá zero, então `$(... || echo 0)` imprimia "0" duas vezes e o
+    # `[ "$QUANTOS" = "0" ]` dava falso — o desfecho "nenhum candidato" caía
+    # no ramo de "vários", listando o vazio. É a mesma pegadinha que a seção 4
+    # já documenta; escrevi o bloco novo sem reler a lição do bloco velho.
+    if [ -z "$CANDIDATOS" ]; then
+        QUANTOS=0
+    else
+        QUANTOS=$(printf '%s\n' "$CANDIDATOS" | grep -c .)
+    fi
+    if [ "$QUANTOS" = "0" ]; then
+        echo "   ⚪ NENHUM Contact no log — e isso é sobre o GRAVADOR, não sobre"
+        echo "      a Meta: o cabeçalho só aparece com o trace SIP LIGADO."
+        echo "      Rode com --ao-vivo, peça uma ligação DENTRO da grade e volte."
+    elif [ "$QUANTOS" = "1" ]; then
+        echo "   ✓ UM candidato — este é o valor:"
+        printf '%s\n' "$CANDIDATOS" | sed 's/^/       /'
+        echo "     Para habilitar a saída, rode o setup com ele:"
+        echo "       sudo META_SIP_DESTINO='<o valor acima>' bash setup-sbc-whatsapp.sh"
+    else
+        echo "   ⚠️  $QUANTOS candidatos distintos — NÃO vou escolher por você:"
+        printf '%s\n' "$CANDIDATOS" | sed 's/^/       /'
+        echo "     Vários costumam ser tentativas de épocas diferentes. Pegue o"
+        echo "     do INVITE MAIS RECENTE (a seção 4 mostra o horário) — endereço"
+        echo "     velho disca para lugar nenhum, ou pior, para outro."
+    fi
+else
+    echo "   🚨 NÃO CONSEGUI OLHAR: sem o log não há INVITE, e sem INVITE não"
+    echo "      há endereço. Isto tem de rodar DENTRO da VM."
 fi
 
 # ── 8. ARMAR A PRÓXIMA ──────────────────────────────────────────────────────

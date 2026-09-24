@@ -3,6 +3,8 @@
 // O payload de exemplo segue a forma REAL do campo "messages" da Cloud API.
 // ============================================================================
 import { createHmac } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
     configWebhook, faltasDaConfigWebhook, responderVerificacao,
     assinaturaValida, extrairEventos, traduzirStatusEntrega,
@@ -345,5 +347,57 @@ describe('🚨 mensagemDoStatus — documento ausente é OUTRA plataforma, não 
         // documento existe, só não tem os campos — não é o caso do P. Leal.
         expect(mensagemDoStatus(true, null)).toBeNull();
         expect(saiuPorOutraPlataforma(mensagemDoStatus(true, null))).toBe(false);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ⚰️ 23/09 — O PAINEL DESCREVIA UM MUNDO QUE NÃO EXISTE MAIS
+//
+// O 📡 Recebimento (webhook) dizia, em produção, que o CFI recebia "em
+// paralelo com a plataforma de atendimento atual, que segue intocada" e que
+// "a leitura e a resposta das conversas continuam na plataforma atual — a
+// tela de atendimento do CFI é a próxima fase". Os dois textos nasceram
+// certos na F1 (13/08) e ficaram **mais de um mês errados**: desde 21/08 a
+// operação inteira responde pelo SP Connect.
+//
+// 🚨 POR QUE ISSO É MAIS CARO QUE UM COMENTÁRIO VELHO: este painel é onde se
+// decide **qual app remover da WABA** ao cortar um fornecedor. Quem abre para
+// decidir lê, no mesmo cartão, que o atendimento ainda vive na plataforma
+// antiga — e a decisão muda.
+//
+// É a quarta ocorrência da mesma classe em dois dias (o doc do SBC, o de-para
+// e o comentário do ALCANCE foram as outras três). O padrão não é desleixo de
+// escrita: é que **texto não tem trava**, então só a contradição com o mundo
+// o desmente, e ninguém está lá para ver.
+// ════════════════════════════════════════════════════════════════════════════
+describe('⚰️ o painel do canal não vende o inbox como "próxima fase"', () => {
+    const painel = readFileSync(join(process.cwd(), 'components/ConfigAdminModal.tsx'), 'utf8');
+
+    it('não diz que a leitura e a resposta continuam na plataforma antiga', () => {
+        expect(painel).not.toMatch(/continuam na plataforma atual/);
+        expect(painel).not.toMatch(/próxima fase do módulo Comunicação/);
+        expect(painel).not.toMatch(/plataforma de atendimento atual, que segue intocada/);
+    });
+
+    it('e diz quem de fato lê e responde hoje', () => {
+        expect(painel).toMatch(/SP Connect/);
+    });
+
+    it('🚨 a tela diz QUAL WABA está lendo — há CINCO com o mesmo nome', () => {
+        // 23/09, no corte da Ultra Fox: o portfólio da Meta mostra cinco
+        // contas do WhatsApp chamadas "BM - SP Assessoria Contábil". Uma
+        // tela que diz "assinados na WABA" sem dizer qual deixa remover um
+        // parceiro de uma conta e ele seguir ativo em outra — com o painel
+        // verde. O backend já devolvia o `wabaId`; só a tela o escondia.
+        expect(painel).toMatch(/webhook\.assinaturaWaba\.wabaId/);
+    });
+
+    it('🚨 app de TERCEIRO sai com o id ao lado — nome não decide remoção', () => {
+        // 23/09, no corte da Ultra Fox: dois apps "de terceiro" na lista
+        // (`Business Agent` e `f-bot`) e NENHUM chamado Ultra Fox. O nome na
+        // Meta não é escolhido por nós; o id é o que casa com o painel dela.
+        // Sem ele, "qual eu removo?" vira palpite — e o errado cala o
+        // recebimento do escritório inteiro.
+        expect(painel).toMatch(/de terceiro <span className="opacity-60">\(id \{a\.id\}\)/);
     });
 });

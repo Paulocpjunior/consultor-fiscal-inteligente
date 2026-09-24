@@ -350,6 +350,90 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
     // suporte da Meta — com o erro das 11:03 no MESMO arquivo. Medição de
     // JANELA não vira conclusão sobre o OUTRO LADO.
     // ════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    // 🎯 24/09 — O ENDEREÇO SIP DA META SAI DO LOG, e não é adivinhado.
+    //
+    // O documento diz, desde 25/08, que *"a ENTRADA destrava a SAÍDA"*: o
+    // `META_SIP_DESTINO` só existe dentro do INVITE que a Meta manda. A
+    // entrada aconteceu em 23/09, então o dado está no log da VM — o que
+    // faltava era alguém LER.
+    //
+    // ⚠️ E a régua aqui é a do prefixo que o Paulo recusou: endereço SIP
+    // deduzido manda a ligação do escritório para um estranho. Com um
+    // candidato o script afirma; com vários, ele MOSTRA e não escolhe.
+    // ════════════════════════════════════════════════════════════════════
+    describe('🎯 o META_SIP_DESTINO sai do log — e o script não inventa', () => {
+        const dirD = mkdtempSync(join(tmpdir(), 'sbc-destino-'));
+        const envD = {
+            ...process.env,
+            LOGGER_CONF: join(dirD, 'logger.conf'),
+            ASTERISK_CONF: join(dirD, 'asterisk.conf'),
+            CDR_CSV: join(dirD, 'nao-existe.csv'),
+            ...RELOGIO_FIXO,
+        };
+        writeFileSync(join(dirD, 'logger.conf'), 'full => notice,warning,error,verbose\n');
+        writeFileSync(join(dirD, 'asterisk.conf'), 'verbose = 3\n');
+
+        const rodarCom = (conteudo: string) => {
+            const log = join(dirD, `full-${Math.random().toString(36).slice(2)}`);
+            writeFileSync(log, conteudo);
+            return execFileSync('bash', ['-s', '--', '1999-01-01'], {
+                input: script,
+                env: { ...envD, LOG_FULL: log },
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+        };
+
+        it('UM candidato vira resposta, com o comando de habilitar junto', () => {
+            const saida = rodarCom('Contact: <sip:meta.whatsapp.net:5061;transport=tls>\n');
+            expect(saida).toMatch(/UM candidato/);
+            expect(saida).toMatch(/sip:meta\.whatsapp\.net:5061/);
+            // Resposta sem o que fazer com ela é meia resposta.
+            expect(saida).toMatch(/META_SIP_DESTINO='<o valor acima>'/);
+            // E o `;transport=tls` e os <> ficam de fora do valor.
+            expect(saida).not.toMatch(/sip:meta\.whatsapp\.net:5061;/);
+        });
+
+        it('🚨 VÁRIOS candidatos o script MOSTRA e NÃO escolhe', () => {
+            // Carimbar um endereço deduzido manda a ligação do escritório
+            // para um estranho — a família do prefixo redigitado à mão.
+            const saida = rodarCom(
+                'Contact: <sip:a.whatsapp.net:5061>\nContact: <sip:b.whatsapp.net:5061>\n',
+            );
+            expect(saida).toMatch(/2 candidatos distintos/);
+            expect(saida).toMatch(/NÃO vou escolher por você/);
+            expect(saida).toMatch(/sip:a\.whatsapp\.net/);
+            expect(saida).toMatch(/sip:b\.whatsapp\.net/);
+            expect(saida).not.toMatch(/UM candidato/);
+        });
+
+        it('🐛 NENHUM candidato é sobre o GRAVADOR — e não cai no ramo de "vários"', () => {
+            // ⚠️ ESTE TESTE PEGOU O DEFEITO DE VERDADE, na primeira execução.
+            // `grep -c` SAI COM 1 quando conta zero, então o `|| echo 0`
+            // disparava junto e `QUANTOS` virava "0\n0": a comparação com
+            // "0" dava falso e o desfecho "nenhum" caía no ramo de "vários",
+            // listando o vazio. É a MESMA pegadinha que a seção 4 do script
+            // já documenta — eu escrevi o bloco novo sem reler a lição do
+            // bloco velho.
+            const saida = rodarCom('[2026-09-23 11:03:37] INVITE sem trace SIP\n');
+            expect(saida).toMatch(/NENHUM Contact no log/);
+            expect(saida).toMatch(/sobre o GRAVADOR, não sobre/);
+            expect(saida).not.toMatch(/candidatos distintos/);
+            expect(saida).not.toMatch(/UM candidato/);
+        });
+
+        it('⚠️ e a contagem de falhas de mídia SEMPRE vem com a data ao lado', () => {
+            // Número sem data foi o que fez este script apontar para a Meta:
+            // falhas de 22/09 (fora da grade) lidas como defeito de agora.
+            const saida = rodarCom(
+                "[2026-09-22 16:52:10] ERROR meta: Couldn't negotiate stream 0:audio\n",
+            );
+            expect(saida).toMatch(/Número SEM data não diz nada/);
+            expect(saida).toMatch(/a chamada completou em 23\/09/);
+        });
+    });
+
     describe('🔴 a mídia é a pergunta de hoje — e o zero da janela não manda mais à Meta', () => {
         const dirM = mkdtempSync(join(tmpdir(), 'sbc-midia-'));
         const logM = join(dirM, 'full');
@@ -512,21 +596,34 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             const envsDeExecucao = fonte.match(/env: \{[^}]*\}/g) || [];
             expect(envsDeExecucao.length).toBeGreaterThan(0);
             for (const e of envsDeExecucao) {
-                // Ou herda um env já pinado, ou espalha o dono do pino, ou
-                // nomeia o parâmetro aqui mesmo.
+                // Basta herdar ALGUM env declarado no arquivo, ou espalhar o
+                // dono do pino direto.
                 //
-                // 🐛 A 1ª VERSÃO DESTA ALTERNÂNCIA NÃO ACEITAVA
-                // `RELOGIO_FIXO` — o próprio dono do pino. Ou seja: a trava
-                // que eu estava escrevendo CONTRA alarme falso nasceu dando
-                // alarme falso, sobre a linha que faz exatamente o que ela
-                // pede. Fica registrado porque é a quarta do gênero em dois
-                // dias, e a lição não é "tome cuidado": é que a asserção
-                // precisa listar o que ela ACEITA, não o que ela lembrou.
-                expect(e).toMatch(/\.\.\.(envM?|RELOGIO_FIXO)\b|META_GRADE|META_DIAS/);
+                // 🐛 DUAS VERSÕES DESTA ASSERÇÃO ACUSARAM CÓDIGO CERTO, e as
+                // duas pelo mesmo vício: ela ENUMERAVA NOMES. A 1ª não
+                // aceitava `RELOGIO_FIXO` — o próprio dono do pino. A 2ª
+                // aceitava `env`/`envM`/`RELOGIO_FIXO` e barrou o `envD`
+                // criado vinte minutos depois, que pina certinho.
+                //
+                // ✂️ Lista de nomes envelhece no próximo nome, e envelhece
+                // ACUSANDO QUEM FEZ CERTO. Por isso a regra virou estrutural,
+                // em duas metades: aqui basta herdar um `env*` declarado; a
+                // metade de baixo exige que TODO `env*` declarado pine.
+                // Juntas fecham a classe sem citar um nome sequer.
+                expect(e).toMatch(/\.\.\.(env\w*|RELOGIO_FIXO)\b|META_GRADE|META_DIAS/);
             }
-            // E os dois envs compartilhados PINAM de fato.
+            // A outra metade: TODO env declarado no arquivo pina o relógio.
+            // Indentação NÃO entra no recorte: `env` está em 4 espaços e
+            // `envM`/`envD` em 8. Prender a coluna foi o que deixou a fatia
+            // com 1 de 3 — e o guard abaixo é quem denunciou.
+            const declarados = fonte.match(/const env\w* = \{[\s\S]*?\n\s*\};/g) || [];
+            // 🚩 Se o recorte não achar nada, a metade de baixo passaria verde
+            // sem olhar nada — o defeito que este arquivo mais paga.
+            expect(declarados.length).toBeGreaterThanOrEqual(3);
+            for (const d of declarados) {
+                expect(d).toMatch(/\.\.\.RELOGIO_FIXO/);
+            }
             expect(fonte).toMatch(/RELOGIO_FIXO = \{ META_GRADE: '00:00-23:59', META_DIAS: '1 2 3 4 5 6 7' \}/);
-            expect((fonte.match(/\.\.\.RELOGIO_FIXO/g) || []).length).toBeGreaterThanOrEqual(2);
         });
 
         it('⚠️ e a grade NÃO é carimbada de memória — é parâmetro com fonte', () => {

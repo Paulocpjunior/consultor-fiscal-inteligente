@@ -112,7 +112,7 @@ Régua de paridade: os **prints reais do bot da Ultra Fox de 16/08**.
 | Vários NÚMEROS de WhatsApp | **[?]** | **apto desde 16/08**: catálogo de canais (o de hoje segue vindo do env e é o padrão), entrada roteada pelo `phone_number_id` da Meta e cadastro na ⚙️ — o token do 2º número vive no Cloud Run, nunca no banco. Falta só o número existir | ✅ apto |
 | Outros canais — Instagram | **[?]** | **DMs no MESMO inbox — ✅ PROVADO EM PRODUÇÃO 22/08** (Paulo: *"perfeito, perfeito, entrou e saiu"*): DM de teste chegou com o selo 📷 na Recepção e a resposta por texto voltou entregue (✓). Arquitetura: caso de uso "API do Instagram com login do Instagram" — webhook na tela do caso de uso (seção 3), assinatura pela chave do app do Instagram (env `INSTAGRAM_APP_SECRET`), resposta pelo `graph.instagram.com` com o token da conta (env `INSTAGRAM_ACCESS_TOKEN`); os dois via Secret Manager, ativados por deploy da esteira. O bot NÃO roda nas DMs (triagem humana na Recepção, decisão de projeto) e fora da janela da Meta não há template — espera-se o cliente escrever | ✅ **22/08** — acesso POR USUÁRIO (lista "Quem atende as DMs" na ⚙️ → 📷; decisão do Paulo: juliana.gomes@, rhsp@ e o admin master); anexo/áudio de SAÍDA no IG é fase futura (recusa nomeada na tela) |
 | Outros canais — Wix (site) | **[?]** | nenhum | 🔴 depende de saber qual recurso do Wix ele quer dizer (chat widget é API própria, sem nada em comum com a Meta) |
-| **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ SONDA o estado real na Meta e relata com o cru da resposta; ☎️ pedido de permissão na conversa; SBC próprio (Asterisk, TLS 5061) apontado no tronco da HitPhone | 🔴 **BLOQUEADO NA META, medido em 25/08** — e o bloqueio é dos DOIS lados. **Saída**: código **131055**, *"Graph API calls are not allowed for SIP enabled numbers"* — em modo SIP quem disca é o tronco, então não existe (nem pode existir) botão de ligar no app. **Entrada**: com todos os interruptores da Meta LIGADOS, o 🔌 verde até o SBC e o gravador do Asterisk **provado ligado**, a chamada das 14h52 — dentro da janela — saiu *"Não atendida"* no celular e o tronco **não registrou CDR nem INVITE** em três conferências. A Meta aceita a chamada e **não entrega**. Chamado aberto (texto pronto em `docs/sbc-whatsapp-hitphone.md`). 🆕 **26/08:
+| **Chamada de voz/vídeo** (liberada pela Meta Brasil) | **[?]** | ⚙️ → ☎️ SONDA o estado real na Meta e relata com o cru da resposta; ☎️ pedido de permissão na conversa; SBC próprio (Asterisk, TLS 5061) apontado no tronco da HitPhone | 🟡 **A ENTRADA FUNCIONA (23/09); a SAÍDA é impossível por desenho, não por defeito.** **Entrada**: ligação real do Paulo caiu na URA com áudio nos dois sentidos — Meta → SBC → HitPhone de ponta a ponta. ⚰️ O *"a Meta aceita e não entrega"* que esta célula afirmou de 25/08 a 23/09 estava **errado**: todas aquelas janelas caíram **fora da grade `call_hours`** da Meta (seg–sex 08:00–12:00 e 13:00–17:30 em America/Sao_Paulo, contra uma VM em UTC). Fora da grade, "nenhum INVITE" é a resposta CERTA. **Chamado na Meta: DESCARTADO** — não abrir. **Saída**: segue 🔴, e é definitivo — código **131055**, *"Graph API calls are not allowed for SIP enabled numbers"*: em modo SIP quem disca é o tronco, então **não existe nem pode existir botão de ligar no app** pela Graph API. Click-to-call, se vier, sai pelo TRONCO. Detalhe em `docs/sbc-whatsapp-hitphone.md`. 
 a chamada passou a TOCAR uma vez** (antes era recusada de saída) e o caminho
 até o SBC foi provado **a partir do endereço que a própria Meta guarda** —
 DNS → 35.185.197.118, TLSv1.2, certificado público válido e **SIP OPTIONS 200
@@ -205,13 +205,26 @@ neste documento (e, quando faltar, vira fila de construção):
 relatórios de volume/tempo, presença, respostas rápidas configuráveis,
 busca dentro da thread, CRM/Jotform.
 
-🔴 **E a CHAMADA DE VOZ não é bloqueante, apesar do vermelho** — a distinção
-importa porque a régua deste documento é *"enquanto houver 🔴 em linha
-bloqueante, a resposta é NÃO"*. Ela não bloqueia por dois motivos: **a Ultra
-Fox também não faz** (a linha dela é **[?]**, e ninguém do escritório atende
-ligação de WhatsApp hoje), e o bloqueio **não é nosso** — é da Meta não
-entregar o INVITE no tronco. Esperar por isso seria manter a mensalidade de
-uma plataforma por um recurso que ela também não tem.
+🟡 **E a CHAMADA DE VOZ continua não sendo bloqueante — agora por um motivo
+melhor** (atualizado em 23/09). A distinção importa porque a régua deste
+documento é *"enquanto houver 🔴 em linha bloqueante, a resposta é NÃO"*.
+
+- **A entrada FUNCIONA**: a ligação do cliente cai na URA, com áudio. O que
+  faltava era discar dentro da grade `call_hours` da Meta, não configuração.
+- **A saída é 🔴 definitivo, e não por defeito**: em modo SIP a Graph API
+  recusa (`131055`) porque quem disca é o tronco. Não é algo a consertar.
+- **A Ultra Fox também não faz** (a linha dela é **[?]**, e ninguém do
+  escritório atende ligação de WhatsApp hoje).
+
+Ou seja: segurar o corte por causa da voz seria manter a mensalidade de uma
+plataforma por um recurso que **ela não tem e que aqui já funciona** na
+direção que importa.
+
+⚠️ **E fica o registro de por que esta linha esteve errada por um mês**: de
+25/08 a 23/09 ela afirmou *"a Meta aceita a chamada e não entrega"* — com
+medições verdadeiras por trás. Todas as janelas conferidas caíram fora da
+grade. **Medição verdadeira levando a conclusão falsa** é a armadilha que este
+documento existe para não repetir, e ela pegou justamente o documento.
 
 **Sequência recomendada**: ~~fechar os 3 bloqueantes~~ ✅ 16/08 →
 ~~ligar o bot no PILOTO, com a Ultra Fox de pé~~ ✅ 17/08 → ~~**ensaio com
@@ -225,13 +238,68 @@ do cancelamento**: (1) ✅ ~~backup COMPLETO exportado e importado pelo ⚙️ �
 confirmado e bot respondendo~~ — **[Paulo, 22/08]** ligado "a dias", com a
 operação real inteira no SP Connect desde 21/08; (3) ✅ ~~um dia de operação
 sem a equipe abrir a Ultra Fox~~ — dias de operação real corridos.
-**⇒ SOBRAM DOIS ATOS, os dois no dia do cancelamento**: (a) o **export
-incremental FINAL** da Ultra Fox (contatos/mensagens desde 21/08) →
-⚙️ → 📥 (reimportar não duplica); (b) **cancelar** — e, cancelada,
-conferir no painel de webhook da ⚙️ Config Admin (CFI) que o app DELA
-saiu da lista de assinados da WABA: enquanto assinado, o fornecedor
-antigo continua RECEBENDO cópia de toda mensagem de cliente, o que depois
-do contrato é problema de LGPD, não de conveniência.
+**⇒ SOBRAM DOIS ATOS — e a ORDEM DELES MUDOU EM 23/09** (Paulo: *"não estamos
+usando a Ultra Fox há mais de 1 mês"*). Este parágrafo foi escrito em 21/08
+supondo o cancelamento logo em seguida; com um mês de desuso, a urgência
+inverteu:
+
+> 📌 **O QUE O PAINEL DA META MOSTROU EM 23/09** (prints do Paulo), para não
+> se refazer esta busca:
+> - **O app do CFI é o `API_Oficial`**, id `1197412879225626`, propriedade do
+>   BM - SP Assessoria Contábil, com o usuário de sistema `cfi-whatsapp`. Bate
+>   com o `✓ este é o nosso` do painel (que vem do `debug_token`).
+> - **App de terceiro NÃO aparece** em Configurações → Apps: lá só estão os do
+>   portfólio (`SP TV Corporativa` e `API_Oficial`). Terceiro entra como
+>   **PARCEIRO da WABA** — e é de lá que sai. Caminho: Configurações → Contas
+>   do WhatsApp → a conta → aba **Parceiros**.
+> - Eram **dois parceiros com controle total**: **WABot Partners** e **Social
+>   Intents** (correspondem aos apps `Business Agent` e `f-bot`). Nenhum se
+>   chama Ultra Fox — **o nome do app na Meta não é escolhido por nós**, então
+>   nome nunca decide remoção.
+> - ⚠️ **O portfólio tem CINCO contas do WhatsApp com o nome IDÊNTICO.** A do
+>   número do CFI é a `917501217467560` — o painel 📡 passou a mostrar o id ao
+>   lado do rótulo justamente por isso. Remover parceiro numa conta **não** o
+>   tira das outras.
+> - 🚨 **REMOVER O PARCEIRO NÃO DESASSINA O APP DELE** — medido em 24/09, com
+>   reconsulta fresca: o Paulo removeu **WABot Partners** e **Social Intents**
+>   da WABA, e a lista de `subscribed_apps` continuou **idêntica**
+>   (`Business Agent` e `f-bot` ainda lá). São dois registros distintos na
+>   Meta: acesso do NEGÓCIO × assinatura do APP.
+>   ⚠️ **E nós não temos como tirar**: o `DELETE /{waba-id}/subscribed_apps`
+>   remove a assinatura **do app que faz a chamada** — com o nosso token só
+>   desassinaríamos o `API_Oficial`, que é o oposto. Se um dia se tentar
+>   passar um app id, saiba que **a Meta ignorando o parâmetro derruba o
+>   recebimento do escritório** (recuperável pelo botão "Assinar o app do CFI
+>   na WABA", mas com janela de mensagem perdida) — só fora do expediente.
+>   ✂️ **O caminho que sobra**: pedir ao próprio fornecedor (com o token dele é
+>   um comando) ou abrir ticket na Meta. Enquanto constarem, **não se pode
+>   afirmar que ninguém mais recebe cópia** — e cancelar o contrato resolve a
+>   mensalidade, não o dado.
+> - ✅ **A cobrança é DIRETA com a Meta, no cartão do Paulo** (ele, 23/09):
+>   nenhum parceiro carrega a linha de crédito. Era o único risco de remover
+>   parceiro com controle total — remover junto a linha derrubaria o ENVIO,
+>   não o recebimento. Não se aplica aqui.
+
+1. 🔴 **TIRAR O APP DELES DA WABA — agora, e independente do cancelamento.**
+   ⚙️ Config Admin (CFI) → 📡 Recebimento (webhook) → *"Apps assinados na
+   WABA"*: remover o marcado `— de terceiro`. Enquanto assinado, o fornecedor
+   **continua recebendo cópia de toda mensagem de cliente**, e há um mês isso
+   não tem mais contrapartida nenhuma — o *"fica assinada de propósito, é a
+   rede de segurança"* valia enquanto a equipe podia precisar dela.
+   ⚠️ **Não remover nada** com o aviso âmbar *"não consegui perguntar à Meta
+   qual app é o nosso"* na tela: ali, ausência de marca é **"não sei"**, não
+   "não é nosso", e remover o errado cala o recebimento do escritório inteiro.
+2. **Cancelar** o contrato — isso virou questão de mensalidade, não de dado.
+   ⚠️ Antes, **um olhar** na Ultra Fox (não um export formal): há conversa
+   depois de 21/08 que não se reconheça do SP Connect? Se não houver, não há o
+   que exportar; se houver, exportar e trazer pelo ⚙️ → 📥 (reimportar não
+   duplica). É o único passo irreversível, e plataforma cancelada não devolve
+   export.
+
+📌 **Por que o export saiu de "ato obrigatório" para "conferência"**: com a
+equipe inteira no SP Connect desde 21/08, mensagem de cliente chegou **nos
+dois** (o app deles seguia assinado) e quem RESPONDEU foi o SP Connect. O que
+estaria só lá é o que ninguém atendeu — que é justamente o que o olhar procura.
 
 ⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
 conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as
