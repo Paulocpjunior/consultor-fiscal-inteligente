@@ -669,3 +669,25 @@ export interface RelatorioAtendimento {
 }
 export const relatorioAtendimento = (dias: number) =>
     req<RelatorioAtendimento>(`/api/admin/whatsapp/relatorio?dias=${dias}`);
+
+// ─── 🔔 Avisos: o painel que responde "por que eu não recebi?" (24/09) ───────
+export interface SimulacaoAviso { receberia: boolean; motivo: string | null }
+export interface AuditoriaAviso {
+    em: string; titulo: string;
+    push: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number };
+    teams: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number; erros: { email: string; etapa: string | null; erro: string }[] };
+}
+export interface StatusAvisosResposta {
+    agora: string; noExpediente: boolean; horario: unknown; avisoTeamsAtivo: boolean;
+    teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+    dispositivos: number; prefs: Record<string, boolean>; filaSimulada: string;
+    simulacao: { push: SimulacaoAviso; teams: SimulacaoAviso };
+    ultimoAviso: AuditoriaAviso | null;
+}
+export interface TesteTudoResposta {
+    teams: { ok: true } | { ok: false; etapa: string; erro: string };
+    push: { ok: true; enviados: number; aparelhos: number; mortos: number } | { ok: false; etapa: string; erro: string; mortos?: number };
+    teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+}
+export const statusAvisos = () => req<StatusAvisosResposta>('/api/admin/whatsapp/avisos/status');
+export const testarTodosAvisos = () => req<TesteTudoResposta>('/api/admin/whatsapp/avisos/testar-tudo', { method: 'POST' });

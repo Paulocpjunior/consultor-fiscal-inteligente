@@ -52,12 +52,12 @@ import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaCon
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { cruzarNumerosComCadastro, sugestaoParaNumero } from './whatsapp-vinculo-telefone.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
-import { registrarToken } from './whatsapp-push.js';
-import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
+import { registrarToken, destinatariosDoPush, destinatariosDoAvisoTeams } from './whatsapp-push.js';
+import { COLECAO_TOKENS, lerUsuariosComToken, enviarPushTeste } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada, podeVerEncerrados,
-    podeIniciarTemplateNaConversa,
+    podeIniciarTemplateNaConversa, dentroDoHorario,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
@@ -2456,6 +2456,85 @@ router.get('/vinculo-sugestoes', requireAdmin, async (req, res) => {
 // celulares. Quem recebe o quê é decidido no envio, pela MESMA régua de fila
 // do inbox — registrar token não dá acesso a nada.
 
+// ─── 🔔 AVISOS — o painel que responde "por que eu não recebi?" (24/09) ─────
+// Paulo: "quando chega mensagem, não estamos recebendo notificação" e "olhei
+// em configurações e não achei o campo". Duas coisas faltavam: um LUGAR com
+// as quatro camadas (som, pop-up, celular, Teams) e a RESPOSTA por pessoa —
+// a régua de audiência já dizia o motivo de cada veto; ninguém a mostrava.
+// A simulação abaixo usa as MESMAS funções do fan-out real, com uma conversa
+// sintética na primeira fila que a pessoa vê: se ela receberia AGORA, e se
+// não, por quê. Régua única, nunca uma segunda cópia.
+router.get('/avisos/status', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const uid = req.user?.uid || '_';
+        const [cfgDoc, ultimoDoc, tokDoc, usuarios] = await Promise.all([
+            db.collection('whatsapp_config').doc('atendimento').get().catch(() => ({ data: () => null })),
+            db.collection('whatsapp_config').doc('ultimo_aviso').get().catch(() => ({ data: () => null, exists: false })),
+            db.collection(COLECAO_TOKENS).doc(uid).get().catch(() => ({ data: () => null })),
+            lerUsuariosComToken(db),
+        ]);
+        const config = resolverConfig(cfgDoc.data());
+        const eu = usuarios.find((u) => u.uid === uid) || null;
+        const { filas: minhasFilas } = await perfilAtendimento(db, req.user);
+        const filaSintetica = minhasFilas === null ? null : (minhasFilas[0] || null);
+        const conversa = { fila: filaSintetica, canal: 'whatsapp' };
+        const agora = new Date();
+        const simular = (fn) => {
+            if (!eu) return { receberia: false, motivo: 'seu usuário não está no cadastro central (users)' };
+            const r = fn({ usuarios: [eu], conversa, config, agora, autorDaMensagem: null });
+            if (r.alvos.length) return { receberia: true, motivo: null };
+            return { receberia: false, motivo: r.fora[0]?.motivo || 'motivo não informado' };
+        };
+        const push = simular(destinatariosDoPush);
+        const teams = config.avisoTeamsAtivo
+            ? simular(destinatariosDoAvisoTeams)
+            : { receberia: false, motivo: 'aviso no Teams DESLIGADO na ⚙️ (chave geral)' };
+        const tok = tokDoc.data() || {};
+        return res.json({
+            ok: true,
+            agora: agora.toISOString(),
+            noExpediente: config.horario ? dentroDoHorario(config.horario, agora) : true,
+            horario: config.horario || null,
+            avisoTeamsAtivo: Boolean(config.avisoTeamsAtivo),
+            teamsStatus: statusAvisoTeams(),
+            dispositivos: Array.isArray(tok.tokens) ? tok.tokens.length : 0,
+            prefs: tok.prefs || {},
+            filaSimulada: filaSintetica || 'recepcao',
+            simulacao: { push, teams },
+            ultimoAviso: ultimoDoc.exists ? ultimoDoc.data() : null,
+        });
+    } catch (e) {
+        console.error('[whatsapp/avisos/status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 🧪 Testa as duas portas que dependem do SERVIDOR (celular e Teams) para a
+// pessoa logada. Som e pop-up são do navegador — a tela dispara os dois no
+// mesmo clique. Cada canal volta com o próprio resultado e o próprio motivo;
+// um não esconde o outro.
+router.post('/avisos/testar-tudo', requireAuth, async (req, res) => {
+    try {
+        const email = req.user?.email;
+        const uid = req.user?.uid;
+        const titulo = '🧪 SP Connect — teste de avisos';
+        const corpo = 'Se você está vendo isto, este canal está funcionando.';
+        const [teams, push] = await Promise.all([
+            email
+                ? enviarAvisoTeams({ email, titulo, corpo }).catch((e) => ({ ok: false, etapa: 'excecao', erro: e.message }))
+                : Promise.resolve({ ok: false, etapa: 'sem-email', erro: 'Sessão sem e-mail — saia e entre de novo.' }),
+            uid
+                ? enviarPushTeste({ uid, titulo, corpo }).catch((e) => ({ ok: false, etapa: 'excecao', erro: e.message }))
+                : Promise.resolve({ ok: false, etapa: 'sem-sessao', erro: 'Sessão inválida.' }),
+        ]);
+        return res.json({ ok: true, teams, push, teamsStatus: statusAvisoTeams() });
+    } catch (e) {
+        console.error('[whatsapp/avisos/testar-tudo]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/push/token', requireAuth, async (req, res) => {
     try {
         const uid = req.user?.uid;
@@ -2489,7 +2568,10 @@ router.post('/push/prefs', requireAuth, async (req, res) => {
         if (!uid) return res.status(401).json({ ok: false, error: 'sessão inválida' });
         const p = req.body?.prefs || {};
         const prefs = {};
-        for (const k of ['som', 'popup', 'push', 'pushForaDoExpediente']) {
+        // `avisoTeams` entrou em 24/09: a régua de audiência já lia o opt-out
+        // (whatsapp-push.js), mas a rota descartava a chave — ligar/desligar na
+        // tela não tinha como chegar ao banco.
+        for (const k of ['som', 'popup', 'push', 'pushForaDoExpediente', 'avisoTeams']) {
             if (typeof p[k] === 'boolean') prefs[k] = p[k];
         }
         await getDb().collection(COLECAO_TOKENS).doc(uid).set({ prefs }, { merge: true });
