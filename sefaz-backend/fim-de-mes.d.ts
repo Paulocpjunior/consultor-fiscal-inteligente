@@ -83,6 +83,14 @@ export interface Bloqueio {
     propostas: string[] | null;
     /** As causas do rito, nomeadas pelo dono do painel de envios. */
     causas: string[] | null;
+    /** 🔎 As notas que travam a etapa 2, nomeadas. */
+    notas: NotaNomeada[] | null;
+    notasCortadas: number;
+}
+export interface NotaNomeada {
+    chave: string | null; numero: string | number | null; tipo: string | null;
+    emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null;
+    motivo: 'resumo' | 'nfse-sem-valor';
 }
 
 /**

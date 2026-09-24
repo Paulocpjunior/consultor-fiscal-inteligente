@@ -700,3 +700,32 @@ describe('🚨 nota importada à mão NÃO é "resumo da SEFAZ": o valor sai do 
         for (const campo of ["'totais.vNF'", "'totais.vServ'", "'valores.total'", "'valores.valorServicos'"]) expect(src).toContain(campo);
     });
 });
+
+// ── 24/09 (B & T 08/2026): "não consegui achar a nota que está pedindo ciência" ──
+describe('🔎 a etapa 2 NOMEIA a nota que trava (chave, número, emitente)', () => {
+    it('resumo da SEFAZ sai com chave e emitente; viaja no próximo passo', () => {
+        const r: any = montarRotinaFiscal({
+            empresa: { nome: 'B & T', cnpj: '11111111000191' }, competencia: '2026-08',
+            documentos: [
+                { chave: CHAVE_55, schema: 'resNFe', tipo: 'NFe', numero: 4321, emitente: { nome: 'FORNECEDOR LTDA', cnpj: '22222222000191' }, dhEmi: '2026-08-14T10:00:00-03:00', direcao: 'entrada' },
+                doc({ direcao: 'saida', chave: CHAVE_55.replace(/1$/, '2') }),
+            ],
+            apuracao: { fonte: 'lucro', totalImpostos: 10 }, tarefas: [tarefa({ status: 'concluida' })], envios: [],
+        });
+        const e2 = etapaDe(r, 'validacao');
+        expect(e2.status).toBe('atencao');
+        expect(e2.notas).toHaveLength(1);
+        expect(e2.notas[0]).toMatchObject({ chave: CHAVE_55, numero: 4321, emitente: 'FORNECEDOR LTDA', emitenteCnpj: '22222222000191', motivo: 'resumo' });
+        expect(r.proximoPasso.id).toBe('validacao');
+        expect(r.proximoPasso.notas[0].chave).toBe(CHAVE_55);
+    });
+    it('o fim de mês projeta as notas no bloqueio, e as telas as mostram', () => {
+        const { bloqueioDaEtapa } = require('../sefaz-backend/fim-de-mes.js');
+        const b = bloqueioDaEtapa({ id: 'validacao', ordem: 2, nome: 'Validar', status: 'atencao', notas: [{ chave: 'x' }], notasCortadas: 0 });
+        expect(b.notas).toEqual([{ chave: 'x' }]);
+        const fs = require('fs'); const path = require('path');
+        for (const f of ['components/FimDeMesBloco.tsx', 'components/RotinaFiscalPainel.tsx']) {
+            expect(fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).toContain('cole a chave (ou o nº) na busca');
+        }
+    });
+});

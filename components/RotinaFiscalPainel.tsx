@@ -408,6 +408,20 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                 </p>
                                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">{p.resumo}</p>
                                                 {p.acao && <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">→ {p.acao}</p>}
+                                                {/* 🔎 A nota NOMEADA (24/09, B & T 08/2026). */}
+                                                { ((p).notas || []).length > 0 && (
+                                                    <ul className="mt-1 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
+                                                        {(p).notas!.map((n, i) => (
+                                                            <li key={n.chave || i} className="font-mono break-all">
+                                                                {n.motivo === 'resumo' ? '📄 Resumo' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
+                                                                {n.emitente ? ` · ${n.emitente}` : ''}{n.dhEmi ? ` · ${String(n.dhEmi).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                                                {n.chave ? <span className="block text-[10px] text-slate-500 dark:text-slate-400">chave {n.chave}</span> : null}
+                                                            </li>
+                                                        ))}
+                                                        {((p).notasCortadas || 0) > 0 && <li className="text-slate-500">e mais {(p).notasCortadas} — mostrando {(p).notas!.length}</li>}
+                                                        <li className="text-[10px] text-slate-500 dark:text-slate-400">Na Central de XMLs, cole a chave (ou o nº) na busca — o selo "Resumo" marca a nota sem o XML completo.</li>
+                                                    </ul>
+                                                )}
                                             </div>
                                             <button
                                                 onClick={() => onIrPara?.(p.id, r.empresa)}

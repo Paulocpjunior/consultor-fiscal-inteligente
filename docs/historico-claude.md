@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔎 "NÃO CONSEGUI ACHAR A NOTA QUE ESTÁ PEDINDO CIÊNCIA NA MOVIMENTAÇÃO
+  DA B & T DO MÊS 08"** (24/09, Paulo). A etapa 2 dizia "1 nota(s) sem
+  valor/itens (resumo da SEFAZ)" e mandava manifestar — sem dizer QUAL nota.
+  Contar sem nomear é mandar procurar. CORREÇÃO: a etapa 2 devolve `notas`
+  (até 20: chave, número, tipo, emitente/CNPJ, emissão, motivo
+  resumo|nfse-sem-valor) + `notasCortadas`; a projeção da Rotina carrega
+  `dhEmi`/`dataEmissao`/`prestador`/`serie`; `proximoPasso` e
+  `bloqueioDaEtapa` carregam a lista; o card da Rotina e o bloco do fim de
+  mês listam cada nota com a chave e a instrução "cole a chave na busca da
+  Central de XMLs — o selo Resumo marca a nota". REGRA: pendência que aponta
+  documento diz o documento (chave), nunca só a contagem.
 - **🔔 "NÃO ESTAMOS RECEBENDO NOTIFICAÇÃO" + "OLHEI EM CONFIGURAÇÕES E NÃO
   ACHEI O CAMPO"** (24/09, Paulo: *"como ativar de forma mais extravagante
   possível e habilitar de todas as formas"*).

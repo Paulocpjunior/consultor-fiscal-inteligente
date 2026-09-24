@@ -13,6 +13,12 @@
  */
 import { getAuth } from 'firebase/auth';
 
+export interface NotaNomeada {
+    chave: string | null; numero: string | number | null; tipo: string | null;
+    emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null;
+    motivo: 'resumo' | 'nfse-sem-valor';
+}
+
 export interface BloqueioFimDeMes {
     id: string;
     ordem: number;
@@ -45,6 +51,9 @@ export interface BloqueioFimDeMes {
      * `null` fora da etapa 5.
      */
     causas?: string[] | null;
+    /** 🔎 As notas que travam a etapa 2, nomeadas (chave, número, emitente). */
+    notas?: NotaNomeada[] | null;
+    notasCortadas?: number;
 }
 
 export interface FechamentoCompetencia {
