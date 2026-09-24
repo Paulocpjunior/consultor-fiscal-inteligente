@@ -243,6 +243,28 @@ usando a Ultra Fox há mais de 1 mês"*). Este parágrafo foi escrito em 21/08
 supondo o cancelamento logo em seguida; com um mês de desuso, a urgência
 inverteu:
 
+> 📌 **O QUE O PAINEL DA META MOSTROU EM 23/09** (prints do Paulo), para não
+> se refazer esta busca:
+> - **O app do CFI é o `API_Oficial`**, id `1197412879225626`, propriedade do
+>   BM - SP Assessoria Contábil, com o usuário de sistema `cfi-whatsapp`. Bate
+>   com o `✓ este é o nosso` do painel (que vem do `debug_token`).
+> - **App de terceiro NÃO aparece** em Configurações → Apps: lá só estão os do
+>   portfólio (`SP TV Corporativa` e `API_Oficial`). Terceiro entra como
+>   **PARCEIRO da WABA** — e é de lá que sai. Caminho: Configurações → Contas
+>   do WhatsApp → a conta → aba **Parceiros**.
+> - Eram **dois parceiros com controle total**: **WABot Partners** e **Social
+>   Intents** (correspondem aos apps `Business Agent` e `f-bot`). Nenhum se
+>   chama Ultra Fox — **o nome do app na Meta não é escolhido por nós**, então
+>   nome nunca decide remoção.
+> - ⚠️ **O portfólio tem CINCO contas do WhatsApp com o nome IDÊNTICO.** A do
+>   número do CFI é a `917501217467560` — o painel 📡 passou a mostrar o id ao
+>   lado do rótulo justamente por isso. Remover parceiro numa conta **não** o
+>   tira das outras.
+> - ✅ **A cobrança é DIRETA com a Meta, no cartão do Paulo** (ele, 23/09):
+>   nenhum parceiro carrega a linha de crédito. Era o único risco de remover
+>   parceiro com controle total — remover junto a linha derrubaria o ENVIO,
+>   não o recebimento. Não se aplica aqui.
+
 1. 🔴 **TIRAR O APP DELES DA WABA — agora, e independente do cancelamento.**
    ⚙️ Config Admin (CFI) → 📡 Recebimento (webhook) → *"Apps assinados na
    WABA"*: remover o marcado `— de terceiro`. Enquanto assinado, o fornecedor
