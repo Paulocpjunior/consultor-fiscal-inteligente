@@ -90,7 +90,13 @@ export const iniciarConversa = (p: {
     templateDireto?: { nome: string; idioma: string };
     variaveisPosicionais?: string[];
 }) =>
-    req<{ numero: string; messageId: string; opcoes?: string[]; faltando?: string[]; acao?: string }>(
+    req<{
+        numero: string; messageId: string; opcoes?: string[]; faltando?: string[]; acao?: string;
+        /** O texto que o cliente RECEBEU (corpo aprovado preenchido) — é o que o balão e o aviso mostram. */
+        texto?: string;
+        /** Regra da Meta: template NÃO abre a janela de 24h; só a resposta do cliente abre. */
+        janelaAbreSoComResposta?: boolean;
+    }>(
         '/api/admin/whatsapp/conversas/iniciar',
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
 

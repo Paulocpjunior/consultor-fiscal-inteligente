@@ -814,6 +814,31 @@ export function podeVerEncerrados(papel) {
 }
 
 /**
+ * Pode-se iniciar um TEMPLATE nesta conversa? Dono único da recusa 409 da
+ * rota `/conversas/iniciar`.
+ *
+ * A regra de sempre: conversa ABERTA e EM CONDUÇÃO por OUTRO recusa — um
+ * template no meio seria uma segunda voz na thread do cliente.
+ *
+ * 🚨 24/09: a regra recusava TAMBÉM quem conduz. Foi escrita para o "✚ Nova"
+ * (número digitado, sem contexto), onde "alguém já atende" é motivo legítimo.
+ * Com o botão "Enviar template para (nome)" DENTRO da conversa, o colaborador
+ * que conduz clicaria no próprio atendimento e levaria *"em condução por
+ * você"*. Quem conduz é justamente quem PODE — é a voz da conversa.
+ *
+ * Devolve `{ ok: true }` ou `{ ok: false, emConducaoPor }`. Conversa
+ * inexistente, resolvida ou sem dono: ok.
+ */
+export function podeIniciarTemplateNaConversa(conversa, email) {
+    if (!conversa || typeof conversa !== 'object') return { ok: true };
+    const status = String(conversa.status ?? 'aberta').toLowerCase();
+    const dono = conversa.atribuidoA ? String(conversa.atribuidoA).toLowerCase() : '';
+    if (status !== 'aberta' || !dono) return { ok: true };
+    if (email && dono === String(email).toLowerCase()) return { ok: true };
+    return { ok: false, emConducaoPor: conversa.atribuidoA };
+}
+
+/**
  * Mensagem DE ENTRADA do cliente numa conversa encerrada REABRE o atendimento.
  *
  * ⚠️ Só a entrada reabre. Eco de saída (resposta nossa por outra plataforma) e

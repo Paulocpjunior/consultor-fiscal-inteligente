@@ -21,6 +21,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { filaParaTemplate } from '../services/spConnect';
+import { podeIniciarTemplateNaConversa } from '../sefaz-backend/whatsapp-atendimento.js';
+import { renderizarCorpoTemplate } from '../sefaz-backend/whatsapp-cloud.js';
 
 const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
 
@@ -101,5 +103,87 @@ describe('✅ filaParaTemplate — exercitada, não varrida', () => {
 
     it('e a tela CONSOME o dono — não reimplementa a escolha', () => {
         expect(tela).toMatch(/filaParaTemplate\(conversa\.fila, filasChip, nc\.departamento\)/);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🚨 24/09, O PRIMEIRO USO REAL DO BOTÃO — três coisas que o print mostrou
+//
+// O Paulo clicou, o template saiu (✓✓)… e a tela: (1) mostrou o balão como
+// `📋 iniciarconversa:` e NADA depois — um template sem variável virava só o
+// nome; (2) não disse que a janela continua fechada (regra da Meta), então
+// ele clicou DE NOVO e o cliente recebeu duas vezes; (3) o painel passou a
+// dizer "Atribuída a: ninguém ainda" porque o pós-envio substituía a conversa
+// REAL por um stub com `atribuidoA: null`.
+//
+// E uma quarta, que o print NÃO mostrou mas o código sim: a recusa 409
+// barrava o PRÓPRIO condutor — escrita para o ✚ Nova, onde "alguém já
+// atende" é motivo; dentro da conversa, quem conduz é justamente quem pode.
+// ════════════════════════════════════════════════════════════════════════════
+describe('✅ podeIniciarTemplateNaConversa — exercitada', () => {
+    it('conduzida por OUTRO recusa, e diz quem', () => {
+        const r = podeIniciarTemplateNaConversa({ status: 'aberta', atribuidoA: 'ana@sp.com' }, 'vilson@sp.com');
+        expect(r.ok).toBe(false);
+        expect((r as any).emConducaoPor).toBe('ana@sp.com');
+    });
+
+    it('🚨 conduzida por MIM libera — quem conduz é a voz da conversa', () => {
+        expect(podeIniciarTemplateNaConversa({ status: 'aberta', atribuidoA: 'vilson@sp.com' }, 'vilson@sp.com').ok).toBe(true);
+        // e-mail não diferencia maiúscula
+        expect(podeIniciarTemplateNaConversa({ status: 'aberta', atribuidoA: 'Vilson@SP.com' }, 'vilson@sp.com').ok).toBe(true);
+    });
+
+    it('sem dono, resolvida ou inexistente: ok', () => {
+        expect(podeIniciarTemplateNaConversa({ status: 'aberta', atribuidoA: null }, 'x@sp.com').ok).toBe(true);
+        expect(podeIniciarTemplateNaConversa({ status: 'resolvida', atribuidoA: 'ana@sp.com' }, 'x@sp.com').ok).toBe(true);
+        expect(podeIniciarTemplateNaConversa(null, 'x@sp.com').ok).toBe(true);
+    });
+
+    it('e a rota CONSOME o dono', () => {
+        const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotas).toMatch(/podeIniciarTemplateNaConversa\(cx, req\.user\?\.email\)/);
+    });
+});
+
+describe('✅ renderizarCorpoTemplate — o balão mostra o que o cliente recebeu', () => {
+    it('preenche {{n}} na ordem', () => {
+        expect(renderizarCorpoTemplate('Olá {{1}}, sua guia de {{2}} venceu.', ['Ana', 'DAS']))
+            .toBe('Olá Ana, sua guia de DAS venceu.');
+    });
+
+    it('🚨 template SEM variável devolve o corpo inteiro — era o caso do print', () => {
+        // `iniciarconversa` não tem {{n}}: antes o balão ficava `📋 iniciarconversa:`.
+        expect(renderizarCorpoTemplate('Olá! Aqui é a SP Assessoria. Como podemos ajudar?', []))
+            .toBe('Olá! Aqui é a SP Assessoria. Como podemos ajudar?');
+    });
+
+    it('⚠️ variável que faltou FICA como {{n}} — nunca vira vazio', () => {
+        expect(renderizarCorpoTemplate('Olá {{1}}, {{2}}.', ['Ana'])).toBe('Olá Ana, {{2}}.');
+        expect(renderizarCorpoTemplate('{{1}}', [''])).toBe('{{1}}');
+    });
+
+    it('e a rota grava o texto RENDERIZADO, com o fallback dito', () => {
+        const rotas = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
+        expect(rotas).toMatch(/texto: corpoRenderizado \|\| resumo/);
+        expect(rotas).toMatch(/corpoIndisponivel: !corpoRenderizado/);
+        // e devolve à tela o que saiu + que a janela não abriu
+        expect(rotas).toMatch(/janelaAbreSoComResposta: true/);
+    });
+});
+
+describe('🚨 depois do envio a tela não mente nem cala', () => {
+    it('o pós-envio reabre a conversa REAL, não o stub', () => {
+        // "Atribuída a: ninguém ainda" logo após mandar — era o stub.
+        expect(tela).toMatch(/const lista = await recarregar\(true\)/);
+        expect(tela).toMatch(/abrir\(real \|\| nova\)/);
+    });
+
+    it('e DIZ que a janela só abre com a resposta do cliente', () => {
+        expect(tela).toMatch(/A janela de 24h só abre quando o cliente responder/);
+        expect(tela).toMatch(/Não reenvie: o cliente já recebeu/);
+    });
+
+    it('o aviso é DESTA conversa — trocar de conversa o apaga', () => {
+        expect(tela).toMatch(/templateEnviado\.numero !== sel\?\.numero\) setTemplateEnviado\(null\)/);
     });
 });

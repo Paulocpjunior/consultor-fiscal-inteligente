@@ -36,6 +36,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ✂️ Trava em `__tests__/templateSemRedigitarNumero.test.ts`, cobrando o
   CAMINHO DO DADO (número, nome e fila saindo da conversa), não a existência do
   botão.
+  🚨 **O PRIMEIRO USO REAL (24/09, print do Paulo) MOSTROU TRÊS BURACOS — e o
+  código, um quarto**: (1) o balão saía `📋 iniciarconversa:` e NADA — o
+  resumo era "nome + variáveis", e template sem variável virava só o nome; ele
+  leu como "não apareceu a mensagem padrão" e **clicou de novo: o cliente
+  recebeu o template duas vezes** (09:39 e 09:40, ✓✓). O corpo aprovado sempre
+  esteve na Meta; faltava lê-lo ao gravar (`renderizarCorpoTemplate`, pura;
+  variável que faltou FICA `{{n}}`, nunca vira vazio). (2) A tela não dizia que
+  **template não abre a janela** (regra da Meta) — agora diz, com o texto que
+  saiu, a hora e *"não reenvie: o cliente já recebeu"*. (3) *"Atribuída a:
+  ninguém ainda"* logo após o envio: o pós-envio substituía a conversa REAL
+  (que o `recarregar` já trazia) por um stub com `atribuidoA: null` — quem
+  decide é a lista fresca. (4) A recusa 409 barrava o PRÓPRIO condutor: foi
+  escrita para o ✚ Nova (número digitado), onde "alguém já atende" é motivo;
+  dentro da conversa, quem conduz é a voz dela. Virou dono
+  (`podeIniciarTemplateNaConversa`), exercitado por execução.
+  📌 **REGRA QUE FICA: botão novo num lugar novo herda as regras do lugar
+  velho — e elas podem estar erradas ali.** O guard, o stub e o resumo eram
+  certos para "iniciar conversa com número digitado"; dentro de uma conversa
+  aberta, os três viraram defeito no primeiro clique.
 
 - **🛑 ABRI O JOTFORM DO ESCRITÓRIO SEM NINGUÉM TER PEDIDO — e cheguei num
   formulário de consulta dermatológica** (23/09, sessão do SP Connect; Paulo:

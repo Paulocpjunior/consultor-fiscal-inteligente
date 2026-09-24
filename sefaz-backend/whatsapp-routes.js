@@ -31,7 +31,7 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
-    registrarNumeroNaCloudApi, statusDoNumeroNaMeta,
+    registrarNumeroNaCloudApi, statusDoNumeroNaMeta, renderizarCorpoTemplate,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -57,6 +57,7 @@ import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
     resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada, podeVerEncerrados,
+    podeIniciarTemplateNaConversa,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
@@ -874,13 +875,18 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
         const numeroAlvo = normalizarNumeroBr(p.para);
         if (numeroAlvo) {
             const convExistente = await getDb().collection('whatsapp_conversas').doc(numeroAlvo).get();
-            const cx = convExistente.data() || {};
-            if (convExistente.exists && (cx.status || 'aberta') === 'aberta' && cx.atribuidoA) {
+            const cx = convExistente.exists ? (convExistente.data() || {}) : null;
+            // A decisão tem DONO (`podeIniciarTemplateNaConversa`): quem CONDUZ
+            // pode — é a voz da conversa. A versão inline recusava até o
+            // próprio condutor, e o botão de 24/09 dentro da conversa
+            // transformou isso em "em condução por você" (24/09).
+            const pode = podeIniciarTemplateNaConversa(cx, req.user?.email);
+            if (!pode.ok) {
                 return res.status(409).json({
                     ok: false,
-                    error: `Este número já está em atendimento na fila ${(FILAS_ATENDIMENTO.find((f) => f.id === (cx.fila || 'recepcao')) || {}).rotulo || 'Recepção'}, em condução por ${cx.atribuidoA}.`,
+                    error: `Este número já está em atendimento na fila ${(FILAS_ATENDIMENTO.find((f) => f.id === (cx.fila || 'recepcao')) || {}).rotulo || 'Recepção'}, em condução por ${pode.emConducaoPor}.`,
                     acao: 'Abra a conversa e deixe uma nota interna pra quem conduz, ou peça a transferência de fila — iniciar outro template criaria duas vozes na mesma conversa do cliente.',
-                    emConducaoPor: cx.atribuidoA,
+                    emConducaoPor: pode.emConducaoPor,
                     fila: cx.fila || 'recepcao',
                 });
             }
@@ -928,18 +934,37 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
             return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
         }
 
-        // A conversa nasce na lista — o balão diz O QUE foi mandado (template +
-        // variáveis preenchidas), porque o corpo aprovado mora na Meta.
+        // 🚨 O BALÃO MOSTRA O TEXTO QUE O CLIENTE RECEBEU (24/09). Antes ele
+        // dizia "nome do template + variáveis" porque "o corpo aprovado mora
+        // na Meta" — e um template SEM variável virava `📋 iniciarconversa:` e
+        // nada. O Paulo leu como "não apareceu a mensagem padrão", clicou de
+        // novo, e o cliente recebeu o template DUAS vezes (09:39 e 09:40, ✓✓).
+        // O corpo sempre esteve na Meta; faltava lê-lo aqui. A leitura vem
+        // DEPOIS do envio (falha dela não pode derrubar um envio que já saiu)
+        // e, se não der, o balão volta ao resumo antigo — dito, não escondido.
         const db = getDb();
         const agora = new Date().toISOString();
         const numero = envio.numeroEnviado;
+        let corpoRenderizado = null;
+        try {
+            const aprovados = await listarTemplatesAprovados();
+            const t = aprovados.ok
+                ? (aprovados.templates || []).find((x) => x.nome === nomeTemplate
+                    && (!idiomaTemplate || !x.idioma || x.idioma === idiomaTemplate))
+                : null;
+            if (t?.corpo) corpoRenderizado = renderizarCorpoTemplate(t.corpo, variaveisPosicionais);
+        } catch (e) { console.warn('[whatsapp/iniciar] corpo do template não lido:', e.message); }
         // ⚠️ usar nomeTemplate/variaveisPosicionais (existem nos DOIS ramos);
         // `template`/`mv` só existem no ramo do cadastro — referenciá-los aqui
         // estourava ReferenceError no caminho templateDireto.
-        const resumo = `📋 ${nomeTemplate}: ${variaveisPosicionais.join(' · ')}`.slice(0, 300);
+        const resumo = (corpoRenderizado
+            ? `📋 ${corpoRenderizado}`
+            : `📋 ${nomeTemplate}: ${variaveisPosicionais.join(' · ')}`).slice(0, 300);
         await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
             conversaId: numero, direcao: 'saida', tipo: 'template',
-            texto: resumo, midia: null, timestamp: agora,
+            texto: corpoRenderizado || resumo, template: nomeTemplate,
+            corpoIndisponivel: !corpoRenderizado,
+            midia: null, timestamp: agora,
             statusEntrega: 'enviado', enviadoPor: req.user?.email || null,
         }, { merge: true });
         const contatoRef = db.collection('whatsapp_contatos').doc(numero);
@@ -973,7 +998,13 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
             });
         } catch (e) { console.warn('[whatsapp/iniciar] auditoria falhou:', e.message); }
 
-        return res.json({ ok: true, numero, messageId: envio.messageId });
+        // A tela DIZ o que saiu e que a janela NÃO abriu — sem isso a pessoa
+        // clica de novo (foi o que aconteceu em 24/09).
+        return res.json({
+            ok: true, numero, messageId: envio.messageId,
+            texto: corpoRenderizado || resumo,
+            janelaAbreSoComResposta: true,
+        });
     } catch (e) {
         console.error('[whatsapp/conversas/iniciar]', e);
         return res.status(500).json({ ok: false, error: e.message });

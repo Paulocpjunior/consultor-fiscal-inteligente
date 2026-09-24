@@ -128,6 +128,11 @@ export function decidirAutomacao(p: {
 export function conversaEncerrada(conversa: unknown): boolean;
 /** Quem abre a aba de encerrados: admin e gestor (quem fecha vê o que fechou). */
 export function podeVerEncerrados(papel: unknown): boolean;
+/** Dono da recusa 409 do template: conduzida por OUTRO recusa; por mim, sem dono ou resolvida, ok. */
+export function podeIniciarTemplateNaConversa(
+    conversa: unknown,
+    email?: string | null,
+): { ok: true } | { ok: false; emConducaoPor: string };
 /** Patch de reabertura por mensagem do cliente, ou `null` se não há o que fazer. */
 export function patchDeReabertura(
     conversa: unknown,

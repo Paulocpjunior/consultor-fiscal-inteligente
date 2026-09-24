@@ -153,3 +153,6 @@ export function statusDoNumeroNaMeta(
     p: { phoneNumberId: string },
     deps?: { cfg?: unknown; env?: Record<string, string | undefined>; fetchImpl?: typeof fetch },
 ): Promise<{ ok: boolean; numero?: Record<string, unknown>; erro?: string; code?: number | null; bruto?: unknown; configuracaoIncompleta?: boolean }>;
+
+/** Preenche `{{n}}` do corpo aprovado com as variáveis posicionais; variável que faltou FICA `{{n}}` (nunca vazio). */
+export function renderizarCorpoTemplate(corpo: string | null | undefined, variaveis?: (string | null | undefined)[]): string;
