@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **✅ E-MAIL PELO GRAPH VOLTOU (24/09, 15:34)** — medição e desfecho.
+  `graph-notificacoes-secret:latest` tinha **36 bytes** (o Secret ID). O
+  Value criado hoje no Azure para o app *Notificacoes* estava gravado como
+  **versão 8 do `graph-client-secret`** (o segredo do PROXY), 40 bytes.
+  Conserto sem o valor passar pela tela: `versions access 8
+  --secret=graph-client-secret | versions add graph-notificacoes-secret`
+  (virou a versão 2), `services update … --update-secrets
+  GRAPH_CLIENT_SECRET=graph-notificacoes-secret:latest` (revisão
+  02422-buc) e tráfego cravado pelo NOME da revisão (`--to-latest` mostrou
+  "01492-qtp", inconsistente — nunca usar `--to-latest` neste serviço; o
+  workflow também roteia por nome). Diagnóstico → Config: "A Microsoft
+  aceitou a credencial do e-mail". PENDÊNCIA deixada com o Paulo: copiar a
+  versão 5 do `graph-client-secret` (a do proxy, 40 bytes) como versão nova
+  e desativar a 8 — `latest` do Secret Manager é a versão mais nova, e
+  desativar sem repor faria o próximo deploy do proxy subir sem segredo.
+  REGRA: segredo se MEDE (`wc -c`) antes de qualquer conclusão; 36 = ID,
+  40 = Value.
+
 - **📏 O E-MAIL LÊ `graph-notificacoes-secret`, NÃO `graph-client-secret`**
   (24/09, medido pelo Paulo: `gcloud run services describe
   consultor-fiscal-inteligente` → `GRAPH_CLIENT_SECRET.secretKeyRef.name =
