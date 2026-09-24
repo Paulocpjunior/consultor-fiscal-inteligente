@@ -175,7 +175,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             // A aba de ENCERRADOS é outro recorte no BANCO, não um filtro da
             // lista carregada: as resolvidas nem vêm na leitura normal.
             const r = await listarConversas(abaRef.current === 'encerrados');
-            if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
+            if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return null; }
             setErro(null);
             setConversas(r.conversas || []);
             // 🚨 A CONVERSA ABERTA TAMBÉM SE ATUALIZA (24/08). A lista se
@@ -194,6 +194,9 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
             if (r.papel) setPapel(r.papel);
             setEncerradasOcultas(r.encerradasOcultas || 0);
+            // Devolve a lista FRESCA: quem acabou de mandar template numa
+            // conversa precisa reabrir o objeto REAL dela, não um stub (24/09).
+            return r.conversas || [];
         } finally {
             if (!silencioso) setCarregando(false);
         }
@@ -417,6 +420,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    // 📋 O que acabou de sair por template NESTA conversa — e o aviso de que a
+    // janela continua fechada. 24/09: sem isso a pessoa mandou, nada mudou na
+    // tela, mandou DE NOVO — e o cliente recebeu duas vezes.
+    const [templateEnviado, setTemplateEnviado] = useState<{ numero: string; em: string; texto: string } | null>(null);
+    useEffect(() => {
+        // Aviso é DESTA conversa: trocar de conversa o apaga.
+        if (templateEnviado && templateEnviado.numero !== sel?.numero) setTemplateEnviado(null);
+    }, [sel?.numero, templateEnviado]);
     // ✅ Quem vê a aba de encerrados — a MESMA função que a rota usa para
     // recusar. Ler `papel === 'admin' || papel === 'gestor'` aqui seria a
     // segunda cópia da regra, e no dia em que ela mudar num lado só o chip
@@ -1504,9 +1515,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { setErroNova(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
             setNovaAberta(false);
             setNc({ para: '', nomeContato: '', departamento: nc.departamento, escolha: '', variaveis: {}, posicionais: [] });
-            await recarregar(true);
+            // 🐛 O STUB APAGAVA O PAINEL (24/09, print do Paulo: "Atribuída a:
+            // ninguém ainda" logo após o envio). O `recarregar` já traz a
+            // conversa REAL do servidor — e este código a substituía por um
+            // objeto com `fila: null, atribuidoA: null`. Para conversa NOVA o
+            // stub é tudo o que existe; para a que já estava aberta, ele é
+            // dado de mentira. Quem decide é a lista fresca.
+            const lista = await recarregar(true);
+            const real = (lista || []).find((c) => c.numero === r.numero);
             const nova = { numero: r.numero, nome: nc.nomeContato || null, empresaId: null, fila: null, atribuidoA: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: null, naoLidas: 0, atualizadoEm: null } as ConversaResumo;
-            abrir(nova);
+            abrir(real || nova);
+            // Regra da Meta: template NÃO abre a janela — só a resposta do
+            // cliente abre. A tela DIZ isso, com o texto que saiu e a hora,
+            // senão a pessoa clica de novo achando que não foi.
+            setTemplateEnviado({ numero: r.numero, em: new Date().toISOString(), texto: r.texto || '' });
         } finally {
             setEnviandoNova(false);
         }
@@ -4676,6 +4698,18 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             className="ml-1 font-bold underline underline-offset-2 hover:opacity-80">
                                             Enviar template para {sel.nome || sel.numero} ➤
                                         </button>
+                                        {templateEnviado && templateEnviado.numero === sel.numero && (
+                                            /* 🚨 SEM ISTO A PESSOA CLICA DE NOVO (24/09): o template saiu
+                                               (✓✓), a tela não mudou nada, e o cliente recebeu duas vezes.
+                                               A janela NÃO abre com template — é regra da Meta — e isso
+                                               tem de estar escrito onde a pessoa está olhando. */
+                                            <p className="mt-1.5 pt-1.5 border-t border-amber-300/60 dark:border-amber-700/60 text-emerald-700 dark:text-emerald-400">
+                                                ✓ Template enviado às {horaCurta(templateEnviado.em, new Date())}
+                                                {templateEnviado.texto ? <>: <em>"{templateEnviado.texto}"</em></> : null}.
+                                                {' '}<strong>A janela de 24h só abre quando o cliente responder</strong> — até lá, só template.
+                                                Não reenvie: o cliente já recebeu.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>

@@ -360,6 +360,28 @@ export function lerTemplateDaMeta(t) {
     };
 }
 
+/**
+ * Preenche o corpo aprovado com as variáveis posicionais — é o TEXTO que o
+ * cliente recebeu, e é isso que o balão tem de mostrar.
+ *
+ * 🚨 24/09, print do Paulo: o balão do template mostrava `📋 iniciarconversa:`
+ * e NADA depois dos dois-pontos. O resumo era "nome do template + variáveis",
+ * e um template sem variável virava só o nome — a pessoa leu como "não
+ * apareceu a mensagem padrão" e clicou DE NOVO. O cliente recebeu o mesmo
+ * template duas vezes (09:39 e 09:40, ✓✓ nas duas). O corpo aprovado sempre
+ * esteve na Meta; faltava lê-lo na hora de gravar.
+ *
+ * ⚠️ Variável que NÃO veio fica como `{{n}}` no texto — nunca vira vazio nem
+ * inventa valor. Um balão com `{{1}}` à mostra é honesto: diz que algo faltou.
+ */
+export function renderizarCorpoTemplate(corpo, variaveis = []) {
+    const lista = Array.isArray(variaveis) ? variaveis : [];
+    return String(corpo || '').replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => {
+        const v = lista[Number(n) - 1];
+        return v === undefined || v === null || String(v) === '' ? m : String(v);
+    });
+}
+
 /** Deriva a WABA a partir do número (mesma lógica do listarTemplatesAprovados). */
 async function descobrirWabaId(cfg, doFetch) {
     if (cfg.wabaId) return { ok: true, wabaId: cfg.wabaId };
