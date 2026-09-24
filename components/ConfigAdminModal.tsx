@@ -516,7 +516,19 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                     inteiro. Quem diz qual é o nosso é a Meta (`debug_token`),
                                                     nunca o nome (que não é escolhido por nós). */}
                                                 <span className="text-slate-600 dark:text-slate-300">
-                                                    <strong>Apps assinados na WABA:</strong>{' '}
+                                                    {/* 🚨 QUAL WABA? — 23/09, no corte da Ultra Fox: o
+                                                        portfólio da Meta tem CINCO contas do WhatsApp com
+                                                        o nome IDÊNTICO ("BM - SP Assessoria Contábil").
+                                                        Dizer "assinados na WABA" sem dizer QUAL é a mesma
+                                                        armadilha do "lista de nomes não é resposta": dá
+                                                        para remover um parceiro numa conta e ele seguir
+                                                        em outra, com a tela verde. O backend já resolvia
+                                                        o id pelo número do token e a tela o escondia. */}
+                                                    <strong>Apps assinados na WABA</strong>
+                                                    {webhook.assinaturaWaba.wabaId && (
+                                                        <span className="opacity-60"> {webhook.assinaturaWaba.wabaId}</span>
+                                                    )}
+                                                    <strong>:</strong>{' '}
                                                     {(webhook.assinaturaWaba.apps || []).length ? (
                                                         (webhook.assinaturaWaba.apps || []).map((a, i) => (
                                                             <span key={a.id || i}>

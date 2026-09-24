@@ -383,6 +383,15 @@ describe('⚰️ o painel do canal não vende o inbox como "próxima fase"', () 
         expect(painel).toMatch(/SP Connect/);
     });
 
+    it('🚨 a tela diz QUAL WABA está lendo — há CINCO com o mesmo nome', () => {
+        // 23/09, no corte da Ultra Fox: o portfólio da Meta mostra cinco
+        // contas do WhatsApp chamadas "BM - SP Assessoria Contábil". Uma
+        // tela que diz "assinados na WABA" sem dizer qual deixa remover um
+        // parceiro de uma conta e ele seguir ativo em outra — com o painel
+        // verde. O backend já devolvia o `wabaId`; só a tela o escondia.
+        expect(painel).toMatch(/webhook\.assinaturaWaba\.wabaId/);
+    });
+
     it('🚨 app de TERCEIRO sai com o id ao lado — nome não decide remoção', () => {
         // 23/09, no corte da Ultra Fox: dois apps "de terceiro" na lista
         // (`Business Agent` e `f-bot`) e NENHUM chamado Ultra Fox. O nome na
