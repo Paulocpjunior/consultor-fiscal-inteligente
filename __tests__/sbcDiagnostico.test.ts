@@ -26,6 +26,26 @@ const raiz = process.cwd();
 const script = readFileSync(join(raiz, 'scripts/sbc-diagnostico.sh'), 'utf8');
 const doc = readFileSync(join(raiz, 'docs/sbc-whatsapp-hitphone.md'), 'utf8');
 
+/**
+ * 🚨 O RELÓGIO NÃO PODE DECIDIR SE O TESTE PASSA — 24/09, e o defeito é meu.
+ *
+ * A checagem da grade da Meta nasceu em 23/09 lendo `date` de verdade. A
+ * suíte ficou VERDE no CI às 17:00 BRT de uma quarta (dentro da grade) e
+ * VERMELHA na manhã seguinte às 06:38, **sem ninguém tocar em código**: às
+ * 06:38 o veredito cai no desfecho "fora da grade" e as fixtures que testam
+ * OUTRA coisa deixam de alcançar o ramo que elas medem.
+ *
+ * ⚠️ Não é falso positivo bobo: um deploy de madrugada, ou qualquer um no
+ * fim de semana, seria reprovado por um motivo que não tem NADA a ver com a
+ * mudança — e a equipe aprende a reexecutar até passar, que é como trava
+ * morre.
+ *
+ * ✂️ Toda fixture que não é SOBRE a grade roda com o relógio pinado: grade
+ * de 24 h e os sete dias. Quem testa a grade passa o próprio env e vira o
+ * único lugar do arquivo onde ela é exercitada.
+ */
+const RELOGIO_FIXO = { META_GRADE: '00:00-23:59', META_DIAS: '1 2 3 4 5 6 7' };
+
 describe('🚨 o script se recusa a concluir no escuro', () => {
     it('CONFERE o gravador ANTES de qualquer contagem', () => {
         const ondeConfere = script.indexOf('O gravador está ligado?');
@@ -228,8 +248,19 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
         LOGGER_CONF: join(dir, 'logger.conf'),
         ASTERISK_CONF: join(dir, 'asterisk.conf'),
         CDR_CSV: join(dir, 'nao-existe.csv'),
+        ...RELOGIO_FIXO,
     };
-    const hoje = new Date().toISOString().slice(0, 10);
+    // 🚨 A DATA TEM DE SER A **LOCAL**, não a de UTC — e isto reprovava de
+    // verdade, não em tese. Sem janela no argumento, o script filtra por
+    // `date +%Y-%m-%d`, que é a data do FUSO DA MÁQUINA; a fixture carimbava
+    // a linha com `toISOString()`, que é a de UTC. Nas horas em que as duas
+    // discordam o `grep` não acha nada e o teste vira "0 linha(s) com INVITE".
+    // Em BRT (UTC−3) isso é **toda noite das 21h à meia-noite**: rodar a suíte
+    // no fim do expediente reprovava por fuso, não por defeito. Achado
+    // variando o TZ de propósito (falhou em Pacific/Honolulu).
+    const agora = new Date();
+    const doisDigitos = (n: number) => String(n).padStart(2, '0');
+    const hoje = `${agora.getFullYear()}-${doisDigitos(agora.getMonth() + 1)}-${doisDigitos(agora.getDate())}`;
     writeFileSync(log, `[${hoje} 09:31:02] VERBOSE[1] Received SIP request INVITE\n`);
     writeFileSync(join(dir, 'logger.conf'), 'full => notice,warning,error,verbose\n');
     writeFileSync(join(dir, 'asterisk.conf'), 'verbose = 3\n');
@@ -328,6 +359,7 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             LOGGER_CONF: join(dirM, 'logger.conf'),
             ASTERISK_CONF: join(dirM, 'asterisk.conf'),
             CDR_CSV: join(dirM, 'nao-existe.csv'),
+            ...RELOGIO_FIXO,
         };
         // O log REAL de 28/08: o INVITE e o erro estão às 11:03, e quem
         // procurar na janela das 08:0 não acha nada.
@@ -400,6 +432,10 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
                     LOGGER_CONF: join(dirT, 'logger.conf'),
                     ASTERISK_CONF: join(dirT, 'asterisk.conf'),
                     CDR_CSV: join(dirT, 'nao-existe.csv'),
+                    // Esta fixture é sobre o TRACE SIP desligado: sem pinar o
+                    // relógio, fora do horário comercial o veredito cairia no
+                    // desfecho da grade e o ramo do trace não seria exercitado.
+                    ...RELOGIO_FIXO,
                 },
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -433,14 +469,64 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             // verde sobre código não exercitado.
             const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
                 input: script,
-                // Grade impossível de casar: qualquer hora cai fora.
-                env: { ...envM, META_TZ: 'UTC', META_GRADE: '23:58-23:59' },
+                // 🚩 Grade que NENHUMA hora alcança. A 1ª versão usava
+                // '23:58-23:59', que é quase sempre falso — e "quase" é
+                // relógio decidindo o teste, o defeito que este arquivo
+                // acabou de pagar. A comparação é de TEXTO "HH:MM", então
+                // "99:98" é maior que qualquer hora real: sempre fora.
+                // Os DIAS vêm do RELOGIO_FIXO (os sete), senão no sábado
+                // cairia no desfecho do dia e não no da hora.
+                env: { ...envM, META_TZ: 'UTC', META_GRADE: '99:98-99:99' },
                 encoding: 'utf8',
                 stdio: ['pipe', 'pipe', 'pipe'],
             });
             expect(saida).toMatch(/FORA da grade/);
             expect(saida).toMatch(/NÃO DÁ PARA CONCLUIR — a rodada está FORA/);
             expect(saida).toMatch(/não vira chamado/);
+        });
+
+        it('🚨 e o DIA fora da grade também segura a conclusão', () => {
+            // A grade é seg-sex. Domingo o silêncio do log é tão correto
+            // quanto às 03h — e antes isto estava cravado no código
+            // (`DIA_SEMANA -gt 5`), sem jeito de exercitar sem esperar o
+            // sábado chegar.
+            const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
+                input: script,
+                // Lista de dias que o `date +%u` nunca devolve: qualquer dia
+                // de hoje cai fora, em qualquer dia da semana.
+                env: { ...envM, META_DIAS: '9' },
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/HOJE NÃO É DIA DE ATENDIMENTO/);
+            expect(saida).toMatch(/NÃO DÁ PARA CONCLUIR — a rodada está FORA/);
+        });
+
+        it('🚨 NENHUMA fixture desta suíte lê o relógio de verdade', () => {
+            // ⚠️ ESTA É A TRAVA DA CLASSE, e ela existe porque o defeito
+            // SAIU: a suíte passou no CI às 17:00 e quebrou às 06:38 do dia
+            // seguinte, sem mudança de código. Um `execFileSync` com env que
+            // não pina a grade volta a amarrar o resultado à hora da máquina
+            // — e o próximo a descobrir seria um deploy de madrugada.
+            const fonte = readFileSync(join(raiz, '__tests__/sbcDiagnostico.test.ts'), 'utf8');
+            const envsDeExecucao = fonte.match(/env: \{[^}]*\}/g) || [];
+            expect(envsDeExecucao.length).toBeGreaterThan(0);
+            for (const e of envsDeExecucao) {
+                // Ou herda um env já pinado, ou espalha o dono do pino, ou
+                // nomeia o parâmetro aqui mesmo.
+                //
+                // 🐛 A 1ª VERSÃO DESTA ALTERNÂNCIA NÃO ACEITAVA
+                // `RELOGIO_FIXO` — o próprio dono do pino. Ou seja: a trava
+                // que eu estava escrevendo CONTRA alarme falso nasceu dando
+                // alarme falso, sobre a linha que faz exatamente o que ela
+                // pede. Fica registrado porque é a quarta do gênero em dois
+                // dias, e a lição não é "tome cuidado": é que a asserção
+                // precisa listar o que ela ACEITA, não o que ela lembrou.
+                expect(e).toMatch(/\.\.\.(envM?|RELOGIO_FIXO)\b|META_GRADE|META_DIAS/);
+            }
+            // E os dois envs compartilhados PINAM de fato.
+            expect(fonte).toMatch(/RELOGIO_FIXO = \{ META_GRADE: '00:00-23:59', META_DIAS: '1 2 3 4 5 6 7' \}/);
+            expect((fonte.match(/\.\.\.RELOGIO_FIXO/g) || []).length).toBeGreaterThanOrEqual(2);
         });
 
         it('⚠️ e a grade NÃO é carimbada de memória — é parâmetro com fonte', () => {
