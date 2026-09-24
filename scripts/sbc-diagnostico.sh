@@ -58,6 +58,13 @@ ASTERISK_CONF="${ASTERISK_CONF:-/etc/asterisk/asterisk.conf}"
 # (ou passa por env) — carimbar horário de memória seria inventar cadastro.
 META_GRADE="${META_GRADE:-08:00-12:00,13:00-17:30}"
 META_TZ="${META_TZ:-America/Sao_Paulo}"
+# 🚩 OS DIAS TAMBÉM SÃO PARÂMETRO, e por um motivo que custou caro: eu cravei
+# "seg-sex" no código (`DIA_SEMANA -gt 5`) e com isso a SUÍTE passou a depender
+# do relógio da máquina. Ela ficou verde no CI às 17:00 BRT de uma quarta e
+# vermelha na manhã seguinte às 06:38 — sem ninguém tocar em código. Teste que
+# só passa em horário comercial reprova um deploy de madrugada por um motivo
+# que não tem nada a ver com a mudança. 1=segunda … 7=domingo.
+META_DIAS="${META_DIAS:-1 2 3 4 5}"
 # 🚨 A FLAG NÃO PODE VIRAR FILTRO DE BUSCA — 26/08, na primeira rodada de
 # verdade. `JANELA="$1"` engolia o `--ao-vivo`, ele descia até o `grep` e a
 # saída trazia TRÊS vezes `grep: unrecognized option '--ao-vivo'`. As buscas
@@ -254,10 +261,13 @@ echo "── 6b. A hora de agora está dentro da grade de atendimento da Meta?"
 DENTRO_GRADE="indeterminado"
 AGORA_BRT=$(TZ="$META_TZ" date +%H:%M 2>/dev/null)
 DIA_SEMANA=$(TZ="$META_TZ" date +%u 2>/dev/null)   # 1=segunda ... 7=domingo
+DIA_NA_GRADE="nao"
+for D in $META_DIAS; do [ "$D" = "$DIA_SEMANA" ] && DIA_NA_GRADE="sim"; done
 if [ -z "$AGORA_BRT" ] || [ -z "$DIA_SEMANA" ]; then
     echo "   ⚪ não consegui ler a hora em $META_TZ — grade não conferida."
-elif [ "$DIA_SEMANA" -gt 5 ] 2>/dev/null; then
-    echo "   ✗ HOJE É FIM DE SEMANA ($AGORA_BRT em $META_TZ) — a grade é seg-sex."
+elif [ "$DIA_NA_GRADE" = "nao" ]; then
+    echo "   ✗ HOJE NÃO É DIA DE ATENDIMENTO ($AGORA_BRT em $META_TZ) — a grade"
+    echo "     vale nos dias $META_DIAS (1=seg … 7=dom)."
     DENTRO_GRADE="nao"
 else
     DENTRO_GRADE="nao"

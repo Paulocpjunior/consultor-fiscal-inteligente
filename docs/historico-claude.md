@@ -5,6 +5,101 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚨 A SUÍTE DEPENDIA DO RELÓGIO — verde no CI às 17:00, vermelha às 06:38
+  do dia seguinte, sem ninguém tocar em código** (23/09, achado ao atualizar
+  este arquivo na manhã seguinte). A checagem da grade da Meta, que entrou
+  ontem, lia `date` de verdade: fora do horário comercial o veredito cai no
+  desfecho "fora da grade" e as fixtures que medem OUTRA coisa deixam de
+  alcançar o ramo delas. A grade tinha parâmetro para a HORA (`META_GRADE`),
+  mas eu cravei o DIA no código (`DIA_SEMANA -gt 5`).
+  ⚠️ **O custo real**: qualquer deploy de madrugada — ou qualquer um no fim de
+  semana — seria reprovado por um motivo que não tem nada a ver com a mudança.
+  E o que a equipe aprende com isso é a reexecutar até passar, que é como
+  trava morre.
+  ✂️ `META_DIAS` vira parâmetro como os outros; um `RELOGIO_FIXO` (grade de
+  24 h, os sete dias) pina toda fixture que **não** é sobre a grade, e quem
+  testa a grade passa o próprio env — virando o único lugar do arquivo onde
+  ela é exercitada. A janela impossível deixou de ser `23:58-23:59` (quase
+  sempre falsa, e "quase" é relógio decidindo) e passou a ser `99:98-99:99`,
+  que a comparação de TEXTO nunca alcança. O ramo do DIA ganhou teste próprio.
+  🚩 **E a trava da classe pegou DUAS coisas na primeira execução**: um
+  terceiro env que eu não havia pinado, e — dois minutos depois — **ela mesma**,
+  porque a alternância não aceitava `RELOGIO_FIXO`, o próprio dono do pino.
+  Quarta trava em dois dias nascendo com alarme falso. 📌 A lição não é "tome
+  cuidado": é que **a asserção precisa listar o que ela ACEITA, não o que ela
+  lembrou**.
+  🐛 **E variar o FUSO de propósito achou um defeito mais velho, que reprovava
+  de verdade**: a fixture carimbava a linha do log com `toISOString()` (data de
+  **UTC**) e o script filtra por `date +%Y-%m-%d` (data **LOCAL**). Nas horas
+  em que as duas discordam, o `grep` não acha nada. Em BRT isso é **toda noite
+  das 21h à meia-noite** — rodar a suíte no fim do expediente, no Mac do
+  Paulo, reprovava por fuso. Agora a fixture usa a data local, e a suíte foi
+  provada em **seis fusos** (São Paulo, UTC, Honolulu, Kiritimati, Kolkata,
+  Lisboa): 38/38 em todos.
+  📌 **REGRA**: teste que lê o relógio ou o fuso da máquina não é trava, é
+  sorteio. Hora, dia e fuso entram por parâmetro, e quem os exercita é UM
+  teste, declarado.
+
+- **🚨 EU DECLAREI O `npm run lint` VERMELHO MEDINDO O MEU CONTAINER** (23/09,
+  fechamento da sessão do Connect + SBC). Durante o dia eu afirmei, duas vezes
+  e por escrito em PR, que `npm run lint` estava vermelho por **40 ocorrências
+  de `setImmediate`** em `whatsapp-webhook-routes.js`, e que isso **já vinha de
+  `main`** (conferi com `git stash`: 40 antes, 40 depois).
+  ❌ **Estava errado, e o erro era do AMBIENTE.** A sessão roda num container
+  que nasce **sem `node_modules`**. Sem `@types/node`, os globais do Node sumem:
+  `process` e `Buffer` viram **TS2591** (*"instale @types/node"*), que o
+  `check-backend-nomes.mjs` ignora de propósito, mas **`setImmediate` não está
+  na lista especial do TS e cai como TS2304** — exatamente a classe que o
+  checker persegue. Com `npm i` feito, o lint fecha **verde**, aqui e no CI
+  (os 13 arquivos do backend que fazem `import ... from 'node:*'` puxam os
+  globais junto). E os "40" eram 20 achados — o `grep -c` contava a linha do
+  achado **e** a linha `→` do eco.
+  ⚠️ **A LIÇÃO É A MESMA QUE EU PASSEI O DIA COBRANDO DO DOCUMENTO DO SBC**:
+  *medição de JANELA não vira conclusão sobre o OUTRO LADO*. Lá eu peguei o
+  documento deduzindo a infraestrutura da Meta a partir de um recorte de log;
+  aqui eu deduzi o estado do lint a partir de um container sem dependências.
+  📌 **REGRA**: neste container, porta só vale depois de `npm ci`. Vermelho sem
+  dependências é retrato do container, não do repositório — e nunca vira
+  afirmação em PR. Registrado no CLAUDE.md.
+
+- **🚨 TRÊS TRAVAS ACUSANDO CÓDIGO CERTO NO MESMO DIA — todas cobrando a FORMA
+  da linha em vez do FATO** (23/09). Apareceram quando a suíte finalmente
+  rodou de verdade (container com dependências), e as três são a família que
+  esta casa documenta desde 22/08:
+  1. `sbcDiagnostico` exigia a **frase** *"só vale se a hora da"* num desfecho
+     cuja reescrita trocou por um texto MAIS forte. Trava que cobra redação
+     manda reescrever para agradar o teste;
+  2. a mesma suíte proibia `comando_de_rodar` no **veredito inteiro**, quando a
+     regra é de UM desfecho — o desfecho novo chama o helper porque é
+     exatamente para isso que ele existe. **Alcance da trava > alcance da
+     regra = alarme falso**;
+  3. `sbcSonda` exigia que `dentroDoHorario` fosse o **último nome do import**.
+     Bastou a linha ganhar `podeVerEncerrados` para ficar vermelha, com a
+     régua de horário intacta.
+  ✂️ Nenhuma linha de código de produção mudou nos três casos. As asserções
+  passaram a cobrar o fato, com guarda contra fatia vazia onde o recorte
+  virou substring. Alarme falso é o que faz a equipe desligar a trava — e
+  trava desligada devolve o defeito que ela existia para pegar.
+
+- **📦 A SESSÃO SEPAROU AS DUAS FRENTES EM BRANCHES PRÓPRIAS, A PARTIR DA
+  `main`** (23/09, Paulo: *"separa o conect em branch própria a partir do
+  main"*). Connect e SBC estavam empilhados no mesmo ramo.
+  ⚠️ **O diff de DUAS pontas assusta e mente**: `git diff main ramo` mostrava o
+  fim de mês e o sem-movimento sendo APAGADOS. É recorte, não remoção — o PR
+  usa **três pontas** (`main...ramo`). Antes de reagir a um diff, confira qual
+  dos dois se está lendo.
+  ✂️ **A exceção `'23/09'` do `DATAS_SEM_EFEITO_PARA_QUEM_USA` saiu**, cumprindo
+  a ressalva escrita nela mesma: *"se algo com efeito na TELA subir em 23/09,
+  esta linha SAI: ela é por DATA e mascararia a entrega de verdade"*. Subiram
+  o carimbo do fim de mês, o sem-movimento e o eSocial. 📌 **Exceção por DATA
+  cala tudo o que couber naquele dia**, não só o que ela quis declarar.
+  ✅ **Desfecho**: PR **#1259** (Connect, aba ✅ Encerrados para admin **e
+  gestor**) e PR **#1260** (SBC) mesclados por squash; deploys **1017** e
+  **1018** verdes, com health check da candidata, roteamento e health check
+  final em produção. As quatro portas rodaram com os dois trabalhos JUNTOS
+  (563 suítes, 8.507 testes) — gate passado em ramo separado não vale para a
+  soma.
+
 - **✅ ATENDIMENTO ENCERRADO SAI DA CAIXA — e a metade que quase ficou era o
   CLIENTE QUE VOLTA** (23/09, Paulo: *"devemos criar uma ABA em especial com
   acesso aos admin somente para atendimentos encerrados/finalizados para que
@@ -96,11 +191,16 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   ❌ **HIPÓTESE MINHA DERRUBADA POR MEDIÇÃO**: eu disse que faltava o codec
   Opus. `module show like opus` mostra `codec_opus_open_source.so ... Running`.
   Descartado.
-  🚩 **A CAUSA CONTINUA ABERTA, e não se deduz**: o suspeito é o perfil de
-  transporte (DTLS-SRTP `UDP/TLS/RTP/SAVPF` × o nosso `media_encryption=sdes`,
-  que o `optimistic` **não** faz ponte). Quem responde é a linha `m=audio` da
-  seção 7. **Nada vira configuração antes dela** — trocar `media_encryption` no
-  escuro é o chute que já custou três rodadas.
+  ✅ **FECHADO NO MESMO DIA, PELA LIGAÇÃO**: o Paulo ligou DENTRO da grade,
+  caiu na URA e **ouviu o áudio**. O caminho funciona ponta a ponta — não há
+  defeito de mídia a caçar, e o chamado da Meta sai de "suspenso" para
+  **descartado**. O suspeito que eu carregava (DTLS-SRTP `UDP/TLS/RTP/SAVPF`
+  × o nosso `media_encryption=sdes`) nunca chegou a ser o problema: as falhas
+  de negociação do log são de tentativas velhas.
+  📌 **A causa das rodadas perdidas era a GRADE `call_hours` da Meta** (seg–sex
+  08:00–12:00 e 13:00–17:30, America/Sao_Paulo; a VM é UTC). A ligação de teste
+  das 07:50 BRT foi **10 minutos antes de a janela abrir** — "nenhum INVITE"
+  ali era a resposta CERTA, não silêncio da contraparte.
   🧹 Junto: issues **#1183** (deploy) e **#778** (robô de auditoria) fechadas
   por RESULTADO — deploys 1009-1013 verdes e runs 35/36/37 do robô `success`.
   ⚠️ **#777 FICA ABERTA, e conferir isso foi o que impediu o erro**: run verde
