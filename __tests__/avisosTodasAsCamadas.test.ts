@@ -138,3 +138,18 @@ describe('🔑 a credencial do Graph é PROVADA, não deduzida da audiência', (
     });
 });
 
+describe('📏 o TAMANHO do segredo sai junto do erro — nunca o valor', () => {
+    // 24/09: 11 chars (máscara copiada da tabela do Azure) e depois 100 (texto
+    // de um comando) — uma tarde para descobrir o que "tem 11, esperado 40"
+    // diria em um segundo.
+    it('a rota mede o tamanho e não expõe o valor', () => {
+        const r = rotas.slice(rotas.indexOf("router.get('/avisos/status'"), rotas.indexOf("router.post('/avisos/testar-tudo'"));
+        expect(r).toMatch(/tamanhoSegredo = String\(process\.env\.GRAPH_CLIENT_SECRET \|\| ''\)\.length/);
+        expect(r).not.toMatch(/GRAPH_CLIENT_SECRET\s*[,}]/);   // o valor não entra na resposta
+    });
+    it('a tela diz "tem N, esperado 40" quando não bate', () => {
+        expect(tela).toMatch(/tamanhoSegredo !== 40/);
+        expect(tela).toMatch(/um segredo de app do Azure tem 40/);
+    });
+});
+

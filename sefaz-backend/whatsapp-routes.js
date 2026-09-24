@@ -2499,10 +2499,16 @@ router.get('/avisos/status', requireAuth, async (req, res) => {
         // pode ser lida como garantia da credencial; então a credencial vira
         // uma linha própria, medida por um token de verdade (cacheado ~55
         // min pelo graph-provider — não é uma chamada por clique).
-        let credencialGraph = { ok: false, erro: 'Graph não configurado (GRAPH_CLIENT_ID/TENANT/SECRET).' };
+        // 📏 O TAMANHO do segredo sai junto do erro — nunca o valor. 24/09: o
+        // AADSTS7000215 custou uma tarde até se descobrir que o Secret Manager
+        // tinha 11 caracteres (a máscara `xxx********` copiada da tabela do
+        // Azure) e depois 100 (o texto de um comando). Segredo de app do Azure
+        // tem 40. Uma linha com "tem 11, esperado 40" teria dito tudo.
+        const tamanhoSegredo = String(process.env.GRAPH_CLIENT_SECRET || '').length;
+        let credencialGraph = { ok: false, erro: 'Graph não configurado (GRAPH_CLIENT_ID/TENANT/SECRET).', tamanhoSegredo };
         if (isGraphConfigured()) {
-            try { await getGraphToken(); credencialGraph = { ok: true, erro: null }; }
-            catch (e) { credencialGraph = { ok: false, erro: String(e?.message || e).slice(0, 400) }; }
+            try { await getGraphToken(); credencialGraph = { ok: true, erro: null, tamanhoSegredo }; }
+            catch (e) { credencialGraph = { ok: false, erro: String(e?.message || e).slice(0, 400), tamanhoSegredo }; }
         }
         return res.json({
             ok: true,
