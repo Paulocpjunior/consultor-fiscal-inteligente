@@ -35,15 +35,19 @@ O SBC é ponte, não destino.
 - ✅ `calling = ENABLED` no nosso número (sonda de 23/08, build 732).
 - ✅ **A META ENTREGA O INVITE no SBC** (28/08, 11:03:38): o Asterisk montou
   sessão no endpoint `meta`. A dúvida de entrega está ENCERRADA.
-- 🔴 **A NEGOCIAÇÃO DE MÍDIA FALHA — e é do NOSSO lado**:
-  `Couldn't negotiate stream 0:audio ... (nothing)`. Opus está instalado e
-  rodando (descartado); o suspeito é o perfil de transporte (DTLS-SRTP × o
-  nosso `media_encryption=sdes`). Ver
-  [🔴 O INVITE CHEGA](#-2808--o-invite-chega-a-premissa-do-chamado-caiu).
-- 🚧 **O que ainda NÃO foi lido**: a linha `m=audio` do SDP da Meta — é ela que
-  decide entre transporte e codec, e **nada vira configuração antes dela**.
-  Mesma régua do CT-e (cStat 239): o primeiro erro real vale mais que dez
-  suposições — e aqui o erro real já está no log, esperando ser lido inteiro.
+- ✅ **A LIGAÇÃO COMPLETA, PONTA A PONTA** (23/09, Paulo: *"liguei e caiu na
+  URA, correto"* … *"ouvi a URA normalmente"*). Chamada feita **dentro da
+  grade**, atendida pela URA, com **áudio nos dois sentidos**. Não há
+  bloqueio, não há chamado a abrir e **não há mídia a consertar**.
+- 📌 **A causa das rodadas perdidas era a GRADE `call_hours` da Meta**, não a
+  infraestrutura: seg–sex 08:00–12:00 e 13:00–17:30 (America/Sao_Paulo), e a
+  VM roda em **UTC**. O teste das 07:50 BRT foi dez minutos antes de a janela
+  abrir. Fora da grade, "nenhum INVITE no log" é a resposta **certa**.
+- ⚰️ **O `Couldn't negotiate stream` do log é de tentativas VELHAS** e não
+  descreve o estado de hoje. O suspeito que este documento carregou por
+  semanas — DTLS-SRTP × o nosso `media_encryption=sdes` — **nunca chegou a ser
+  o problema**. Ver [🔴 O INVITE CHEGA](#-2808--o-invite-chega-a-premissa-do-chamado-caiu)
+  e a [Conclusão](#conclusão).
 
 ## Pré-requisitos (na mão do Paulo)
 
@@ -214,11 +218,13 @@ celular e do WhatsApp; o cliente escolhe o MEIO, não o caminho interno.
 📌 **Isso mata a questão do DTMF antes de ela existir**: não há menu para
 digitar em lugar nenhum, então teclado não decide nada aqui (ver o funil).
 
-⚠️ **E isso NÃO destrava a ligação**: o INVITE da Meta **chega** (28/08), mas a
-sessão morre na negociação de mídia, antes de chegar ao plano de discagem —
-ver [🔴 O INVITE CHEGA](#-2808--o-invite-chega-a-premissa-do-chamado-caiu). O
-211 é para onde a chamada vai cair **quando** a mídia negociar; trocar o destino
-agora é preparar o terreno, não corrigir o bloqueio.
+⚠️ **E isso NÃO destrava a ligação — nunca destravou, e nem era para.** Escolher
+o destino diz **onde a chamada cai**, não **se ela chega**. Na época esta frase
+existia porque o caso parecia travado; hoje se sabe que o que faltava era
+discar **dentro da grade da Meta** (23/09 — ver a [Conclusão](#conclusão)). A
+régua continua valendo para o futuro: mexer no `SBC_DESTINO` é decisão de
+roteamento interno e **nunca** deve ser lida como conserto de chamada que não
+chega.
 
 ### Caminho SECUNDÁRIO da saída: teclado com prefixo
 
@@ -563,7 +569,27 @@ codec_opus_open_source.so ... Running
 E o endpoint já declara `allow=opus,alaw,ulaw`. **Codec ausente está
 descartado** como causa.
 
-### 🚩 O QUE FALTA CONFERIR — e não se deduz
+### ⚰️ SUPERADA EM 23/09 — a hipótese do transporte nunca precisou ser testada
+
+> 🚨 **NÃO EXECUTE O QUE ESTA SEÇÃO MANDA FAZER.** Ela está aqui como
+> registro, não como instrução. Em 23/09 a ligação **completou**: entrou
+> dentro da grade, caiu na URA e teve áudio. Não há negociação de mídia
+> quebrada para consertar, e **trocar `media_encryption` agora quebraria o que
+> está funcionando**.
+>
+> O que derrubou esta hipótese não foi uma medição do `m=audio` — foi a
+> ligação. As falhas de negociação que ainda estão no log são de tentativas
+> velhas, de fora da grade.
+>
+> 📌 **E é por isso que ela fica escrita.** A seção abaixo é um raciocínio
+> coerente, bem fundamentado e **errado** — apagá-la esconderia o quanto uma
+> hipótese boa se parece com uma causa. Ela também explica por que o próprio
+> texto insistia em *"nada vira configuração antes do `m=audio`"*: a
+> desconfiança estava certa, só não foi longe o bastante para desconfiar da
+> **pergunta**.
+
+<details>
+<summary>O raciocínio de 28/08, preservado (clique para abrir)</summary>
 
 O suspeito seguinte é o **perfil de transporte da mídia**. A Meta entrega
 chamada de WhatsApp com pilha de WebRTC, e ali o SDP costuma oferecer
@@ -602,6 +628,8 @@ esconderia justamente a evidência que inverteu o caso.
 Enquanto essa linha não for lida, **nada aqui vira configuração** — trocar
 `sdes` por `dtls` no escuro é o mesmo chute que já custou três rodadas.
 
+</details>
+
 ### ⚠️ E as medições de 25-26/08 NÃO foram desmentidas — elas foram limitadas
 
 Nas janelas conferidas de 25 e 26/08 o log tinha mesmo **zero INVITE**, com o
@@ -629,10 +657,31 @@ branco, é uma afirmação ativa que a próxima sessão executaria.
 
 ### Conclusão
 
-**O caso está ABERTO, e do NOSSO lado.** O INVITE chega; a sessão falha ao
-negociar mídia no endpoint `meta`. Não há chamado a abrir na Meta enquanto o
-`m=audio` do SDP não for lido — e, dependendo do que ele disser, pode não haver
-chamado nenhum.
+**O caso está FECHADO, e nada havia para consertar.** Em 23/09 o Paulo ligou
+**dentro da grade**, a chamada caiu na URA e ele ouviu o áudio — *"liguei e
+caiu na URA, correto"*, *"ouvi a URA normalmente"*. O caminho Meta → SBC →
+HitPhone funciona ponta a ponta.
+
+**A causa das rodadas perdidas era a grade `call_hours` da Meta**: seg–sex
+08:00–12:00 e 13:00–17:30 em America/Sao_Paulo, contra uma VM que roda em
+**UTC**. O teste das 07:50 BRT foi dez minutos antes de a janela abrir. As
+quatro falhas reais do log caem todas **dentro** dela — o que mudou não foi a
+configuração, foi a hora de discar.
+
+⚠️ **E o que este documento errou vale mais que o que ele acertou.** Ele
+chegou a concluir *"não há o que consertar deste lado — o próximo passo é o
+suporte da Meta"*, com um chamado pronto afirmando quatro vezes algo que o
+nosso próprio log desmentia. Depois corrigiu para *"o caso está aberto, e do
+nosso lado"*, apontando o transporte de mídia — **também errado**. Duas
+conclusões opostas, as duas confiantes, as duas construídas sobre a mesma
+falha: **medir uma JANELA e concluir sobre o OUTRO LADO**.
+
+📌 **REGRA QUE FICA: conclusão em documento não é espaço em branco — é uma
+instrução que alguém executa.** Cada versão errada daqui mandaria a próxima
+sessão fazer algo caro: abrir chamado indevido na Meta, ou trocar
+`media_encryption` num tronco que já funciona. Enquanto a pergunta não tem
+resposta, o documento diz *"não sei"* — nunca um palpite com cara de próximo
+passo.
 
 📌 **REGRA QUE FICA: infraestrutura de diagnóstico se CONFERE antes do teste.**
 As três primeiras rodadas não valeram nada porque o SBC nasceu sem gravar —
@@ -651,17 +700,18 @@ suporte da Meta.
 
 ### ⛔ Texto do chamado (Meta / suporte da WABA) — SUSPENSO, NÃO ENVIAR
 
-> 🚨 **NÃO ENVIE ESTE TEXTO.** Ele afirma, quatro vezes, que **nenhum INVITE
-> chega ao nosso SBC** — e o log do Asterisk de 28/08 prova o contrário. Enviá-lo
-> hoje acusaria a Meta de um defeito que é nosso, com a nossa própria evidência
-> desmentindo o chamado. A volta seria "está tudo certo do nosso lado", que é a
-> resposta mais cara que existe, porque parece resposta.
+> 🚨 **NÃO ENVIE ESTE TEXTO — e agora não há mais hipótese que o ressuscite.**
+> Ele afirma, quatro vezes, que **nenhum INVITE chega ao nosso SBC**. O log de
+> 28/08 já desmentia isso, e em **23/09 a ligação completou com áudio**.
+> Enviá-lo acusaria a Meta de um defeito que nunca existiu, com a nossa própria
+> evidência contra o chamado — e a volta seria "está tudo certo do nosso lado",
+> que é a resposta mais cara que existe, porque parece resposta.
 >
-> Ele fica guardado porque **as medições que ele cita são verdadeiras** (janelas
-> de 25-26/08, o experimento do número irmão, a conferência do caminho) e voltam
-> a servir se — e só se — o `m=audio` mostrar que o problema é da entrega. Nesse
-> caso, reescreva a parte do INVITE citando a sessão de 28/08 **antes** de
-> enviar.
+> ⚰️ **De "suspenso" ele passou a DESCARTADO.** Fica arquivado por uma razão só:
+> as medições que ele cita são verdadeiras (as janelas de 25-26/08, o
+> experimento do número irmão, a conferência do caminho) — e **medição
+> verdadeira levando a conclusão falsa** é o caso de estudo mais útil deste
+> documento. Todas aquelas janelas caíram fora da grade da Meta.
 
 
 
