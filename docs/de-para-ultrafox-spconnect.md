@@ -238,13 +238,31 @@ do cancelamento**: (1) ✅ ~~backup COMPLETO exportado e importado pelo ⚙️ �
 confirmado e bot respondendo~~ — **[Paulo, 22/08]** ligado "a dias", com a
 operação real inteira no SP Connect desde 21/08; (3) ✅ ~~um dia de operação
 sem a equipe abrir a Ultra Fox~~ — dias de operação real corridos.
-**⇒ SOBRAM DOIS ATOS, os dois no dia do cancelamento**: (a) o **export
-incremental FINAL** da Ultra Fox (contatos/mensagens desde 21/08) →
-⚙️ → 📥 (reimportar não duplica); (b) **cancelar** — e, cancelada,
-conferir no painel de webhook da ⚙️ Config Admin (CFI) que o app DELA
-saiu da lista de assinados da WABA: enquanto assinado, o fornecedor
-antigo continua RECEBENDO cópia de toda mensagem de cliente, o que depois
-do contrato é problema de LGPD, não de conveniência.
+**⇒ SOBRAM DOIS ATOS — e a ORDEM DELES MUDOU EM 23/09** (Paulo: *"não estamos
+usando a Ultra Fox há mais de 1 mês"*). Este parágrafo foi escrito em 21/08
+supondo o cancelamento logo em seguida; com um mês de desuso, a urgência
+inverteu:
+
+1. 🔴 **TIRAR O APP DELES DA WABA — agora, e independente do cancelamento.**
+   ⚙️ Config Admin (CFI) → 📡 Recebimento (webhook) → *"Apps assinados na
+   WABA"*: remover o marcado `— de terceiro`. Enquanto assinado, o fornecedor
+   **continua recebendo cópia de toda mensagem de cliente**, e há um mês isso
+   não tem mais contrapartida nenhuma — o *"fica assinada de propósito, é a
+   rede de segurança"* valia enquanto a equipe podia precisar dela.
+   ⚠️ **Não remover nada** com o aviso âmbar *"não consegui perguntar à Meta
+   qual app é o nosso"* na tela: ali, ausência de marca é **"não sei"**, não
+   "não é nosso", e remover o errado cala o recebimento do escritório inteiro.
+2. **Cancelar** o contrato — isso virou questão de mensalidade, não de dado.
+   ⚠️ Antes, **um olhar** na Ultra Fox (não um export formal): há conversa
+   depois de 21/08 que não se reconheça do SP Connect? Se não houver, não há o
+   que exportar; se houver, exportar e trazer pelo ⚙️ → 📥 (reimportar não
+   duplica). É o único passo irreversível, e plataforma cancelada não devolve
+   export.
+
+📌 **Por que o export saiu de "ato obrigatório" para "conferência"**: com a
+equipe inteira no SP Connect desde 21/08, mensagem de cliente chegou **nos
+dois** (o app deles seguia assinado) e quem RESPONDEU foi o SP Connect. O que
+estaria só lá é o que ninguém atendeu — que é justamente o que o olhar procura.
 
 ⚠️ **O que fica ENTRE o piloto e o 🌐 todos**: o piloto prova o bot na
 conversa de UMA pessoa que começa do zero; o 🌐 solta o bot sobre as

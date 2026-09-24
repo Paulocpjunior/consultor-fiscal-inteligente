@@ -3705,11 +3705,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             🤖 Bot de triagem {cfg.botAtivo ? 'LIGADO' : 'desligado'}
                                         </span>
                                     </label>
-                                    {/* 🚨 ALCANCE — é o que deixa os DOIS apps de pé.
-                                        A Ultra Fox continua assinada na WABA de propósito
-                                        (é a rede de segurança); os dois recebem a mesma
-                                        mensagem, então quem limita o menu em dobro é a
-                                        lista daqui. */}
+                                    {/* 🚨 ALCANCE — nasceu para deixar os DOIS apps de pé:
+                                        a Ultra Fox seguia assinada na WABA como rede de
+                                        segurança, os dois recebiam a mesma mensagem, e
+                                        quem limitava o menu em dobro era a lista daqui.
+                                        ⚰️ 23/09: essa razão MORREU — "não estamos usando a
+                                        Ultra Fox há mais de 1 mês" (Paulo). O app dela
+                                        assinado hoje só serve para um terceiro receber
+                                        cópia de mensagem de cliente; tirar da WABA é item
+                                        do de-para (§8), não decisão desta tela. O alcance
+                                        continua valendo pelo que ele É: o raio do bot. */}
                                     {cfg.botAtivo && (
                                         <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
                                             <div className="flex gap-1.5 flex-wrap">
