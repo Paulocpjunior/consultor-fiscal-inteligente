@@ -27,7 +27,7 @@ const PROXY_TOKEN = process.env.SHAREPOINT_PROXY_TOKEN || process.env.PROXY_SHAR
  * ⚠️ Quem chama em LOTE (o auto-sync) chama UMA vez por rodada e passa a lista
  * adiante: ~400 leituras seriam o HTTP 429 de 27/08 com outra roupa.
  */
-export async function listarPastasDeEmpresas() {
+export async function listarPastasDeEmpresas(opts = {}) {
     const resp = await fetch(`${PROXY_URL}/api/sharepoint/explorar`, {
         method: 'POST',
         headers: {
@@ -41,7 +41,12 @@ export async function listarPastasDeEmpresas() {
         throw new Error(err.error || `Proxy explorar ${resp.status}`);
     }
     const d = await resp.json();
-    return (d?.pastas || []).map(p => p?.nome).filter(Boolean);
+    const nomes = (d?.pastas || []).map(p => p?.nome).filter(Boolean);
+    // 📏 QUANTAS pastas foram lidas, e em quantas páginas (24/09): "157 sem
+    // pasta" sem dizer quantas o app leu não deixa ninguém comparar com o
+    // SharePoint. O proxy devolve `paginas` desde 22/09.
+    if (opts.comMeta) return { nomes, total: nomes.length, paginas: Number(d?.paginas) || null };
+    return nomes;
 }
 
 /** O Cod.Cliente, nas duas formas em que o cadastro o guarda. */
@@ -58,7 +63,7 @@ export function codClienteDoCadastro(dados) {
  * `nao-encontrada` diz o que o app **NÃO** faz: criar a pasta da empresa
  * criaria uma duplicada com o nome errado ao lado da que existe.
  */
-export function motivoDaResolucao(achado, codCliente) {
+export function motivoDaResolucao(achado, codCliente, totalLidas = null) {
     switch (achado?.situacao) {
         case 'codigo-ausente':
             return 'Empresa sem Cod.Cliente no cadastro — é por ele que a pasta do SharePoint é '
@@ -67,9 +72,11 @@ export function motivoDaResolucao(achado, codCliente) {
             return `Há MAIS DE UMA pasta com o código ${codCliente} em ${PASTA_RAIZ}: `
                 + `${achado.candidatas.join(' · ')}. O app não escolhe — deixe uma só no SharePoint.`;
         case 'nao-encontrada':
-            return `Nenhuma pasta com o código ${codCliente} em ${PASTA_RAIZ}. O app NÃO cria a pasta `
-                + 'da empresa (criaria uma duplicada com o nome errado): crie-a no SharePoint começando '
-                + 'pelo código.';
+            return `Nenhuma pasta com o código ${codCliente} em ${PASTA_RAIZ}`
+                + (Number.isFinite(Number(totalLidas)) && totalLidas !== null ? ` (entre as ${totalLidas} pastas lidas)` : '')
+                + '. O app NÃO cria a pasta da empresa (criaria uma duplicada com o nome errado): confira em '
+                + '"O que existe nesta biblioteca?" se ela existe com outro código, ou crie-a no SharePoint '
+                + 'começando pelo código.';
         default:
             return null;
     }
@@ -102,6 +109,6 @@ export async function resolverPastaDaEmpresa(dados, pastas) {
         ok: achado.situacao === 'ok',
         pasta: achado.pasta,
         codCliente,
-        motivo: motivoDaResolucao(achado, codCliente),
+        motivo: motivoDaResolucao(achado, codCliente, Array.isArray(lista) ? lista.length : null),
     };
 }
