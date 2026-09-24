@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🛡️ "PODE TRAVAR E PASSAR O MATA-BURROS! ISSO NÃO PODE VOLTAR A
+  ACONTECER" + PORTE DO E-MAIL PARA O CCI** (24/09, Paulo, após o e-mail
+  voltar). O defeito de fundo: o alerta noturno de saúde sai POR E-MAIL,
+  pela mesma credencial — credencial morta = alerta mudo, e só a guia
+  falhando na mão da Sandra avisou. MATA-BURRO: `graph-credencial-vigia.js`
+  sonda a credencial (token, cache invalidado) dentro do
+  `health-alerta-cron` ANTES de calcular/mandar o alerta, grava
+  `health_alertas/graph-email` (situação, forma do segredo, primeiraFalhaEm,
+  ultimoOkEm), marca a saúde como crítica, e a Rotina do Mês mostra a faixa
+  (`CredencialEmailFaixa`, rota GET /api/admin/credencial-email/vigia, para
+  todo usuário) — vermelha em recusa, amarela se o vigia não roda há mais de
+  2 dias (silêncio não é saúde). PORTE PARA O CCI: a sessão NÃO tinha acesso
+  ao repo `plano-contas-iob` (add_repo negado pela permissão); o kit pronto
+  está em `docs/porte-email-cci/` (email-layout com "Departamento Contábil",
+  graph-provider, graph-remetente, logo, README com a rota-modelo e os
+  comandos do Cloud Run: mesmo app Notificacoes, `graph-notificacoes-secret`).
+  REGRA: alerta de credencial nunca pode depender da credencial que vigia.
+
 - **📏 CARD SHAREPOINT: "157 EMPRESAS SEM PASTA" AGORA DIZ ENTRE QUANTAS
   PASTAS PROCUROU** (24/09, rodada das 08:39: 157 sem pasta + 193 com erro,
   depois da paginação de 22/09 que baixou de 264). O proxy está

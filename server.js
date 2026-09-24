@@ -87,6 +87,7 @@ import diagnosticoCadastrosRouter from './sefaz-backend/diagnostico-cadastros-ro
 import certMonitorRouter from './sefaz-backend/cert-monitor-routes.js';
 import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.js';
 import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
+import graphCredencialVigiaRouter from './sefaz-backend/graph-credencial-vigia-routes.js';
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import saeNfceRouter from './sefaz-backend/sefaz-sp-nfce-routes.js';
@@ -426,6 +427,8 @@ app.use('/api/admin/diagnostico-cadastros', diagnosticoCadastrosRouter);
 app.use('/api/admin/cert-monitor', certMonitorRouter);
 app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
 app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
+// 🛡️ Vigia da credencial do e-mail (24/09): o veredito noturno, lido pela faixa da Rotina.
+app.use('/api/admin/credencial-email', graphCredencialVigiaRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
 app.use('/api/admin/cadastro-contabil', cadastroContabilRouter);
