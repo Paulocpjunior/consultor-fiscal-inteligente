@@ -260,6 +260,21 @@ inverteu:
 >   número do CFI é a `917501217467560` — o painel 📡 passou a mostrar o id ao
 >   lado do rótulo justamente por isso. Remover parceiro numa conta **não** o
 >   tira das outras.
+> - 🚨 **REMOVER O PARCEIRO NÃO DESASSINA O APP DELE** — medido em 24/09, com
+>   reconsulta fresca: o Paulo removeu **WABot Partners** e **Social Intents**
+>   da WABA, e a lista de `subscribed_apps` continuou **idêntica**
+>   (`Business Agent` e `f-bot` ainda lá). São dois registros distintos na
+>   Meta: acesso do NEGÓCIO × assinatura do APP.
+>   ⚠️ **E nós não temos como tirar**: o `DELETE /{waba-id}/subscribed_apps`
+>   remove a assinatura **do app que faz a chamada** — com o nosso token só
+>   desassinaríamos o `API_Oficial`, que é o oposto. Se um dia se tentar
+>   passar um app id, saiba que **a Meta ignorando o parâmetro derruba o
+>   recebimento do escritório** (recuperável pelo botão "Assinar o app do CFI
+>   na WABA", mas com janela de mensagem perdida) — só fora do expediente.
+>   ✂️ **O caminho que sobra**: pedir ao próprio fornecedor (com o token dele é
+>   um comando) ou abrir ticket na Meta. Enquanto constarem, **não se pode
+>   afirmar que ninguém mais recebe cópia** — e cancelar o contrato resolve a
+>   mensalidade, não o dado.
 > - ✅ **A cobrança é DIRETA com a Meta, no cartão do Paulo** (ele, 23/09):
 >   nenhum parceiro carrega a linha de crédito. Era o único risco de remover
 >   parceiro com controle total — remover junto a linha derrubaria o ENVIO,
