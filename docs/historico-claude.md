@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📏 CARD SHAREPOINT: "157 EMPRESAS SEM PASTA" AGORA DIZ ENTRE QUANTAS
+  PASTAS PROCUROU** (24/09, rodada das 08:39: 157 sem pasta + 193 com erro,
+  depois da paginação de 22/09 que baixou de 264). O proxy está
+  "Conectado" (credencial do proxy OK; a versão 8 errada do
+  `graph-client-secret` foi coberta pela 9 = cópia da 5, e a 8 desativada).
+  O que faltava para saber se 157 é real ou é leitura curta: QUANTAS pastas
+  a rodada leu. `listarPastasDeEmpresas({ comMeta: true })` devolve
+  {nomes, total, paginas}; o auto-sync grava `pastasLidas`/`pastasPaginas`
+  no `sharepoint_sync_log` e na resposta; o card mostra "N pasta(s) lidas
+  em Empresas (M pág.)"; e o motivo por empresa diz "entre as N pastas
+  lidas" + manda conferir em "O que existe nesta biblioteca?". `codigoDaPasta`
+  casa dígitos iniciais (0807 = 807), então "não encontrada" com N ≈ total
+  real do SharePoint é pasta sem código no nome, ou inexistente. Trava
+  ajustada para cobrar o FATO (listagem fora do laço), não a redação.
+
 - **✅ E-MAIL PELO GRAPH VOLTOU (24/09, 15:34)** — medição e desfecho.
   `graph-notificacoes-secret:latest` tinha **36 bytes** (o Secret ID). O
   Value criado hoje no Azure para o app *Notificacoes* estava gravado como

@@ -84,7 +84,7 @@ describe('🧭 os dois trilhos que gravam usam o DONO', () => {
         const fim = autoSync.indexOf('const totalNovos', ini);
         const laco = autoSync.slice(ini, fim > ini ? fim : undefined);
         expect(laco).not.toMatch(/listarPastasDeEmpresas\(\)/);
-        expect(autoSync).toMatch(/pastasDeEmpresas = await listarPastasDeEmpresas\(\)/);
+        expect(autoSync).toMatch(/await listarPastasDeEmpresas\(/)  // o FATO: lidas uma vez, fora do laço — não a redação da linha;
     });
 
     // ⚠️ Falhar a listagem é FATAL e vai DITO: sem ela nenhuma empresa resolve,
@@ -143,4 +143,17 @@ describe('🚦 cada situação da resolução tem AÇÃO própria — num dono s
             expect(fonte).not.toMatch(/MAIS DE UMA pasta com o código/);
         });
     }
+});
+
+// ── 24/09: "157 sem pasta" sem dizer quantas o app leu não deixa comparar ────
+describe('📏 o motivo "não encontrada" diz entre quantas pastas procurou', () => {
+    it('com o total lido, a frase nomeia o número e manda conferir a biblioteca', () => {
+        const { motivoDaResolucao } = require('../sefaz-backend/sharepoint-pastas.js');
+        const m = motivoDaResolucao({ situacao: 'nao-encontrada' }, '0807', 273);
+        expect(m).toMatch(/código 0807/);
+        expect(m).toMatch(/entre as 273 pastas lidas/);
+        expect(m).toMatch(/O que existe nesta biblioteca/);
+        // Sem o total (leitura por outro caminho) a frase não inventa número.
+        expect(motivoDaResolucao({ situacao: 'nao-encontrada' }, '0807')).not.toMatch(/pastas lidas/);
+    });
 });
