@@ -20,6 +20,7 @@
 // ============================================================================
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { filaParaTemplate } from '../services/spConnect';
 
 const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
 
@@ -36,20 +37,15 @@ describe('🚨 template fora da janela não faz redigitar o número', () => {
         expect(tela).toMatch(/nomeContato: conversa\.nome/);
     });
 
-    it('⚠️ a FILA vem da conversa, não do default do módulo', () => {
-        // Mandar pelo 'fiscal' um atendimento que está no Contábil trocaria o
-        // departamento do protocolo — e o cliente receberia resposta de outra
-        // equipe.
-        expect(tela).toMatch(/filaDaConversa/);
-        expect(tela).toMatch(/filasChip\.some\(\(x\) => x\.id === conversa\.fila\)/);
-    });
-
-    it('🐛 e fila que a pessoa NÃO vê cai na dela — select vazio some sem erro', () => {
-        // Lição de 16/08 (o dropdown de template vazio culpando a pessoa
-        // errada): um <select> cujo value não está entre as options renderiza
-        // VAZIO, e o envio falha sem dizer por quê. Conversa na Recepção tem
-        // `fila: null`, então este galho é o caso NORMAL, não a exceção.
-        expect(tela).toMatch(/filasChip\[0\]\?\.id \|\| nc\.departamento/);
+    it('⚠️ a FILA vem da conversa, e a REGRA tem dono fora da tela', () => {
+        // 🐛 AS DUAS ASSERÇÕES QUE MORAVAM AQUI PRENDIAM A IMPLEMENTAÇÃO
+        // INLINE (`filasChip.some(...)`, `filasChip[0]?.id || ...`) e caíram
+        // no minuto em que a regra virou função pura — sobre código MELHOR.
+        // Trava que cobra a forma da linha atrapalha justamente o refactor
+        // que ela deveria proteger. O que importa é que a tela CONSOME o
+        // dono; o comportamento se prova executando `filaParaTemplate`,
+        // no bloco do fim deste arquivo.
+        expect(tela).toMatch(/filaParaTemplate\(/);
     });
 
     it('📌 o texto morto saiu — não promete mais "na próxima etapa"', () => {
@@ -66,5 +62,44 @@ describe('🚨 template fora da janela não faz redigitar o número', () => {
         // templates a pessoa pode mandar ao cliente.
         expect(tela).toMatch(/carregarTemplatesSePreciso/);
         expect((tela.match(/listarTemplatesDaMeta\(\)/g) || []).length).toBe(1);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ✅ A PARTE QUE DÁ PARA PROVAR POR EXECUÇÃO
+//
+// Os testes acima são VARREDURA DE FONTE: provam que a fiação está escrita,
+// não que o botão renderiza. A escolha da fila é a única decisão de verdade
+// desta entrega, e ela foi extraída para função pura justamente para sair do
+// regex e entrar no exercício real. O clique continua sendo prova da pessoa.
+// ════════════════════════════════════════════════════════════════════════════
+describe('✅ filaParaTemplate — exercitada, não varrida', () => {
+    const filas = [{ id: 'contabil' }, { id: 'fiscal' }];
+
+    it('a fila da conversa é respeitada quando a pessoa a enxerga', () => {
+        expect(filaParaTemplate('contabil', filas, 'fiscal')).toBe('contabil');
+    });
+
+    it('🚨 conversa na RECEPÇÃO (fila null) não vira select vazio', () => {
+        // Caso NORMAL, não exceção: toda conversa nova nasce sem fila.
+        expect(filaParaTemplate(null, filas, 'fiscal')).toBe('contabil');
+        expect(filaParaTemplate(undefined, filas, 'fiscal')).toBe('contabil');
+    });
+
+    it('🚨 fila que a pessoa NÃO enxerga cai na primeira dela', () => {
+        // Devolver 'juridico' aqui renderizaria um <select> vazio e o envio
+        // falharia sem causa — a lição de 16/08.
+        expect(filaParaTemplate('juridico', filas, 'fiscal')).toBe('contabil');
+    });
+
+    it('⚠️ sem fila nenhuma visível, devolve o padrão — nunca string vazia', () => {
+        // Campo vazio é o que faz o envio morrer calado; o padrão ao menos
+        // chega ao backend, que recusa com motivo.
+        expect(filaParaTemplate('contabil', [], 'fiscal')).toBe('fiscal');
+        expect(filaParaTemplate(null, [], 'fiscal')).toBe('fiscal');
+    });
+
+    it('e a tela CONSOME o dono — não reimplementa a escolha', () => {
+        expect(tela).toMatch(/filaParaTemplate\(conversa\.fila, filasChip, nc\.departamento\)/);
     });
 });

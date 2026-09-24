@@ -52,6 +52,7 @@ import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
+    filaParaTemplate,
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
@@ -1464,9 +1465,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
      * 16/08, a mesma do dropdown de template).
      */
     const abrirNovaPara = async (conversa: ConversaResumo) => {
-        const filaDaConversa = filasChip.some((x) => x.id === conversa.fila)
-            ? (conversa.fila as string)
-            : (filasChip[0]?.id || nc.departamento);
+        // A escolha mora em `filaParaTemplate` (services/spConnect.ts), pura e
+        // exercitada por execução — é a única parte desta entrega que dá para
+        // PROVAR sem clicar. Aqui a tela só a consome.
+        const filaDaConversa = filaParaTemplate(conversa.fila, filasChip, nc.departamento);
         setNc({
             para: conversa.numero,
             nomeContato: conversa.nome || '',
