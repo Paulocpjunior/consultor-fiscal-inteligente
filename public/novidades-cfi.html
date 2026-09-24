@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (24/09) — leia esta parte primeiro</h2>
 
+    <h3>🧾 <strong>Resumo completado pela importação manual deixa de pedir ciência</strong></h3>
+    <p>Quando você importava o XML completo por cima de um resumo da SEFAZ, a Rotina continuava dizendo "resumo,
+    manifeste a ciência" — o rótulo velho do resumo sobrevivia à importação. Agora a importação carimba que
+    completou, e a Rotina olha o fato (a nota tem itens e valor) antes do rótulo. As notas já completadas antes
+    desta correção também passam a ser lidas como completas.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → etapa 2. Se a nota continuar como resumo, ela é
+    resumo mesmo: manifeste a ciência e aguarde a captura trazer a completa (cron das 02h) ou importe o XML.</div>
+
     <h3>🔎 <strong>A etapa 2 da Rotina agora diz QUAL nota está travando — com a chave</strong></h3>
     <p>"1 nota sem valor/itens (resumo da SEFAZ)" mandava manifestar ciência sem dizer qual nota era, e ninguém
     achava na movimentação. Agora o card da Rotina e o bloco do fim de mês listam cada nota: número, emitente, data

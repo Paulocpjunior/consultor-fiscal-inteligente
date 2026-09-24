@@ -121,6 +121,13 @@ const modeloComItens = (chave) => {
 
 export function ehResumoSemCompleta(d) {
     if (!d || cancelado(d)) return false;
+    // 🚨 O FATO VENCE O RÓTULO (24/09, B & T, KRONA 1458345): a completa
+    // importada à mão entrava por `merge` sobre o resumo e o `schema:
+    // 'resNFe'` velho sobrevivia — a nota tinha itens e valor, e a Rotina
+    // mandava manifestar a ciência de uma nota inteira. Itens gravados, ou
+    // importação manual com totais, são a completa; rótulo velho não muda isso.
+    if (d.temItens === true && Number.isFinite(valorDoDocumento(d))) return false;
+    if (String(d.origem || '') === 'manual' && d.totais && Number.isFinite(valorDoDocumento(d))) return false;
     if (/^res(NFe|NFCe|CTe|MDFe)/.test(String(d.schema || ''))) return true;
     if (/^res/.test(String(d.tipoDoc || ''))) return true;
     if (d.temItens === false && modeloComItens(d.chave)) return true;

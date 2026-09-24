@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 "SEGUI CONFORME O INDICADO MAS AINDA TÁ DANDO COMO SEM CIÊNCIA … ATÉ
+  REIMPORTEI"** (24/09, Paulo, B & T 08/2026, KRONA 1458345). CAUSA: a
+  importação manual COMPLETA o resumo com `setDoc(..., {merge: true})` (o
+  certo, para não apagar os eventos), mas o documento montado no navegador
+  não traz `schema`/`tipoDoc`/`temItens` — então o `schema: 'resNFe'` do
+  resumo SOBREVIVIA ao merge e `ehResumoSemCompleta` (que lê o schema
+  primeiro) seguia dizendo "resumo, manifeste a ciência" sobre uma nota
+  inteira. CORREÇÃO em duas pontas: `carimboDaCompleta(parsed)` (régua pura
+  em `gravacao-nfe-regua.js`) é gravado no upgrade manual
+  (schema procNFe/procCTe/…, tipoDoc, temItens, `_completadoEm/PorEmail`);
+  e a régua da Rotina olha o FATO antes do rótulo — `temItens === true` com
+  valor legível, ou `origem === 'manual'` com `totais` e valor, é a completa
+  (cobre os docs já completados antes da correção). A projeção da Rotina
+  carrega `origem`. REGRA: merge sobre documento existente precisa reescrever
+  o rótulo do que ele passou a ser — rótulo velho sobrevivendo a merge é a
+  lápide que trava a reimportação de novo.
+
 - **🔎 "NÃO CONSEGUI ACHAR A NOTA QUE ESTÁ PEDINDO CIÊNCIA NA MOVIMENTAÇÃO
   DA B & T DO MÊS 08"** (24/09, Paulo). A etapa 2 dizia "1 nota(s) sem
   valor/itens (resumo da SEFAZ)" e mandava manifestar — sem dizer QUAL nota.
