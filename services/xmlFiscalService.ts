@@ -42,6 +42,7 @@ import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './
 // saída de uma cliente e entrada de outra ganha um documento por lado. O id
 // sai do DONO — montá-lo aqui seria a segunda cópia da identidade.
 import { idDoDocumentoDoLado, carimboDoLado } from '../sefaz-backend/documento-lado.js';
+import { carimboDaCompleta } from '../sefaz-backend/gravacao-nfe-regua.js';
 // A decisão de tirar uma nota da empresa (motivo, autor, lápide) é PURA e mora
 // no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
 // jest não carrega, que é régua sem prova.
@@ -646,6 +647,16 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // UPGRADE grava com MERGE — o resumo pode já ter recebido eventos
             // (cancelamento chega antes da completa) e um set sem merge os
             // apagaria. É o mesmo desenho do importer do backend.
+            //
+            // 🚨 E O MERGE PRECISA DIZER QUE COMPLETOU (24/09, B & T): sem
+            // `schema`/`tipoDoc`/`temItens` no que chega, o `schema: 'resNFe'`
+            // do resumo sobrevivia ao merge e a Rotina seguia lendo a nota
+            // inteira como "resumo, manifeste a ciência".
+            if (podeCompletar) {
+                Object.assign(paraGravar, carimboDaCompleta(parsed));
+                paraGravar._completadoEm = new Date().toISOString();
+                paraGravar._completadoPorEmail = user.email || null;
+            }
             await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), paraGravar,
                 podeCompletar ? { merge: true } : {});
         } catch (err) {

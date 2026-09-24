@@ -729,3 +729,23 @@ describe('🔎 a etapa 2 NOMEIA a nota que trava (chave, número, emitente)', ()
         }
     });
 });
+
+// ── 24/09 (B & T, KRONA 1458345): a completa importada à mão NÃO vira "resumo" ─
+describe('🚨 o FATO vence o rótulo: resumo completado à mão deixa de ser resumo', () => {
+    it('schema resNFe velho com itens gravados (temItens) não é resumo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: true, totais: { vNF: 100 } })).toBe(false);
+    });
+    it('schema resNFe velho, importação manual com totais → é a completa (o merge não reescreveu o rótulo)', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: false, origem: 'manual', totais: { vNF: 100 } })).toBe(false);
+    });
+    it('resumo de verdade (SEFAZ, sem itens) continua resumo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: false, origem: 'sefaz', valorTotal: 100 })).toBe(true);
+    });
+    it('a completa carimba schema/tipoDoc/temItens ao completar (régua pura)', () => {
+        const { carimboDaCompleta } = require('../sefaz-backend/gravacao-nfe-regua.js');
+        expect(carimboDaCompleta({ tipo: 'NFe', itens: [{}] })).toEqual({ schema: 'procNFe', tipoDoc: 'NFe', temItens: true });
+        expect(carimboDaCompleta({ tipo: 'CTe', itens: [] })).toEqual({ schema: 'procCTe', tipoDoc: 'CTe', temItens: false });
+        expect(carimboDaCompleta({ tipo: 'NFSe', itens: [{}] }).schema).toBe('nfse');
+        expect(carimboDaCompleta(null)).toEqual({ schema: null, tipoDoc: null, temItens: false });
+    });
+});

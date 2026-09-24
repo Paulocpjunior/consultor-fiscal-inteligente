@@ -253,7 +253,7 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // de produtor rural (DIPAM) sem NENHUMA leitura extra — o
                 // detalhe fica na aba própria, aqui só sinaliza a obrigação.
                 // tpNF=0 = nota própria de entrada (produtor no destinatário).
-                'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF',
+                'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF', 'origem',
                 // 🚨 AS FORMAS DO VALOR QUE `valorDoDocumento` LÊ (23/09, RADIO E TV
                 // IBIRAPUERA): o import pelo navegador grava só `totais.vNF` — sem
                 // estes campos na projeção, a nota chegava "sem valor" à etapa 2
