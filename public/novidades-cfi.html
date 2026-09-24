@@ -77,6 +77,13 @@
 <section>
     <h2>🆕 O que mudou agora (24/09) — leia esta parte primeiro</h2>
 
+    <h3>📧 <strong>"Falha no envio: a Microsoft recusou a credencial" — a mensagem agora aponta o segredo certo</strong></h3>
+    <p>O e-mail da guia usa o app "Notificacoes" da Microsoft, e o segredo dele mora em
+    <strong>graph-notificacoes-secret</strong>, não no graph-client-secret (que é do proxy do SharePoint). A mensagem
+    de erro mandava para o lugar errado. Agora ela nomeia o segredo certo e os dois passos que fazem a versão nova
+    valer (revisão nova + tráfego). Enquanto não for resolvido, "Abrir no Outlook Web" continua enviando pela sua caixa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> DCTFWeb / Envios → "Enviar pelo sistema" → texto do erro.</div>
+
     <h3>🧾 <strong>Resumo completado pela importação manual deixa de pedir ciência</strong></h3>
     <p>Quando você importava o XML completo por cima de um resumo da SEFAZ, a Rotina continuava dizendo "resumo,
     manifeste a ciência" — o rótulo velho do resumo sobrevivia à importação. Agora a importação carimba que
