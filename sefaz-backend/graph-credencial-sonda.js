@@ -15,7 +15,9 @@
 //     Secret Manager `graph-client-secret:latest` → app **a876887f…** →
 //     SharePoint;
 //   · `GRAPH_CLIENT_SECRET` do **serviço do CFI**
-//     (`consultor-fiscal-inteligente`) → app **59fd4ec9…** → ENVIO DE E-MAIL.
+//     (`consultor-fiscal-inteligente`), vindo do Secret Manager
+//     `graph-notificacoes-secret:latest` (medido 24/09) → app **59fd4ec9…**
+//     ("Notificacoes") → ENVIO DE E-MAIL e avisos do Teams.
 //
 // Mesmo nome, dois serviços, dois aplicativos. Renovar um não conserta o outro.
 //

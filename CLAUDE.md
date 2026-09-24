@@ -72,7 +72,7 @@ Plataforma de gestão de documentos fiscais da SP Assessoria Contábil (~213 emp
 
 ## Integrações
 
-- Secret Manager: `gemini-api-key`, `graph-client-secret`, `cfi-empresa-cert-key`, `sefaz-cron-secret`.
+- Secret Manager: `gemini-api-key`, `graph-client-secret` (**proxy do SharePoint**, app `a876887f…`), `graph-notificacoes-secret` (**e-mail/Teams do serviço principal**, app `59fd4ec9…` "Notificacoes"; é o que `GRAPH_CLIENT_SECRET` do `consultor-fiscal-inteligente` lê — medido 24/09), `cfi-empresa-cert-key`, `sefaz-cron-secret`. O nome da variável é o mesmo nos dois serviços; o segredo não.
 - Microsoft Graph (Mail.Send) usa `GRAPH_CLIENT_ID` e `GRAPH_TENANT_ID`. SharePoint usa 5 variáveis `SHAREPOINT_*`.
 - Certificados A1 por empresa: AES-256-GCM, guardados em Storage + `empresas_certificados`.
 - **WhatsApp Calling (SBC Asterisk, VM `sbc-whatsapp`, us-west1-a):** funciona ponta a ponta desde 23/09 (ligação real caiu na URA com áudio). A Meta só entrega chamada **dentro da grade `call_hours`** — seg–sex 08:00–12:00 e 13:00–17:30, America/Sao_Paulo, e **a VM roda em UTC**. Fora da grade, "nenhum INVITE no log" é a resposta CERTA: não vira chamado na Meta. Diagnóstico: `scripts/sbc-diagnostico.sh`, rodado DENTRO da VM.

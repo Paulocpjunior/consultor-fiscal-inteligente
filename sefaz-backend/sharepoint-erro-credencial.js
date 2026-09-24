@@ -128,11 +128,18 @@ export const APPS_AZURE = {
             + 'contêiner sobe.',
     },
     '59fd4ec9-37bd-472c-9fa7-373461dffd50': {
-        nome: 'envio de e-mail pelo Microsoft Graph (guia ao cliente)',
-        onde: 'na variável GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente (Cloud Run). '
-            + '⚠️ O tráfego deste serviço fica PINADO numa revisão: editar a variável cria uma revisão NOVA '
-            + 'a 0% de tráfego, então é preciso rotear o tráfego para ela (ou esperar o próximo deploy, que '
-            + 'carrega a variável junto).',
+        nome: 'envio de e-mail pelo Microsoft Graph (guia ao cliente) — app "Consultor Fiscal Inteligente - Notificacoes"',
+        // 📏 MEDIDO em 24/09 (`gcloud run services describe`): a variável
+        // GRAPH_CLIENT_SECRET deste serviço lê `graph-notificacoes-secret:latest`
+        // — NÃO o `graph-client-secret`, que é do proxy. Gravar no
+        // `graph-client-secret` (foi o que aconteceu, versões 6–8 de 24/09)
+        // não chega a este serviço e ainda troca o segredo do proxy.
+        onde: 'Secret Manager → graph-notificacoes-secret (projeto consultorfiscalapp) — é ESTE o segredo que a '
+            + 'variável GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente lê (medido em 24/09); o '
+            + 'graph-client-secret é do PROXY do SharePoint, outro app. Depois de gravar a versão nova, o :latest '
+            + 'só é lido por uma REVISÃO NOVA: `gcloud run services update consultor-fiscal-inteligente '
+            + '--region us-west1 --update-secrets GRAPH_CLIENT_SECRET=graph-notificacoes-secret:latest` e, como o '
+            + 'tráfego deste serviço fica PINADO numa revisão, `gcloud run services update-traffic … --to-latest`.',
     },
 };
 

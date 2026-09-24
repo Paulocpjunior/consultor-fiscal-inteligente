@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📏 O E-MAIL LÊ `graph-notificacoes-secret`, NÃO `graph-client-secret`**
+  (24/09, medido pelo Paulo: `gcloud run services describe
+  consultor-fiscal-inteligente` → `GRAPH_CLIENT_SECRET.secretKeyRef.name =
+  graph-notificacoes-secret`, `key: latest`; tráfego 100% na revisão
+  02418-gij). A nota de hoje mais acima dizia que o app *Notificacoes*
+  (`59fd4ec9…`) era lido de `graph-client-secret` — estava ERRADA, e as
+  versões 6, 7 e 8 gravadas hoje em `graph-client-secret` foram para o
+  segredo do PROXY (app `a876887f…`), sem chegar ao e-mail e com risco de
+  trocar o segredo do SharePoint na próxima revisão do proxy. CORREÇÃO:
+  `APPS_AZURE['59fd4ec9…'].onde` agora nomeia `graph-notificacoes-secret` +
+  `--update-secrets GRAPH_CLIENT_SECRET=graph-notificacoes-secret:latest` +
+  `update-traffic --to-latest`; CLAUDE.md lista os dois segredos com o app
+  de cada um. REGRA: onde um segredo mora se MEDE (`services describe`),
+  nunca se deduz do nome da variável — o nome é o mesmo nos dois serviços.
+
 - **🧾 "SEGUI CONFORME O INDICADO MAS AINDA TÁ DANDO COMO SEM CIÊNCIA … ATÉ
   REIMPORTEI"** (24/09, Paulo, B & T 08/2026, KRONA 1458345). CAUSA: a
   importação manual COMPLETA o resumo com `setDoc(..., {merge: true})` (o
