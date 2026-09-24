@@ -1419,6 +1419,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [enviandoNova, setEnviandoNova] = useState(false);
     const [erroNova, setErroNova] = useState<string | null>(null);
 
+    /** DONO ÚNICO do carregamento dos templates — as duas portas de abrir o
+     *  modal (✚ Nova e "enviar para este contato") leem daqui. Duas cópias
+     *  divergiriam em silêncio no primeiro filtro que mudasse. */
+    const carregarTemplatesSePreciso = async () => {
+        if (templates.length > 0 || daMeta.length > 0) return;
+        setCarregandoTpl(true);
+        try {
+            const [cad, meta] = await Promise.all([listarTemplates(), listarTemplatesDaMeta()]);
+            if (cad.ok) setTemplates((cad.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
+            if (meta.ok) setDaMeta((meta.templates || []).filter((t) => t.status === 'APPROVED' && !t.temDocumento));
+            if (!cad.ok && !meta.ok) setErroNova(cad.error || 'Falha ao carregar os templates.');
+        } finally {
+            setCarregandoTpl(false);
+        }
+    };
+
     const abrirNova = async () => {
         setNovaAberta(true);
         setErroNova(null);
@@ -1428,17 +1444,40 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setNc((f) => (filasChip.some((x) => x.id === f.departamento)
             ? f
             : { ...f, departamento: filasChip[0]?.id || f.departamento, escolha: '', variaveis: {} }));
-        if (templates.length === 0 && daMeta.length === 0) {
-            setCarregandoTpl(true);
-            try {
-                const [cad, meta] = await Promise.all([listarTemplates(), listarTemplatesDaMeta()]);
-                if (cad.ok) setTemplates((cad.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
-                if (meta.ok) setDaMeta((meta.templates || []).filter((t) => t.status === 'APPROVED' && !t.temDocumento));
-                if (!cad.ok && !meta.ok) setErroNova(cad.error || 'Falha ao carregar os templates.');
-            } finally {
-                setCarregandoTpl(false);
-            }
-        }
+        await carregarTemplatesSePreciso();
+    };
+
+    /**
+     * ✚ Nova conversa JÁ PREENCHIDA com o contato aberto na tela.
+     *
+     * 🚨 Nasceu de um achado de colaborador (23/09, atendimento do Eduardo
+     * Guerra): com a janela de 24h fechada, o aviso mandava "usar as telas do
+     * módulo" — e lá se REDIGITA o número de quem está aberto na tela.
+     * Redigitar dado que o sistema tem é onde nasce o dígito trocado, e aqui
+     * o erro manda template de cliente para um estranho.
+     *
+     * ⚠️ A fila vem da CONVERSA, não do default: mandar pelo 'fiscal' um
+     * atendimento que está no Contábil trocaria o departamento do protocolo.
+     * Se a fila da conversa não estiver entre as que a pessoa vê (ou for
+     * null, que é Recepção), cai na primeira dela — select com valor fora das
+     * opções renderiza VAZIO e o envio falharia sem dizer por quê (lição de
+     * 16/08, a mesma do dropdown de template).
+     */
+    const abrirNovaPara = async (conversa: ConversaResumo) => {
+        const filaDaConversa = filasChip.some((x) => x.id === conversa.fila)
+            ? (conversa.fila as string)
+            : (filasChip[0]?.id || nc.departamento);
+        setNc({
+            para: conversa.numero,
+            nomeContato: conversa.nome || '',
+            departamento: filaDaConversa,
+            escolha: '',
+            variaveis: {},
+            posicionais: [],
+        });
+        setNovaAberta(true);
+        setErroNova(null);
+        await carregarTemplatesSePreciso();
     };
 
     const templatesDoDep = templates.filter((t) => t.departamento === nc.departamento);
@@ -4620,7 +4659,21 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 ) : (
                                     <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
                                         📋 Janela de 24h fechada — o envio inicial sai por <strong>template aprovado</strong> (regra da Meta).
-                                        O envio de template direto daqui chega na próxima etapa; por enquanto use o envio de guia/template das telas do módulo.
+                                        {/* 🚨 O NÚMERO JÁ ESTÁ AQUI — 23/09, achado de um colaborador no
+                                            atendimento do Eduardo Guerra: o aviso mandava "usar as telas do
+                                            módulo", e lá se REDIGITA o número de quem já está aberto na
+                                            tela. Mesma família do prefixo que o Paulo recusou na ligação:
+                                            reintroduzir à mão um dado que o sistema tem é onde nasce o
+                                            dígito trocado — e aqui o custo é mandar template de cliente
+                                            para um estranho.
+                                            A máquina toda já existia (`/conversas/iniciar` recebe número,
+                                            template e variáveis); faltava o BOTÃO. */}
+                                        <button
+                                            type="button"
+                                            onClick={() => abrirNovaPara(sel)}
+                                            className="ml-1 font-bold underline underline-offset-2 hover:opacity-80">
+                                            Enviar template para {sel.nome || sel.numero} ➤
+                                        </button>
                                     </div>
                                 )}
                             </div>

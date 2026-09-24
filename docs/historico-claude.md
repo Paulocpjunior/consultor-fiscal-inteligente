@@ -5,6 +5,38 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📋 A JANELA FECHOU E O AVISO MANDAVA REDIGITAR O NÚMERO DO CLIENTE QUE
+  ESTAVA ABERTO NA TELA** (24/09, achado de um COLABORADOR no atendimento do
+  Eduardo Guerra; o Paulo trouxe o print e a pergunta: *"não tem como enviar um
+  template de início de conversa sem a necessidade de cadastrar o número dele
+  novamente?"*).
+  🔴 **O retrato**: com a janela de 24h fechada, o rodapé do composer dizia *"o
+  envio de template direto daqui chega na próxima etapa; por enquanto use o
+  envio de guia/template das telas do módulo"* — e nessas telas a pessoa
+  **digita de novo** o número de quem já está na frente dela.
+  ⚠️ **É A MESMA FAMÍLIA DO PREFIXO RECUSADO NA LIGAÇÃO** (25/08, Paulo):
+  *"mandar decorar um prefixo e REDIGITAR o número reintroduz à mão um dado que
+  o sistema já tem — e é aí que um dígito errado liga para um estranho"*. Com
+  outra roupa e o mesmo custo: template de cliente saindo para número trocado.
+  📌 **E NÃO FALTAVA MECANISMO, FALTAVA BOTÃO**: `/conversas/iniciar` recebe
+  número, template e variáveis desde sempre; o modal ✚ Nova já usa essa rota.
+  A correção inteira foi abrir o MESMO modal com `para`, `nomeContato` e
+  `departamento` vindos da conversa. Vale como régua: antes de dizer "chega na
+  próxima etapa", conferir se a etapa não chegou — aqui ela tinha chegado e o
+  aviso seguiu prometendo futuro por semanas.
+  ⚠️ **A FILA VEM DA CONVERSA, não do default do módulo**: mandar pelo
+  `fiscal` um atendimento que está no Contábil trocaria o departamento do
+  protocolo, e o cliente receberia resposta de outra equipe. Fila que a pessoa
+  não enxerga (ou `null`, que é Recepção) cai na primeira dela — `select` com
+  valor fora das opções renderiza VAZIO e o envio falha sem causa (lição de
+  16/08, a do dropdown de template).
+  🔒 **Dono único do carregamento de templates** (`carregarTemplatesSePreciso`):
+  duas portas abrem o mesmo modal, e duas cópias divergiriam no primeiro filtro
+  que mudasse — e o filtro decide QUAIS templates podem sair para o cliente.
+  ✂️ Trava em `__tests__/templateSemRedigitarNumero.test.ts`, cobrando o
+  CAMINHO DO DADO (número, nome e fila saindo da conversa), não a existência do
+  botão.
+
 - **🛑 ABRI O JOTFORM DO ESCRITÓRIO SEM NINGUÉM TER PEDIDO — e cheguei num
   formulário de consulta dermatológica** (23/09, sessão do SP Connect; Paulo:
   *"voce esta ficando louco? o que o jotform tem haver com o whatsapp"* e
