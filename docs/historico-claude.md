@@ -64,6 +64,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📌 **REGRA QUE FICA: credencial se PROVA com um token, não se deduz de
   configuração presente.** `graphConfigurado: true` só diz que as três envs
   existem — não que valem.
+  📏 **E A CAUSA ERA O TAMANHO — uma tarde para o que uma linha diria** (24/09,
+  fechamento): o Secret Manager tinha **11 caracteres** (a máscara
+  `xxx********` copiada da tabela do Azure — o portal mascara na hora e só o
+  ícone DENTRO da coluna *Valor*, logo após *Adicionar*, copia o valor) e, na
+  tentativa seguinte, **100** (o texto de um comando copiado do chat por cima
+  do segredo). Segredo de app do Azure tem **40** e nunca tem `@`. A versão
+  **8** foi gravada com 40 e o deploy a levou. A linha 🔑 passa a dizer *"o
+  segredo configurado tem N caracteres — esperado 40"* — tamanho, nunca valor.
+  📌 **REGRA QUE FICA para rotação de segredo com o Paulo**: (1) o comando de
+  captura vai ao terminal ANTES de copiar o segredo (`read -s S && … wc -c`),
+  senão o clipboard é sobrescrito; (2) o número que valida é o TAMANHO (40);
+  (3) o `printf '%s' "$S"` grava; nada é impresso. E a versão que sobrar
+  desativada NÃO pode ser a `latest` — o Cloud Run lê `latest` e instância
+  nova não sobe com versão desativada (aconteceu: 7 desativada, reativada).
 
 - **📋 A JANELA FECHOU E O AVISO MANDAVA REDIGITAR O NÚMERO DO CLIENTE QUE
   ESTAVA ABERTO NA TELA** (24/09, achado de um COLABORADOR no atendimento do

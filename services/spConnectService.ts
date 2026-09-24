@@ -679,7 +679,7 @@ export interface AuditoriaAviso {
 }
 export interface StatusAvisosResposta {
     /** Token do Graph emitido de verdade (cacheado) — a AUDIÊNCIA certa não prova a credencial. */
-    credencialGraph: { ok: boolean; erro: string | null };
+    credencialGraph: { ok: boolean; erro: string | null; /** só o TAMANHO, nunca o valor — 40 é o esperado */ tamanhoSegredo?: number };
     agora: string; noExpediente: boolean; horario: unknown; avisoTeamsAtivo: boolean;
     teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
     dispositivos: number; prefs: Record<string, boolean>; filaSimulada: string;

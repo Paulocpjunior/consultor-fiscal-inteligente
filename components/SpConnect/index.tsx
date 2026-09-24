@@ -3824,7 +3824,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             <p className={`text-[10px] mb-0.5 ${avisosStatus.credencialGraph.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
                                                 {avisosStatus.credencialGraph.ok
                                                     ? '🔑 Credencial do Graph (app Notificacoes): ✅ o Azure emitiu token.'
-                                                    : `🔑 Credencial do Graph (app Notificacoes): ❌ ${avisosStatus.credencialGraph.erro} — sem isto NENHUM aviso no Teams sai (nem e-mail de guia, nem alerta por e-mail).`}
+                                                    : `🔑 Credencial do Graph (app Notificacoes): ❌ ${avisosStatus.credencialGraph.erro} — sem isto NENHUM aviso no Teams sai (nem e-mail de guia, nem alerta por e-mail).${
+                                                        typeof avisosStatus.credencialGraph.tamanhoSegredo === 'number' && avisosStatus.credencialGraph.tamanhoSegredo !== 40
+                                                            ? ` O segredo configurado tem ${avisosStatus.credencialGraph.tamanhoSegredo} caracteres — um segredo de app do Azure tem 40: o valor gravado no Secret Manager não é o "Valor" do segredo.`
+                                                            : ''}`}
                                             </p>
                                         )}
                                         {avisosStatus && (
