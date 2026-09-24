@@ -159,6 +159,9 @@ export function bloqueioDaEtapa(e) {
         // sabe para ONDE mandar — e foi assim que a única porta oferecida na
         // VINCENZO virou a que não resolvia nenhuma das duas causas.
         causas: Array.isArray(e.causas) ? e.causas : null,
+        // 🔎 As NOTAS que travam a etapa 2, nomeadas (chave, número, emitente).
+        notas: Array.isArray(e.notas) ? e.notas : null,
+        notasCortadas: Number(e.notasCortadas || 0),
     };
 }
 

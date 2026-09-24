@@ -276,7 +276,9 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // CARTA DE CORREÇÃO: ela pode ter mudado o CFOP/natureza, e
                 // o livro sai do XML ORIGINAL. Era capturada e nenhum ponto
                 // da escrituração olhava — a validação passou a olhar.
-                'eventos', 'cancelamentoDeclarado', 'numero'),
+                'eventos', 'cancelamentoDeclarado', 'numero',
+                // Para NOMEAR a nota que trava a etapa 2 (24/09): emissão e prestador.
+                'dhEmi', 'dataEmissao', 'prestador', 'serie'),
         { label: `rotina-fiscal ${competencia}`, maxDocs: 60000 },
     );
     const documentos = docsSnaps.map((s) => s.data() || {});

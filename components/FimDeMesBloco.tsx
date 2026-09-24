@@ -631,11 +631,25 @@ const Bloqueios: React.FC<{
             </p>
             {bloqueios.map((b) => (
                 <div key={b.id} className="flex items-start justify-between gap-2 flex-wrap">
-                    <p className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-[200px]">
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-[200px]">
                         <span className="font-semibold">{b.ordem}. {b.nome}</span>
                         {b.resumo ? ` — ${b.resumo}` : ''}
                         {b.acao && <span className="block text-blue-700 dark:text-blue-300">→ {b.acao}</span>}
-                    </p>
+                        {/* 🔎 A nota NOMEADA (24/09, B & T): contar sem dizer qual é mandar procurar. */}
+                        { ((b).notas || []).length > 0 && (
+                            <ul className="mt-1 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
+                                {(b).notas!.map((n, i) => (
+                                    <li key={n.chave || i} className="font-mono break-all">
+                                        {n.motivo === 'resumo' ? '📄 Resumo' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
+                                        {n.emitente ? ` · ${n.emitente}` : ''}{n.dhEmi ? ` · ${String(n.dhEmi).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                        {n.chave ? <span className="block text-[10px] text-slate-500 dark:text-slate-400">chave {n.chave}</span> : null}
+                                    </li>
+                                ))}
+                                {((b).notasCortadas || 0) > 0 && <li className="text-slate-500">e mais {(b).notasCortadas} — mostrando {(b).notas!.length}</li>}
+                                <li className="text-[10px] text-slate-500 dark:text-slate-400">Na Central de XMLs, cole a chave (ou o nº) na busca — o selo "Resumo" marca a nota sem o XML completo.</li>
+                            </ul>
+                        )}
+                    </div>
                     {onIrPara && b.onde && (
                         <button
                             onClick={() => onIrPara(b.id)}

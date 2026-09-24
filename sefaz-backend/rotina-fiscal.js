@@ -310,10 +310,26 @@ export function montarRotinaFiscal({
             resumos > 0 ? 'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente.' : null,
             nfseSemValor > 0 ? 'A NFS-e entrou sem <vServ>/valor que o leitor entenda — abra a nota na Central de XMLs e confira o valor; se estiver vazio, reimporte o XML completo (não é caso de manifestação).' : null,
         ].filter(Boolean);
+        // 🔎 A NOTA VAI NOMEADA (24/09, B & T 08/2026: "não consegui achar a
+        // nota que está pedindo ciência"). Contar sem dizer QUAL é mandar
+        // procurar: número, emitente e CHAVE são o que a busca da Central
+        // de XMLs aceita, e o selo "Resumo" é o que a pessoa vai ver lá.
+        const notas = semValor.slice(0, 20).map((d) => {
+            const emit = d.emitente || d.prestador || {};
+            return {
+                chave: d.chave || null,
+                numero: d.numero || null,
+                tipo: d.tipo || null,
+                emitente: emit.nome || emit.xNome || emit.razaoSocial || null,
+                emitenteCnpj: String(emit.cnpj || emit.cnpjCpf || emit.CNPJ || d.cnpjEmit || '').replace(/\D/g, '') || null,
+                dhEmi: d.dhEmi || d.dataEmissao || null,
+                motivo: ehNfse(d) ? 'nfse-sem-valor' : 'resumo',
+            };
+        });
         eValidacao = etapa('validacao', 'atencao',
             `${partes.join(' · ')}.`,
             `${acoes.join(' ')} Sem isso a apuração sai a menor.`,
-            { resumos, nfseSemValor, canceladas, cce });
+            { resumos, nfseSemValor, canceladas, cce, notas, notasCortadas: Math.max(0, semValor.length - notas.length) });
     } else {
         eValidacao = etapa('validacao', 'concluida',
             `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}.`,
@@ -722,7 +738,9 @@ export function montarRotinaFiscal({
         etapas,
         fechamento: fechamento || null,
         proximoPasso: (mesFechado || !proxima) ? null
-            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo },
+            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo,
+                // As notas NOMEADAS viajam no próximo passo — é ali que a pessoa lê.
+                ...(Array.isArray(proxima.notas) && proxima.notas.length ? { notas: proxima.notas, notasCortadas: proxima.notasCortadas || 0 } : {}) },
         progresso: { concluidas: fechadas, total: etapas.length },
         // 'fechado' é FATO (o carimbo). 'ok' passou a querer dizer **pronto
         // para fechar** desde 26/08 — as cinco etapas fecharam e ninguém deu o

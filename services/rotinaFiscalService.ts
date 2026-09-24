@@ -61,7 +61,12 @@ export interface RotinaEmpresa {
     competencia: string;
     iss: IssDaRotina | null;
     etapas: EtapaRotina[];
-    proximoPasso: { id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string } | null;
+    proximoPasso: {
+        id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string;
+        /** 🔎 Etapa 2: as notas que travam, nomeadas. */
+        notas?: Array<{ chave: string | null; numero: string | number | null; tipo: string | null; emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null; motivo: 'resumo' | 'nfse-sem-valor' }>;
+        notasCortadas?: number;
+    } | null;
     progresso: { concluidas: number; total: number };
     /**
      * `'fechado'` é FATO (o carimbo do fim de mês); `'ok'` quer dizer **pronto
