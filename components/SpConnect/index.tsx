@@ -31,7 +31,7 @@ import {
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
-    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams,
+    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams, statusAvisos, testarTodosAvisos, StatusAvisosResposta, TesteTudoResposta,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -43,7 +43,7 @@ import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
 } from '../../services/notificacaoConnect';
 import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
-import { pushConfigurado, registrarDispositivo } from '../../services/pushConnect';
+import { pushConfigurado, registrarDispositivo, lerPrefsPush, salvarPrefsPush } from '../../services/pushConnect';
 import {
     SOBRE_VERSAO, POR_QUE, O_QUE_FAZ, DIFERENCIAIS, MANUAL, REVISOES,
     temSobreNaoLido, marcarSobreComoLido, dataBr,
@@ -591,6 +591,55 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally { setTeamsTestando(false); }
     };
 
+    // ── 🔔 AVISOS — o painel que responde "por que eu não recebi?" (24/09) ──
+    // Paulo: "como ativar de forma mais extravagante possível e habilitar de
+    // todas as formas" e "olhei em configurações e não achei o campo". São
+    // QUATRO camadas com donos diferentes — som e pop-up (navegador), celular
+    // (FCM) e Teams (Graph) — e nenhuma tela as mostrava JUNTAS com o estado
+    // de cada uma. A simulação e a auditoria vêm do servidor, com a MESMA
+    // régua do fan-out real (destinatariosDoPush/DoAvisoTeams): se a pessoa
+    // não receberia agora, a tela diz o motivo em vez de deixá-la deduzir.
+    const [avisosStatus, setAvisosStatus] = useState<StatusAvisosResposta | null>(null);
+    const [avisosErro, setAvisosErro] = useState<string | null>(null);
+    const [avisosCarregando, setAvisosCarregando] = useState(false);
+    const [prefsAviso, setPrefsAviso] = useState<Record<string, boolean>>({});
+    const [testeTudo, setTesteTudo] = useState<TesteTudoResposta | null>(null);
+    const [testandoTudo, setTestandoTudo] = useState(false);
+    const carregarAvisos = async () => {
+        setAvisosCarregando(true); setAvisosErro(null);
+        try {
+            const [s, p] = await Promise.all([statusAvisos(), lerPrefsPush()]);
+            if (s.ok) setAvisosStatus(s as StatusAvisosResposta); else setAvisosErro(s.error || 'Falha ao ler o estado dos avisos.');
+            if (p.ok) setPrefsAviso(p.prefs || {});
+        } finally { setAvisosCarregando(false); }
+    };
+    const alternarPrefAviso = async (chave: string) => {
+        // Padrão é LIGADO (regra do Paulo: alerta para a equipe nasce ativo);
+        // ausência da chave é "ligado", e o clique inverte a partir daí.
+        const atual = prefsAviso[chave] !== false;
+        const novo = { ...prefsAviso, [chave]: !atual };
+        setPrefsAviso(novo);
+        const r = await salvarPrefsPush(novo);
+        if (!r.ok) setAvisosErro(r.error || 'Não salvou a preferência.');
+        else void carregarAvisos();
+    };
+    const testarTudo = async () => {
+        if (testandoTudo) return;
+        setTestandoTudo(true); setTesteTudo(null);
+        try {
+            // As DUAS camadas do navegador disparam AQUI, no gesto do clique —
+            // é o único momento em que o navegador deixa tocar e mostrar.
+            setSomOk(await destravarSom());
+            tocarAviso();
+            if (permissaoAviso === 'concedida') {
+                try { new Notification('🧪 SP Connect — teste de avisos', { body: 'Se você viu isto, o pop-up do navegador funciona.', icon: '/connect-icon-192.png', tag: 'spconnect-teste' }); } catch { /* o som já provou o gesto */ }
+            }
+            const r = await testarTodosAvisos();
+            if (r.ok) setTesteTudo(r as TesteTudoResposta); else setAvisosErro(r.error || 'A rota de teste não respondeu.');
+        } finally { setTestandoTudo(false); }
+    };
+    const linkNoNavegador = typeof window !== 'undefined' ? `${window.location.origin}/connect` : '/connect';
+
     // ── 🖼️ Imagem por fila: sobe/grava na hora (não fica pendente do
     // "Salvar configuração" — senão trocar de aba sem salvar perderia o
     // upload que já foi pro Storage).
@@ -626,7 +675,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    // A aba 🔔 lê o estado ao abrir — o efeito mora DEPOIS do `cfgAba`
+    // (usá-lo antes da declaração estourava TS2448 no tsconfig normal).
+    useEffect(() => { if (cfgAba === 'avisos') void carregarAvisos(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cfgAba]);
 
     // ── 🗄 Arquivo de mídia no SharePoint (o cron roda sozinho; o botão antecipa)
     const [arqRodando, setArqRodando] = useState(false);
@@ -2479,7 +2531,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -2498,68 +2550,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <strong>Recepção</strong>. Sem nenhuma fila marcada, a pessoa só vê o que ela mesma
                                     conduz. <em>Ser admin do CFI configura o app, mas não dá visão do inbox inteiro.</em>
                                 </p>
-                                {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
-                                    não deixa a página mostrar popup do sistema — quem avisa lá é
-                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
-                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
-                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
-                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
-                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
-                                        </button>
-                                    </div>
-                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
-                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
-                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
-                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
-                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
-                                    </p>
-                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
-                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
-                                    </button>
-                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
-                                        tipo que faz a pessoa procurar problema onde não há.
-                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
-                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
-                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
-                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
-                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
-                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
-                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
-                                        os dois suspeitos da frente sem mais nenhum teste. */}
-                                    {teamsTeste && (teamsTeste.resultado.ok ? (
-                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
-                                            <p>
-                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
-                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
-                                                declara <code>activities</code>. Nada mais falta configurar.
-                                            </p>
-                                            <p className="text-slate-500 dark:text-slate-400">
-                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
-                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
-                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
-                                                SP Connect está silenciado.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
-                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
-                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
-                                            <p className="text-slate-500 dark:text-slate-400">
-                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
-                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
-                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
-                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
-                                                3) o SP Connect não instalado no seu Teams.
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
 
                                 {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
                                 {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
@@ -3751,6 +3741,194 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         Confirmar e gravar
                                     </button>
                                 </div>
+                            </div>
+                        )}
+
+                        {cfgAba === 'avisos' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                    Mensagem nova avisa por <strong>quatro portas</strong>, e cada uma tem um dono diferente. Aqui
+                                    está o estado de cada uma <strong>para você</strong>, o botão que liga, e — quando não chega —
+                                    <strong> o motivo</strong>, lido da mesma régua que o servidor usa de verdade.
+                                </p>
+                                {dentroDeIframe() && (
+                                    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 text-[10.5px] text-amber-800 dark:text-amber-300 leading-snug">
+                                        ⚠️ <strong>Você está dentro do Teams.</strong> Aqui só funcionam o <strong>som</strong> e o
+                                        <strong> sino do Teams</strong> — o Teams não deixa a página mostrar pop-up nem registrar o celular.
+                                        Para ligar as outras duas, abra o SP Connect no navegador:{' '}
+                                        <a href={linkNoNavegador} target="_blank" rel="noreferrer" className="font-bold underline">{linkNoNavegador}</a>
+                                        {' '}(e instale como app pelo ícone da barra de endereço — aí avisa com tudo fechado).
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button onClick={testarTudo} disabled={testandoTudo}
+                                        className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {testandoTudo ? 'Testando…' : '🧪 Testar TUDO agora (som, pop-up, celular e Teams)'}
+                                    </button>
+                                    <button onClick={() => void carregarAvisos()} disabled={avisosCarregando}
+                                        className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40">
+                                        {avisosCarregando ? 'Lendo…' : '🔄 Atualizar'}
+                                    </button>
+                                </div>
+                                {avisosErro && <p className="text-[11px] text-red-600 dark:text-red-400">{avisosErro}</p>}
+
+                                {/* ── as 4 camadas, uma por linha: estado · ação · resultado do teste ── */}
+                                <div className="space-y-1.5">
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>🔊 Som</strong> nesta aba — {somOk ? '✅ liberado' : '❌ ainda travado (o navegador só libera depois de um clique)'}</span>
+                                            {!somOk && <button onClick={async () => { setSomOk(await destravarSom()); tocarAviso(); }} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Liberar e tocar</button>}
+                                        </div>
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.som !== false} onChange={() => void alternarPrefAviso('som')} /> quero som de mensagem nova
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>🔔 Pop-up</strong> do navegador — {permissaoAviso === 'concedida' ? '✅ permitido' : permissaoAviso === 'negada' ? '❌ BLOQUEADO neste navegador' : permissaoAviso === 'sem-suporte' ? '❌ este navegador não mostra' : '❌ ainda não permitido'}</span>
+                                            {permissaoAviso === 'nao-pedida' && !dentroDeIframe() && <button onClick={pedirPermissaoAviso} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Permitir</button>}
+                                        </div>
+                                        {permissaoAviso === 'negada' && !dentroDeIframe() && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">Cadeado 🔒 ao lado do endereço → Notificações → Permitir, e recarregue.</p>}
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.popup !== false} onChange={() => void alternarPrefAviso('popup')} /> quero pop-up de mensagem nova
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>📱 Celular / app fechado</strong> (push) — {!pushConfigurado().ok ? '❌ não configurado no servidor' : (avisosStatus?.dispositivos || 0) > 0 ? `✅ ${avisosStatus?.dispositivos} aparelho(s) registrado(s)` : '❌ nenhum aparelho registrado nesta conta'}</span>
+                                            {pushConfigurado().ok && !dentroDeIframe() && <button onClick={ligarPush} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Registrar este aparelho</button>}
+                                        </div>
+                                        {!pushConfigurado().ok && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">{pushConfigurado().motivo} {pushConfigurado().acao}</p>}
+                                        {push.msg && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{push.msg}{push.acao ? ` ${push.acao}` : ''}</p>}
+                                        {avisosStatus && (
+                                            <p className={`text-[10px] mt-0.5 ${avisosStatus.simulacao.push.receberia ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                                {avisosStatus.simulacao.push.receberia
+                                                    ? `✅ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, seu celular receberia.`
+                                                    : `❌ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, seu celular NÃO receberia: ${avisosStatus.simulacao.push.motivo}.`}
+                                            </p>
+                                        )}
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.push !== false} onChange={() => void alternarPrefAviso('push')} /> quero aviso no celular
+                                        </label>
+                                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.pushForaDoExpediente === true} onChange={() => void alternarPrefAviso('pushForaDoExpediente')} /> também <strong>fora do expediente</strong> (24h) — nasce desligado: celular apitando de madrugada faz a pessoa desligar tudo
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        {avisosStatus && (
+                                            <p className={`text-[10px] mb-1 ${avisosStatus.simulacao.teams.receberia ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                                {avisosStatus.simulacao.teams.receberia
+                                                    ? `✅ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams tocaria.`
+                                                    : `❌ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams NÃO tocaria: ${avisosStatus.simulacao.teams.motivo}.`}
+                                            </p>
+                                        )}
+                                        <label className="mb-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.avisoTeams !== false} onChange={() => void alternarPrefAviso('avisoTeams')} /> quero aviso no sino do Teams
+                                        </label>
+                                        {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
+                                    não deixa a página mostrar popup do sistema — quem avisa lá é
+                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
+                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
+                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
+                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
+                                        </button>
+                                    </div>
+                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
+                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
+                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
+                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
+                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
+                                    </p>
+                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
+                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
+                                    </button>
+                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
+                                        tipo que faz a pessoa procurar problema onde não há.
+                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
+                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
+                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
+                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
+                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
+                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
+                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
+                                        os dois suspeitos da frente sem mais nenhum teste. */}
+                                    {teamsTeste && (teamsTeste.resultado.ok ? (
+                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                                            <p>
+                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
+                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
+                                                declara <code>activities</code>. Nada mais falta configurar.
+                                            </p>
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
+                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
+                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
+                                                SP Connect está silenciado.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
+                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
+                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
+                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
+                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
+                                                3) o SP Connect não instalado no seu Teams.
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                                    </div>
+                                </div>
+
+                                {avisosStatus && (
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        ⏰ Agora: {avisosStatus.noExpediente ? 'DENTRO do expediente do atendimento' : 'FORA do expediente do atendimento — celular e Teams só avisam quem ligou o 24h'}
+                                        {' '}(a grade mora em 🤖 Bot e mensagens → horário).
+                                    </p>
+                                )}
+
+                                {/* ── resultado do "Testar TUDO", canal a canal ── */}
+                                {testeTudo && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[10.5px] space-y-0.5">
+                                        <p className="font-bold text-slate-700 dark:text-slate-200">Resultado do teste:</p>
+                                        <p>🔊 Som: {somOk ? '✅ tocou (se não ouviu, o volume do aparelho está baixo)' : '❌ o navegador não liberou — clique de novo'}</p>
+                                        <p>🔔 Pop-up: {permissaoAviso === 'concedida' ? '✅ mostrado (canto da tela)' : dentroDeIframe() ? '❌ impossível dentro do Teams' : '❌ sem permissão'}</p>
+                                        <p>📱 Celular: {testeTudo.push.ok ? `✅ enviado para ${testeTudo.push.enviados} de ${testeTudo.push.aparelhos} aparelho(s)` : `❌ ${testeTudo.push.erro}`}</p>
+                                        <p>💼 Teams: {testeTudo.teams.ok ? '✅ o Graph aceitou — veja o sino de Atividade no aplicativo do Teams' : `❌ (${testeTudo.teams.etapa}) ${testeTudo.teams.erro}`}</p>
+                                    </div>
+                                )}
+
+                                {/* ── o último aviso REAL: quem recebeu, quem não e por quê ── */}
+                                {avisosStatus?.ultimoAviso ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[10.5px] space-y-0.5">
+                                        <p className="font-bold text-slate-700 dark:text-slate-200">
+                                            Último aviso real — {horaCurta(avisosStatus.ultimoAviso.em, new Date())} · {avisosStatus.ultimoAviso.titulo}
+                                        </p>
+                                        <p>📱 Celular: {avisosStatus.ultimoAviso.push.enviados} enviado(s) para {avisosStatus.ultimoAviso.push.alvos.length} pessoa(s){avisosStatus.ultimoAviso.push.alvos.length ? ` (${avisosStatus.ultimoAviso.push.alvos.join(', ')})` : ''}.</p>
+                                        <p>💼 Teams: {avisosStatus.ultimoAviso.teams.enviados} aceito(s) de {avisosStatus.ultimoAviso.teams.alvos.length}{avisosStatus.ultimoAviso.teams.erros.length ? ` — recusados: ${avisosStatus.ultimoAviso.teams.erros.map((e) => `${e.email} (${e.etapa}: ${e.erro})`).join('; ')}` : ''}.</p>
+                                        {(avisosStatus.ultimoAviso.push.fora.length > 0 || avisosStatus.ultimoAviso.teams.fora.length > 0) && (
+                                            <details className="text-slate-500 dark:text-slate-400">
+                                                <summary className="cursor-pointer">Quem NÃO recebeu, e por quê</summary>
+                                                <ul className="list-disc pl-4">
+                                                    {avisosStatus.ultimoAviso.push.fora.map((f, i) => <li key={`p${i}`}>📱 {f.email || '(sem e-mail)'} — {f.motivo}</li>)}
+                                                    {avisosStatus.ultimoAviso.teams.fora.map((f, i) => <li key={`t${i}`}>💼 {f.email || '(sem e-mail)'} — {f.motivo}</li>)}
+                                                </ul>
+                                            </details>
+                                        )}
+                                    </div>
+                                ) : avisosStatus ? (
+                                    <p className="text-[10px] text-slate-400">Ainda não há aviso real registrado — o registro nasce na próxima mensagem de cliente.</p>
+                                ) : null}
                             </div>
                         )}
 

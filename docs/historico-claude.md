@@ -5,6 +5,44 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔔 "NÃO ESTAMOS RECEBENDO NOTIFICAÇÃO" + "OLHEI EM CONFIGURAÇÕES E NÃO
+  ACHEI O CAMPO"** (24/09, Paulo: *"como ativar de forma mais extravagante
+  possível e habilitar de todas as formas"*).
+  🔴 **O retrato**: eram QUATRO camadas com donos diferentes — som e pop-up
+  (navegador), celular (FCM/VAPID) e sino do Teams (Graph
+  `sendActivityNotification`) — e nenhuma tela as mostrava JUNTAS. O único
+  controle visível era um "Testar no meu Teams" enterrado em 👥 Atendentes e
+  filas; as preferências por pessoa (`PreferenciasAviso`) existiam como API
+  (`/push/prefs`) **sem tela nenhuma**; e a rota descartava a chave
+  `avisoTeams` que a régua de audiência já lia.
+  🚨 **E o motivo do silêncio JÁ ERA CONHECIDO PELO CÓDIGO**: `vetoDoAviso`
+  devolve o motivo de cada exclusão (fila que a pessoa não atende, fora do
+  expediente sem o 24h, Instagram restrito, sem celular registrado) — e o
+  fan-out jogava tudo no `console.warn`. Silêncio sem motivo é o que faz a
+  equipe concluir "o app não avisa".
+  ⚠️ **DENTRO DO TEAMS, DUAS DAS QUATRO SÃO IMPOSSÍVEIS POR DESENHO**: o
+  webview não deixa pop-up nem `Notification.requestPermission`, e por isso o
+  botão do push nunca aparecia lá (o ramo da permissão retorna antes). A tela
+  agora DIZ isso e aponta o navegador (`/connect`) + instalar como app — em vez
+  de deixar a pessoa procurando um botão que não existe.
+  ✂️ **Entregue**: aba **🔔 Avisos**, PRIMEIRA da ⚙️: estado de cada camada
+  para a pessoa logada; botão de ligar cada uma; preferências (som, pop-up,
+  celular, 24h, Teams — tudo ligado por padrão, 24h desligado); **🧪 Testar
+  TUDO** (som e pop-up no gesto do clique; celular e Teams pelo servidor, cada
+  canal com o próprio resultado); **simulação** *"se chegasse AGORA na sua fila,
+  você receberia? senão, por quê"* usando as MESMAS `destinatariosDoPush`/
+  `destinatariosDoAvisoTeams` do envio real (régua única); e a **auditoria do
+  último aviso real** gravada em `whatsapp_config/ultimo_aviso`
+  (`montarAuditoriaAviso`, pura: quem recebeu, quem não e o motivo, sem o texto
+  da mensagem). O bloco do Teams MUDOU de aba — uma cópia só.
+  📌 **REGRA QUE FICA: aviso que não chega tem de vir com o motivo de não ter
+  chegado — e o motivo já estava calculado.** O custo não era escrever a regra,
+  era mostrá-la.
+  🚧 **O que a tela NÃO resolve sozinha, e diz**: os dois atos do Paulo para o
+  Teams (admin consent de `TeamsActivity.Send` no app Graph e o SP Connect
+  instalado no Teams de cada pessoa) — o 🧪 devolve a recusa crua do Graph
+  quando faltam.
+
 - **📋 A JANELA FECHOU E O AVISO MANDAVA REDIGITAR O NÚMERO DO CLIENTE QUE
   ESTAVA ABERTO NA TELA** (24/09, achado de um COLABORADOR no atendimento do
   Eduardo Guerra; o Paulo trouxe o print e a pergunta: *"não tem como enviar um

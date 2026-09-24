@@ -133,3 +133,26 @@ export function registrarToken(tokensAtuais = [], token, limite = 10) {
     // Mais recente primeiro: o corte por limite tira o celular mais velho.
     return { ok: true, tokens: [t, ...sem].slice(0, limite) };
 }
+
+/**
+ * 🔎 AUDITORIA DO ÚLTIMO AVISO — a resposta para "não estamos recebendo".
+ *
+ * 24/09, Paulo: *"quando chega mensagem, não estamos recebendo notificação"*.
+ * O núcleo já SABIA quem ficou de fora e por quê (`fora[].motivo`), mas o
+ * fan-out jogava isso no console e devolvia só um número. Silêncio sem motivo
+ * é o que faz a pessoa concluir "o app não avisa". Isto grava, por canal, quem
+ * recebeu e quem não recebeu COM O MOTIVO — sem o texto da mensagem, só o
+ * título curto (a prévia já é curta de propósito).
+ */
+export function montarAuditoriaAviso({ titulo, push, teams, agora = new Date() }) {
+    const lista = (r) => ({
+        alvos: (r?.alvos || []).map((a) => a.email || a.uid || null),
+        fora: (r?.fora || []).slice(0, 60).map((f) => ({ email: f.email || f.uid || null, motivo: String(f.motivo || '') })),
+    });
+    return {
+        em: agora.toISOString(),
+        titulo: String(titulo || '').slice(0, 120),
+        push: { ...lista(push), enviados: Number(push?.enviados || 0) },
+        teams: { ...lista(teams), enviados: Number(teams?.enviados || 0), erros: (teams?.erros || []).slice(0, 20) },
+    };
+}
