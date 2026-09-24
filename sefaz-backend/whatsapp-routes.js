@@ -75,6 +75,7 @@ import {
     assinaturasDoApp,
 } from './instagram-dm.js';
 import { enviarAvisoTeams, statusAvisoTeams } from './teams-aviso.js';
+import { getGraphToken, isGraphConfigured } from './graph-provider.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -2491,8 +2492,21 @@ router.get('/avisos/status', requireAuth, async (req, res) => {
             ? simular(destinatariosDoAvisoTeams)
             : { receberia: false, motivo: 'aviso no Teams DESLIGADO na ⚙️ (chave geral)' };
         const tok = tokDoc.data() || {};
+        // 🔑 A CREDENCIAL DO GRAPH É PROVADA AQUI, sem mandar nada (24/09). No
+        // primeiro "Testar TUDO" real a simulação disse "o sino tocaria" (a
+        // AUDIÊNCIA estava certa) e o envio caiu em AADSTS7000215 — segredo
+        // do app Notificacoes inválido no Secret Manager. A simulação não
+        // pode ser lida como garantia da credencial; então a credencial vira
+        // uma linha própria, medida por um token de verdade (cacheado ~55
+        // min pelo graph-provider — não é uma chamada por clique).
+        let credencialGraph = { ok: false, erro: 'Graph não configurado (GRAPH_CLIENT_ID/TENANT/SECRET).' };
+        if (isGraphConfigured()) {
+            try { await getGraphToken(); credencialGraph = { ok: true, erro: null }; }
+            catch (e) { credencialGraph = { ok: false, erro: String(e?.message || e).slice(0, 400) }; }
+        }
         return res.json({
             ok: true,
+            credencialGraph,
             agora: agora.toISOString(),
             noExpediente: config.horario ? dentroDoHorario(config.horario, agora) : true,
             horario: config.horario || null,

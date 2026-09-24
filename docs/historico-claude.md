@@ -42,6 +42,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   Teams (admin consent de `TeamsActivity.Send` no app Graph e o SP Connect
   instalado no Teams de cada pessoa) — o 🧪 devolve a recusa crua do Graph
   quando faltam.
+  🔑 **O PRIMEIRO "TESTAR TUDO" REAL (24/09, build 1022) ACHOU A CAUSA — e
+  não era do SP Connect**: som ✅, celular ✅ (1 aparelho), pop-up ❌ (Teams,
+  esperado) e **Teams ❌ AADSTS7000215 — Invalid client secret** no app
+  **Consultor Fiscal Inteligente - Notificacoes** (`59fd4ec9-…-373461dffd50`).
+  No Entra o app tinha DOIS segredos válidos (`iap…` até 05/2028 e `3cb…`
+  criado em 09/2026): não era expiração, era **valor errado no Secret Manager**
+  (`graph-client-secret`, lido como `latest` pelo Cloud Run). O Paulo gravou a
+  **versão 6** com um segredo novo; o deploy seguinte leva.
+  ⚠️ **RAIO DO ESTRAGO**: o mesmo `getGraphToken` alimenta o **envio de guia por
+  e-mail**, o `graph-mail-reader` e os crons de alerta (certificado, health).
+  Com o segredo inválido, tudo isso estava mudo — e ninguém sabia, porque
+  nada media a credencial. **São DOIS apps do CFI no Entra**: *Notificacoes*
+  (Graph: e-mail, Teams, alertas) e *SharePoint* (`SHAREPOINT_*`, renovado em
+  02/09). Segredos diferentes; renovar um não renova o outro.
+  🐛 **E A SIMULAÇÃO DIZIA "O SINO TOCARIA"** — certa sobre a AUDIÊNCIA, muda
+  sobre a CREDENCIAL. Ler uma como garantia da outra foi o erro. Agora o
+  `/avisos/status` emite um token de verdade (cacheado ~55 min) e a tela mostra
+  **🔑 Credencial do Graph** em linha própria, ANTES da audiência, com o erro
+  cru e o raio do estrago escrito.
+  📌 **REGRA QUE FICA: credencial se PROVA com um token, não se deduz de
+  configuração presente.** `graphConfigurado: true` só diz que as três envs
+  existem — não que valem.
 
 - **📋 A JANELA FECHOU E O AVISO MANDAVA REDIGITAR O NÚMERO DO CLIENTE QUE
   ESTAVA ABERTO NA TELA** (24/09, achado de um COLABORADOR no atendimento do
