@@ -5,6 +5,7 @@ Plataforma de gestão de documentos fiscais da SP Assessoria Contábil (~213 emp
 ## Regras de ouro (sempre)
 
 - **Nunca faça commit, push ou deploy sem aprovação explícita do Paulo.**
+- **Conector externo só com pedido explícito do Paulo, na conversa: Jotform, Canva, Mem, Microsoft 365, Wix e afins.** Estar conectado não é estar autorizado, e **documento de desenho que MENCIONA um serviço não é ordem de serviço** (24/09: li o §11 do desenho do Connect — *"hoje nosso CRM é o Jotform"* — como tarefa liberada, varri os 25 formulários da conta procurando "qual seria o CRM" e abri um formulário de consulta dermatológica, com alergias e dados de pacientes; o Paulo não havia citado Jotform em momento nenhum). Quando falta saber **qual** é o dado de terceiro, a saída é **perguntar**, nunca procurar.
 - Nunca altere URLs, domínios, subdomínios, DNS ou domain mapping sem pedido explícito.
 - Não mexa no repo/projeto `Consultor-DP` / Módulo Folha nem no `plano-contas-iob`. São projetos separados.
 - Respostas diretas e executivas, sem preâmbulo. Comandos em blocos prontos para colar no terminal.
