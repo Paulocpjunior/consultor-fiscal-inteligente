@@ -202,12 +202,8 @@ describe('o túnel entrega o regime de verdade aos apps irmãos', () => {
 describe('a lista da imune e da isenta é a que ele respondeu', () => {
     const porNome = (n: string): any => CATALOGO.IMUNE.find((o: any) => o.obrigacao === n)!;
 
-    it('1 · ECD e ECF: "entrega se tiver movimento financeiro"', () => {
-        for (const n of ['ECD', 'ECF']) {
-            const o = porNome(n);
-            expect(o.status).toBe('proposta');
-            expect(o.dependeDe).toMatch(/movimento financeiro/);
-        }
+    it('1 · ECD e ECF saíram da lista da imune em 25/09 — são do Contábil, não do Fiscal', () => {
+        for (const n of ['ECD', 'ECF']) expect(porNome(n)).toBeUndefined();
     });
 
     it('2 · DCTFWeb: "apenas quando houver eventos (aluguel/folha/retidos)"', () => {

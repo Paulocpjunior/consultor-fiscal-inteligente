@@ -34,7 +34,7 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
-import { OBRIGACOES_DO_DP } from './catalogo-obrigacoes.js';
+import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
@@ -413,8 +413,9 @@ export function montarRotinaFiscal({
     // 👥 FGTS e INSS patronal são do DP (Paulo, 22/09): tarefa dessas
     // obrigações não entra na conta do Fiscal — nem como entregue, nem como
     // falta. Ela sai CONTADA, com a ação (cancelar em lote em Tarefas).
-    const tarefasDoDp = tarefas.filter((t) => OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
-    const tarefasCfi = tarefas.filter((t) => !OBRIGACOES_DO_DP.includes(String(t.obrigacao || '')));
+    // 🏢 25/09: ECD/ECF são do Contábil — mesma régua, mesma saída.
+    const tarefasDoDp = tarefas.filter((t) => OBRIGACOES_FORA_DO_FISCAL.includes(String(t.obrigacao || '')));
+    const tarefasCfi = tarefas.filter((t) => !OBRIGACOES_FORA_DO_FISCAL.includes(String(t.obrigacao || '')));
     const concluidas = tarefasCfi.filter((t) => t.status === 'concluida').length;
     const abertas = tarefasCfi.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
     // PRAZO das que estão abertas. A rotina já lia as tarefas e jogava a DATA
@@ -467,10 +468,17 @@ export function montarRotinaFiscal({
     }
     if (tarefasDoDp.length) {
         const abertasDp = tarefasDoDp.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada').length;
+        // "DP: FGTS, INSS_CPP · Contábil: ECD" — quem entrega, nomeado.
+        const porDepto = {};
+        for (const t of tarefasDoDp) {
+            const d = departamentoDaObrigacao(t.obrigacao) || '?';
+            (porDepto[d] = porDepto[d] || new Set()).add(String(t.obrigacao || ''));
+        }
+        const detalheOutroDepto = Object.entries(porDepto).map(([d, set]) => `${d}: ${[...set].join(', ')}`).join(' · ');
         eObrigacoes = { ...eObrigacoes,
-            resumo: `${eObrigacoes.resumo} · ${tarefasDoDp.length} tarefa(s) do DP (FGTS/INSS) fora da conta`,
+            resumo: `${eObrigacoes.resumo} · ${tarefasDoDp.length} tarefa(s) de outro departamento fora da conta (${detalheOutroDepto})`,
             acao: abertasDp
-                ? `${eObrigacoes.acao ? `${eObrigacoes.acao} ` : ''}${abertasDp} tarefa(s) de FGTS/INSS ainda aberta(s) são do DP, não do Fiscal — cancele-as em Vencimentos e Obrigações → Tarefas → "Cancelar tarefas do DP".`
+                ? `${eObrigacoes.acao ? `${eObrigacoes.acao} ` : ''}${abertasDp} tarefa(s) ainda aberta(s) são de outro departamento (${detalheOutroDepto}), não do Fiscal — cancele-as em Vencimentos e Obrigações → Tarefas → "Cancelar tarefas de outro departamento".`
                 : eObrigacoes.acao,
             tarefasDoDp: tarefasDoDp.length };
     }

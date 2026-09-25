@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏢 ECD E ECF SAEM DO CATÁLOGO DO FISCAL — SÃO DO CONTÁBIL** (25/09, Paulo:
+  *"como adotamos para outras obrigações federais, vamos replicar p ECD/ECF
+  que não é do departamento fiscal e sim do contábil"*). Mesma régua do DP
+  (22/09): `catalogo-obrigacoes.js` ganha `OBRIGACOES_DO_CONTABIL` (ECD, ECF),
+  `OBRIGACOES_FORA_DO_FISCAL` (DP + Contábil) e `departamentoDaObrigacao()`;
+  ECF/ECD e as variantes `_SE_MOVIMENTO` da imune/isenta saem de TODAS as
+  listas; `calendario-obrigacoes.js` sem ECD/ECF; a etapa 4 da Rotina filtra
+  por `OBRIGACOES_FORA_DO_FISCAL` e diz "N tarefa(s) de outro departamento fora
+  da conta (DP: … · Contábil: …)"; `cancelarTarefasDeOutroDepartamento({
+  departamento? })` cancela em lote (motivo por departamento; o nome antigo
+  `cancelarTarefasDoDp` cancela só DP), rota nova `POST
+  /api/admin/tarefas/cancelar-outro-departamento` (a `/cancelar-dp` continua),
+  botão único em Tarefas. Testes em `obrigacoesDoDp.test.ts`; `calendarioFiscal`
+  e `regimeTributario` ajustados ao fato (a ECF era a fixture da régua "último
+  dia útil de N meses depois" — virou fixture local). Não mexi no
+  `FiscalObligationsDashboard`/`NfpProCloud` (listas de consulta ao e-CAC, não
+  o catálogo de tarefas).
+
 - **🧾 EFD CONTRIBUIÇÕES SEM M400/M800 — "Deverá existir um registro M400/M800
   para cada CST informados nos documentos com CST igual a 04, 06, 07, 08 ou 09"**
   (25/09, Paulo, EDUARDO GUERRA HORTIFRUTI 08/2026, 2 erros no PVA; *"preciso
