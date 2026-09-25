@@ -82,8 +82,10 @@ describe('calendarioFiscal', () => {
             expect(v.getFullYear()).toBe(2027);
         });
 
-        it('ECF competência 12/2026 → último útil de julho/27 = 30/07 (sexta)', () => {
-            const regra = OBRIGACOES_POR_REGIME.LUCRO_PRESUMIDO.find(r => r.obrigacao === 'ECF')!;
+        it('anual com último dia útil: competência 12/2026 + 7 meses → julho/27 = 30/07 (sexta)', () => {
+            // 25/09: a ECF saiu do catálogo do Fiscal (é do Contábil); a régua do
+            // "último dia útil de N meses depois" continua e é exercitada por fixture.
+            const regra: any = { obrigacao: 'ANUAL_JULHO', frequencia: 'anual', diaVencimento: 31, mesesApos: 7, ultimoDiaUtilDoMes: true, ajusteDiaNaoUtil: 'antecipa' };
             const v = calcularVencimento('12/2026', regra);
             expect(v.getMonth()).toBe(6);   // julho
             expect(v.getFullYear()).toBe(2027);
@@ -133,12 +135,12 @@ describe('calendarioFiscal', () => {
             expect(codigos).toContain('CSLL_TRIM');
             expect(codigos).not.toContain('ECF');
         });
-        it('dezembro dispara anuais (ECF, ECD)', () => {
+        it('dezembro dispara IRPJ/CSLL — e NÃO ECF/ECD, que são do Contábil (25/09)', () => {
             const ap = obrigacoesAplicaveis('LUCRO_PRESUMIDO', '12/2026');
             const codigos = ap.map(o => o.obrigacao);
             expect(codigos).toContain('IRPJ_TRIM');
-            expect(codigos).toContain('ECF');
-            expect(codigos).toContain('ECD');
+            expect(codigos).not.toContain('ECF');
+            expect(codigos).not.toContain('ECD');
         });
         it('Simples dezembro dispara DEFIS', () => {
             const ap = obrigacoesAplicaveis('SIMPLES', '12/2026');

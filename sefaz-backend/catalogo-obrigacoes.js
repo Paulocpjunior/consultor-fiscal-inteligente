@@ -171,17 +171,34 @@ const DAS = {
 // "Falta: FGTS, INSS_CPP…" sobre trabalho que é do módulo de DP).
 // Quem sabe se há folha é o DP; o CFI não afirma nem cobra.
 export const OBRIGACOES_DO_DP = Object.freeze(['FGTS', 'INSS_CPP']);
+// ❌ ECD e ECF SAÍRAM DO CATÁLOGO INTEIRO — Paulo, 25/09: *"como adotamos para
+// outras obrigações federais, vamos replicar p ECD/ECF que não é do
+// departamento fiscal e sim do contábil"*. A escrituração contábil (ECD) e a
+// ECF são entregues pelo Contábil (o CCI). O Fiscal não gera tarefa, não
+// cobra na etapa 4 e não lista no calendário — mesma régua do DP.
+export const OBRIGACOES_DO_CONTABIL = Object.freeze(['ECD', 'ECF']);
+/** Toda obrigação que outro departamento entrega — o Fiscal não afirma nem cobra. */
+export const OBRIGACOES_FORA_DO_FISCAL = Object.freeze([...OBRIGACOES_DO_DP, ...OBRIGACOES_DO_CONTABIL]);
+/** Qual departamento entrega a obrigação (null = é do Fiscal). */
+export function departamentoDaObrigacao(obrigacao) {
+    const cod = String(obrigacao || '');
+    if (OBRIGACOES_DO_DP.includes(cod)) return 'DP';
+    if (OBRIGACOES_DO_CONTABIL.includes(cod)) return 'Contábil';
+    return null;
+}
 
 /**
  * Tarefa AUTOMÁTICA e ABERTA de obrigação do DP — a que o admin cancela em
  * lote depois de 22/09 (o cron não gera mais, mas as já geradas ficam).
  * Manual não se toca: alguém a criou de propósito.
  */
-export function tarefaDoDpParaCancelar(t) {
-    if (!t || !OBRIGACOES_DO_DP.includes(String(t.obrigacao || ''))) return false;
+export function tarefaDeOutroDepartamentoParaCancelar(t) {
+    if (!t || !OBRIGACOES_FORA_DO_FISCAL.includes(String(t.obrigacao || ''))) return false;
     if (t.status === 'concluida' || t.status === 'cancelada') return false;
     return String(t.origem || 'automatica') === 'automatica';
 }
+/** Nome de 22/09, mantido: hoje a régua cobre DP e Contábil. */
+export const tarefaDoDpParaCancelar = tarefaDeOutroDepartamentoParaCancelar;
 const DCTFWEB = {
     obrigacao: 'DCTFWEB', label: 'DCTFWeb', nome: 'DCTFWeb',
     esfera: 'federal', abrangencia: 'BR',
@@ -240,22 +257,7 @@ const DEFIS = {
     baseLegal: 'Res. CGSN 140/2018 art. 72 (até 31/03 do ano seguinte)',
     status: 'ativa', revisar: true,
 };
-const ECF = {
-    obrigacao: 'ECF', label: 'ECF', nome: 'ECF',
-    esfera: 'federal', abrangencia: 'BR',
-    frequencia: A, diaVencimento: 31, mesesApos: 7, ultimoDiaUtilDoMes: true,
-    ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'IN RFB 2.004/2021 (último dia útil de julho)',
-    status: 'ativa', revisar: true,
-};
-const ECD = {
-    obrigacao: 'ECD', label: 'ECD', nome: 'ECD',
-    esfera: 'federal', abrangencia: 'BR',
-    frequencia: A, diaVencimento: 30, mesesApos: 6, ultimoDiaUtilDoMes: true,
-    ajusteDiaNaoUtil: 'antecipa',
-    baseLegal: 'IN RFB 2.003/2021 (último dia útil de junho)',
-    status: 'ativa', revisar: true,
-};
+// ❌ ECF e ECD: definições removidas em 25/09 — são do Contábil (ver OBRIGACOES_DO_CONTABIL).
 
 // ISS PRÓPRIO — a esfera MUNICIPAL, que não existia neste catálogo.
 // Dois motivos pra ele nascer 'proposta' e não gerar tarefa ainda:
@@ -340,19 +342,7 @@ const DCTFWEB_EVENTOS = {
 //
 // Ou seja: mesmo quando a imune/isenta TEM folha, o FGTS não é obrigação que o
 // CFI acompanha — é do módulo de DP. Extensão minha, dedução errada, removida.
-const ECD_SE_MOVIMENTO = {
-    ...ECD,
-    // "entrega se tiver movimento financeiro"
-    status: 'proposta',
-    dependeDe: 'movimento financeiro no ano',
-    baseLegal: ECD.baseLegal + ' — imune/isenta: só com movimento financeiro (Paulo, 18/08)',
-};
-const ECF_SE_MOVIMENTO = {
-    ...ECF,
-    status: 'proposta',
-    dependeDe: 'movimento financeiro no ano',
-    baseLegal: ECF.baseLegal + ' — imune/isenta: só com movimento financeiro (Paulo, 18/08)',
-};
+// ❌ ECD_SE_MOVIMENTO / ECF_SE_MOVIMENTO (imune/isenta, 18/08) saíram em 25/09 com o resto da ECD/ECF: são do Contábil.
 const EFD_CONTRIB_ANUAL = {
     ...EFD_CONTRIB,
     // "Apenas em dezembro, indicando sem movimento."
@@ -392,7 +382,7 @@ const COMUNS_LUCRO = [DCTFWEB, PIS_COFINS, EFD_CONTRIB, SPED, ISS, DERE];
  */
 const IMUNE_ISENTA = [
     DCTFWEB_EVENTOS,
-    EFD_CONTRIB_ANUAL, ECD_SE_MOVIMENTO, ECF_SE_MOVIMENTO,
+    EFD_CONTRIB_ANUAL,
     // A DeRE alcança "todas as pessoas jurídicas, INCLUSIVE imunes e isentas"
     // que forneçam sob regime específico (esclarecimento CGIBS/RFB) — uma
     // cooperativa de saúde imune é exatamente o caso. Continua `proposta`: só
@@ -402,8 +392,8 @@ const IMUNE_ISENTA = [
 
 export const CATALOGO = {
     SIMPLES: [DAS, DEFIS],
-    LUCRO_PRESUMIDO: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
-    LUCRO_REAL: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM, ECF, ECD],
+    LUCRO_PRESUMIDO: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM],
+    LUCRO_REAL: [...COMUNS_LUCRO, IRPJ_TRIM, CSLL_TRIM],
     IMUNE: IMUNE_ISENTA,
     ISENTA: IMUNE_ISENTA,
     // Regime indefinido NÃO fica vazio (isso apagaria o cliente do mês) e NÃO

@@ -26,7 +26,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente, OBRIGACOES_DO_DP, tarefaDoDpParaCancelar } from './catalogo-obrigacoes.js';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente, OBRIGACOES_DO_DP, OBRIGACOES_DO_CONTABIL, OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao, tarefaDeOutroDepartamentoParaCancelar } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 import { decidirReaplicacao } from './reaplicar-prazos.js';
 
@@ -381,14 +381,20 @@ export async function reaplicarPrazosDoCatalogo(competencia, opts = {}) {
  *
  * @param {object} opts  { competencia?: 'MM/AAAA', empresaIdEspecifica?, quem? }
  */
-export async function cancelarTarefasDoDp(opts = {}) {
+export async function cancelarTarefasDeOutroDepartamento(opts = {}) {
     fa();
+    // 🏢 25/09: DP (FGTS/INSS) e Contábil (ECD/ECF). Sem `departamento` = os dois.
+    const dep = String(opts.departamento || '').toUpperCase();
+    const obrigacoesAlvo = dep === 'DP' ? [...OBRIGACOES_DO_DP]
+        : (dep === 'CONTABIL' || dep === 'CONTÁBIL') ? [...OBRIGACOES_DO_CONTABIL]
+            : [...OBRIGACOES_FORA_DO_FISCAL];
     const db = admin.firestore();
     const inicio = new Date();
     const comp = opts.competencia ? assertCompetencia(opts.competencia) : null;
     const log = {
-        tipo: 'cancelar-tarefas-dp', competencia: comp, quem: opts.quem || null,
-        obrigacoes: [...OBRIGACOES_DO_DP],
+        tipo: 'cancelar-tarefas-outro-departamento', competencia: comp, quem: opts.quem || null,
+        departamento: dep || 'DP+CONTABIL',
+        obrigacoes: obrigacoesAlvo,
         iniciadoEm: inicio.toISOString(),
         tarefasLidas: 0, canceladas: 0, jaFechadas: 0, manuais: 0,
         canceladasPorCompetencia: {},
@@ -396,7 +402,7 @@ export async function cancelarTarefasDoDp(opts = {}) {
         erros: [],
     };
     const lote = [];
-    for (const obrigacao of OBRIGACOES_DO_DP) {
+    for (const obrigacao of obrigacoesAlvo) {
         let q = db.collection('tarefas').where('obrigacao', '==', obrigacao);
         if (comp) q = q.where('competencia', '==', comp);
         if (opts.empresaIdEspecifica) q = q.where('empresaId', '==', String(opts.empresaIdEspecifica));
@@ -405,23 +411,25 @@ export async function cancelarTarefasDoDp(opts = {}) {
         snap.forEach((d) => {
             const t = { id: d.id, ...(d.data() || {}) };
             if (t.status === 'concluida' || t.status === 'cancelada') { log.jaFechadas++; return; }
-            if (!tarefaDoDpParaCancelar(t)) { log.manuais++; return; }
-            lote.push(d.ref);
+            if (!tarefaDeOutroDepartamentoParaCancelar(t)) { log.manuais++; return; }
+            lote.push({ ref: d.ref, obrigacao });
             log.canceladas++;
             const c = String(t.competencia || '?');
             log.canceladasPorCompetencia[c] = (log.canceladasPorCompetencia[c] || 0) + 1;
             if (log.exemplos.length < 8) log.exemplos.push(`${obrigacao} ${c} · ${t.empresaNome || t.empresaId || ''}`);
         });
     }
-    const motivo = 'Obrigação do DP (FGTS/INSS patronal) — saiu do catálogo do CFI em 22/09; cancelada em lote pelo admin.';
+    const motivoDe = (obrigacao) => (departamentoDaObrigacao(obrigacao) === 'Contábil'
+        ? 'Obrigação do Contábil (ECD/ECF) — saiu do catálogo do CFI em 25/09; cancelada em lote pelo admin.'
+        : 'Obrigação do DP (FGTS/INSS patronal) — saiu do catálogo do CFI em 22/09; cancelada em lote pelo admin.');
     for (let i = 0; i < lote.length; i += 400) {
         const b = db.batch();
-        for (const ref of lote.slice(i, i + 400)) {
+        for (const { ref, obrigacao } of lote.slice(i, i + 400)) {
             b.update(ref, {
                 status: 'cancelada',
                 canceladaEm: admin.firestore.FieldValue.serverTimestamp(),
                 canceladaPorEmail: opts.quem || null,
-                cancelamentoMotivo: motivo,
+                cancelamentoMotivo: motivoDe(obrigacao),
             });
         }
         await b.commit();
@@ -435,6 +443,11 @@ export async function cancelarTarefasDoDp(opts = {}) {
         console.warn('[tarefas/cancelar-dp] falha ao gravar log:', e.message);
     }
     return log;
+}
+
+/** Nome de 22/09, mantido: cancela SÓ as do DP. */
+export function cancelarTarefasDoDp(opts = {}) {
+    return cancelarTarefasDeOutroDepartamento({ ...opts, departamento: 'DP' });
 }
 
 /**

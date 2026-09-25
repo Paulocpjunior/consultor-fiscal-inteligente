@@ -3225,6 +3225,32 @@ app.post('/api/admin/tarefas/cancelar-dp', requireAdmin, express.json(), async (
     }
 });
 
+// POST /api/admin/tarefas/cancelar-outro-departamento
+//   🏢 25/09: DP (FGTS/INSS) e Contábil (ECD/ECF). Body: { competencia?: "MM/AAAA",
+//   empresaId?, departamento?: "DP" | "CONTABIL" } — sem departamento = os dois.
+app.post('/api/admin/tarefas/cancelar-outro-departamento', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId, departamento } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        if (departamento && !['DP', 'CONTABIL'].includes(String(departamento).toUpperCase())) {
+            return res.status(400).json({ ok: false, error: 'departamento, se informado, é DP ou CONTABIL' });
+        }
+        const { cancelarTarefasDeOutroDepartamento } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarTarefasDeOutroDepartamento({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            departamento: departamento ? String(departamento) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-outro-departamento]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
 // POST /api/tarefas/aplicar-carteira
 //   Atribui retroativamente as tarefas sem dono ao titular da Carteira.
 //   Idempotente. Protegida por X-Cron-Secret.
