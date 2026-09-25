@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (25/09) — leia esta parte primeiro</h2>
 
+    <h3>🚦 <strong>Captura NF-e: rodada completa dentro de 1 hora da anterior é recusada — e o aviso diz a causa</strong></h3>
+    <p>Hoje o aviso "Captura SEFAZ 14:19: 0 novos XMLs, 147 falha(s)" apareceu depois de uma sequência que o próprio
+    app produziu: um deploy interrompeu a captura, a retomada automática refez a carteira inteira e, 42 segundos depois
+    do fim, outra rodada completa bateu na trava de 1 hora por CNPJ. Nenhuma nota se perdeu, mas ninguém tinha como
+    saber. Três travas: (1) "Forçar captura agora" recusa dentro de 1 hora da última rodada completa e diz quanto falta;
+    (2) a retomada pós-deploy só refaz rodada agendada, e a empresa já consultada sai como "pulada pela janela", não como
+    falha; (3) toda rodada grava os motivos, inclusive a manual, e o aviso e o banner mostram a causa dominante
+    (ex.: "28 falhas — 20× SEM_CERT"). Em Erros e Logs a coluna Origem passa a mostrar quem disparou.</p>
+    <p><strong>Onde:</strong> banner e aviso da captura; Central de XMLs → Relatórios e Logs → Erros e Logs; Captura Automática → Forçar captura agora.</p>
+
     <h3>📤 <strong>Central de DAS: "Já enviei esta guia por fora" — um a um ou em lote, sem inventar pagamento</strong></h3>
     <p>A Central de DAS tem dois eixos que a leitura misturava: o <strong>Pagamento</strong> (pendente → vencido → pago, e
     "pago" só entra quando alguém marca) e o <strong>Envio</strong> (a guia chegou ao cliente pelo rito). Guia mandada

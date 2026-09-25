@@ -142,6 +142,11 @@ export interface CronLogItem extends CronLog {
     periodo?: string | null;
     prestadoresAutorizados?: number | null;
     errosResumo?: CronLogErroResumoItem[] | null;
+    /** 🚦 25/09: puladas pela janela de 1 h (não são falhas), resumo com a causa, motivo da recusa. */
+    puladasJanela?: number | null;
+    puladasResumo?: Array<{ cnpj?: string; nome?: string; motivo?: string }> | null;
+    resumo?: string | null;
+    motivo?: string | null;
 }
 
 export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promise<CronLogItem[]> {

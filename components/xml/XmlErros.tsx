@@ -127,7 +127,7 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                                     <td className="px-3 py-1.5 text-right text-red-700 dark:text-red-400">{log.falhas ?? '—'}</td>
                                                     <td className={`px-3 py-1.5 text-right font-bold ${(log.totalNovos ?? 0) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>{log.totalNovos ?? 0}</td>
                                                     <td className="px-3 py-1.5 text-slate-500">{log.metodoLogin || '—'}</td>
-                                                    <td className="px-3 py-1.5 text-slate-500">{log.capturadoPor || '—'}</td>
+                                                    <td className="px-3 py-1.5 text-slate-500" title={log.fonte || ''}>{log.fonte || log.capturadoPor || '—'}</td>
                                                     <td className="px-3 py-1.5 text-red-600 dark:text-red-400 max-w-[280px] truncate" title={log.erroFatal || ''}>{log.erroFatal || '—'}</td>
                                                 </tr>
                                                 {aberto && podeExpandir && (
@@ -135,6 +135,9 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                                         <td colSpan={9} className="px-3 py-2">
                                                             {temResumo ? (
                                                                 <div className="space-y-1">
+                                                                    {log.resumo && (
+                                                                        <div className="text-[11px] text-slate-600 dark:text-slate-300 mb-1">{log.resumo}</div>
+                                                                    )}
                                                                     <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                                                                         Erros por empresa (top {log.errosResumo!.length} de {log.falhas ?? 0}):
                                                                     </div>
@@ -158,9 +161,13 @@ const XmlErros: React.FC<Props> = ({ currentUser, refreshKey }) => {
                                                                     <p className="text-amber-700 dark:text-amber-300 font-semibold">
                                                                         ⚠ Esta execução teve {log.falhas} falha(s), mas não persistiu os motivos individuais.
                                                                     </p>
+                                                                    {/* 🚦 25/09: a dica antiga mandava "disparar de novo agora" — e rodada completa
+                                                                        dentro de 1 h da anterior dá uma falha por empresa (147/147 às 14:19). Rodada
+                                                                        manual sem motivo era o "Forçar captura agora" antigo; desde 25/09 toda rodada grava. */}
                                                                     <p className="text-slate-500">
-                                                                        Execuções <strong>após o deploy 03/06 16:30 BRT (PR #27)</strong> já gravam o resumo. Pra ver os motivos:
-                                                                        <strong> dispare a captura de novo agora</strong> em <em>Captura Automática → ▶ Forçar captura agora</em>, depois recarregue esta tela.
+                                                                        Rodadas a partir de 25/09 gravam os motivos (inclusive "Forçar captura agora"). Se esta rodada foi disparada
+                                                                        até 1 h depois de outra rodada completa, a causa provável é a trava de 1 h por CNPJ, não a SEFAZ nem o cadastro.
+                                                                        <strong> Não dispare de novo dentro dessa hora</strong> — o botão agora recusa e diz quanto falta.
                                                                     </p>
                                                                 </div>
                                                             ) : (
