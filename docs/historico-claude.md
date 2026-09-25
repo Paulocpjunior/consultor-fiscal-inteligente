@@ -5,6 +5,33 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚦 CAPTURA NF-e: JANELA DE 1 H DA RODADA COMPLETA — TRÊS TRAVAS** (25/09,
+  Paulo: *"analise o erro insistente hoje"*, toast "Captura SEFAZ 14:19: 0 novos
+  XMLs, 147 falha(s)"). Erros & Logs do dia: 06:00 agendada (sefaz-xml-capture)
+  interrompida pelo deploy 1032 → 06:32 retomada refez a carteira → 109 falhas;
+  13:45 interrompida pelo deploy 1037 → 13:49 retomada (119 ok, 344 docs, fim
+  14:18) → 14:19:01 OUTRA rodada completa → 147/147 falhas em 4,6 s por
+  empresa = trava de 1 h por CNPJ (`LOCK_TTL_MS`), o app nem chegou à SEFAZ.
+  Piso normal da carteira: 28–30 falhas (cadastro/cert). O "Forçar captura
+  agora" não gravava `errosResumo` e a dica de Erros & Logs mandava "disparar
+  de novo" — receita da colisão. `sefaz-backend/rodada-completa-janela.js`
+  (puro): `janelaDaRodadaCompleta({logs})` (rodada completa = fonte que não é
+  drenagem/dirigida e sem `tipo`; medida do INÍCIO; interrompida conta),
+  `fonteRetomavel` (admin-* não), `classificarResultado` (`locked` →
+  'pulada-janela', não falha), `codigoDoResultado`, `resumoDaRodada` +
+  `causaDominante`. `sync-routes.js`: laço ÚNICO `rodarCarteiraNfe` para
+  /sync-cron e /sync-cron-now (motivos nos dois; pulada sem respiro de 3 s);
+  `conferirJanelaDaRodadaCompleta` — /sync-cron-now responde 409 com o motivo;
+  /sync-cron agendado grava log `status: 'pulada-janela'` e responde 200, exceto
+  com header `x-retomada: 1`. `cron-retomada.js`: só `fonteRetomavel`; o POST
+  vai com `x-cloudscheduler-jobname: retomada:<fonte>` + `x-retomada`. Rota
+  /cron-logs whitelist: status, puladasJanela, puladasResumo, resumo, motivo.
+  UI: `CronCapturaBanner` toast/banner com `fraseDaRodada` (resumo do backend
+  ou `resumoDaRodada`); `XmlErros` coluna Origem = `fonte`, resumo no bloco
+  expandido, dica reescrita. Travas: `rodadaCompletaJanela.test.ts` (12) +
+  caso manual em `cronRetomada.test.ts`. Regra minha: não fazer deploy nas
+  janelas 06:00–06:45, 12:00–12:45 e 18:00–18:45 (capturas intra-dia).
+
 - **📤 CENTRAL DE DAS: "JÁ ENVIEI ESTA GUIA POR FORA" — UM A UM OU EM LOTE**
   (25/09, Paulo: *"como fica a baixa do status da guia enviado ao cliente,
   visto que esse status interfere diretamente no controle mensal"* → decisão:

@@ -7,6 +7,11 @@ import express from 'express';
 import admin from 'firebase-admin';
 import forge from 'node-forge';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
+// 🚦 Janela da rodada completa (25/09): recusa rodada dentro de 1 h, pula a
+// empresa já consultada como "janela" (não falha) e resume com a causa.
+import {
+  janelaDaRodadaCompleta, classificarResultado, codigoDoResultado, resumoDaRodada,
+} from './rodada-completa-janela.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
 import { consultaNFePorChave } from './sefaz-client.js';
@@ -127,8 +132,106 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
   }
 });
 
+/**
+ * 🚦 TRAVA 1 — uma rodada completa pode começar agora? Lê as últimas
+ * rodadas de sefaz_cron_logs e aplica a régua pura (1 h, a mesma do lock por
+ * CNPJ). A resposta carrega o motivo com a hora da última e quanto falta.
+ */
+async function conferirJanelaDaRodadaCompleta() {
+  try {
+    const snap = await fa().firestore().collection('sefaz_cron_logs')
+      .orderBy('executadoEm', 'desc').limit(12).get();
+    const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return janelaDaRodadaCompleta({ logs });
+  } catch (e) {
+    // Sem leitura não há como afirmar a janela: segue, dito no log.
+    console.warn('[sync-cron] janela da rodada não conferida:', e.message);
+    return { ok: true, naoConferida: e.message };
+  }
+}
+
+/**
+ * 🔒 O LAÇO DA CARTEIRA É UM SÓ (25/09). O noturno gravava os motivos
+ * (`errosResumo`) e o "Forçar captura agora" não — e "147 falhas" mudo foi o
+ * que mandou a equipe clicar de novo. Agora as duas portas rodam ESTE laço:
+ *
+ * - `sucesso`         → contou, somou os XMLs novos;
+ * - `pulada-janela`   → a empresa foi consultada há menos de 1 h (lock vivo).
+ *                       NÃO é falha: é a trava 2 no nível da empresa, e é o
+ *                       que faz a retomada refazer só quem a rodada
+ *                       interrompida não alcançou. Sem respiro de 3 s: não
+ *                       houve consulta à SEFAZ;
+ * - `falha`           → de verdade, com motivo e código no resumo (top 50).
+ */
+async function rodarCarteiraNfe({ empresas, capturadoPor, rotulo = 'sync-cron' }) {
+  let sucessos = 0, falhas = 0, puladasJanela = 0, totalNovos = 0;
+  const errosResumo = [];
+  const puladasResumo = [];
+  let idx = 0;
+  for (const emp of empresas) {
+    idx++;
+    let classe = 'falha';
+    try {
+      const result = await sincronizarEmpresa({ empresaId: emp.id, empresaCnpj: emp.cnpj, capturadoPor });
+      classe = classificarResultado(result);
+      if (classe === 'sucesso') { sucessos++; totalNovos += (result.novosXmls || 0); }
+      else if (classe === 'pulada-janela') {
+        puladasJanela++;
+        if (puladasResumo.length < 50) puladasResumo.push({ cnpj: emp.cnpj, nome: (emp.nome || '').slice(0, 60), motivo: String(result.motivo || '').slice(0, 200) });
+      } else {
+        falhas++;
+        console.warn(`[${rotulo}] falha em ${emp.cnpj}: ${result.motivo}`);
+        if (errosResumo.length < 50) errosResumo.push({
+          cnpj: emp.cnpj,
+          nome: (emp.nome || '').slice(0, 60),
+          motivo: String(result.motivo || '').slice(0, 200),
+          codigo: codigoDoResultado(result),
+        });
+      }
+    } catch (e) {
+      falhas++;
+      console.error(`[${rotulo}] exceção em ${emp.cnpj}:`, e.message);
+      if (errosResumo.length < 50) errosResumo.push({
+        cnpj: emp.cnpj,
+        nome: (emp.nome || '').slice(0, 60),
+        motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
+        codigo: 'EXCEPTION',
+      });
+    }
+    // Anti-656: respiro entre empresas. Sem pausa, a varredura vira uma
+    // rajada contínua no NFeDistribuicaoDFe (140 empresas back-to-back) e o
+    // WAF da SEFAZ pune com "Consumo Indevido" (29× num ciclo, painel 30/07).
+    // 3s × 140 empresas ≈ 7 min a mais num job noturno — irrelevante.
+    // Pulada pela janela não consultou a SEFAZ: não precisa do respiro.
+    if (idx < empresas.length && classe !== 'pulada-janela') {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+  return { sucessos, falhas, puladasJanela, totalNovos, errosResumo, puladasResumo };
+}
+
 router.post('/sync-cron', requireCronAuth, async (req, res) => {
   const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'sefaz-cron-noturno';
+  // 🚦 TRAVA 1 na porta agendada: o Scheduler espaça as rodadas em horas, então
+  // só uma colisão (retentativa, disparo manual pouco antes) cai aqui. A
+  // RETOMADA pós-deploy passa (`x-retomada`): ela refaz a rodada interrompida
+  // e as empresas já alcançadas saem como "janela" no laço, sem consulta.
+  const ehRetomada = String(req.headers?.['x-retomada'] || '') === '1';
+  if (!ehRetomada) {
+    const janela = await conferirJanelaDaRodadaCompleta();
+    if (!janela.ok) {
+      console.warn(`[sync-cron] rodada ${fonte} recusada pela janela: ${janela.motivo}`);
+      try {
+        await fa().firestore().collection('sefaz_cron_logs').add({
+          executadoEm: admin.firestore.FieldValue.serverTimestamp(),
+          iniciadoEm: new Date().toISOString(),
+          status: 'pulada-janela', fonte, motivo: janela.motivo,
+          totalEmpresas: 0, sucessos: 0, falhas: 0, totalNovosXmls: 0,
+        });
+      } catch (e) { console.warn('[sync-cron] log da recusa falhou:', e.message); }
+      return res.status(200).json({ ok: false, pulada: true, motivo: janela.motivo, faltaMin: janela.faltaMin });
+    }
+  }
   // withCronHeartbeat:
   //  1) cria log em sefaz_cron_logs com status='iniciado' ANTES de responder 200;
   //  2) responde 200 imediato (Scheduler nao retentara);
@@ -146,51 +249,11 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
     console.log('[sync-cron] início — fonte:', fonte);
     const empresas = await listarEmpresasParaCron();
     console.log(`[sync-cron] ${empresas.length} empresas elegíveis`);
-    let sucessos = 0;
-    let falhas = 0;
-    let totalNovos = 0;
-    // Top 50 falhas com motivo — pra UI 'Erros & Logs' mostrar detalhe
-    // por linha expandida (PR #28). Sem isso, painel so dizia '17 falhas'
-    // sem nenhuma pista de QUAIS empresas e por que.
-    const errosResumo = [];
-    let idxEmp = 0;
-    for (const emp of empresas) {
-      idxEmp++;
-      try {
-        const result = await sincronizarEmpresa({
-          empresaId: emp.id,
-          empresaCnpj: emp.cnpj,
-          capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
-        });
-        if (result.ok) { sucessos++; totalNovos += (result.novosXmls || 0); }
-        else {
-          falhas++;
-          console.warn(`[sync-cron] falha em ${emp.cnpj}: ${result.motivo}`);
-          if (errosResumo.length < 50) errosResumo.push({
-            cnpj: emp.cnpj,
-            nome: (emp.nome || '').slice(0, 60),
-            motivo: String(result.motivo || '').slice(0, 200),
-            codigo: result.rateLimited ? 'cStat=656' : (result.certInvalido ? 'cStat=593' : (result.locked ? 'LOCK' : null)),
-          });
-        }
-      } catch (e) {
-        falhas++;
-        console.error(`[sync-cron] exceção em ${emp.cnpj}:`, e.message);
-        if (errosResumo.length < 50) errosResumo.push({
-          cnpj: emp.cnpj,
-          nome: (emp.nome || '').slice(0, 60),
-          motivo: `[EXCECAO] ${String(e.message || '').slice(0, 200)}`,
-          codigo: 'EXCEPTION',
-        });
-      }
-      // Anti-656: respiro entre empresas. Sem pausa, a varredura vira uma
-      // rajada contínua no NFeDistribuicaoDFe (140 empresas back-to-back) e o
-      // WAF da SEFAZ pune com "Consumo Indevido" (29× num ciclo, painel 30/07).
-      // 3s × 140 empresas ≈ 7 min a mais num job noturno — irrelevante.
-      if (idxEmp < empresas.length) {
-        await new Promise(r => setTimeout(r, 3000));
-      }
-    }
+    const { sucessos, falhas, puladasJanela, totalNovos, errosResumo, puladasResumo } = await rodarCarteiraNfe({
+      empresas,
+      capturadoPor: { uid: 'cron-system', email: 'cron@spassessoriacontabil', fonte: 'cron' },
+      rotulo: 'sync-cron',
+    });
     // Manifestação automática (ciência) dos resNFe que ficaram pendentes de
     // execuções anteriores. Sem isso o resumo fica "Pendente" com R$ 0,00 pra
     // sempre — a SEFAZ só libera o procNFe completo (valores, itens, data)
@@ -257,7 +320,7 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       console.warn('[sync-cron] backfill de endereço do destinatário falhou:', e.message);
     }
 
-    console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
+    console.log(`[sync-cron] fim — ${sucessos}/${empresas.length} sucessos, ${puladasJanela} puladas pela janela, ${totalNovos} novos (${empresas._bloqueadasSemAcesso || 0} bloqueadas por cadastro, ${empresas._totalA3 || 0} A3 puladas)`);
     // Campos retornados aqui sao MERGED no log (junto com status='sucesso',
     // duracaoMs, finalizadoEm). Bloqueadas por cadastro (sem cert A1/A3 e sem
     // procuracao e-CAC) e A3 sao puladas em listarEmpresasParaCron, mas
@@ -276,6 +339,9 @@ router.post('/sync-cron', requireCronAuth, async (req, res) => {
       } : null,
       reatribuicao: reatribuicao || null,
       errosResumo,
+      puladasJanela,
+      puladasResumo,
+      resumo: resumoDaRodada({ totalEmpresas: empresas.length, sucessos, falhas, puladasJanela, totalNovosXmls: totalNovos, errosResumo }),
     };
   });
 });
@@ -687,6 +753,13 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Apenas administradores' });
   }
+  // 🚦 TRAVA 1: dentro de 1 h da última rodada completa o botão RECUSA, com a
+  // hora e quanto falta — em vez de rodar 147 empresas para 147 falhas (25/09,
+  // 14:19). 409, nunca 500: é resposta, não defeito.
+  const janela = await conferirJanelaDaRodadaCompleta();
+  if (!janela.ok) {
+    return res.status(409).json({ ok: false, pulada: true, error: janela.motivo, motivo: janela.motivo, faltaMin: janela.faltaMin });
+  }
   await withCronHeartbeat({
     collection: 'sefaz_cron_logs',
     fonte: 'admin-manual',
@@ -694,27 +767,14 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
     metadados: { adminEmail: req.user.email },
   }, async () => {
     console.log('[sync-cron-now] início — admin:', req.user.email);
-    let sucessos = 0, falhas = 0, totalNovos = 0;
     const empresas = await listarEmpresasParaCron();
-    let idxEmpNow = 0;
-    for (const emp of empresas) {
-      idxEmpNow++;
-      try {
-        const result = await sincronizarEmpresa({
-          empresaId: emp.id, empresaCnpj: emp.cnpj,
-          capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
-        });
-        if (result.ok) { sucessos++; totalNovos += result.novosXmls || 0; }
-        else falhas++;
-      } catch (e) {
-        falhas++;
-        console.error(`[sync-cron-now] exceção em ${emp.cnpj}:`, e.message);
-      }
-      // Anti-656: mesmo respiro entre empresas do cron noturno.
-      if (idxEmpNow < empresas.length) {
-        await new Promise(r => setTimeout(r, 3000));
-      }
-    }
+    // O MESMO laço do noturno: motivos gravados (trava 3), pulada por janela
+    // separada de falha (trava 2).
+    const { sucessos, falhas, puladasJanela, totalNovos, errosResumo, puladasResumo } = await rodarCarteiraNfe({
+      empresas,
+      capturadoPor: { uid: req.user.uid, email: req.user.email, fonte: 'cron-now-admin' },
+      rotulo: 'sync-cron-now',
+    });
     // Mesma manifestação automática do cron noturno — sem ela, o admin que
     // clica "Forçar captura agora" continuava vendo os resumos "Pendente"
     // até a madrugada. Ciência agora; o procNFe completo vem na captura
@@ -763,9 +823,11 @@ router.post('/sync-cron-now', requireAuth, async (req, res) => {
       console.warn('[sync-cron-now] correção de status cancelado falhou:', e.message);
     }
 
-    console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${totalNovos} novos`);
+    console.log(`[sync-cron-now] fim — ${sucessos}/${empresas.length} ok, ${puladasJanela} puladas pela janela, ${totalNovos} novos`);
     return {
       totalEmpresas: empresas.length, sucessos, falhas, totalNovosXmls: totalNovos,
+      errosResumo, puladasJanela, puladasResumo,
+      resumo: resumoDaRodada({ totalEmpresas: empresas.length, sucessos, falhas, puladasJanela, totalNovosXmls: totalNovos, errosResumo }),
       manifestacaoAuto: manifestacaoAuto ? {
         total: manifestacaoAuto.total ?? 0,
         sucessos: manifestacaoAuto.sucessos ?? 0,
@@ -1850,6 +1912,14 @@ router.get('/cron-logs', requireAuth, async (req, res) => {
         periodo: d.periodo ?? null,
         prestadoresAutorizados: d.prestadoresAutorizados ?? null,
         errosResumo: d.errosResumo ?? null,
+        // 🚦 25/09: status da rodada (inclui 'pulada-janela'), puladas pela
+        // janela de 1 h (não são falhas), o resumo com a causa dominante e o
+        // motivo da recusa. Campo novo => whitelist no mesmo PR.
+        status: d.status ?? null,
+        puladasJanela: d.puladasJanela ?? null,
+        puladasResumo: d.puladasResumo ?? null,
+        resumo: d.resumo ?? null,
+        motivo: d.motivo ?? null,
       };
     });
     return res.json({ colecao: col, total: logs.length, logs });

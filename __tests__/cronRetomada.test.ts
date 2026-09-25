@@ -39,6 +39,17 @@ describe('cron-retomada — seleção de runs interrompidos', () => {
         expect(selecionarInterrompidosParaRetomar(docs, AGORA)).toEqual([]);
     });
 
+    // 🚦 25/09: a retomada refazia a rodada MANUAL interrompida pelo deploy,
+    // carteira inteira dentro da janela de 1 h — 109 e 147 falhas no mesmo dia.
+    it('rodada manual (admin-*) interrompida NÃO é retomada; agendada é', () => {
+        const docs = [
+            { id: 'manual', status: 'interrompido', fonte: 'admin-manual', interrompidoEm: new Date(AGORA - 60_000).toISOString() },
+            { id: 'dirigida', status: 'interrompido', fonte: 'admin-dirigida', interrompidoEm: new Date(AGORA - 60_000).toISOString() },
+            { id: 'agendada', status: 'interrompido', fonte: 'sefaz-xml-capture', interrompidoEm: new Date(AGORA - 60_000).toISOString() },
+        ];
+        expect(selecionarInterrompidosParaRetomar(docs, AGORA).map((d: any) => d.id)).toEqual(['agendada']);
+    });
+
     it('lista vazia/nula não explode', () => {
         expect(selecionarInterrompidosParaRetomar([], AGORA)).toEqual([]);
         expect(selecionarInterrompidosParaRetomar(null as any, AGORA)).toEqual([]);
