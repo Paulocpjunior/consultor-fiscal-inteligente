@@ -853,15 +853,27 @@ export interface DasEmitido {
         total: number;       // valor + multa + juros
         calculadoEm: string; // ISO YYYY-MM-DD
     };
-    /** Snapshot do último envio da guia ao cliente (email via Graph). */
-    ultimoEnvioCliente?: {
-        canal: 'email';
-        para: string;
-        copiaPara?: string[];
-        anexouPdf: boolean;
-        enviadoPor: string | null;
-        enviadoEm: string;   // ISO
-    };
+    /**
+     * Snapshot do último envio da guia ao cliente: e-mail pelo servidor (com
+     * prova) ou envio DECLARADO por fora do app (25/09 — sem prova, com autor,
+     * meio, data e texto). É a coluna Envio; NÃO é o eixo Pagamento.
+     */
+    ultimoEnvioCliente?: DasEnvioSnapshot;
+}
+
+export interface DasEnvioSnapshot {
+    canal: 'email' | 'fora-do-app';
+    para: string;
+    copiaPara?: string[];
+    anexouPdf: boolean;
+    enviadoPor: string | null;
+    enviadoEm: string;   // ISO — quando foi registrado
+    /** Só no envio declarado por fora. */
+    meio?: string | null;
+    meioLabel?: string | null;
+    quando?: string | null;      // AAAA-MM-DD — o dia em que a guia saiu
+    comoFoi?: string | null;
+    declaradoPor?: string | null;
 }
 
 /** Registro de envio de DAS ao cliente (coleção das_envios_cliente). */
@@ -873,7 +885,7 @@ export interface DasEnvioCliente {
     competencia: string | null;
     valor: number;
     vencimento: string | null;
-    canal: 'email';
+    canal: 'email' | 'fora-do-app';
     para: string;
     copiaPara?: string[];
     assunto: string;
@@ -881,6 +893,12 @@ export interface DasEnvioCliente {
     anexouPdf: boolean;
     enviadoPor: string | null;
     enviadoEm: string | null; // ISO
+    /** Só no envio declarado por fora do app. */
+    meio?: string | null;
+    meioLabel?: string | null;
+    quando?: string | null;
+    comoFoi?: string | null;
+    declaradoPor?: string | null;
 }
 
 export interface DasResumo {

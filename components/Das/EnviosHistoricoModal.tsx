@@ -118,7 +118,9 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
                                             <div className="text-xs text-slate-500 mt-0.5">
                                                 {env.competencia ? `Competência ${env.competencia} · ` : ''}
                                                 {env.valor > 0 ? `${formatBRL(env.valor)} · ` : ''}
-                                                para <span className="font-mono">{env.para}</span>
+                                                {env.canal === 'fora-do-app'
+                                                    ? <>📤 declarado por fora — {env.meioLabel || 'meio não informado'}{env.quando ? ` em ${env.quando.split('-').reverse().join('/')}` : ''} · sem prova de entrega</>
+                                                    : <>para <span className="font-mono">{env.para}</span></>}
                                             </div>
                                         </div>
                                         <div className="text-right shrink-0">
@@ -142,7 +144,7 @@ const EnviosHistoricoModal: React.FC<Props> = ({ currentUser, empresas, cnpjInic
                                     <div className="px-4 pb-4 space-y-2 text-sm border-t border-slate-200 dark:border-slate-700 pt-3">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
                                             <div><span className="text-slate-400">Assunto:</span> {env.assunto || '—'}</div>
-                                            <div><span className="text-slate-400">Enviado por:</span> {env.enviadoPor || '—'}</div>
+                                            <div><span className="text-slate-400">{env.canal === 'fora-do-app' ? 'Declarado por:' : 'Enviado por:'}</span> {env.declaradoPor || env.enviadoPor || '—'}</div>
                                             <div><span className="text-slate-400">CNPJ:</span> <span className="font-mono">{env.empresaCnpj}</span></div>
                                             <div><span className="text-slate-400">Vencimento:</span> {env.vencimento || '—'}</div>
                                             {env.copiaPara && env.copiaPara.length > 0 && (

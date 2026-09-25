@@ -5,6 +5,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📤 CENTRAL DE DAS: "JÁ ENVIEI ESTA GUIA POR FORA" — UM A UM OU EM LOTE**
+  (25/09, Paulo: *"como fica a baixa do status da guia enviado ao cliente,
+  visto que esse status interfere diretamente no controle mensal"* → decisão:
+  *"Declarar por fora, em lote. Mesma régua que fizemos para a cópia no
+  SharePoint … Não inventa pagamento"*). Dois eixos que a tela misturava na
+  leitura: Pagamento (`statusPagamento`, pendente→vencido pelo cron→pago SÓ à
+  mão) e Envio (`ultimoEnvioCliente` + rito em `impostos_enviados`, que é o que
+  a etapa 5 da Rotina lê). `sefaz-backend/das-envio-declarado.js` (puro + I/O
+  injetado): `planejarDeclaracaoEmLote` (pula guia que JÁ tem envio — declaração
+  sem prova nunca sobrepõe prova — e guia sem CNPJ, nomeando cada pulo),
+  `snapshotEnvioDeclarado` (`canal: 'fora-do-app'`, `para: ''`, sem PDF, com
+  meio/meioLabel/quando/comoFoi/declaradoPor — nunca carrega statusPagamento),
+  `logEnvioDeclarado` (das_envios_cliente com a frase "o app NÃO enviou"),
+  `declararEnvioDasEmLote` (declaração conferida UMA vez pelo
+  `conferirDeclaracao` de envio-fora-do-app; acesso POR guia via
+  `podeAcessarEmpresaId`; cada guia → `executarRitoEnvioImposto` tipo DAS canal
+  fora-do-app → log → `set({ultimoEnvioCliente}, merge)`; rito que falha vira
+  erro nomeado sem derrubar o lote; `sem-tarefa` da baixa é DITO no resumo).
+  Rota `POST /api/admin/das/declarar-envio` (requireEmissao) com
+  `carregarGuiasLeves(ids)` no orchestrator (documentId `in` fatiado + select,
+  sem o base64). Histórico `/envios-cliente` ganhou a whitelist dos campos
+  novos (lição do #382). UI `components/Das/DeclararEnvioModal.tsx` (meios do
+  backend, lista das guias, aviso "já enviada", resultado com puladas/erros) e
+  `components/Das/index.tsx`: checkbox por linha + "selecionar visíveis", barra
+  do lote "📤 Já enviei por fora (N)", filtro Todas/Não enviadas/Enviadas
+  (local), badge âmbar "📤 Declarado dd/mm", bloco no detalhe e botão "📤 Já
+  enviei esta guia por fora" onde antes só dizia "Ainda não enviado".
+  `EnviosHistoricoModal` mostra "declarado por fora — meio em data · sem prova".
+  Travas: `__tests__/dasEnvioDeclarado.test.ts` (13) e
+  `__tests__/dasDeclararEnvioTela.test.tsx` (4, por render).
+
 - **🧾 CST PADRÃO DE PIS/COFINS NA SAÍDA — "COMO O SAGE", 49 PARA AS DEMAIS**
   (25/09, Paulo, tela "Situação Tributária do PIS" do SAGE: *"devemos fazer
   este cadastro como a SAGE, CST 49 para as demais receitas, pode cadastrar"*).
