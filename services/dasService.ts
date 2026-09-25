@@ -394,6 +394,39 @@ export async function enviarDasCliente(user: User | null, req: EnviarDasClienteR
     return res.json();
 }
 
+export interface DeclararEnvioDasRequest {
+    dasIds: string[];
+    meio: string;
+    comoFoi: string;
+    quando: string; // AAAA-MM-DD
+}
+
+export interface DeclararEnvioDasResultado {
+    ok: boolean;
+    declaradas: Array<{ id: string; empresaNome: string; competencia: string | null; rito?: { baixa?: { status?: string }; sharePoint?: { status?: string } } }>;
+    puladas: Array<{ id: string; empresaNome?: string; competencia?: string | null; motivo: string }>;
+    erros: Array<{ id: string; empresaNome?: string; competencia?: string | null; motivo: string }>;
+    resumo: string;
+    declaracao?: { texto: string } | null;
+}
+
+/**
+ * 📤 "Já enviei esta guia por fora" — um a um ou em lote. O backend confere a
+ * declaração (meio, texto, data, autor), passa cada guia pelo rito com canal
+ * `fora-do-app`, grava o histórico e a coluna Envio. Nunca toca o pagamento.
+ * Declaração incompleta volta como 400 com a frase do que falta.
+ */
+export async function declararEnvioDasForaDoApp(user: User | null, req: DeclararEnvioDasRequest): Promise<DeclararEnvioDasResultado> {
+    const res = await fetch(`${BASE}/declarar-envio`, {
+        method: 'POST',
+        headers: { ...(await authHeaders(user)), 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `declararEnvioDas: ${res.status}`);
+    return data as DeclararEnvioDasResultado;
+}
+
 export async function listarEnviosDas(
     user: User | null,
     filters: { cnpj?: string; dasId?: string; limit?: number } = {}

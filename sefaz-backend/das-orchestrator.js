@@ -229,6 +229,27 @@ export async function listarDas({ empresaId, competencia, status } = {}) {
     return docs;
 }
 
+/**
+ * Guias LEVES por id (sem o PDF) — para o lote do "já enviei por fora". Ler o
+ * doc inteiro traria o base64 de cada guia; 50 guias seriam ~5 MB por clique.
+ * `in` do Firestore aceita até 30 ids; fatiado em 10 por segurança. Id que não
+ * existe volta como null NA POSIÇÃO do pedido, para o pulo ser nomeado.
+ */
+export async function carregarGuiasLeves(ids) {
+    const db = fa().firestore();
+    const lista = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
+    const porId = new Map();
+    for (let i = 0; i < lista.length; i += 10) {
+        const fatia = lista.slice(i, i + 10);
+        const snap = await db.collection(COLLECTION)
+            .where(admin.firestore.FieldPath.documentId(), 'in', fatia)
+            .select(...CAMPOS_LISTAGEM)
+            .get();
+        snap.docs.forEach((d) => porId.set(d.id, { id: d.id, ...d.data() }));
+    }
+    return lista.map((id) => porId.get(id) || null);
+}
+
 /** PDF/base64 de UM DAS — buscado sob demanda (baixar/imprimir/enviar). */
 export async function getDasPdf(id) {
     const db = fa().firestore();

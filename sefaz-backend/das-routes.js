@@ -10,8 +10,10 @@ import admin from 'firebase-admin';
 import { ultimasCompetencias as ultimasCompetenciasHelper } from './competencias-helper.js';
 import {
     emitirDasRegular, emitirDasAvulso, declararPgdasSemMovimento,
-    listarDas, getResumoDas, getDasPdf, marcarPago,
+    listarDas, getResumoDas, getDasPdf, marcarPago, carregarGuiasLeves,
     processarCronDas, sondarFormaSemMovimento } from './das-orchestrator.js';
+import { declararEnvioDasEmLote } from './das-envio-declarado.js';
+import { executarRitoEnvioImposto } from './envio-imposto.js';
 import { getDasMode, getDasProvider } from './das-provider.js';
 import { errorPayload } from './das-error-payload.js';
 import { podeAcessarEmpresaId, podeAcessarCnpj } from './carteira-auth.js';
@@ -205,6 +207,45 @@ router.post('/marcar-pago', requireEmissao, express.json(), async (req, res) => 
         if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
         res.json(await marcarPago(docId, dataPagamento));
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /declarar-envio  { dasIds: string[], meio, comoFoi, quando }
+//
+// 📤 "JÁ ENVIEI ESTA GUIA POR FORA" — um a um ou em lote (Paulo, 25/09). A
+// declaração é conferida UMA vez (meio da lista, texto com piso, data que não
+// está no futuro, autor = quem está logado); cada guia passa pelo rito de
+// envio-imposto com canal `fora-do-app` (impostos_enviados + baixa da tarefa
+// DAS — é o que fecha a etapa 5 da Rotina), entra no histórico da Central e
+// ganha a coluna Envio. NUNCA toca o pagamento e NUNCA sobrepõe envio já
+// registrado (guia com envio é pulada e dita). Acesso é por guia: colaborador
+// só declara guia de empresa da carteira dele.
+router.post('/declarar-envio', requireEmissao, express.json(), async (req, res) => {
+    try {
+        const { dasIds, meio, comoFoi, quando } = req.body || {};
+        const quem = req.user?.email || req.user?.uid || null;
+        const db = admin.firestore();
+        const r = await declararEnvioDasEmLote({
+            dasIds, meio, comoFoi, quando, quem,
+            carregarGuias: carregarGuiasLeves,
+            podeAcessar: (guia) => podeAcessarEmpresaId(req.user, guia.empresaId),
+            executarRito: executarRitoEnvioImposto,
+            gravarLog: async (log) => {
+                await db.collection('das_envios_cliente').add({
+                    ...log, enviadoEm: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            },
+            atualizarGuia: async (id, snapshot) => {
+                await db.collection('das_emitidos').doc(id).set({ ultimoEnvioCliente: snapshot }, { merge: true });
+            },
+        });
+        // 400, nunca 500: declaração incompleta é RESPOSTA, e a frase diz o que falta.
+        if (!r.ok) return res.status(r.status || 400).json({ ok: false, error: r.erro });
+        console.log(`[das/declarar-envio] ${r.declaradas.length} declarada(s), ${r.puladas.length} pulada(s), ${r.erros.length} erro(s) por ${quem}`);
+        return res.json(r);
+    } catch (err) {
+        console.error('[das/declarar-envio]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
 // GET /cobertura-pgdas?meses=6

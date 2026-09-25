@@ -1469,6 +1469,14 @@ app.get('/api/admin/das/envios-cliente', requireAuth, async (req, res) => {
                     anexouPdf: Boolean(x.anexouPdf),
                     enviadoPor: x.enviadoPor || null,
                     enviadoEm: x.enviadoEm?.toDate?.()?.toISOString() || null,
+                    // 📤 Envio DECLARADO por fora (25/09): campo novo => whitelist
+                    // da rota no MESMO PR (lição do #382) — sem isto o histórico
+                    // mostraria "para (vazio)" e ninguém saberia o meio.
+                    meio: x.meio || null,
+                    meioLabel: x.meioLabel || null,
+                    quando: x.quando || null,
+                    comoFoi: x.comoFoi || null,
+                    declaradoPor: x.declaradoPor || null,
                 };
             })
             .filter(e => cnpjsCarteira === null || cnpjsCarteira.includes(e.empresaCnpj))
