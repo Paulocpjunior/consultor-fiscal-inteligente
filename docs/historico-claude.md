@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📬 QUEM JÁ NOS ENVIA XML, POR TRILHO** (25/09, Paulo: *"preciso analisar e
+  quantificar os clientes que já nos enviam xml usando o email xml@sp ou com
+  o nosso cnpj"*). Este ambiente não alcança o Firestore, então o número sai
+  do app: `montarAptidaoSaida().resumo.porTrilho` {autxml, cofre, ambos,
+  soAutxml, soCofre} (trilho da PROVA, uma nota basta) + bloco e CSV no
+  `AptidaoSaidaPanel`. ⚡ A rota `/aptidao-saida` lia o documento INTEIRO de
+  toda saída do acervo — ganhou `.select()` dos 9 campos que a régua usa.
+  Auditoria de gargalos do mesmo dia (resumo entregue no chat): 12 arquivos
+  de rota leem `documentos_fiscais` sem projeção; `documentos_fiscais` inteira
+  por competência é o padrão de custo; histórico com 1 MB (ler só por grep).
+
 - **🏢 ECD E ECF SAEM DO CATÁLOGO DO FISCAL — SÃO DO CONTÁBIL** (25/09, Paulo:
   *"como adotamos para outras obrigações federais, vamos replicar p ECD/ECF
   que não é do departamento fiscal e sim do contábil"*). Mesma régua do DP

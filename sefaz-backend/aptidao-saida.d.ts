@@ -40,6 +40,8 @@ export function montarAptidaoSaida(p: {
     resumo: {
         total: number; comSaida55: number; aptos: number; ativos: number;
         aptosSemFluxo: number; aptosPararam: number; semProva: number; semSaida55: number;
+        /** 25/09: quem já nos envia XML, por trilho da prova (autxml = nosso CNPJ na nota; cofre = e-mail). */
+        porTrilho: { autxml: number; cofre: number; ambos: number; soAutxml: number; soCofre: number };
     };
     ressalvas: string[];
 };

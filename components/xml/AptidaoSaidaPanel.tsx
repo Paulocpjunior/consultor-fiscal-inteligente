@@ -34,6 +34,7 @@ interface Resposta {
     resumo: {
         total: number; comSaida55: number; aptos: number; ativos: number;
         aptosSemFluxo: number; aptosPararam: number; semProva: number; semSaida55: number;
+        porTrilho?: { autxml: number; cofre: number; ambos: number; soAutxml: number; soCofre: number };
     };
     ressalvas: string[];
 }
@@ -77,6 +78,23 @@ const AptidaoSaidaPanel: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    // ⬇️ CSV com TODAS as linhas (a tabela da tela é filtrada): quem envia, por
+    // qual trilho, desde quando e a chave que prova. Abre no Excel.
+    const baixarCsv = () => {
+        if (!dados) return;
+        const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const cab = ['Cliente', 'CNPJ', 'Situação', 'Trilho (autxml = nosso CNPJ na nota · cofre = e-mail)', 'Prova em', 'Chave da prova', 'Dias sem receber', 'O que fazer'];
+        const linhas = dados.linhas.map(l => [
+            l.nome, fmtCnpj(l.cnpj), l.rotulo, l.trilhos.join(' + ') || '—', fmtData(l.provaData), l.provaChave || '', l.diasSemReceber ?? '', l.acao,
+        ].map(esc).join(';'));
+        const csv = '\ufeff' + [cab.map(esc).join(';'), ...linhas].join('\r\n');
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = `quem-envia-xml-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
     };
 
     const visiveis = !dados ? [] : (filtro === 'acao'
@@ -123,6 +141,36 @@ const AptidaoSaidaPanel: React.FC = () => {
                             </div>
                         ))}
                     </div>
+
+                    {dados.resumo.porTrilho && (
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">📬 Quem já nos envia XML — por trilho</p>
+                                <button onClick={baixarCsv}
+                                    className="px-3 py-1 text-[11px] rounded-lg font-semibold bg-emerald-700 hover:bg-emerald-800 text-white">
+                                    ⬇️ CSV com todos os clientes
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 mt-2">
+                                {[
+                                    { k: 'autxml', rot: 'Nosso CNPJ no autXML', sub: 'a SEFAZ entrega ao escritório' },
+                                    { k: 'cofre', rot: 'Cofre de e-mail (xml@)', sub: 'o emissor manda por e-mail' },
+                                    { k: 'ambos', rot: 'Os dois trilhos', sub: 'contam nas duas colunas' },
+                                ].map(c => (
+                                    <div key={c.k} className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2 text-center">
+                                        <p className="text-xl font-bold font-mono text-slate-800 dark:text-slate-100">{(dados.resumo.porTrilho as any)[c.k]}</p>
+                                        <p className="text-[10px] text-slate-600 dark:text-slate-300">{c.rot}</p>
+                                        <p className="text-[9px] text-slate-400">{c.sub}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-2">
+                                Só autXML: <b>{dados.resumo.porTrilho.soAutxml}</b> · só cofre: <b>{dados.resumo.porTrilho.soCofre}</b> ·
+                                clientes com saída mod 55 sem nenhum trilho: <b className="text-red-700 dark:text-red-400">{dados.resumo.semProva}</b>.
+                                O trilho é o da PROVA (uma nota basta, de qualquer data); o número sai desta apuração, não de cadastro.
+                            </p>
+                        </div>
+                    )}
 
                     <p className="text-[11px] text-slate-600 dark:text-slate-300">
                         <b>{dados.resumo.aptos}</b> de <b>{dados.resumo.comSaida55}</b> clientes que emitem mod 55
