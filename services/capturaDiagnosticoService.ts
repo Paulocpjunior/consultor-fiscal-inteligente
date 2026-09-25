@@ -51,7 +51,7 @@ export interface CapturaStatus {
     } | { erro: string };
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
-    topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number }> } | null;
+    topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number; acao?: string | null; codigo?: string | null }> } | null;
     /** Total histórico de docs desta fonte (hoje só NFSe Nacional envia) —
      *  separa "nunca capturou" (elegibilidade) de "capturava e parou" (quebra). */
     docsTotalHistorico?: number | null;
