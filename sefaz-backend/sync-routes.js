@@ -36,6 +36,7 @@ import {
 } from './cnpjs-dirigidos.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import { temCcmSp } from './ccm-sp.js';
+import { agruparFalhasAdn } from './adn-erro-catalogo.js';
 
 const router = express.Router();
 
@@ -1500,7 +1501,10 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
         const snap = await db.collection('nfse_nacional_dfe_erros')
           .orderBy('registradoEm', 'desc').limit(30).get();
         if (snap.empty) return null;
-        const contagem = new Map();
+        // 📖 25/09: agrupa por CAUSA (catálogo do ADN), não por CNPJ+JSON cru.
+        // Dois CNPJs com E999 viram UMA linha, com os CNPJs, a ação e a
+        // reincidência ("há N execuções seguidas desde DD/MM") lida do estado.
+        const registros = [];
         let maisRecenteMs = null;
         for (const docSnap of snap.docs) {
           const d = docSnap.data();
@@ -1509,15 +1513,17 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           // Janela: só erros das últimas 48h (erro velho não é "principal
           // motivo de falha" da rodada atual).
           if (ts != null && maisRecenteMs != null && (maisRecenteMs - ts) > 48 * 3600000) break;
-          // E2220/NENHUM_DOCUMENTO deixou de ser erro no #302 (sucesso-vazio);
-          // registros ANTIGOS dele não devem assustar o card até envelhecerem.
-          if (/E2220|NENHUM_DOCUMENTO/i.test(String(d.motivo || ''))) continue;
-          const chave = `${d.empresaCnpj ? d.empresaCnpj + ' — ' : ''}${String(d.motivo || 'sem motivo').slice(0, 140)}`;
-          contagem.set(chave, (contagem.get(chave) || 0) + 1);
+          registros.push({ empresaCnpj: d.empresaCnpj, motivo: d.motivo });
         }
-        const top = [...contagem.entries()]
-          .sort((a, b) => b[1] - a[1]).slice(0, maxMotivos)
-          .map(([motivo, quantidade]) => ({ motivo, quantidade }));
+        const cnpjs = [...new Set(registros.map((r) => String(r.empresaCnpj || '').replace(/\D/g, '')).filter(Boolean))].slice(0, 15);
+        const reincidenciaPorCnpj = {};
+        await Promise.all(cnpjs.map(async (c) => {
+          try {
+            const st = await db.collection('nfse_nacional_dfe_state').doc(c).get();
+            if (st.exists && st.data()?.erroAtual) reincidenciaPorCnpj[c] = st.data().erroAtual;
+          } catch { /* sem estado = sem reincidência dita */ }
+        }));
+        const top = agruparFalhasAdn(registros, { maxMotivos, reincidenciaPorCnpj });
         return top.length ? { executadoEmMs: maisRecenteMs, top } : null;
       } catch (e) {
         console.warn('[captura-diagnostico] topFalhasNfseNacional:', e.message);

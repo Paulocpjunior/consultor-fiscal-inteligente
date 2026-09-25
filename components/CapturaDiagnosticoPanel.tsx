@@ -240,6 +240,8 @@ const CardCaptura: React.FC<{
                             // fora do card (print 26/07 — E2220 do ADN).
                             <div key={i} className="text-red-700 break-all">
                                 <span className="font-mono font-bold">{f.quantidade}×</span> {f.motivo}
+                                {/* 📖 25/09: ação do catálogo do ADN (E999 etc.) — o que fazer, não o JSON */}
+                                {f.acao && <div className="text-red-800 mt-0.5 pl-3 border-l-2 border-red-300">{f.acao}</div>}
                             </div>
                         ))}
                     </div>

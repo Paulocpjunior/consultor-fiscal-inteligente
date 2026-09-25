@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📖 CATÁLOGO DAS RECUSAS DO ADN — E999 DEIXA DE SER JSON CRU** (25/09, Paulo,
+  Diagnóstico de Captura: dois CNPJs com `HTTP 400 … "Codigo":"E999","Descricao":
+  "Erro não catalogado"`; *"pode catalogar E999 do ADN"*). `sefaz-backend/
+  adn-erro-catalogo.js` (puro): `extrairErrosAdn` (JSON do ADN com prefixo
+  "pagina N: HTTP 400:"), `catalogarErroAdn` (E999 = do CNPJ, ação cadastral:
+  município aderente + habilitação no ambiente nacional, NUNCA certificado;
+  E2243 = raiz; E2220 = sucesso-vazio; desconhecido sai dito), `proximoErroAtual`
+  (reincidência no `nfse_nacional_dfe_state.erroAtual`: execuções seguidas e
+  desde quando; sucesso limpa), `agruparFalhasAdn` (uma linha por CAUSA com os
+  CNPJs, ação e reincidência). `topFalhasNfseNacional` passou a agrupar por
+  causa; o card mostra a ação. Trava `adnErroCatalogo.test.ts` (relógio por
+  parâmetro). ⚠️ O app NÃO afirma qual das causas do E999 é — diz as duas e
+  onde conferir; só "todas iguais" é do serviço (`deQuemEhAFalha`, 30/08).
+
 - **📬 QUEM JÁ NOS ENVIA XML, POR TRILHO** (25/09, Paulo: *"preciso analisar e
   quantificar os clientes que já nos enviam xml usando o email xml@sp ou com
   o nosso cnpj"*). Este ambiente não alcança o Firestore, então o número sai

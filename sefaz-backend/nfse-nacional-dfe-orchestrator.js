@@ -17,6 +17,7 @@
 import admin from 'firebase-admin';
 import { consultarDFe } from './nfse-nacional-dfe-client.js';
 import { importarDfeNfseNacional, registrarErroNfseNacionalDfe } from './nfse-nacional-dfe-importer.js';
+import { proximoErroAtual } from './adn-erro-catalogo.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000; // 1 hora
 const MAX_PAGINAS = 10;             // 10 * 50 = 500 docs/empresa por execução
@@ -101,6 +102,17 @@ export async function limparLocksOrfaos() {
         removidos += slice.length;
     }
     return { total, removidos };
+}
+
+// 📖 Catálogo das recusas do ADN (25/09): o erro da rodada fica no estado
+// do CNPJ com contagem de execuções seguidas — o card diz "há N execuções
+// seguidas desde DD/MM" em vez de repetir o JSON cru.
+async function carregaErroAtual(cnpj) {
+    const cnpjNum = String(cnpj).replace(/\D/g, '');
+    try {
+        const snap = await fa().firestore().collection('nfse_nacional_dfe_state').doc(cnpjNum).get();
+        return snap.exists ? (snap.data().erroAtual || null) : null;
+    } catch { return null; }
 }
 
 async function carregaUltNSU(cnpj) {
@@ -206,11 +218,17 @@ export async function sincronizarEmpresaNfseNacionalDfe({ empresaId, empresaCnpj
             if (lote.length === 0 || (maxNSU && ultNSU >= maxNSU)) break;
         }
 
-        // Persiste cursor final
+        // Persiste cursor final — e o erro da rodada (ou a limpeza dele).
+        const erroAtual = proximoErroAtual({
+            anterior: motivoFinal ? await carregaErroAtual(cnpjNum) : null,
+            motivo: motivoFinal,
+            agoraMs: Date.now(),
+        });
         await persisteUltNSU(cnpjNum, ultNSU, {
             maxNSU,
             ultimaSyncFonte: 'nfse-nacional-dfe-adn',
             ultimaSyncCert: fonteCert,
+            erroAtual,
         });
 
         await registrarLog(cnpjNum, {
