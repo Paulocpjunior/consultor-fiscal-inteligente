@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (25/09) — leia esta parte primeiro</h2>
 
+    <h3>🧾 <strong>EFD Contribuições: CST padrão de PIS/COFINS na saída, como o cadastro do SAGE — 49 para as demais saídas</strong></h3>
+    <p>O CST do PIS/COFINS vinha só do XML e, quando a nota não trazia, tudo caía em 01 (tributada), inclusive remessa,
+    devolução e bonificação. Agora cada empresa cadastra o CST por tipo de saída: venda (ex.: 01 ou 06), exportação
+    (sugestão 08) e demais saídas (sugestão 49). O tipo vem da descrição oficial do CFOP. O cadastro entra onde o XML não
+    traz CST; o que o emissor declarou fica, a menos que você ligue "sobrepor", e aí o arquivo diz quantos itens mudaram.
+    Sem cadastro nada muda, e o aviso do arquivo conta o que caiu no 01, por tipo e CFOP.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → SPED Contribuições → bloco 3, "CST padrão de PIS/COFINS na saída". Grava junto com a natureza da receita.</p>
+
     <h3>📖 <strong>ADN (NFS-e nacional): o E999 e as outras recusas agora saem traduzidas, com a ação e a reincidência</strong></h3>
     <p>No Diagnóstico de Captura, o card do ADN mostrava o JSON cru do provedor para cada CNPJ que falhava ("E999 — Erro não
     catalogado"). Agora o app cataloga o código: diz de quem é a falha (do CNPJ, não do serviço nem do certificado), o que
