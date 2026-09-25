@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (25/09) — leia esta parte primeiro</h2>
 
+    <h3>🧊 <strong>NFS-e SP: a lista não trava mais o navegador — período do mês por padrão, 200 linhas por vez e rodapé que diz quando pode haver mais</strong></h3>
+    <p>Ao consultar as notas de serviço com CNPJ, direção e período, a tela demorava e o navegador mostrava "Esta página
+    não está respondendo". O rodapé dizia "de 20000 carregadas": a tela pedia 5.000 notas, mas a leitura ignorava o
+    limite e descia até 20.000 documentos inteiros, e depois desenhava as 20.000 linhas de uma vez. Agora a primeira
+    carga é do mês corrente, o período entra na própria consulta quando há CNPJ, o teto de 5.000 é respeitado, a
+    tabela mostra 200 linhas por vez com "Mostrar mais", e o rodapé diz "mostrando X de Y" e avisa quando o teto foi
+    atingido, mandando estreitar o período. Com CNPJ informado, erro de leitura vira mensagem, nunca a carga do acervo
+    inteiro.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Captura → NFS-e SP capturadas.</p>
+
     <h3>🚦 <strong>Captura NF-e: rodada completa dentro de 1 hora da anterior é recusada — e o aviso diz a causa</strong></h3>
     <p>Hoje o aviso "Captura SEFAZ 14:19: 0 novos XMLs, 147 falha(s)" apareceu depois de uma sequência que o próprio
     app produziu: um deploy interrompeu a captura, a retomada automática refez a carteira inteira e, 42 segundos depois
