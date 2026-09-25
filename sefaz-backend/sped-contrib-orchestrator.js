@@ -42,7 +42,8 @@ import { acharFichaCompetencia } from './ipi-varredura.js';
 // só via a retenção GRAVADA NO DOCUMENTO. A ficha é a mesma fonte da guia que
 // o cliente paga — calcular aqui faria o DARF e o SPED discordarem.
 import { montarF600DaFicha } from './retencao-f600-da-ficha.js';
-import { direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docContaNoLivro, docCancelado } from './xml-metadata-helper.js';
+import { aplicarCstPadraoNasSaidas, avisosDoCstPadrao } from './cst-pis-cofins-saida.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
@@ -358,6 +359,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    // 🧾 CST padrão de PIS/COFINS na saída — o cadastro "como o SAGE" (25/09).
+    // Entra ANTES dos blocos: C170, C175 e M400 leem o mesmo item.
+    const cstPadrao = aplicarCstPadraoNasSaidas(notas, empresa.cstPisCofinsContrib || {}, {
+        direcaoDoDoc: direcaoEfetivaDoc,
+        docFora: docCancelado, // a régua única do cancelamento (evento 110111 inclusive)
+    });
+    warnings.push(...avisosDoCstPadrao(cstPadrao));
     if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
     const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
@@ -525,6 +533,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         receitaAplicacaoFinanceira,
         // 🧾 Natureza da receita sem ônus (M410/M810), cadastrada por empresa e CST.
         naturezaReceita: (empresa && empresa.naturezaReceitaContrib) || {},
+        cstPisCofins: (empresa && empresa.cstPisCofinsContrib) || {},
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
         contaContabilReceitaFinanceiraNome: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNome || '',
         contaContabilReceitaFinanceiraNivel: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNivel || '',

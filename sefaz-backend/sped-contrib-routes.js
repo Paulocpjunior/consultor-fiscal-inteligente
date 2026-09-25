@@ -18,6 +18,7 @@ import { competenciaParaGerarArquivo } from './competencia.js';
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
 import admin from 'firebase-admin';
 import { conferirCadastroNaturezaReceita, CSTS_SEM_ONUS, TABELA_NAT_REC_POR_CST, SUGESTOES_PROVADAS } from './sped-contrib-m400.js';
+import { conferirCadastroCst, CST_SAIDA, TIPOS_DE_SAIDA } from './cst-pis-cofins-saida.js';
 
 const router = express.Router();
 
@@ -182,6 +183,10 @@ router.get('/natureza-receita', requireAdmin, async (req, res) => {
             csts: CSTS_SEM_ONUS,
             tabelas: TABELA_NAT_REC_POR_CST,
             sugestoes: SUGESTOES_PROVADAS,
+            // 🧾 CST padrão na saída (cadastro como o SAGE, 25/09)
+            cstPisCofins: doc.data.cstPisCofinsContrib || {},
+            cstSaida: CST_SAIDA,
+            tiposDeSaida: TIPOS_DE_SAIDA,
         });
     } catch (e) {
         return tratarErro(e, res);
@@ -190,18 +195,21 @@ router.get('/natureza-receita', requireAdmin, async (req, res) => {
 
 router.post('/natureza-receita', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId, naturezaReceita } = req.body || {};
+        const { empresaId, naturezaReceita, cstPisCofins } = req.body || {};
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
         const conf = conferirCadastroNaturezaReceita(naturezaReceita || {});
         if (!conf.ok) return res.status(400).json({ error: 'CADASTRO_INVALIDO', erros: conf.erros });
+        const confCst = conferirCadastroCst(cstPisCofins || {});
+        if (!confCst.ok) return res.status(400).json({ error: 'CADASTRO_INVALIDO', erros: confCst.erros });
         const doc = await docDaEmpresa(empresaId);
         if (!doc) return res.status(404).json({ error: 'EMPRESA_NAO_ENCONTRADA' });
         await doc.ref.set({
             naturezaReceitaContrib: conf.cadastro,
+            cstPisCofinsContrib: confCst.cadastro,
             naturezaReceitaContribAtualizadoEm: new Date().toISOString(),
             naturezaReceitaContribAtualizadoPor: (req.user && req.user.email) || null,
         }, { merge: true });
-        return res.json({ ok: true, naturezaReceita: conf.cadastro });
+        return res.json({ ok: true, naturezaReceita: conf.cadastro, cstPisCofins: confCst.cadastro });
     } catch (e) {
         return tratarErro(e, res);
     }

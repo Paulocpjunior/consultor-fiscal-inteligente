@@ -84,6 +84,10 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [naturezaReceita, setNaturezaReceita] = useState<Record<string, NaturezaReceitaLinha>>({});
     const [naturezaMeta, setNaturezaMeta] = useState<{ csts: string[]; tabelas: Record<string, string>; sugestoes: Record<string, Array<{ natRec: string; quando: string; prova: string }>>; atualizadoEm: string | null; atualizadoPor: string | null } | null>(null);
     const [naturezaMsg, setNaturezaMsg] = useState<string | null>(null);
+    // 🧾 CST padrão de PIS/COFINS na saída — cadastro "como o SAGE" (25/09).
+    type CstPadrao = { venda?: string; exportacao?: string; outras?: string; sobreporXml?: boolean };
+    const [cstPisCofins, setCstPisCofins] = useState<CstPadrao>({});
+    const [cstMeta, setCstMeta] = useState<{ cstSaida: Record<string, string>; tiposDeSaida: Record<string, { rotulo: string; sugestao: string | null; exemplo: string }> } | null>(null);
     const [salvandoNatureza, setSalvandoNatureza] = useState(false);
 
     useEffect(() => {
@@ -265,6 +269,8 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             if (!resp.ok) { setNaturezaMsg(`Não consegui ler o cadastro da natureza da receita (HTTP ${resp.status}).`); return; }
             const data = await resp.json();
             setNaturezaReceita(data.naturezaReceita || {});
+            setCstPisCofins(data.cstPisCofins || {});
+            setCstMeta(data.cstSaida && data.tiposDeSaida ? { cstSaida: data.cstSaida, tiposDeSaida: data.tiposDeSaida } : null);
             setNaturezaMeta({ csts: data.csts || [], tabelas: data.tabelas || {}, sugestoes: data.sugestoes || {}, atualizadoEm: data.atualizadoEm || null, atualizadoPor: data.atualizadoPor || null });
             setNaturezaMsg(null);
         } catch (e) {
@@ -288,7 +294,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const resp = await fetch('/api/admin/sped-contrib/natureza-receita', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ empresaId, naturezaReceita }),
+                body: JSON.stringify({ empresaId, naturezaReceita, cstPisCofins }),
             });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) {
@@ -296,6 +302,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 throw new Error(erros);
             }
             setNaturezaReceita(data.naturezaReceita || {});
+            if (data.cstPisCofins) setCstPisCofins(data.cstPisCofins);
             const cadastrados = Object.keys(data.naturezaReceita || {});
             setNaturezaMsg(cadastrados.length
                 ? `✓ Natureza da receita gravada para CST ${cadastrados.join(', ')}. Gere o SPED Contribuições de novo para o M400/M800 sair.`
@@ -997,6 +1004,43 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 </div>
                             );
                         })}
+                        {cstMeta && (
+                            <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                    CST padrão de PIS/COFINS na saída (como o cadastro do SAGE)
+                                </p>
+                                <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                    O tipo da saída vem da descrição oficial do CFOP. O CST cadastrado entra onde o XML não traz CST; o que o emissor declarou fica,
+                                    a menos que você ligue "sobrepor" — e aí o arquivo diz quantos itens mudaram.
+                                </p>
+                                <div className="space-y-2">
+                                    {Object.entries(cstMeta.tiposDeSaida).map(([tipo, t]) => (
+                                        <div key={tipo} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 260px' }}>
+                                            <div>
+                                                <div className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{t.rotulo}</div>
+                                                <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>ex.: CFOP {t.exemplo}{t.sugestao ? ` · sugestão: ${t.sugestao}` : ''}</div>
+                                            </div>
+                                            <select
+                                                value={(cstPisCofins as Record<string, string | boolean | undefined>)[tipo] as string || ''}
+                                                onChange={e => setCstPisCofins({ ...cstPisCofins, [tipo]: e.target.value })}
+                                                className="p-2 text-sm rounded-lg outline-none"
+                                                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                            >
+                                                <option value="">— sem cadastro (fica o padrão 01) —</option>
+                                                {Object.keys(cstMeta.cstSaida).sort().map((cod) => [cod, cstMeta.cstSaida[cod]] as const).map(([cod, desc]) => (
+                                                    <option key={cod} value={cod}>{cod} — {desc}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                    <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                        <input type="checkbox" checked={cstPisCofins.sobreporXml === true}
+                                            onChange={e => setCstPisCofins({ ...cstPisCofins, sobreporXml: e.target.checked })} />
+                                        Sobrepor o CST que vem no XML pelo cadastrado (o C170 sai diferente do que o emissor declarou; o arquivo avisa quantos)
+                                    </label>
+                                </div>
+                            </div>
+                        )}
                         <div className="flex items-center gap-3 pt-1">
                             <button
                                 onClick={salvarNaturezaReceita}

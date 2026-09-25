@@ -5,6 +5,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 CST PADRÃO DE PIS/COFINS NA SAÍDA — "COMO O SAGE", 49 PARA AS DEMAIS**
+  (25/09, Paulo, tela "Situação Tributária do PIS" do SAGE: *"devemos fazer
+  este cadastro como a SAGE, CST 49 para as demais receitas, pode cadastrar"*).
+  No CFI o CST vinha só do XML e o fallback era 01 para QUALQUER saída (remessa
+  inclusive). `sefaz-backend/cst-pis-cofins-saida.js` (puro): `tipoDaSaidaPeloCfop`
+  pela DESCRIÇÃO OFICIAL do CFOP (Venda/Prestação/Industrialização = venda;
+  7xxx de venda + 5501/5502/6501/6502 = exportação; resto = outras — remessa,
+  devolução, bonificação, transferência, ativo 5551), `conferirCadastroCst`
+  (tabela 4.3.3: 01–09 e 49), `aplicarCstPadraoNasSaidas` (entra onde o XML
+  não traz CST; `sobreporXml` é opção explícita e sai DITA com CFOP e o CST do
+  emissor; sem cadastro nada muda e o aviso conta o que caiu no 01),
+  `avisosDoCstPadrao`. Aplicado no orquestrador ANTES dos blocos (C170, C175 e
+  M400 leem o mesmo item). Cadastro por empresa `cstPisCofinsContrib` {venda,
+  exportacao, outras, sobreporXml}, nas mesmas rotas GET/POST
+  `/api/admin/sped-contrib/natureza-receita`; tela no bloco 3 da aba SPED
+  Contribuições. Teste `cstPisCofinsSaida.test.ts` (inclui: 49 cadastrado tira
+  a remessa do M210 e do M400). ⚠️ 49 NÃO entra no M400 (leiaute: só
+  04/06/07/08/09) — a remessa com 49 fica só no C170.
+
 - **📖 CATÁLOGO DAS RECUSAS DO ADN — E999 DEIXA DE SER JSON CRU** (25/09, Paulo,
   Diagnóstico de Captura: dois CNPJs com `HTTP 400 … "Codigo":"E999","Descricao":
   "Erro não catalogado"`; *"pode catalogar E999 do ADN"*). `sefaz-backend/
