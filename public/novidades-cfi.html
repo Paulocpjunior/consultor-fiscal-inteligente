@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (25/09) — leia esta parte primeiro</h2>
 
+    <h3>🧱 <strong>EFD Contribuições: o PVA recusava com "Organização hierárquica dos blocos/registros fora dos padrões" (123 erros) — o registro 0500 estava no lugar errado</strong></h3>
+    <p>Na ELS 08/2026 o PVA devolveu 127 erros, 123 deles de hierarquia, um por participante, unidade e item do bloco 0.
+    O registro 0500 (plano de contas, gerado quando a empresa tem a conta da receita financeira cadastrada) saía logo
+    depois do 0140, antes dos 0150/0190/0200, e isso fechava a subárvore do estabelecimento: o PVA passava a esperar o
+    0600 e recusava tudo o que vinha depois. Agora o 0500 sai no lugar do leiaute, depois dos itens e antes do 0990.
+    Gere o arquivo de novo e valide.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → SPED Contribuições → gerar arquivo.</p>
+
     <h3>🧊 <strong>NFS-e SP: a lista não trava mais o navegador — período do mês por padrão, 200 linhas por vez e rodapé que diz quando pode haver mais</strong></h3>
     <p>Ao consultar as notas de serviço com CNPJ, direção e período, a tela demorava e o navegador mostrava "Esta página
     não está respondendo". O rodapé dizia "de 20000 carregadas": a tela pedia 5.000 notas, mas a leitura ignorava o

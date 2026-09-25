@@ -64,9 +64,43 @@ function buildBloco0Contrib(dados) {
     // ── 0140 — Estabelecimentos ─────────────────────────────────────────
     linhas.push(build0140(dados));
 
-    // 🚨 O 0500 vem ANTES de quem o referencia (o F100), como o 0150/0200 vêm
-    // antes do C100/A100. Ele só sai quando a conta está INTEIRA no cadastro —
-    // ver a régua em `receita-aplicacao-financeira.js`.
+    // ── 0150 — Participantes ────────────────────────────────────────────
+    // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
+    //
+    // Paulo, 18/08 (MANTOAN, 30 recusas): *"alguns erros como COD MUN eu
+    // arrumava manual mesmo, pq na nota não tinha mesmo"*. A decisão dele fica:
+    // o app NÃO preenche — inventar município é afirmar domicílio de terceiro, e
+    // o '9999999' que a mensagem do PVA sugere significa "NÃO domiciliado no
+    // Brasil", o que seria FALSO para um paciente de São Paulo.
+    //
+    // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
+    // contagem, em vez de deixar a descoberta para o PVA depois do upload.
+    // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
+    for (const p of dados.participantes || []) {
+        linhas.push(build0150(p));
+    }
+
+    // ── 0190 — Unidades de Medida ───────────────────────────────────────
+    for (const u of dados.unidades || []) {
+        linhas.push(build0190(u));
+    }
+
+    // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
+    for (const item of dados.itens || []) {
+        linhas.push(build0200(item));
+    }
+
+    // ── 0500 — Plano de contas ──────────────────────────────────────────
+    // 🚨 POSIÇÃO NA HIERARQUIA (ELS 08/2026, 25/09, PVA com 127 erros): o 0500
+    // é filho do 0001, NÃO do 0140. Ele saía logo depois do 0140, ANTES dos
+    // 0150/0190/0200 — o que FECHA a subárvore do 0140 e faz o PVA recusar
+    // cada 0150, 0190 e 0200 seguinte com "Organização hierárquica dos
+    // blocos/registros fora dos padrões" (37 + 9 + 77 = 123 recusas), esperando
+    // o 0600. A ordem do Guia Prático: 0140 → 0145 → 0150 → 0190 → 0200 → 0400
+    // → 0450 → 0500 → 0600 → 0990. Ele continua vindo ANTES de quem o
+    // referencia (o F100 é do bloco F).
+    // Ele só sai quando a conta está INTEIRA no cadastro — ver a régua em
+    // `receita-aplicacao-financeira.js`.
     const c0500 = montar0500ContaReceita({
         codConta: dados.contaContabilReceitaFinanceira,
         nomeConta: dados.contaContabilReceitaFinanceiraNome,
@@ -96,31 +130,6 @@ function buildBloco0Contrib(dados) {
         );
     }
 
-    // ── 0150 — Participantes ────────────────────────────────────────────
-    // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
-    //
-    // Paulo, 18/08 (MANTOAN, 30 recusas): *"alguns erros como COD MUN eu
-    // arrumava manual mesmo, pq na nota não tinha mesmo"*. A decisão dele fica:
-    // o app NÃO preenche — inventar município é afirmar domicílio de terceiro, e
-    // o '9999999' que a mensagem do PVA sugere significa "NÃO domiciliado no
-    // Brasil", o que seria FALSO para um paciente de São Paulo.
-    //
-    // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
-    // contagem, em vez de deixar a descoberta para o PVA depois do upload.
-    // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
-    for (const p of dados.participantes || []) {
-        linhas.push(build0150(p));
-    }
-
-    // ── 0190 — Unidades de Medida ───────────────────────────────────────
-    for (const u of dados.unidades || []) {
-        linhas.push(build0190(u));
-    }
-
-    // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
-    for (const item of dados.itens || []) {
-        linhas.push(build0200(item));
-    }
 
     const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
