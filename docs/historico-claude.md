@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧱 EFD-CONTRIB: 0500 FORA DA HIERARQUIA — 123 RECUSAS DO PVA** (25/09,
+  Paulo, ELS DISTRIBUIDORA DE BANANAS 08/2026, arquivo + PDF do PVA: 127
+  erros — 123 "Organização hierárquica dos blocos/registros fora dos padrões",
+  linha 7 esperava 0600 e achou 0150). O `buildBloco0Contrib` emitia o 0500
+  logo após o 0140, ANTES dos 0150/0190/0200 — o 0500 é filho do 0001 e sua
+  presença fecha a subárvore do 0140; cada 0150 (37), 0190 (9) e 0200 (77)
+  seguinte virava recusa. Só aparecia em empresa COM conta da receita
+  financeira cadastrada (a EDUARDO GUERRA não tinha, por isso passou). Movido
+  para depois do 0200, antes do 0990 (ordem do Guia Prático: 0140 → 0145 →
+  0150 → 0190 → 0200 → 0400 → 0450 → 0500 → 0600 → 0990). Trava
+  `spedContribBloco0Ordem.test.ts` (posição, sequência e contagem do 0990).
+  Ficam 2 "Tamanho do campo inválido" no relatório que o PDF não deixou ler
+  daqui — pedir as linhas ao Paulo se persistirem após regerar.
+
 - **🧊 LISTA DE NFS-e SP TRAVAVA O NAVEGADOR — "de 20000 carregadas"** (25/09,
   Paulo: *"quando coloco CNPJ, emitidas e recebidas e o período, o consultor
   fica demorando e quando carrega dá esse erro"* — print "Esta página não está
