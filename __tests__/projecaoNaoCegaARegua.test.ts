@@ -30,6 +30,7 @@ const RAIZ = join(__dirname, '..');
 const SEM_PERGUNTA_DE_CANCELAMENTO: Record<string, string> = {
     'sefaz-backend/backlog-entrada-routes.js': 'conta resumo × completa (a fila da manifestação), não valor',
     'sefaz-backend/cofre-checklist-routes.js': 'mede ADOÇÃO do cofre de saída — quem chegou, não quanto vale',
+    'sefaz-backend/cobertura-saida-routes.js': 'aptidão da saída mede o TRILHO por que a nota chegou (autXML/cofre), não valor — nota cancelada ainda prova a configuração (25/09)',
     'sefaz-backend/conferencia-chaves-routes.js': 'presença da chave; a 2ª consulta do arquivo TEM o trio',
     'sefaz-backend/fila-migracao-routes.js': 'diagnóstico da fila de migração (mesma exceção da varredura de cancelada)',
     'sefaz-backend/migracao-prontidao-routes.js': 'diagnóstico de prontidão',

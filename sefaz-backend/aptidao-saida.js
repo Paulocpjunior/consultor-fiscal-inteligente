@@ -217,6 +217,19 @@ export function montarAptidaoSaida({
     const conta = (s) => linhas.filter((l) => l.status === s).length;
     const aptos = linhas.filter((l) => l.apto).length;
     const comSaida = linhas.filter((l) => l.status !== 'sem-saida-55').length;
+    // 📬 QUEM JÁ NOS ENVIA XML, por trilho (Paulo, 25/09: "quantificar os
+    // clientes que já nos enviam xml usando o email xml@sp ou com o nosso
+    // cnpj"). O trilho é o da PROVA: 'autxml' = o CNPJ do escritório na nota
+    // (SEFAZ entrega ao escritório); 'cofre' = chegou pela caixa de e-mail.
+    // Uma empresa pode ter os dois — conta em "ambos" e em cada um.
+    const temTrilho = (l, t) => l.apto && Array.isArray(l.trilhos) && l.trilhos.includes(t);
+    const porTrilho = {
+        autxml: linhas.filter((l) => temTrilho(l, 'autxml')).length,
+        cofre: linhas.filter((l) => temTrilho(l, 'cofre')).length,
+        ambos: linhas.filter((l) => temTrilho(l, 'autxml') && temTrilho(l, 'cofre')).length,
+        soAutxml: linhas.filter((l) => temTrilho(l, 'autxml') && !temTrilho(l, 'cofre')).length,
+        soCofre: linhas.filter((l) => temTrilho(l, 'cofre') && !temTrilho(l, 'autxml')).length,
+    };
 
     return {
         linhas,
@@ -229,6 +242,7 @@ export function montarAptidaoSaida({
             aptosPararam: conta('apto-parou'),
             semProva: conta('sem-prova'),
             semSaida55: conta('sem-saida-55'),
+            porTrilho,
         },
         ressalvas: [
             'APTIDÃO não é o mesmo que ATIVIDADE: uma única nota, de qualquer data, já prova que o '
