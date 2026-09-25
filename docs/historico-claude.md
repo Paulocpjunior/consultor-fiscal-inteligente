@@ -5,6 +5,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧊 LISTA DE NFS-e SP TRAVAVA O NAVEGADOR — "de 20000 carregadas"** (25/09,
+  Paulo: *"quando coloco CNPJ, emitidas e recebidas e o período, o consultor
+  fica demorando e quando carrega dá esse erro"* — print "Esta página não está
+  respondendo"). Causa: `listarNfseSpCapturadas` punha `fbLimit(5000)` nas
+  restrições base e `fetchAllDocs` acrescentava `limit(500)` de página por
+  cima (o último vence) → paginava até `maxDocs` 20.000 docs INTEIROS; sem
+  CNPJ o período nem entrava na consulta do caminho por CNPJ (só em memória);
+  e a tabela desenhava todas as linhas. `services/nfseSpListaJanela.ts`
+  (puro): `periodoPadrao` (mês corrente na 1ª carga), `LINHAS_POR_PAGINA`
+  200 + `linhasVisiveis`, `textoDaContagem` (farol: "mostrando X de Y" e teto
+  atingido dito). Serviço devolve `{notas, truncado, limite}`, passa
+  `maxDocs: lim` + `meta`, período NA consulta por CNPJ (índices novos
+  tipoDoc+fonte+prestadorCnpj+dhEmi e …+tomadorCnpj+dhEmi em
+  `firestore.indexes.json`, sobem pelo deploy-firestore.yml) com fallback
+  sem período se o índice faltar; com CNPJ, erro vira erro — nunca cai na
+  leitura sem CNPJ. Tela: "Mostrar mais (N restantes)", rodapé âmbar no
+  teto. Trava `nfseSpListaJanela.test.ts`. LIÇÃO: `fbLimit` dentro de
+  `baseConstraints` do `fetchAllDocs` é ignorado — o teto é `maxDocs`.
+
 - **🚦 CAPTURA NF-e: JANELA DE 1 H DA RODADA COMPLETA — TRÊS TRAVAS** (25/09,
   Paulo: *"analise o erro insistente hoje"*, toast "Captura SEFAZ 14:19: 0 novos
   XMLs, 147 falha(s)"). Erros & Logs do dia: 06:00 agendada (sefaz-xml-capture)

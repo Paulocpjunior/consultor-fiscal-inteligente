@@ -255,6 +255,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "prestadorCnpj", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "documentos_fiscais", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoDoc", "order": "ASCENDING" },
+        { "fieldPath": "fonte", "order": "ASCENDING" },
+        { "fieldPath": "tomadorCnpj", "order": "ASCENDING" },
+        { "fieldPath": "dhEmi", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
