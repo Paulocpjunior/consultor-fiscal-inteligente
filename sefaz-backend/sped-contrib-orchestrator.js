@@ -523,6 +523,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         unidadesPorCodItem: unidadesPorCodigo,
         receitaSemDocumento,
         receitaAplicacaoFinanceira,
+        // 🧾 Natureza da receita sem ônus (M410/M810), cadastrada por empresa e CST.
+        naturezaReceita: (empresa && empresa.naturezaReceitaContrib) || {},
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
         contaContabilReceitaFinanceiraNome: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNome || '',
         contaContabilReceitaFinanceiraNivel: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNivel || '',

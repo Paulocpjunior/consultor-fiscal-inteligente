@@ -16,6 +16,8 @@ import { competenciaParaGerarArquivo } from './competencia.js';
 // O nome carrega a HORA da geração — sem ela, "confira se é o arquivo novo"
 // é um pedido que ninguém tem como cumprir (PWR, 25/08).
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
+import admin from 'firebase-admin';
+import { conferirCadastroNaturezaReceita, CSTS_SEM_ONUS, TABELA_NAT_REC_POR_CST, SUGESTOES_PROVADAS } from './sped-contrib-m400.js';
 
 const router = express.Router();
 
@@ -143,6 +145,63 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             },
         })));
         return res.send(buffer);
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+/**
+ * 🧾 NATUREZA DA RECEITA SEM ÔNUS (M410/M810) — cadastro por empresa e CST.
+ *
+ * PVA da EDUARDO GUERRA HORTIFRUTI 08/2026 (25/09): sem M400/M800 o arquivo é
+ * recusado, e o código do M410 depende do PRODUTO (tabelas 4.3.13 etc.) — é
+ * cadastro, nunca dedução. Mora no doc da empresa (`naturezaReceitaContrib`),
+ * porque não muda de mês para mês.
+ */
+async function docDaEmpresa(empresaId) {
+    const db = admin.firestore();
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+        const ref = db.collection(col).doc(String(empresaId));
+        const snap = await ref.get();
+        if (snap.exists) return { ref, data: snap.data() || {} };
+    }
+    return null;
+}
+
+router.get('/natureza-receita', requireAdmin, async (req, res) => {
+    try {
+        const { empresaId } = req.query;
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        const doc = await docDaEmpresa(empresaId);
+        if (!doc) return res.status(404).json({ error: 'EMPRESA_NAO_ENCONTRADA' });
+        return res.json({
+            empresaId,
+            naturezaReceita: doc.data.naturezaReceitaContrib || {},
+            atualizadoEm: doc.data.naturezaReceitaContribAtualizadoEm || null,
+            atualizadoPor: doc.data.naturezaReceitaContribAtualizadoPor || null,
+            csts: CSTS_SEM_ONUS,
+            tabelas: TABELA_NAT_REC_POR_CST,
+            sugestoes: SUGESTOES_PROVADAS,
+        });
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+router.post('/natureza-receita', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { empresaId, naturezaReceita } = req.body || {};
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        const conf = conferirCadastroNaturezaReceita(naturezaReceita || {});
+        if (!conf.ok) return res.status(400).json({ error: 'CADASTRO_INVALIDO', erros: conf.erros });
+        const doc = await docDaEmpresa(empresaId);
+        if (!doc) return res.status(404).json({ error: 'EMPRESA_NAO_ENCONTRADA' });
+        await doc.ref.set({
+            naturezaReceitaContrib: conf.cadastro,
+            naturezaReceitaContribAtualizadoEm: new Date().toISOString(),
+            naturezaReceitaContribAtualizadoPor: (req.user && req.user.email) || null,
+        }, { merge: true });
+        return res.json({ ok: true, naturezaReceita: conf.cadastro });
     } catch (e) {
         return tratarErro(e, res);
     }

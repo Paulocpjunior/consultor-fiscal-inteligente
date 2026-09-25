@@ -63,6 +63,7 @@ import { valorOperacaoDoItem } from './valor-operacao-c190.js';
 // lugar nunca entrou. O dono consolida por CFOP + CST + alíquotas e decide em
 // qual CST a contribuição INCIDE — o C170 da nota 55 lê a MESMA régua.
 import { consolidarC175, camposDoC175, cstComIncidenciaNaSaida } from './sped-contrib-c175.js';
+import { acumularReceitaSemOnus, montarReceitaSemOnus } from './sped-contrib-m400.js';
 // A receita que NÃO tem documento (aluguel) — F550. Régua única, com o
 // arquivo aceito da AFFITTARE 05/2026 como fonte.
 import { montarF550, montarF100, montar1900, CST_F550_TRIBUTADA } from './receita-sem-documento-f550.js';
@@ -1981,6 +1982,26 @@ export function buildBlocoM(dados) {
     // M500 — Credito COFINS (nao-cumulativo)
     // Espelho do M100 — ver o comentário lá (as casas 09/11/12 estavam
     // trocadas, e os campos 13 e 15, obrigatórios, saíam vazios).
+    // M400/M410 — RECEITA SEM ÔNUS do PIS (CST 04/06/07/08/09), por natureza.
+    //
+    // 🚨 PVA da EDUARDO GUERRA HORTIFRUTI 08/2026 (25/09): *"Deverá existir um
+    // registro M400/M800 para cada CST informados nos documentos com CST igual
+    // a 04, 06, 07, 08 ou 09"*. Os 6.859 itens de saída com CST 06 saíam do
+    // M210 (certo — não têm incidência) e não entravam em lugar NENHUM do
+    // bloco M. O espelho é o EFD aceito da mesma empresa em 07/2026:
+    // |M400|06|Σ VL_ITEM||| + |M410|<natureza>|Σ VL_ITEM|||.
+    // A natureza é CADASTRO por empresa (sped-contrib-m400.js); sem ela o
+    // registro não sai e o aviso diz valor, CST, tabela e onde cadastrar.
+    const receitaSemOnus = acumularReceitaSemOnus(dados.notas || [], {
+        getCstPis, getCstCofins, regimeApuracao,
+        direcaoDoDoc: direcaoEfetivaDoc,
+        docFora: (n) => docCancelado(n) || n.status === 'denegado',
+    });
+    const avisosSemOnus = Array.isArray(dados.warnings) ? dados.warnings : [];
+    linhas.push(...montarReceitaSemOnus({
+        contribuicao: 'pis', porCst: receitaSemOnus.pis, cadastro: dados.naturezaReceita || {}, warnings: avisosSemOnus,
+    }));
+
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
         const dispCof = totalCofinsEntrada;
         const descCof = Math.min(dispCof, vlContribCofins);
@@ -2074,6 +2095,11 @@ export function buildBlocoM(dados) {
             fmt.formatValue(finM.cofins),
         ]));
     }
+
+    // M800/M810 — espelho do M400/M410 para a COFINS (mesma receita, mesma natureza).
+    linhas.push(...montarReceitaSemOnus({
+        contribuicao: 'cofins', porCst: receitaSemOnus.cofins, cadastro: dados.naturezaReceita || {}, warnings: avisosSemOnus,
+    }));
 
     const totalBloco = linhas.length + 1;
     linhas.push(fmt.buildLine(['M990', totalBloco]));

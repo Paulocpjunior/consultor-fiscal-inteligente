@@ -77,6 +77,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [gerandoContrib, setGerandoContrib] = useState(false);
     const [mensagemContrib, setMensagemContrib] = useState<MensagemRetorno | null>(null);
     const [competenciaContrib, setCompetenciaContrib] = useState<string>(getCompetenciaAtual());
+    // 🧾 Natureza da receita sem ônus (M410/M810) — cadastro por empresa e CST.
+    // PVA da EDUARDO GUERRA 08/2026 (25/09): sem M400/M800 o arquivo é recusado,
+    // e o código depende do produto (tabelas 4.3.13 etc.) — é cadastro, nunca chute.
+    type NaturezaReceitaLinha = { natRec: string; descricao: string };
+    const [naturezaReceita, setNaturezaReceita] = useState<Record<string, NaturezaReceitaLinha>>({});
+    const [naturezaMeta, setNaturezaMeta] = useState<{ csts: string[]; tabelas: Record<string, string>; sugestoes: Record<string, Array<{ natRec: string; quando: string; prova: string }>>; atualizadoEm: string | null; atualizadoPor: string | null } | null>(null);
+    const [naturezaMsg, setNaturezaMsg] = useState<string | null>(null);
+    const [salvandoNatureza, setSalvandoNatureza] = useState(false);
 
     useEffect(() => {
         let alive = true;
@@ -243,6 +251,60 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             });
         } finally {
             setGerando(false);
+        }
+    };
+
+    const carregarNaturezaReceita = async () => {
+        if (!empresaId) { setNaturezaMeta(null); setNaturezaReceita({}); return; }
+        try {
+            const token = await auth?.currentUser?.getIdToken();
+            if (!token) return;
+            const resp = await fetch(`/api/admin/sped-contrib/natureza-receita?empresaId=${encodeURIComponent(empresaId)}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (!resp.ok) { setNaturezaMsg(`Não consegui ler o cadastro da natureza da receita (HTTP ${resp.status}).`); return; }
+            const data = await resp.json();
+            setNaturezaReceita(data.naturezaReceita || {});
+            setNaturezaMeta({ csts: data.csts || [], tabelas: data.tabelas || {}, sugestoes: data.sugestoes || {}, atualizadoEm: data.atualizadoEm || null, atualizadoPor: data.atualizadoPor || null });
+            setNaturezaMsg(null);
+        } catch (e) {
+            setNaturezaMsg(`Não consegui ler o cadastro da natureza da receita: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    };
+
+    useEffect(() => {
+        if (spedTab !== 'contribuicoes') return;
+        void carregarNaturezaReceita();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [empresaId, spedTab]);
+
+    const salvarNaturezaReceita = async () => {
+        if (!empresaId) return;
+        setSalvandoNatureza(true);
+        setNaturezaMsg(null);
+        try {
+            const token = await auth?.currentUser?.getIdToken();
+            if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+            const resp = await fetch('/api/admin/sped-contrib/natureza-receita', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ empresaId, naturezaReceita }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                const erros = Array.isArray(data.erros) ? data.erros.join(' ') : (data.error || `HTTP ${resp.status}`);
+                throw new Error(erros);
+            }
+            setNaturezaReceita(data.naturezaReceita || {});
+            const cadastrados = Object.keys(data.naturezaReceita || {});
+            setNaturezaMsg(cadastrados.length
+                ? `✓ Natureza da receita gravada para CST ${cadastrados.join(', ')}. Gere o SPED Contribuições de novo para o M400/M800 sair.`
+                : '✓ Cadastro gravado sem nenhum CST — o M400/M800 NÃO sai enquanto o CST com receita não tiver código.');
+            void carregarNaturezaReceita();
+        } catch (e) {
+            setNaturezaMsg(`Não gravou: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setSalvandoNatureza(false);
         }
     };
 
@@ -883,6 +945,82 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         Lucro Real = não-cumulativo (PIS 1,65% / COFINS 7,6%).
                     </p>
                 </div>
+            </div>
+
+            <div
+                className="p-5 rounded-xl"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
+            >
+                <h3 className="text-sm font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
+                    3. Natureza da receita sem ônus (M410/M810)
+                </h3>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                    Saída com CST <strong>04, 06, 07, 08 ou 09</strong> (alíquota zero, monofásica na revenda, isenta, sem incidência, suspensa)
+                    tem de sair no M400/M800 com o código da <strong>natureza da receita</strong> das tabelas da RFB — o PVA recusa o arquivo sem isso.
+                    O código depende do produto; o app não deduz. Cadastre só os CST que a empresa usa; linha em branco = sem cadastro (o arquivo avisa).
+                </p>
+                {naturezaMeta ? (
+                    <div className="space-y-2">
+                        {naturezaMeta.csts.map((cst) => {
+                            const linha = naturezaReceita[cst] || { natRec: '', descricao: '' };
+                            const sugestoes = naturezaMeta.sugestoes[cst] || [];
+                            return (
+                                <div key={cst} className="grid gap-2 items-start" style={{ gridTemplateColumns: '64px 110px 1fr' }}>
+                                    <div className="text-xs font-bold pt-2" style={{ color: 'var(--text-primary)' }}>CST {cst}</div>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={3}
+                                        placeholder="código"
+                                        value={linha.natRec}
+                                        onChange={e => setNaturezaReceita({ ...naturezaReceita, [cst]: { ...linha, natRec: e.target.value.replace(/\D/g, '').slice(0, 3) } })}
+                                        className="p-2 text-sm rounded-lg outline-none"
+                                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                    />
+                                    <div>
+                                        <input
+                                            type="text"
+                                            maxLength={120}
+                                            placeholder="descrição complementar (opcional)"
+                                            value={linha.descricao}
+                                            onChange={e => setNaturezaReceita({ ...naturezaReceita, [cst]: { ...linha, descricao: e.target.value } })}
+                                            className="w-full p-2 text-sm rounded-lg outline-none"
+                                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                                        />
+                                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                                            Tabela {naturezaMeta.tabelas[cst] || '—'}
+                                            {sugestoes.length > 0 && (
+                                                <> · já provado em arquivo aceito: {sugestoes.map(sg => `${sg.natRec} = ${sg.quando} (${sg.prova})`).join('; ')}</>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div className="flex items-center gap-3 pt-1">
+                            <button
+                                onClick={salvarNaturezaReceita}
+                                disabled={salvandoNatureza || !empresaId}
+                                className="btn-press px-4 py-2 text-white text-sm font-bold rounded-lg disabled:opacity-40"
+                                style={{ background: 'var(--accent)' }}
+                            >
+                                {salvandoNatureza ? 'Gravando…' : '💾 Gravar natureza da receita'}
+                            </button>
+                            {naturezaMeta.atualizadoEm && (
+                                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                    último cadastro {new Date(naturezaMeta.atualizadoEm).toLocaleString('pt-BR')}{naturezaMeta.atualizadoPor ? ` por ${naturezaMeta.atualizadoPor}` : ''}
+                                </span>
+                            )}
+                        </div>
+                        {naturezaMsg && (
+                            <p className="text-xs" style={{ color: naturezaMsg.startsWith('✓') ? 'var(--success, #059669)' : 'var(--danger, #DC2626)' }}>{naturezaMsg}</p>
+                        )}
+                    </div>
+                ) : (
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {empresaId ? (naturezaMsg || 'Carregando o cadastro desta empresa…') : 'Selecione a empresa para ver o cadastro.'}
+                    </p>
+                )}
             </div>
 
             <div className="flex justify-center">
