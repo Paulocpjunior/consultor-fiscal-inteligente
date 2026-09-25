@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 EFD CONTRIBUIÇÕES SEM M400/M800 — "Deverá existir um registro M400/M800
+  para cada CST informados nos documentos com CST igual a 04, 06, 07, 08 ou 09"**
+  (25/09, Paulo, EDUARDO GUERRA HORTIFRUTI 08/2026, 2 erros no PVA; *"preciso
+  encerrar a obrigação EFD CONTRIBUIÇÕES … precisa ser criado os campos
+  M400/M800"*). O arquivo do CFI tinha 6.859 itens de saída com CST 06
+  (R$ 4.293.206,20) e bloco M só com M200/M600 zerados. Espelho: o EFD ACEITO
+  da mesma empresa em 07/2026 (outro sistema): `|M400|06|Σ VL_ITEM|||` +
+  `|M410|116|Σ|||`, `|M400|08|280|||` + `|M410|999|280|||`, e o mesmo par em
+  M800/M810 — VL_TOT_REC = Σ VL_ITEM das saídas do CST, COD_CTA/DESC_COMPL
+  vazios. Entregue: `sefaz-backend/sped-contrib-m400.js` (puro:
+  `acumularReceitaSemOnus` por CST/PIS/COFINS com a régua do `receitaDoItem`,
+  `montarReceitaSemOnus`, `conferirCadastroNaturezaReceita`,
+  `TABELA_NAT_REC_POR_CST`, `SUGESTOES_PROVADAS`); `buildBlocoM` emite
+  M400/M410 depois do M210 e M800/M810 depois do M610; a natureza é CADASTRO
+  por empresa e CST (`naturezaReceitaContrib` no doc da empresa; rotas
+  `GET/POST /api/admin/sped-contrib/natureza-receita`; bloco 3 da aba SPED
+  Contribuições). Sem cadastro o registro NÃO sai (M400 sem M410 é inválido) e
+  o aviso diz valor, CST, tabela e onde cadastrar; 116 e 999 entram só como
+  sugestão provada. Teste `spedContribM400.test.ts`.
+  ⚠️ Observado e NÃO mexido: o 0000 do CFI sai com IND_ATIV=1 (prestador) para
+  tudo que não é `industrial`; o aceito da hortifrúti traz 2 (comércio). O
+  cadastro (`EmpresaDadosFiscaisModal`) só oferece industrial/outras. Fica na fila.
+
 - **🖼️ LOGO GIGANTE NO E-MAIL — width="52" não basta** (24/09, e-mail de
   prova do CCI, mesma casca do CFI: o leitor de e-mail do Paulo ignorou o
   atributo e mostrou o PNG de 226×320 no tamanho natural). Régua tripla em
