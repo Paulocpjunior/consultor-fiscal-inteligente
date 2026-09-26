@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 AUDITORIA 26/09 — ONDA 1, PARTE A (segurança e leituras)** (Paulo:
+  *"faça uma auditoria completa"* → *"pode fazer"*; relatório em
+  `docs/auditoria-2026-09-26.md`). (1) Rate limit: a chave era
+  `auth.slice(-48)` — Bearer forjado ganhava balde novo. `sefaz-backend/
+  rate-limit-chave.js` (puro): `criarGeradorDeChave({verificar, cache})` →
+  `u:<uid>` só para token que VERIFICOU, senão `ip:<ip>`; `CacheDeToken`
+  (TTL 5 min, teto 5000). Em server.js o `verificar` é o `verifyIdToken`
+  (express-rate-limit 7 aguarda keyGenerator assíncrono — conferido no
+  dist). (2) `health-consolidado-routes.js:73` e `diagnostico-docs-fiscais-
+  routes.js` GET liam `documentos_fiscais` inteiro com doc completo →
+  `.select()` dos campos da contagem (+ os do `valorDoDocumento`); exceções
+  declaradas em `projecaoNaoCegaARegua` (contam estrutura, não apuram). O
+  POST merge-duplicatas ficou como está (usa o doc inteiro para mesclar).
+  (3) `/envio-imposto/historico`: `limit` sem `orderBy` devolvia 200
+  arbitrários → `orderBy('enviadoEm','desc')` + índice (empresaCnpj,
+  enviadoEm desc). (4) `/envio-imposto/painel`: `where('competencia')`
+  quando 'AAAA-MM' + `truncado/teto/aviso` na resposta. (5)
+  `rotina-fiscal-routes`: envios por `where('competencia')` via
+  `fetchAllDocs` (antes `limit(3000)` sem filtro, corte mudo). (6)
+  `/nfse-nacional/nbs` exige `requireAuth`. Trava `rateLimitChave.test.ts`.
+
 - **🏷️ BANNER E DIAGNÓSTICO DIZEM QUAL RODADA FOI — DRENAGEM VAZIA NÃO É
   "CAPTURA 0/0"** (26/09, Paulo: *"não houve captura de xml?"* / *"esse é o
   status de hoje, deve ser corrigido"* — banner "Captura SEFAZ concluída às

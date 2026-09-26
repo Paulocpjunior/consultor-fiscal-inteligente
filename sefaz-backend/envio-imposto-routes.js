@@ -410,9 +410,12 @@ router.get('/historico', requireAuth, async (req, res) => {
         const cnpj = String(req.query.cnpj || '').replace(/\D/g, '');
         const limite = Math.min(Math.max(Number(req.query.limit || 200), 1), 500);
         const db = fa().firestore();
+        // 🚨 26/09 (auditoria): `limit` sem `orderBy` devolvia 200 envios
+        // ARBITRÁRIOS, não os mais recentes — o histórico mentia por omissão.
+        // Índice (empresaCnpj, enviadoEm desc) em firestore.indexes.json.
         let q = db.collection('impostos_enviados');
         if (cnpj) q = q.where('empresaCnpj', '==', cnpj);
-        const snap = await q.limit(limite).get();
+        const snap = await q.orderBy('enviadoEm', 'desc').limit(limite).get();
         const envios = snap.docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .sort((a, b) => {
@@ -515,15 +518,28 @@ router.get('/painel', requireAuth, async (req, res) => {
         if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
         const competencia = String(req.query.competencia || '').trim() || null;
         const db = fa().firestore();
-        // Sem índice composto: filtra a competência em memória (o volume é de
-        // dezenas por mês, não de milhares).
-        const snap = await db.collection('impostos_enviados').limit(2000).get();
+        // 🚨 26/09 (auditoria): lia 2.000 envios de QUALQUER competência e
+        // cortava em silêncio. Com competência ('AAAA-MM', como o rito grava) o
+        // filtro vai na consulta (igualdade simples, sem índice composto); o
+        // teto continua e, se bater, a resposta DIZ que cortou.
+        const TETO = 2000;
+        let q = db.collection('impostos_enviados');
+        // A consulta cobre as FORMAS gravadas da competência (dono único:
+        // formasDaCompetencia) — igualdade com o texto cru perderia o registro
+        // gravado na outra forma (trava competenciaReguaUnica).
+        const formas = competencia ? formasDaCompetencia(competencia) : [];
+        if (formas.length) q = q.where('competencia', 'in', formas.slice(0, 10));
+        const snap = await q.limit(TETO).get();
         const envios = snap.docs.map((d) => {
             const x = d.data();
             return { id: d.id, ...x, enviadoEm: x.enviadoEm?.toDate?.()?.toISOString?.() || null };
         });
         const painel = montarPainelEnvios(envios, { competencia });
-        return res.json({ ok: true, gestor: GESTOR_EMAIL, ...painel });
+        const truncado = snap.size >= TETO;
+        return res.json({
+            ok: true, gestor: GESTOR_EMAIL, ...painel, truncado, teto: TETO,
+            ...(truncado ? { aviso: `Lidos ${TETO} envios (teto) — pode haver mais; o painel está incompleto.` } : {}),
+        });
     } catch (e) {
         console.error('[envio-imposto/painel]', e);
         return res.status(500).json({ ok: false, error: e.message });

@@ -4,6 +4,7 @@ import { secretsMatch } from './sefaz-backend/cron-secret.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { criarGeradorDeChave } from './sefaz-backend/rate-limit-chave.js';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -272,10 +273,19 @@ const isCronRequest = (req) => {
     const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
     return secretsMatch(header, secret);
 };
-const rateLimitKey = (req) => {
-    const auth = req.headers.authorization || '';
-    return auth ? `auth:${auth.slice(-48)}` : req.ip;
-};
+// 🔑 26/09 (auditoria): a chave era o FIM do header Authorization — qualquer
+// Bearer inventado ganhava um balde novo por requisição, e o limite só valia
+// para quem não tentava furá-lo. Agora a chave é o uid de um token QUE
+// VERIFICOU (com cache por token); token ausente/forjado/expirado cai no IP.
+// Régua e cache moram em sefaz-backend/rate-limit-chave.js (puro, testado).
+const rateLimitKey = criarGeradorDeChave({
+    verificar: async (token) => {
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        const decoded = await adminMod.auth().verifyIdToken(token);
+        return decoded?.uid || null;
+    },
+});
 // Limite geral anti-flood em toda a API.
 const apiLimiter = rateLimit({
     windowMs: 60_000, max: 600,
