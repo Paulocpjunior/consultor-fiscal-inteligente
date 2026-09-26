@@ -5,6 +5,28 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏷️ BANNER E DIAGNÓSTICO DIZEM QUAL RODADA FOI — DRENAGEM VAZIA NÃO É
+  "CAPTURA 0/0"** (26/09, Paulo: *"não houve captura de xml?"* / *"esse é o
+  status de hoje, deve ser corrigido"* — banner "Captura SEFAZ concluída às
+  25/09 19:00 — 0 novos XMLs em 0 empresa(s)" e card NF-e "há 13h, 0 / 0"). Os
+  dois liam o ÚLTIMO doc de `sefaz_cron_logs`, fosse o que fosse: era a
+  drenagem das 19:00 (0 alvos). `rodada-completa-janela.js`: `rotuloDaFonte`
+  (noturna/intra-dia/manual/retomada/drenagem/dirigida) e
+  `fraseDaRodadaComTipo` (drenagem sem alvo → "nenhuma empresa com fila").
+  `/captura-diagnostico`: `ultimoLog` ganha `rotulo`/`resumo`/`puladasJanela`;
+  `ultimaCapturaCompleta()` (primeiro doc `ehRodadaCompleta` dos últimos 15)
+  vai no card `sefazNfe`. `CapturaDiagnosticoPanel`: `log` = captura completa
+  quando existe (é ela que `avaliarSaudeCaptura` mede), "Última rodada de
+  qualquer tipo" dita ao lado, motivo da 'pulada-janela' e puladas. Banner e
+  toast: `${hora} — ${fraseDaRodadaComTipo}`. Segurança: a conferência da
+  janela em /sync-cron e /sync-cron-now tem teto de 10 s (`Promise.race`) —
+  leitura pendurada nunca deixa a rodada sem heartbeat. NOVIDADES_VERSAO
+  2026-09-26. ⚠️ PENDENTE DE DADO: se o card de hoje (04–08h) não mostrava
+  o noturno das 02:00, o intra-dia das 06:00 e o ADN das 04:00, os crons
+  não deixaram NEM o heartbeat — aponta para Cloud Scheduler/segredo, não
+  para o app (o heartbeat é gravado antes de qualquer trabalho). Pedido ao
+  Paulo: print de Erros & Logs de hoje + `gcloud scheduler jobs list`.
+
 - **🧱 EFD-CONTRIB: 0500 FORA DA HIERARQUIA — 123 RECUSAS DO PVA** (25/09,
   Paulo, ELS DISTRIBUIDORA DE BANANAS 08/2026, arquivo + PDF do PVA: 127
   erros — 123 "Organização hierárquica dos blocos/registros fora dos padrões",

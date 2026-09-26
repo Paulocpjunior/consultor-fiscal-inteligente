@@ -11,6 +11,7 @@ import { sincronizarEmpresa } from './sync-orchestrator.js';
 // empresa já consultada como "janela" (não falha) e resume com a causa.
 import {
   janelaDaRodadaCompleta, classificarResultado, codigoDoResultado, resumoDaRodada,
+  ehRodadaCompleta, rotuloDaFonte,
 } from './rodada-completa-janela.js';
 import { statusJanelaOperacional } from './janela-operacional.js';
 import { requireAuth } from './require-admin.js';
@@ -139,8 +140,14 @@ router.post('/sync-one', requireAuth, express.json(), async (req, res) => {
  */
 async function conferirJanelaDaRodadaCompleta() {
   try {
-    const snap = await fa().firestore().collection('sefaz_cron_logs')
+    // ⏱️ A conferência NUNCA segura a rodada: se a leitura demorar mais que
+    // 10 s, segue sem conferir (dito no log). A porta do cron precisa gravar o
+    // heartbeat antes de qualquer coisa — uma leitura pendurada aqui deixaria a
+    // rodada sem registro nenhum, que é pior do que rodar sem a trava.
+    const leitura = fa().firestore().collection('sefaz_cron_logs')
       .orderBy('executadoEm', 'desc').limit(12).get();
+    const limite = new Promise((_, rej) => setTimeout(() => rej(new Error('leitura da janela passou de 10 s')), 10_000));
+    const snap = await Promise.race([leitura, limite]);
     const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return janelaDaRodadaCompleta({ logs });
   } catch (e) {
@@ -1229,10 +1236,45 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           totalNovos: d.totalNovos ?? d.totalNovosXmls ?? d.totalNFes ?? d.criadas ?? null,
           erroFatal: d.erroFatal ?? d.erro ?? null,
           fonte: d.fonte ?? null,
+          rotulo: rotuloDaFonte(d.fonte),
           // 'iniciado' = run longo em andamento (heartbeat) — o painel mostra
           // "em execução" em vez de parecer travado por 15-25 min.
           status: d.status ?? null,
+          resumo: d.resumo ?? null,
+          puladasJanela: d.puladasJanela ?? null,
         };
+      } catch (e) {
+        return { erro: e.message };
+      }
+    }
+
+    // 🏷️ 26/09: o card da NF-e lia o ÚLTIMO doc de sefaz_cron_logs fosse o que
+    // fosse — uma drenagem vazia das 19:00 virava "0 / 0, 0 novos" e lia-se
+    // "não houve captura". A última CAPTURA COMPLETA (carteira inteira) é
+    // outra pergunta, e é ela que a saúde do trilho deve medir.
+    async function ultimaCapturaCompleta() {
+      try {
+        const snap = await db.collection('sefaz_cron_logs').orderBy('executadoEm', 'desc').limit(15).get();
+        for (const doc of snap.docs) {
+          const d = doc.data();
+          if (!ehRodadaCompleta(d)) continue;
+          return {
+            executadoEmMs: d.executadoEm?.toMillis?.() ?? null,
+            duracaoMs: d.duracaoMs ?? null,
+            totalEmpresas: d.totalEmpresas ?? null,
+            sucessos: d.sucessos ?? null,
+            falhas: d.falhas ?? null,
+            totalNovos: d.totalNovos ?? d.totalNovosXmls ?? null,
+            erroFatal: d.erroFatal ?? d.erro ?? null,
+            fonte: d.fonte ?? null,
+            rotulo: rotuloDaFonte(d.fonte),
+            status: d.status ?? null,
+            resumo: d.resumo ?? null,
+            puladasJanela: d.puladasJanela ?? null,
+            motivo: d.motivo ?? null,
+          };
+        }
+        return null;
       } catch (e) {
         return { erro: e.message };
       }
@@ -1788,6 +1830,7 @@ router.get('/captura-diagnostico', requireAuth, async (req, res) => {
           endpointCron: '/api/admin/sefaz/sync-cron',
           schedulerEsperado: 'sefaz-cron-noturno (02:00 BRT seg-sex)',
           ultimoCron: logSefaz,
+          ultimaCapturaCompleta: await ultimaCapturaCompleta(),
           state: stateSefaz,
           docsUltimos7d: docsNfe,
           topFalhas: falhasNfe,

@@ -75,8 +75,16 @@ const CardCaptura: React.FC<{
     const [feedback, setFeedback] = useState<string | null>(null);
     const [comunicadoCopiado, setComunicadoCopiado] = useState(false);
 
-    const log = isCronLog(status.ultimoCron) ? status.ultimoCron : null;
+    // 🏷️ 26/09: a última rodada de QUALQUER tipo (drenagem vazia inclusive) não
+    // é "a captura". Para a NF-e o backend manda a última CAPTURA COMPLETA em
+    // separado; é ela que a saúde mede e que o card mostra primeiro. A outra
+    // fica dita, com o nome.
+    const ultimaQualquer = isCronLog(status.ultimoCron) ? status.ultimoCron : null;
+    const ultimaCompleta = isCronLog(status.ultimaCapturaCompleta) ? status.ultimaCapturaCompleta : null;
+    const log = ultimaCompleta ?? ultimaQualquer;
     const ultimoMs = log?.executadoEmMs ?? null;
+    const outraRodada = ultimaCompleta && ultimaQualquer && ultimaQualquer.executadoEmMs !== ultimaCompleta.executadoEmMs
+        ? ultimaQualquer : null;
     const stateOk = status.state && 'total' in status.state;
     const stateTotal = stateOk ? (status.state as any).total : null;
     const stateTotalAtivas = stateOk ? (status.state as any).totalAtivas : null;
@@ -191,9 +199,23 @@ const CardCaptura: React.FC<{
 
             <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                    <span className="opacity-80">Última execução:</span>
-                    <span className="font-semibold">{formatRelativeBR(ultimoMs)}</span>
+                    <span className="opacity-80">{ultimaCompleta ? 'Última captura completa:' : 'Última execução:'}</span>
+                    <span className="font-semibold">
+                        {formatRelativeBR(ultimoMs)}
+                        {log?.rotulo && fonte === 'sefazNfe' ? <span className="opacity-70 font-normal"> · {log.rotulo}</span> : null}
+                    </span>
                 </div>
+                {outraRodada && (
+                    <div className="flex justify-between text-xs opacity-80">
+                        <span>Última rodada de qualquer tipo:</span>
+                        <span>{outraRodada.rotulo || 'Rodada'} {formatRelativeBR(outraRodada.executadoEmMs)}</span>
+                    </div>
+                )}
+                {log?.status === 'pulada-janela' && log.motivo && (
+                    <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                        🚦 Rodada não iniciada: {log.motivo}
+                    </div>
+                )}
                 {log && (
                     <>
                         <div className="flex justify-between">
@@ -204,6 +226,12 @@ const CardCaptura: React.FC<{
                             <span className="opacity-80">Novos docs (essa exec.):</span>
                             <span className="font-mono">{log.totalNovos ?? 0}</span>
                         </div>
+                        {(log.puladasJanela ?? 0) > 0 && (
+                            <div className="flex justify-between text-xs">
+                                <span className="opacity-80">Puladas (consultadas há menos de 1 h):</span>
+                                <span className="font-mono">{log.puladasJanela}</span>
+                            </div>
+                        )}
                         {log.erroFatal && (
                             <div className="text-red-700 bg-red-50 p-2 rounded text-xs mt-1">
                                 <strong>Erro fatal:</strong> {log.erroFatal}

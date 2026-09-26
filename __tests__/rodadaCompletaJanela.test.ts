@@ -113,3 +113,35 @@ describe('trava 3 — o resumo diz a causa dominante e separa pulada de falha', 
         expect(causaDominante(null)).toBe('');
     });
 });
+
+// 🏷️ 26/09: o banner e o card liam o ÚLTIMO doc, fosse o que fosse — uma
+// drenagem vazia das 19:00 saía como "0 novos XMLs em 0 empresa(s)".
+import { rotuloDaFonte, fraseDaRodadaComTipo } from '../sefaz-backend/rodada-completa-janela.js';
+
+describe('🏷️ cada rodada diz o que é', () => {
+    it('o rótulo sai do fonte', () => {
+        expect(rotuloDaFonte('sefaz-drenagem-cron')).toMatch(/Drenagem/);
+        expect(rotuloDaFonte('sefaz-cron-noturno')).toMatch(/noturna/);
+        expect(rotuloDaFonte('sefaz-xml-capture')).toMatch(/intra-dia/);
+        expect(rotuloDaFonte('admin-manual')).toMatch(/manual/);
+        expect(rotuloDaFonte('retomada:sefaz-xml-capture')).toMatch(/Retomada/);
+        expect(rotuloDaFonte('admin-dirigida')).toMatch(/dirigida/);
+        expect(rotuloDaFonte(undefined)).toBe('Rodada');
+    });
+
+    it('drenagem sem alvo diz que não havia fila — não "0 novos XMLs em 0 empresas"', () => {
+        const t = fraseDaRodadaComTipo({ fonte: 'sefaz-drenagem-cron', totalEmpresas: 0, sucessos: 0, falhas: 0, totalNovosXmls: 0 });
+        expect(t).toMatch(/Drenagem/);
+        expect(t).toMatch(/nenhuma empresa com fila/);
+        expect(t).not.toMatch(/0 empresa\(s\)/);
+    });
+
+    it('captura completa leva o nome e o resumo', () => {
+        const t = fraseDaRodadaComTipo({ fonte: 'sefaz-xml-capture', totalEmpresas: 147, sucessos: 119, falhas: 28, totalNovosXmls: 344 });
+        expect(t).toMatch(/^Captura intra-dia: /);
+        expect(t).toMatch(/344/);
+        const p = fraseDaRodadaComTipo({ fonte: 'admin-manual', status: 'pulada-janela', motivo: 'Aguarde 30 min.' });
+        expect(p).toMatch(/Captura manual não iniciada/);
+        expect(p).toMatch(/30 min/);
+    });
+});
