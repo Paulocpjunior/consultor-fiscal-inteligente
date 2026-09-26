@@ -16,6 +16,8 @@ export interface Contador {
 }
 
 const COLECAO = 'contadores';
+/** Teto de leitura: catálogo de contadores do escritório (dezenas). */
+const TETO_CONTADORES = 2000;
 
 /**
  * 🚨 O `list` desta coleção exige `request.query.limit <= 500` nas rules — sem
@@ -25,7 +27,7 @@ const COLECAO = 'contadores';
  */
 export async function listarContadores(): Promise<Contador[]> {
     if (!isFirebaseConfigured || !db) return [];
-    const snap = await fetchAllDocs(COLECAO, [], { batchSize: 500 });
+    const snap = await fetchAllDocs(COLECAO, [], { batchSize: 500, maxDocs: TETO_CONTADORES });
     return snap
         .map(d => ({ id: d.id, ...(d.data() as any) }))
         .filter(c => c.nome)

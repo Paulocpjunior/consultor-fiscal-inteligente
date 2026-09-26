@@ -7,6 +7,8 @@
  */
 import React, { useState } from 'react';
 import DareSpModal from '../LucroPresumidoReal/DareSpModal';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 import { auth } from '../../services/firebaseConfig';
 
 interface VarreduraLinha {
@@ -17,6 +19,8 @@ interface VarreduraLinha {
     /** 'simples' = guia consolidada aqui · 'lucro' = escritura no SPED. */
     regime?: 'simples' | 'lucro';
 }
+// Referência estável pra quando ainda não há varredura (senão o hook reinicia a cada render).
+const SEM_LINHAS: VarreduraLinha[] = [];
 interface LinhaDifal {
     chave: string; numero: string; dhEmi: string | null; fornecedor: string;
     ufOrigem: string; base: number; aliqInterna: number; aliqInterDerivada: boolean; difal: number;
@@ -77,6 +81,7 @@ const compAnterior = () => {
 const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToast }) => {
     const [competencia, setCompetencia] = useState(compAnterior());
     const [varredura, setVarredura] = useState<VarreduraLinha[] | null>(null);
+    const paginaVarredura = usePaginaLocal(varredura ?? SEM_LINHAS, undefined, 'clientes');
     const [dareAberto, setDareAberto] = useState(false);
     // Antecipação do 426-A é UMA GUIA POR DOCUMENTO (não consolida): o modal
     // abre pra UMA nota, com o valor dela e a chave amarrada na auditoria.
@@ -167,7 +172,7 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                                 <th className="text-right">c/ ST (426-A)</th><th className="text-right">Base aprox.</th><th></th></tr>
                         </thead>
                         <tbody>
-                            {varredura.map(l => (
+                            {paginaVarredura.visiveis.map(l => (
                                 <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
                                     <td className="py-1.5 font-semibold">
                                         {l.nome}
@@ -198,6 +203,7 @@ const DifalPanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToa
                             ))}
                         </tbody>
                     </table>
+                    <MostrarMais pagina={paginaVarredura} />
                 </div>
             )}
             {varredura && varredura.some(l => l.regime === 'lucro') && !painel && (

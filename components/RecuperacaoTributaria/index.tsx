@@ -12,6 +12,8 @@ import {
 } from '../../services/recuperacaoTributariaService';
 import LoadingSpinner from '../LoadingSpinner';
 import { FormattedText } from '../FormattedText';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 import {
     Search,
     FileText,
@@ -180,6 +182,7 @@ const RecuperacaoTributaria: React.FC<Props> = ({ currentUser, onShowToast }) =>
         }
         return list;
     }, [data, filtro]);
+    const paginaResultados = usePaginaLocal(resultadosOrdenados, undefined, 'empresas');
 
     const summaryCards = useMemo(() => {
         if (!data) return null;
@@ -435,7 +438,7 @@ const RecuperacaoTributaria: React.FC<Props> = ({ currentUser, onShowToast }) =>
             {/* Results table */}
             {data && !loading && resultadosOrdenados.length > 0 && (
                 <div className="space-y-2">
-                    {resultadosOrdenados.map(emp => {
+                    {paginaResultados.visiveis.map(emp => {
                         const isExpanded = expandedEmpresa === emp.empresaId;
                         const temOportunidade = emp.totalRecuperavel > 0;
 
@@ -666,6 +669,7 @@ const RecuperacaoTributaria: React.FC<Props> = ({ currentUser, onShowToast }) =>
                             </div>
                         );
                     })}
+                    <MostrarMais pagina={paginaResultados} />
                 </div>
             )}
 

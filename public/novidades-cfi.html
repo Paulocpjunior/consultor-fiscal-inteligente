@@ -77,6 +77,17 @@
 <section>
     <h2>🆕 O que mudou agora (26/09) — leia esta parte primeiro</h2>
 
+    <h3>🧊 <strong>Auditoria, onda 2: nenhuma tela desenha a lista inteira, nenhuma leitura do navegador é sem teto, e a data de hoje é a de Brasília</strong></h3>
+    <p>Dez telas desenhavam a lista completa de uma vez (Tarefas, Simples, Lucro, Status de Captura, Usuários, NFS-e
+    Nacional, Empresas Monitoradas, Recuperação Tributária, Retenções NFS-e SP, DIPAM e DIFAL). Agora mostram 200
+    linhas por vez com "Mostrar mais (N restantes)" e o rodapé "mostrando X de N". Exportações e totais continuam
+    sobre a lista completa. Todas as 24 leituras que o navegador faz direto no banco passaram a ter teto explícito, e
+    as que alimentam telas dizem quando cortaram. O SP Connect, o Diagnóstico de Captura e a faixa de vencimentos
+    param de consultar o servidor quando a aba não está visível. No servidor, "hoje" passou a ser o dia em Brasília:
+    das 21h à meia-noite o horário universal já era amanhã, e uma guia que vence hoje aparecia vencida. O servidor
+    também sobe em Node 22.</p>
+    <p><strong>Onde:</strong> as dez telas citadas; Central de DAS, DARF, DCTFWeb e Vencimentos (cálculo de vencido).</p>
+
     <h3>💓 <strong>Auditoria, onda 1B: cinco crons que rodavam mudos ganham registro e entram no vigia; o servidor mantém a CPU depois de responder</strong></h3>
     <p>Saída NFC-e (SAE), saída NF-e via autXML, arquivo do cofre no SharePoint, resumo diário da captura e alertas de
     documentos no SharePoint rodavam sem deixar registro: se morressem no meio, ninguém via. Agora cada um grava

@@ -7,7 +7,7 @@ import {
 import { extractDocumentData, extractPgdasDataFromPdf } from './geminiService';
 import { parsePgdasExtrato } from './pgdasPdfParser';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
-import { fetchAllDocs } from './firestorePaginate';
+import { fetchAllDocs, type FetchAllMeta } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import {
@@ -19,6 +19,10 @@ import {
 const STORAGE_KEY_EMPRESAS  = 'simples_nacional_empresas';
 const STORAGE_KEY_NOTAS     = 'simples_nacional_notas';
 const MASTER_ADMIN_EMAIL    = 'junior@spassessoriacontabil.com.br';
+/** Teto de leitura da coleção de empresas (~213 clientes na casa). */
+const TETO_EMPRESAS         = 2000;
+/** Teto de notas lidas por empresa em `getNotasDaEmpresa`. */
+export const TETO_NOTAS_EMPRESA = 5000;
 
 // ─── TABELAS (tipadas - LC 123/2006 com LC 155/2016 e LC 192/2022) ────────────
 
@@ -159,7 +163,7 @@ export const getEmpresas = async (user?: User | null): Promise<SimplesNacionalEm
 
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const snaps = await fetchAllDocs('simples_empresas', []);
+            const snaps = await fetchAllDocs('simples_empresas', [], { maxDocs: TETO_EMPRESAS });
             snaps.forEach(d => cloudIds.add(d.id));
             cloudEmpresas = snaps
                 .filter(d => {
@@ -317,11 +321,22 @@ export const deleteEmpresa = async (id: string): Promise<void> => {
  *
  * A consulta é por `empresaId` no servidor — trazer tudo e filtrar no cliente
  * seria pagar o mesmo preço com outro nome.
+ *
+ * SEM recorte de período no servidor, DE PROPÓSITO: o campo `data` da nota é
+ * gravado em DUAS formas — epoch (number) pela importação via IA e `AAAA-MM-DD`
+ * (string) pelo parser de XML — e o Firestore ordena por tipo, então um
+ * `where('data', '>=', …)` deixaria uma das formas FORA do recorte em silêncio.
+ * Enquanto o campo não for normalizado, o período é assunto de quem calcula.
+ *
+ * `meta.truncado=true` diz que a leitura bateu em TETO_NOTAS_EMPRESA e PODE
+ * haver notas não lidas — quem mostra a lista tem de avisar.
  */
 export const getNotasDaEmpresa = async (
     empresaId: string,
-    _user?: User | null
+    _user?: User | null,
+    meta?: { truncado?: boolean },
 ): Promise<SimplesNacionalNota[]> => {
+    if (meta) meta.truncado = false;
     const id = String(empresaId || '').trim();
     if (!id) return [];
     const porId = new Map<string, SimplesNacionalNota>();
@@ -335,7 +350,9 @@ export const getNotasDaEmpresa = async (
 
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const snaps = await fetchAllDocs('simples_notas', [where('empresaId', '==', id)]);
+            const pageMeta: FetchAllMeta = { truncated: false, count: 0, maxDocs: TETO_NOTAS_EMPRESA };
+            const snaps = await fetchAllDocs('simples_notas', [where('empresaId', '==', id)], { maxDocs: TETO_NOTAS_EMPRESA, meta: pageMeta });
+            if (meta) meta.truncado = pageMeta.truncated;
             // A nuvem SOBREPÕE o local — é a mesma ordem do getAllNotas.
             snaps.forEach(d => porId.set(d.id, { id: d.id, ...d.data() } as SimplesNacionalNota));
         } catch { /* silent: fica o que veio do local */ }

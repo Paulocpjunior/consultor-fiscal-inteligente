@@ -86,6 +86,15 @@ import type {
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
+/** Teto de leitura das coleções de empresas (~213 clientes na casa). */
+const TETO_EMPRESAS = 2000;
+/** Teto de documentos_fiscais em leituras recortadas (CNPJ+período, chave). */
+const TETO_DOCUMENTOS = 5000;
+/**
+ * Teto do dashboard (`listDocumentos`): recorte por competência da casa inteira.
+ * Fica no valor que já valia por default; o truncamento sai em `meta.truncado`.
+ */
+const TETO_DOCUMENTOS_LISTA = 20000;
 const COLLECTIONS = {
     DOCUMENTOS: 'documentos_fiscais',
     CAPTURAS: 'xml_capturas',
@@ -246,8 +255,8 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     try {
         const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas', []),
-            fetchAllDocs('lucro_empresas', []),
+            fetchAllDocs('simples_empresas', [], { maxDocs: TETO_EMPRESAS }),
+            fetchAllDocs('lucro_empresas', [], { maxDocs: TETO_EMPRESAS }),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
@@ -345,8 +354,8 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
     try {
         const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas'),
-            fetchAllDocs('lucro_empresas'),
+            fetchAllDocs('simples_empresas', [], { maxDocs: TETO_EMPRESAS }),
+            fetchAllDocs('lucro_empresas', [], { maxDocs: TETO_EMPRESAS }),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
@@ -846,7 +855,7 @@ export async function listDocumentos(
     try {
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const pageMeta = { truncated: false, count: 0, maxDocs: 0 };
-        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, meta: pageMeta });
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: pageMeta });
         if (meta) meta.truncado = pageMeta.truncated;
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
 
@@ -871,7 +880,7 @@ export async function listDocumentos(
                     : where('competencia', '==', filters.competencia));
             }
             const metaCnpj = { truncated: false, count: 0, maxDocs: 0 };
-            const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, meta: metaCnpj });
+            const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: metaCnpj });
             if (meta && metaCnpj.truncated) meta.truncado = true;
             const vistos = new Set(docs.map(d => d.id));
             for (const d of snapsCnpj) {
@@ -957,7 +966,8 @@ export async function getDocumentosByChaves(chaves: string[]): Promise<Documento
     const results: DocumentoFiscal[] = [];
     await Promise.all(batches.map(async batch => {
         try {
-            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [where('chave', 'in', batch)]);
+            // `chave in` já limita a 30 chaves por lote; o teto é só garantia.
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [where('chave', 'in', batch)], { maxDocs: TETO_DOCUMENTOS });
             snaps.forEach(d => {
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
             });
@@ -993,7 +1003,7 @@ export async function getDocumentosByCnpjPeriodo(
                 where(campo, '==', cnpjLimpo),
                 where('dhEmi', '>=', dtIniIso),
                 where('dhEmi', '<=', dtFimIso),
-            ]);
+            ], { maxDocs: TETO_DOCUMENTOS });
             snaps.forEach(d => {
                 if (visto.has(d.id)) return;
                 visto.add(d.id);

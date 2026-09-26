@@ -19,8 +19,8 @@ import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { calcularMultaPorObrigacao } from './multa-calculator.js';
 import { classificarUrgencia } from './urgencia-vencimento.js';
+import { hojeBrt as hojeIsoBrt, dataBrt } from './data-brt.js';
 
-const TZ_OFFSET_BRT = -3; // BRT = UTC-3
 const REMETENTE_DEFAULT = process.env.GRAPH_REMETENTE || 'contabil@spassessoriacontabil.com.br';
 
 function fa() {
@@ -30,12 +30,13 @@ function fa() {
     return admin;
 }
 
-// Data atual no fuso BRT, normalizada pra 00:00
+// Data atual no fuso BRT, normalizada pra 00:00 (meia-noite UTC do DIA de
+// Brasília — a mesma convenção de sempre para o diffDiasBrt).
+// 📅 26/09: o dia vem do dono único (Intl com o fuso), não de um offset fixo
+// de -3 h somado ao fuso da máquina.
 function hojeBrt() {
-    const agora = new Date();
-    const brt = new Date(agora.getTime() + (TZ_OFFSET_BRT * 60 * 60 * 1000) - (agora.getTimezoneOffset() * 60 * 1000));
-    brt.setHours(0, 0, 0, 0);
-    return brt;
+    const iso = hojeIsoBrt() || new Date().toISOString().slice(0, 10);
+    return new Date(`${iso}T00:00:00Z`);
 }
 
 export function diffDiasBrt(dataVencimento, hoje = hojeBrt()) {
@@ -348,8 +349,9 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h', force = 
                 if (!deveAlertar(tarefa, dias)) continue;
 
                 // Idempotência por dia (force ignora pra re-disparar)
-                const hojeIso = hoje.toISOString().slice(0, 10);
-                const ultimoEmail = tarefa.ultimoEmailEm?.toDate?.()?.toISOString?.()?.slice(0, 10);
+                // 📅 26/09: o dia em Brasília — a idempotência diária virava às 21h.
+                const hojeIso = hoje.toISOString().slice(0, 10); // `hoje` = meia-noite UTC do dia BRT
+                const ultimoEmail = dataBrt(tarefa.ultimoEmailEm?.toDate?.() || NaN);
                 if (!force && ultimoEmail === hojeIso) continue;
 
                 // Multa estimada se atrasada e tem valorEstimado
@@ -391,7 +393,7 @@ export async function processarVencimentos({ disparadoPor = 'cron-08h', force = 
         // alerta (deveAlertar), independente de terem responsável ou de já
         // terem sido marcadas hoje. Garante que o admin tem a visão completa
         // todo dia e recebe 1 email-resumo diário (mesmo com 0 responsáveis).
-        const hojeIso = hoje.toISOString().slice(0, 10);
+        const hojeIso = hoje.toISOString().slice(0, 10); // `hoje` = meia-noite UTC do dia BRT
         const digestItens = [];
         for (const doc of docs) {
             const t = doc.data();

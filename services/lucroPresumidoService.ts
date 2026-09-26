@@ -2,6 +2,8 @@
 import { LucroPresumidoEmpresa, FichaFinanceiraRegistro, User } from '../types';
 import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+/** Teto de leitura da coleção de empresas (~213 clientes na casa). */
+const TETO_EMPRESAS = 2000;
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc, getDoc, query, where, limit as fbLimit } from 'firebase/firestore';
@@ -163,7 +165,7 @@ export const getEmpresas = async (currentUser?: User | null): Promise<LucroPresu
 
     if (isFirebaseConfigured && db && auth?.currentUser) {
         try {
-            const snaps = await fetchAllDocs('lucro_empresas', []);
+            const snaps = await fetchAllDocs('lucro_empresas', [], { maxDocs: TETO_EMPRESAS });
             snaps.forEach(doc => cloudIds.add(doc.id));
             cloudEmpresas = snaps
                 .filter(doc => {

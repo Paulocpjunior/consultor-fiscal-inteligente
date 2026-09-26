@@ -474,10 +474,18 @@ const CapturaDiagnosticoPanel: React.FC<Props> = ({ currentUser }) => {
     useEffect(() => {
         aliveRef.current = true;
         load();
-        const interval = setInterval(load, 60000); // refresh a cada 1min
+        // Só com a aba visível; ao voltar para a aba, recarrega na hora.
+        const poll = () => {
+            if (document.visibilityState !== 'visible') return;
+            load();
+        };
+        const interval = setInterval(poll, 60000); // refresh a cada 1min
+        const aoVoltar = () => { if (document.visibilityState === 'visible') poll(); };
+        document.addEventListener('visibilitychange', aoVoltar);
         return () => {
             aliveRef.current = false;
             clearInterval(interval);
+            document.removeEventListener('visibilitychange', aoVoltar);
         };
     }, [load]);
 

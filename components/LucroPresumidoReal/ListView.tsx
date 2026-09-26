@@ -14,6 +14,8 @@ import type { User } from '../../types';
 import type * as lucroPresumidoService from '../../services/lucroPresumidoService';
 import { PlusIcon, TrashIcon } from '../Icons';
 import { empresaBateBusca, prefixoCodCliente } from '../../services/buscaEmpresa';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 import LoteDareModal from './LoteDareModal';
 import { previewMesclagem, executarMesclagem, descreverResumo } from '../../services/empresasMergeService';
 
@@ -82,6 +84,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
         () => empresas.filter(e => empresaBateBusca(busca, e)),
         [empresas, busca],
     );
+    const paginaEmpresas = usePaginaLocal(empresasFiltradas, undefined, 'empresas');
 
     // Duplicatas por CNPJ NORMALIZADO: mesma empresa cadastrada 2+ vezes (em
     // formatos diferentes o olho não pega). Badge vermelho pro admin limpar
@@ -146,7 +149,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                         </tr>
                     </thead>
                     <tbody>
-                        {empresasFiltradas.map(emp => (
+                        {paginaEmpresas.visiveis.map(emp => (
                             <tr key={emp.id} className="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">
                                     {prefixoCodCliente(emp) && (
@@ -221,6 +224,7 @@ const ListView: React.FC<ListViewProps> = ({ empresas, currentUser, onNovaEmpres
                         )}
                     </tbody>
                 </table>
+                <MostrarMais pagina={paginaEmpresas} />
             </div>
         </div>
     );

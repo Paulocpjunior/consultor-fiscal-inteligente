@@ -19,6 +19,7 @@ import {
     resolverPrazoMunicipal, montarPrazoInformadoNoFluxo, prazosAConfirmar,
 } from './prazos-municipais.js';
 import { calcularVencimento } from './catalogo-obrigacoes.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 import {
     montarPromptPrazoMunicipal, interpretarPropostaPrazo,
 } from './prazo-municipal-consulta.js';
@@ -44,7 +45,7 @@ router.get('/', requireAuth, async (req, res) => {
         const db = getDb();
         const competencia = /^\d{4}-\d{2}$/.test(String(req.query.competencia || ''))
             ? req.query.competencia
-            : new Date().toISOString().slice(0, 7);
+            : anoMesBrt(); // 📅 26/09: competência corrente em Brasília
 
         const cadastros = await carregarPrazosMunicipais(db);
 
@@ -301,7 +302,7 @@ router.post('/consultar', requireAdmin, express.json(), async (req, res) => {
 
         const db = getDb();
         const cadastros = await carregarPrazosMunicipais(db);
-        const competencia = new Date().toISOString().slice(0, 7);
+        const competencia = anoMesBrt(); // 📅 26/09: Brasília, não UTC
         const atual = resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, competencia });
 
         const modelos = req.app.get('geminiModelos');
