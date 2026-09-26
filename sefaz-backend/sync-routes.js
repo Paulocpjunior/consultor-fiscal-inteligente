@@ -25,9 +25,12 @@ import { importarXmlSefaz, reatribuirDesconhecidas, corrigirDirecaoEntradaPropri
 // Competências que o backfill de cancelamento varre: a ATUAL e a ANTERIOR —
 // fechamento é sempre do mês anterior, e é lá que cancelada torta morde.
 function competenciasParaBackfillCancelado(agora = new Date()) {
-  const atual = agora.toISOString().slice(0, 7);
-  const d = new Date(agora); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
-  return [atual, d.toISOString().slice(0, 7)];
+  // 📅 26/09: a competência corrente é a de Brasília (na virada do mês, das
+  // 21h à meia-noite, o UTC já está no mês seguinte).
+  const atual = anoMesBrt(agora) || agora.toISOString().slice(0, 7);
+  const [ano, mes] = atual.split('-').map(Number);
+  const anterior = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, '0')}`;
+  return [atual, anterior];
 }
 import { withCronHeartbeat, listarCronsOrfaos } from './cron-heartbeat.js';
 import { manifestarPendentes } from './manifesto-orchestrator.js';
@@ -43,6 +46,7 @@ import {
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import { temCcmSp } from './ccm-sp.js';
 import { agruparFalhasAdn } from './adn-erro-catalogo.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 
 const router = express.Router();
 

@@ -8,6 +8,7 @@ import { getDarfProvider, getDarfMode } from './darf-provider.js';
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs, commitUpdatesInChunks } from './firestore-paginate.js';
 import { calcularMultaDarf } from './multa-calculator.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 
 const COLLECTION = 'darfs_emitidos';
 
@@ -108,7 +109,8 @@ export async function getResumoDarf(cnpjsPermitidos = null) {
         cnpjsPermitidos,
     );
 
-    const hoje = new Date().toISOString().slice(0, 10);
+    // 📅 26/09: hoje em Brasília, não em UTC.
+    const hoje = hojeBrt();
     let pendentes = 0, vencidos = 0, pagos = 0;
     let valorPendente = 0, valorVencido = 0, valorPago = 0;
     let valorMultaEstimada = 0;
@@ -170,7 +172,7 @@ export async function marcarPago(docId, dataPagamento, cnpjsPermitidos = null) {
     }
     await ref.update({
         statusPagamento: 'pago',
-        dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
+        dataPagamento: dataPagamento || hojeBrt(),
     });
     return { ok: true };
 }
@@ -180,7 +182,7 @@ export async function marcarPago(docId, dataPagamento, cnpjsPermitidos = null) {
  */
 export async function processarVencimentos() {
     const db = fa().firestore();
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeBrt(); // 📅 26/09: Brasília, não UTC
     const snapDocs = await fetchAllDocs(db.collection(COLLECTION), { label: 'darf_emitidos/cron' });
     const stats = { total: snapDocs.length, atualizados: 0 };
     const updates = [];
