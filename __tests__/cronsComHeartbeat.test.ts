@@ -44,4 +44,10 @@ describe('💓 os crons da auditoria passam pelo heartbeat', () => {
     it('o deploy mantém a CPU alocada depois da resposta (trabalho em setImmediate)', () => {
         expect(ler('.github/workflows/deploy-app.yml')).toMatch(/--no-cpu-throttling/);
     });
+
+    // Paulo (26/09): "deixar de forma que fique sempre disponível a toda e
+    // qualquer solicitação" — uma instância quente, sem partida a frio.
+    it('o deploy mantém uma instância sempre de pé (sem partida a frio)', () => {
+        expect(ler('.github/workflows/deploy-app.yml')).toMatch(/--min-instances=1/);
+    });
 });

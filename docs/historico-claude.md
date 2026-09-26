@@ -5,6 +5,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **☁️ CLOUD RUN SEMPRE DISPONÍVEL** (26/09, Paulo: *"vc precisa aumentar a
+  CPU do cloud run por qual motivo?"* → explicado que `--no-cpu-throttling`
+  não aumenta CPU, só a mantém ligada depois do 200 para o trabalho em
+  `setImmediate`; → *"pode fazer, e deixar de forma que fique sempre
+  disponível a toda e qq solicitação"*). `deploy-app.yml` passa
+  `--no-cpu-throttling` e `--min-instances=1`: uma instância quente 24/7,
+  sem partida a frio. CUSTO: instância mínima + CPU alocada é cobrança
+  contínua (ordem de dezenas de dólares/mês na configuração atual de
+  memória/CPU do serviço) — conferir a fatura do Cloud Run em ~2 semanas.
+  Reverter = tirar as duas flags do deploy E rodar `gcloud run services
+  update … --cpu-throttling --min-instances=0` (a flag no deploy só
+  acrescenta; não zera sozinha).
+
 - **💓 AUDITORIA 26/09 — ONDA 1, PARTE B (crons com heartbeat + CPU alocada)**.
   Dos 13 crons sem heartbeat, 5 não tinham log NENHUM: `/sae-nfce-cron`,
   `/autxml-harvest-cron`, `/xml-email-arquivo-sp-cron`, `/captura-resumo-cron`
