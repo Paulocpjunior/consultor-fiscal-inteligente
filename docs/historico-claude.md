@@ -29,9 +29,10 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   DipamProdutorRuralPanel e DifalPanel (`SEM_LINHAS` estável para
   `varredura` nula). Exportações e totais seguem sobre a lista inteira.
   Travas `paginaLocal.test.ts`, `usePaginaLocal.test.tsx` (renderHook),
-  `listasPaginadas.test.ts` (varredura das 11 telas). PENDENTE pequeno:
-  Tarefas.tsx ainda não passa `meta` ao `listarTarefas` para dizer "N+"
-  quando o teto de 20000 corta.
+  `listasPaginadas.test.ts` (varredura das 11 telas). Fechado em seguida:
+  Tarefas.tsx passa `meta` ao `listarTarefas` e, quando o teto de 20000
+  corta, avisa "Mostrando 20.000+ tarefas … refine os filtros" (trava na
+  própria `leiturasComTeto.test.ts`).
 
 - **📅 AUDITORIA 26/09 — ONDA 2C: DATA DE HOJE EM BRASÍLIA (dono único) + NODE 22**
   (Paulo: *"vamos matar o restante"*). `sefaz-backend/data-brt.js` (puro):

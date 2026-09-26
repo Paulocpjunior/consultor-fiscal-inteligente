@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     listarTarefas,
+    TETO_TAREFAS,
     criarTarefaManual,
     marcarConcluida,
     atualizarStatus,
@@ -39,6 +40,8 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
     // Estado
     const [tarefas, setTarefas] = useState<Tarefa[]>([]);
     const [carregando, setCarregando] = useState(true);
+    // true quando a leitura bateu em TETO_TAREFAS: a lista NÃO é a carteira inteira.
+    const [tarefasCortadas, setTarefasCortadas] = useState(false);
     const [empresas, setEmpresas] = useState<EmpresaPerfilOption[]>([]);
     const [carteira, setCarteira] = useState<VinculoCarteira[]>([]);
     const [versao, setVersao] = useState(0);
@@ -199,9 +202,11 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                 }
             }
             if (!ativo) return;
-            const list = await listarTarefas(filtros);
+            const meta = { truncado: false };
+            const list = await listarTarefas(filtros, meta);
             if (!ativo) return;
             setTarefas(list);
+            setTarefasCortadas(meta.truncado === true);
             setCarregando(false);
         };
         carregar();
@@ -311,6 +316,11 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                             Gestão de prazos por empresa, obrigação e responsável.
                         </p>
+                        {tarefasCortadas && (
+                            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" role="status">
+                                ⚠️ Mostrando {TETO_TAREFAS.toLocaleString('pt-BR')}+ tarefas: a leitura bateu no teto e há mais que não vieram. Refine os filtros (empresa, competência, status).
+                            </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         {/* Toggle de vista: Lista vs Kanban */}

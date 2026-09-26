@@ -117,6 +117,17 @@ describe('quem alimenta TELA expõe o truncamento', () => {
         expect(fn).toMatch(/meta\.truncado = /);
     });
 
+    it('a tela de Tarefas LÊ o truncamento (passa `meta` ao listarTarefas) e avisa quando o teto cortou', () => {
+        const src = fonte('components/Tarefas.tsx');
+        // Fato 1: a chamada da tela passa um segundo argumento (o out-param).
+        const chamadas = [...src.matchAll(/await listarTarefas\(([^)]*)\)/g)].map((m) => m[1]);
+        expect(chamadas.length).toBeGreaterThan(0);
+        for (const args of chamadas) expect(args.split(',').length).toBeGreaterThanOrEqual(2);
+        // Fato 2: o truncamento vira estado da tela e o teto aparece no aviso.
+        expect(src).toMatch(/\.truncado === true/);
+        expect(src).toMatch(/TETO_TAREFAS/);
+    });
+
     it('getNotasDaEmpresa aceita out-param `meta` e o preenche com o truncamento da leitura', () => {
         const src = fonte('services/simplesNacionalService.ts');
         const corpo = src.slice(src.indexOf('export const getNotasDaEmpresa'));
