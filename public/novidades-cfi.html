@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (26/09) — leia esta parte primeiro</h2>
 
+    <h3>💓 <strong>Auditoria, onda 1B: cinco crons que rodavam mudos ganham registro e entram no vigia; o servidor mantém a CPU depois de responder</strong></h3>
+    <p>Saída NFC-e (SAE), saída NF-e via autXML, arquivo do cofre no SharePoint, resumo diário da captura e alertas de
+    documentos no SharePoint rodavam sem deixar registro: se morressem no meio, ninguém via. Agora cada um grava
+    "iniciado" antes de trabalhar e "sucesso" ou "falha" no fim, aparece em Erros e Logs e no vigia de saúde dos crons,
+    e o agendador recebe resposta na hora (o código 4 de "tempo esgotado" do agendador some). O deploy passa a manter
+    a CPU alocada depois da resposta, então o trabalho em segundo plano não é congelado.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Relatórios e Logs → Erros e Logs; Diagnóstico e Saúde → crons.</p>
+
     <h3>🔒 <strong>Auditoria, onda 1: limite de requisições por usuário, telas de saúde mais leves e histórico de envios na ordem certa</strong></h3>
     <p>Da auditoria de 26/09 entraram os cinco itens de maior risco e menor custo. O limite de requisições passa a
     contar por usuário logado (antes um token inventado ganhava um balde novo a cada chamada). As telas de Saúde

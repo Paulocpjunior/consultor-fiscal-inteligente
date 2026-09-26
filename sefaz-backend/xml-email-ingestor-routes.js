@@ -15,6 +15,7 @@ import express from 'express';
 import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
+import { withCronHeartbeat } from './cron-heartbeat.js';
 import { ingerirXmlPorEmail } from './xml-email-ingestor.js';
 import { arquivarNoSharePoint } from './cofre-sharepoint-arquivo.js';
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
@@ -177,17 +178,22 @@ router.post('/xml-email-ingest/alerta-cron', requireCronAuth, async (req, res) =
 // Paulo rodar o script na máquina dele, e a cadência que serve pro XML serve
 // pra mídia. Uma falha NÃO derruba a outra — cada arquivador tem cursor e
 // resultado próprios.
+// 💓 26/09 (auditoria): heartbeat antes do trabalho — a rodada horária do
+// arquivo (8–20h) morta no meio deixa registro, e o Scheduler recebe 200 na hora.
 router.post('/xml-email-arquivo-sp-cron', requireCronAuth, async (req, res) => {
-  try {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'cofre-sharepoint-arquivo-cron';
+  await withCronHeartbeat({ collection: 'cofre_arquivo_cron_logs', fonte, res }, async () => {
     const fiscal = await arquivarNoSharePoint({})
       .catch((e) => ({ ok: false, erroFatal: e.message }));
     const whatsapp = await arquivarMidiasWhatsappNoSharePoint({})
       .catch((e) => ({ ok: false, erroFatal: e.message }));
-    return res.json({ ...fiscal, whatsapp });
-  } catch (e) {
-    console.error('[xml-email-arquivo-sp-cron] erro:', e.message);
-    return res.status(500).json({ error: e.message });
-  }
+    return {
+      ...fiscal, whatsapp,
+      totalNovos: fiscal?.arquivados ?? fiscal?.enviados ?? 0,
+      falhas: (fiscal?.erros ?? 0) + (fiscal?.erroFatal ? 1 : 0) + (whatsapp?.erroFatal ? 1 : 0),
+      sucessos: fiscal?.ok === false ? 0 : 1,
+    };
+  });
 });
 
 router.post('/xml-email-arquivo-sp', requireAdmin, async (req, res) => {

@@ -12,6 +12,7 @@ import express from 'express';
 import { requireAdmin } from './require-admin.js';
 import { colherSaidaAutXML } from './distdfe-autxml-orchestrator.js';
 import { secretsMatch } from './cron-secret.js';
+import { withCronHeartbeat } from './cron-heartbeat.js';
 
 const router = express.Router();
 
@@ -23,17 +24,22 @@ function requireCronAuth(req, res, next) {
   return res.status(403).json({ error: 'Cron auth failed' });
 }
 
+// 💓 26/09 (auditoria): heartbeat antes do trabalho — rodada morta no meio
+// deixa registro, e o Scheduler recebe 200 na hora.
 router.post('/autxml-harvest-cron', requireCronAuth, async (req, res) => {
-  try {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'autxml-harvest-cron';
+  await withCronHeartbeat({ collection: 'autxml_harvest_cron_logs', fonte, res }, async () => {
     const r = await colherSaidaAutXML({
       capturadoPor: { uid: 'cron', email: 'autxml-harvest-cron' },
       resetNSU: false,
     });
-    return res.json(r);
-  } catch (e) {
-    console.error('[autxml-harvest-cron] erro:', e.message);
-    return res.status(500).json({ error: e.message });
-  }
+    return {
+      ...r,
+      totalNovos: r?.novosXmls ?? r?.importadas ?? r?.totalNovos ?? 0,
+      falhas: r?.erros ?? r?.falhas ?? 0,
+      sucessos: r?.ok === false ? 0 : 1,
+    };
+  });
 });
 
 router.post('/autxml-harvest', requireAdmin, async (req, res) => {

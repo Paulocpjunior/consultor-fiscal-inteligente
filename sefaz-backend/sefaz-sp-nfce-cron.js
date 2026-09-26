@@ -27,6 +27,9 @@ import admin from 'firebase-admin';
 import { listCertsEmpresas } from './cert-storage.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
 import { secretsMatch } from './cron-secret.js';
+// 💓 26/09 (auditoria): heartbeat ANTES do trabalho — rodada morta no meio
+// deixa registro ('interrompido'), e o Scheduler recebe 200 na hora.
+import { withCronHeartbeat } from './cron-heartbeat.js';
 
 const router = express.Router();
 
@@ -66,6 +69,11 @@ function cursorToMs(cursor) {
 }
 
 router.post('/sae-nfce-cron', requireCronAuth, async (req, res) => {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'sae-nfce-cron';
+  await withCronHeartbeat({ collection: 'sae_nfce_cron_logs', fonte, res }, () => rodarSaeNfce());
+});
+
+async function rodarSaeNfce() {
   const t0 = Date.now();
   const db = getDb();
   const resposta = {
@@ -170,11 +178,18 @@ router.post('/sae-nfce-cron', requireCronAuth, async (req, res) => {
     resposta.duracaoMs = Date.now() - t0;
     console.log(`[sae-nfce-cron] ${resposta.processadas}/${resposta.empresasElegiveis} empresas, ` +
       `${resposta.totais.importadas} importadas, ${resposta.totais.erros} erros, ${resposta.duracaoMs}ms`);
-    return res.json(resposta);
+    // Campos do log (o painel lê totalEmpresas/sucessos/falhas/totalNovos).
+    return {
+      ...resposta,
+      totalEmpresas: resposta.empresasElegiveis,
+      sucessos: resposta.processadas - resposta.totais.erros,
+      falhas: resposta.totais.erros,
+      totalNovos: resposta.totais.importadas,
+    };
   } catch (e) {
     console.error('[sae-nfce-cron] erro:', e);
-    return res.status(500).json({ error: e.message, duracaoMs: Date.now() - t0 });
+    throw e; // o heartbeat grava status='falha' + erroFatal
   }
-});
+}
 
 export default router;

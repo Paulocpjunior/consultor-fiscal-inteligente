@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **💓 AUDITORIA 26/09 — ONDA 1, PARTE B (crons com heartbeat + CPU alocada)**.
+  Dos 13 crons sem heartbeat, 5 não tinham log NENHUM: `/sae-nfce-cron`,
+  `/autxml-harvest-cron`, `/xml-email-arquivo-sp-cron`, `/captura-resumo-cron`
+  e `/api/admin/sharepoint/cron-alertas`. Cada um passa por
+  `withCronHeartbeat` (coleções `sae_nfce_cron_logs`,
+  `autxml_harvest_cron_logs`, `cofre_arquivo_cron_logs`,
+  `captura_resumo_cron_logs`, `sharepoint_alertas_cron_logs`), com
+  totalEmpresas/sucessos/falhas/totalNovos no retorno para o painel; as 5
+  entram em `CRON_LOG_COLLECTIONS` (vigia). Os outros 8 (nfsesp-portal,
+  vencimentos, tarefas-mensal, cert-alerta, sharepoint-auto-sync, dctfweb,
+  das, caixa-postal, xml-email-ingest) já gravam log próprio no fim — ficam
+  para a onda 3 (heartbeat sem duplicar o doc). `deploy-app.yml`:
+  `--no-cpu-throttling` (18 rotas trabalham em `setImmediate` depois do 200;
+  sem CPU alocada o Cloud Run congela — provável causa do código 13 do
+  das-cron e do 4 do sharepoint-auto-sync em 25/09). Trava
+  `cronsComHeartbeat.test.ts` (varredura: handler usa o heartbeat com a
+  coleção certa, coleção no vigia, flag no deploy).
+
 - **🔒 AUDITORIA 26/09 — ONDA 1, PARTE A (segurança e leituras)** (Paulo:
   *"faça uma auditoria completa"* → *"pode fazer"*; relatório em
   `docs/auditoria-2026-09-26.md`). (1) Rate limit: a chave era

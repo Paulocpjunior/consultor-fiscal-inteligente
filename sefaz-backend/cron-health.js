@@ -27,6 +27,13 @@ export const CRON_LOG_COLLECTIONS = [
     { collection: 'cert_alerta_cron_logs',      label: 'Alerta de certificado',        tsField: 'criadoEm',    maxIdleHoras: 48 },
     { collection: 'tarefas_cron_logs',          label: 'Tarefas/obrigações mensais',   tsField: 'criadoEm',    maxIdleHoras: 800 }, // mensal
     { collection: 'vencimentos_cron_logs',      label: 'Vencimentos (alertas)',        tsField: 'executadoEm', maxIdleHoras: 48 },
+    // 💓 26/09 (auditoria): cinco crons que rodavam sem log nem heartbeat
+    // ganharam os dois. Entram no vigia para "não rodou" deixar de ser mudo.
+    { collection: 'sae_nfce_cron_logs',         label: 'Saída NFC-e (SAE)',            tsField: 'executadoEm', maxIdleHoras: 48 },
+    { collection: 'autxml_harvest_cron_logs',   label: 'Saída NF-e via autXML',        tsField: 'executadoEm', maxIdleHoras: 48 },
+    { collection: 'cofre_arquivo_cron_logs',    label: 'Cofre → arquivo no SharePoint', tsField: 'executadoEm', maxIdleHoras: 48 },
+    { collection: 'captura_resumo_cron_logs',   label: 'Resumo diário da captura',     tsField: 'executadoEm', maxIdleHoras: 48 },
+    { collection: 'sharepoint_alertas_cron_logs', label: 'Alertas de docs no SharePoint', tsField: 'executadoEm', maxIdleHoras: 48 },
 ];
 
 // Converte os vários formatos de timestamp (Firestore Timestamp, ISO string,
