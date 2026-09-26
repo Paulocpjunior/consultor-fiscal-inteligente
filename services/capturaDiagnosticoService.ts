@@ -25,6 +25,11 @@ export interface CronLog {
      * ou pela auto-cura por idade, pra não ficar "travado" eterno.
      */
     status?: string | null;
+    /** 🏷️ 26/09: o nome da rodada pelo fonte (drenagem, intra-dia, noturna, manual…). */
+    rotulo?: string | null;
+    resumo?: string | null;
+    puladasJanela?: number | null;
+    motivo?: string | null;
 }
 
 export interface CapturaStatus {
@@ -32,6 +37,12 @@ export interface CapturaStatus {
     endpointCron: string;
     schedulerEsperado: string;
     ultimoCron: CronLog | null | { erro: string };
+    /**
+     * 🏷️ 26/09 (só NF-e): a última rodada COMPLETA (carteira inteira), separada
+     * da última rodada de qualquer tipo — uma drenagem vazia não é "a captura".
+     * É ela que a saúde do trilho mede.
+     */
+    ultimaCapturaCompleta?: CronLog | null | { erro: string };
     state: {
         total: number;
         travadas: number | null;

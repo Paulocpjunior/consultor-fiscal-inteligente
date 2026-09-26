@@ -68,14 +68,26 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 25/09/2026 · leitura de 30 minutos</p>
+            <p>Departamento Fiscal · atualizado em 26/09/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (25/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (26/09) — leia esta parte primeiro</h2>
+
+    <h3>🏷️ <strong>Captura NF-e: o banner e o Diagnóstico dizem QUAL rodada foi — e a última captura completa sai separada da drenagem</strong></h3>
+    <p>Ontem à noite o banner mostrou "Captura SEFAZ concluída às 19:00 — 0 novos XMLs em 0 empresa(s)" e o card da NF-e
+    no Diagnóstico repetiu "0 / 0, 0 novos". Lia-se "não houve captura". Era a drenagem de pendências das 19:00, que só
+    trata empresas com fila na SEFAZ e não achou nenhuma; as capturas de verdade tinham trazido 444 e 344 documentos
+    horas antes. Os dois liam o último registro do log, fosse ele o que fosse. Agora cada rodada diz o que é (captura
+    noturna, intra-dia, manual, retomada, drenagem, dirigida), a drenagem sem alvo diz "nenhuma empresa com fila", e o
+    card da NF-e mostra a última captura completa em primeiro lugar, com a última rodada de qualquer tipo dita ao lado.
+    A saúde do trilho passa a medir a captura completa.</p>
+    <p><strong>Onde:</strong> banner da captura; Central de XMLs → Captura → Diagnóstico de Captura, card NF-e.</p>
+
+    <h2>Antes disso (25/09)</h2>
 
     <h3>🧱 <strong>EFD Contribuições: o PVA recusava com "Organização hierárquica dos blocos/registros fora dos padrões" (123 erros) — o registro 0500 estava no lugar errado</strong></h3>
     <p>Na ELS 08/2026 o PVA devolveu 127 erros, 123 deles de hierarquia, um por participante, unidade e item do bloco 0.

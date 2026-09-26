@@ -9,7 +9,7 @@
  *  - Polling a cada 5 min para detectar novas execucoes (6h/12h/18h)
  *  - Mostra toast e flash visual quando nova captura e detectada
  */
-import { resumoDaRodada } from '../sefaz-backend/rodada-completa-janela.js';
+import { fraseDaRodadaComTipo } from '../sefaz-backend/rodada-completa-janela.js';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import type { User } from '../types';
 import { getAuth } from 'firebase/auth';
@@ -39,8 +39,10 @@ interface CronStatus {
  * O backend grava `resumo`; sem ele (log antigo) a régua pura monta aqui.
  */
 function fraseDaRodada(s: CronStatus): string {
-    if (s.status === 'pulada-janela') return `rodada não iniciada — ${s.motivo || 'dentro da janela de 1 h da anterior'}`;
-    return s.resumo || resumoDaRodada(s);
+    // 🏷️ 26/09: com o NOME da rodada na frente — "Drenagem de pendências NSU:
+    // nenhuma empresa com fila" em vez de "Captura SEFAZ concluída — 0 novos
+    // XMLs em 0 empresa(s)", que se lia como "não houve captura".
+    return fraseDaRodadaComTipo(s);
 }
 
 interface Props {
@@ -160,7 +162,7 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 if (onShowToast && newData.hasRun) {
                     const execDate = parseTimestamp(newData.executadoEm);
                     const hora = execDate ? formatTimeBRT(execDate) : '';
-                    onShowToast(`Captura SEFAZ ${hora}: ${fraseDaRodada(newData)}`);
+                    onShowToast(`${hora} — ${fraseDaRodada(newData)}`);
                 }
 
                 // Browser push notification (works even if tab is in background)
@@ -235,9 +237,7 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
     if (hasErro) {
         message = `Captura SEFAZ falhou as ${timeStr} — ${status.erro}`;
     } else {
-        message = status.status === 'pulada-janela'
-            ? `Captura SEFAZ às ${timeStr} — ${fraseDaRodada(status)}`
-            : `Captura SEFAZ concluida as ${timeStr} — ${fraseDaRodada(status)}`;
+        message = `${timeStr} — ${fraseDaRodada(status)}`;
     }
 
     return (

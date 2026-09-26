@@ -165,3 +165,36 @@ export function causaDominante(errosResumo) {
     const [motivo, qtd] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0];
     return `${qtd}× ${motivo}`;
 }
+
+/**
+ * 🏷️ O NOME DA RODADA pelo `fonte` do log (26/09). O banner e o card do
+ * Diagnóstico liam o ÚLTIMO doc de sefaz_cron_logs, fosse ele o que fosse, e
+ * uma drenagem vazia das 19:00 saía como "Captura SEFAZ concluída — 0 novos
+ * XMLs em 0 empresa(s)": lia-se "não houve captura". Cada rodada passa a
+ * dizer o que é.
+ */
+export function rotuloDaFonte(fonte) {
+    const f = String(fonte || '').trim();
+    if (!f) return 'Rodada';
+    if (/^retomada:/i.test(f)) return 'Retomada pós-deploy';
+    if (/drenagem/i.test(f)) return 'Drenagem de pendências NSU';
+    if (/dirigida|targeted/i.test(f)) return 'Captura dirigida';
+    if (/admin-manual|cron-now/i.test(f)) return 'Captura manual';
+    if (/noturno/i.test(f)) return 'Captura noturna';
+    if (/xml-capture|intra/i.test(f)) return 'Captura intra-dia';
+    return `Rodada ${f}`;
+}
+
+/**
+ * A frase de UMA rodada com o seu nome na frente — é o que o banner e o
+ * toast mostram. Drenagem sem alvo diz que não havia fila, em vez de "0
+ * novos XMLs em 0 empresa(s)".
+ */
+export function fraseDaRodadaComTipo(s = {}) {
+    const rotulo = rotuloDaFonte(s.fonte);
+    if (s.status === 'pulada-janela') return `${rotulo} não iniciada — ${s.motivo || 'dentro da janela de 1 h da anterior'}`;
+    if (/drenagem/i.test(String(s.fonte || '')) && Number(s.totalEmpresas || 0) === 0) {
+        return `${rotulo}: nenhuma empresa com fila na SEFAZ — nada a drenar`;
+    }
+    return `${rotulo}: ${s.resumo || resumoDaRodada(s)}`;
+}

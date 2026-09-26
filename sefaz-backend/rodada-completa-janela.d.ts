@@ -31,3 +31,6 @@ export interface ResumoRodadaEntrada {
 }
 export declare function resumoDaRodada(r?: ResumoRodadaEntrada): string;
 export declare function causaDominante(errosResumo: Array<{ codigo?: string | null; motivo?: string | null }> | null | undefined): string;
+
+export declare function rotuloDaFonte(fonte: unknown): string;
+export declare function fraseDaRodadaComTipo(s?: ResumoRodadaEntrada & { fonte?: string | null; status?: string | null; motivo?: string | null; resumo?: string | null }): string;
