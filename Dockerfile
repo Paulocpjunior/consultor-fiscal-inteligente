@@ -1,5 +1,5 @@
 # ─── Stage 1: Build React/Vite ───────────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -43,12 +43,12 @@ ENV APP_BUILD_NUMBER=$APP_BUILD_NUMBER
 RUN npm run build
 
 # ─── Stage 2: Servidor Express (API /api/fiscal/* + SPA estatico) ────────────
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
 
 # Dependências do Chromium pra Playwright (login automático portal NFSe SP)
-# Lista mínima validada pelo Playwright em node:20-slim.
+# Lista mínima validada pelo Playwright em node:20-slim (mantida em node:22-slim, mesma base Debian).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     fonts-liberation \

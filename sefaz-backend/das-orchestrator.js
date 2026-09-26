@@ -15,6 +15,7 @@ import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
 import { candidatosSemMovimento, assertSondaNaoTransmite, lerResultadoCandidato, vereditoDaSonda } from './pgdas-sonda-sem-movimento.js';
 import { assinaturaEmissaoDas, reservarEmissaoDas } from './das-emissao-state.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -271,7 +272,8 @@ export async function getResumoDas() {
         { label: 'das_emitidos/resumo' },
     )).map(d => d.data());
 
-    const hoje = new Date().toISOString().slice(0, 10);
+    // 📅 26/09: hoje em Brasília (às 21h o UTC já é amanhã → vencido a maior).
+    const hoje = hojeBrt();
     let pendentes = 0, vencidos = 0, pagos = 0;
     let valorPendente = 0, valorVencido = 0, valorPago = 0;
     let valorMultaEstimada = 0;
@@ -323,11 +325,9 @@ export async function getResumoDas() {
  */
 export async function processarCronDas() {
     const db = fa().firestore();
-    const hoje = new Date().toISOString().slice(0, 10);
-    const cincoDiasFrente = (() => {
-        const d = new Date(); d.setDate(d.getDate() + 5);
-        return d.toISOString().slice(0, 10);
-    })();
+    // 📅 26/09: hoje e +5 dias em Brasília, não em UTC.
+    const hoje = hojeBrt();
+    const cincoDiasFrente = dataBrt(Date.now() + 5 * 24 * 60 * 60 * 1000);
 
     const snapDocs = await fetchAllDocs(db.collection(COLLECTION), { label: 'das_emitidos/cron' });
     const stats = {
@@ -431,7 +431,7 @@ export async function marcarPago(docId, dataPagamento) {
     const db = fa().firestore();
     await db.collection(COLLECTION).doc(docId).update({
         statusPagamento: 'pago',
-        dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
+        dataPagamento: dataPagamento || hojeBrt(),
     });
     return { ok: true };
 }
