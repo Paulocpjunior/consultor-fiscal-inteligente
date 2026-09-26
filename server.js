@@ -3167,13 +3167,21 @@ app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) 
     if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
-    try {
+    // 💓 26/09 (auditoria): heartbeat antes do trabalho — a varredura das pastas
+    // morta no meio deixa registro, e o Scheduler recebe 200 na hora (era um
+    // dos 13 crons sem log nem heartbeat).
+    const { withCronHeartbeat } = await import('./sefaz-backend/cron-heartbeat.js');
+    const fonte = req.headers['x-cloudscheduler-jobname'] || 'sharepoint-cron-alertas';
+    await withCronHeartbeat({ collection: 'sharepoint_alertas_cron_logs', fonte, res }, async () => {
         const r = await processarAlertasSharePoint();
-        return res.json(r);
-    } catch (err) {
-        console.error('[sharepoint/cron-alertas]', err);
-        return respondeErro(res, err, undefined, { formatoOk: true });
-    }
+        return {
+            ...r,
+            totalEmpresas: r?.empresas ?? r?.totalEmpresas ?? null,
+            totalNovos: r?.docsNovos ?? r?.novos ?? r?.totalNovos ?? 0,
+            falhas: r?.erros ?? r?.falhas ?? 0,
+            sucessos: r?.ok === false ? 0 : 1,
+        };
+    });
 });
 
 // POST /api/tarefas/cron-mensal

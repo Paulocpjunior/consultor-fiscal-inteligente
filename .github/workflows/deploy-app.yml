@@ -199,6 +199,7 @@ jobs:
               --region ${{ env.REGION }} \
               --update-env-vars=WHATSAPP_PHONE_NUMBER_ID=1167203206473367,WHATSAPP_TEMPLATE_GUIA=envio_guia_imposto \
               --update-secrets=WHATSAPP_CLOUD_TOKEN=whatsapp-cloud-token:latest \
+              --no-cpu-throttling \
               --no-traffic --tag candidate \
               --quiet; then
               exit 0
