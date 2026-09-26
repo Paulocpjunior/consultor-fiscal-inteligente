@@ -21,6 +21,8 @@ import { encadearReleitura, fraseDoResultado } from '../../services/relerPartici
 import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import {
     montarFilaFornecedores, resumirFila, textoDaFila, linhasDoPdf, totaisDoPdf,
@@ -60,9 +62,13 @@ const Caixa: React.FC<{ titulo: string; children: React.ReactNode; extra?: React
     </div>
 );
 
+// Referência estável pra quando ainda não há varredura (senão o hook reinicia a cada render).
+const SEM_LINHAS: DipamVarreduraLinha[] = [];
+
 const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [varredura, setVarredura] = useState<any>(null);
+    const paginaVarredura = usePaginaLocal<DipamVarreduraLinha>(varredura?.linhas ?? SEM_LINHAS, undefined, 'clientes');
     const [carregandoVarredura, setCarregandoVarredura] = useState(false);
     const [empresaId, setEmpresaId] = useState<string | null>(null);
     const [painel, setPainel] = useState<DipamPainel | null>(null);
@@ -223,7 +229,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {varredura.linhas.map((l: DipamVarreduraLinha) => (
+                                    {paginaVarredura.visiveis.map((l: DipamVarreduraLinha) => (
                                         <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
                                             <td className="py-1.5 pr-2">
                                                 <span className="font-semibold text-slate-700 dark:text-slate-200">{l.nome}</span>
@@ -252,6 +258,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
                                     ))}
                                 </tbody>
                             </table>
+                            <MostrarMais pagina={paginaVarredura} />
                         </div>
                     )}
                 </div>

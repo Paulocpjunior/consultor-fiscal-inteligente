@@ -1,9 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
 import { MODULOS_RESTRITOS, PERMISSOES_FUNCIONAIS } from '../config/menuConfig';
 import { CloseIcon, UserGroupIcon, TrashIcon, UserIcon } from './Icons';
 import { useConfirm, usePrompt } from './dialog/DialogProvider';
+import { usePaginaLocal } from './hooks/usePaginaLocal';
+import MostrarMais from './MostrarMais';
 
 interface UserManagementModalProps {
     isOpen: boolean;
@@ -183,6 +185,15 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const confirm = useConfirm();
     const prompt = usePrompt();
+
+    // Filtro fora do IIFE do JSX: hook não pode nascer lá dentro.
+    const usuariosFiltrados = useMemo(() => {
+        const termo = busca.trim().toLowerCase();
+        return users.filter(u => !termo
+            || (u.name || '').toLowerCase().includes(termo)
+            || (u.email || '').toLowerCase().includes(termo));
+    }, [users, busca]);
+    const paginaUsuarios = usePaginaLocal(usuariosFiltrados, undefined, 'usuários');
     // Guard que evita setState apos unmount/fechar modal mid-flight do fetch.
     // Antes, abrir/fechar rapido o modal podia atualizar state em componente
     // ja desmontado (React 18 warning + memory leak).
@@ -514,9 +525,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         <div className="text-center py-12 text-slate-500">Carregando...</div>
                     ) : tab === 'users' ? (() => {
                         const termo = busca.trim().toLowerCase();
-                        const filtrados = users.filter(u => !termo
-                            || (u.name || '').toLowerCase().includes(termo)
-                            || (u.email || '').toLowerCase().includes(termo));
+                        const filtrados = usuariosFiltrados;
                         return (
                         <div>
                             <div className="mb-3 flex items-center gap-3">
@@ -533,7 +542,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 )}
                             </div>
                             <div className="space-y-1">
-                                {filtrados.map((user) => {
+                                {paginaUsuarios.visiveis.map((user) => {
                                     const deps = user.departamentos ?? [];
                                     const mods = user.modulosPermitidos ?? [];
                                     const aberto = expandido === user.id;
@@ -683,6 +692,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                         </div>
                                     );
                                 })}
+                                <MostrarMais pagina={paginaUsuarios} />
                                 {filtrados.length === 0 && !error && (
                                     <p className="px-4 py-8 text-center text-slate-400 text-sm">
                                         {users.length === 0 ? 'Nenhum usuário encontrado.' : `Nenhum usuário casa com "${busca}".`}

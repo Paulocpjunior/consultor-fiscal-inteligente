@@ -248,13 +248,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     }, [carregandoAntigas]);
 
     // Atendimento não vive de F5: lista e thread aberta se renovam a cada 30s.
+    // SÓ com a aba visível: aba esquecida atrás de outra não precisa bater no
+    // servidor a cada 30s; ao voltar para a aba, renova na hora.
     useEffect(() => {
         recarregar();
-        const timer = setInterval(() => {
+        const poll = () => {
+            if (document.visibilityState !== 'visible') return;
             recarregar(true);
             if (selRef.current) carregarThread(selRef.current.numero, true);
-        }, 30_000);
-        return () => clearInterval(timer);
+        };
+        const timer = setInterval(poll, 30_000);
+        const aoVoltar = () => { if (document.visibilityState === 'visible') poll(); };
+        document.addEventListener('visibilitychange', aoVoltar);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener('visibilitychange', aoVoltar);
+        };
     }, [recarregar, carregarThread]);
 
     // 🟢 BATIMENTO DE PRESENÇA — é o que responde "quem está no ar?" na hora

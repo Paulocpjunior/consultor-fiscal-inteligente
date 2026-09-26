@@ -61,10 +61,18 @@ const VencimentosBanner: React.FC<Props> = ({ currentUser, onClickIrTarefas }) =
         if (!currentUser) return;
         aliveRef.current = true;
         carregar();
-        const interval = setInterval(carregar, 5 * 60 * 1000); // 5 min
+        // Só com a aba visível; ao voltar para a aba, recarrega na hora.
+        const poll = () => {
+            if (document.visibilityState !== 'visible') return;
+            carregar();
+        };
+        const interval = setInterval(poll, 5 * 60 * 1000); // 5 min
+        const aoVoltar = () => { if (document.visibilityState === 'visible') poll(); };
+        document.addEventListener('visibilitychange', aoVoltar);
         return () => {
             aliveRef.current = false;
             clearInterval(interval);
+            document.removeEventListener('visibilitychange', aoVoltar);
         };
     }, [carregar, currentUser]);
 

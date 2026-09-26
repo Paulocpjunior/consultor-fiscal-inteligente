@@ -158,6 +158,11 @@ export async function listarNfseSpCapturadas(filtros: NfseSpFiltros = {}): Promi
     }
 }
 
+/**
+ * Estatística da base de NFS-e feita no CLIENTE, sobre no máximo
+ * LIMITE_DOCS_NFSE_SP docs. `truncado=true` = a base é MAIOR que o lido e os
+ * números são piso, não total — quem mostra tem de dizer isso.
+ */
 export async function resumoNfseSpCapturadas(): Promise<{
     total: number;
     emitidas: number;
@@ -166,15 +171,19 @@ export async function resumoNfseSpCapturadas(): Promise<{
     valorRecebidasTotal: number;
     empresasUnicas: number;
     ultimaCaptura?: string;
+    truncado: boolean;
+    limite: number;
 }> {
+    const lim = LIMITE_DOCS_NFSE_SP;
     if (!isFirebaseConfigured || !db) {
-        return { total: 0, emitidas: 0, recebidas: 0, valorEmitidasTotal: 0, valorRecebidasTotal: 0, empresasUnicas: 0 };
+        return { total: 0, emitidas: 0, recebidas: 0, valorEmitidasTotal: 0, valorRecebidasTotal: 0, empresasUnicas: 0, truncado: false, limite: lim };
     }
     try {
+        const meta: FetchAllMeta = { truncated: false, count: 0, maxDocs: lim };
         const snaps = await fetchAllDocs('documentos_fiscais', [
             where('tipoDoc', '==', 'NFSe'),
             where('fonte', '==', 'csv-portal-sp'),
-        ], { batchSize: 2000 });
+        ], { batchSize: 2000, maxDocs: lim, meta });
         const empresas = new Set<string>();
         let emitidas = 0, recebidas = 0, valE = 0, valR = 0;
         let ultima = '';
@@ -195,9 +204,11 @@ export async function resumoNfseSpCapturadas(): Promise<{
             valorRecebidasTotal: +valR.toFixed(2),
             empresasUnicas: empresas.size,
             ultimaCaptura: ultima || undefined,
+            truncado: meta.truncated,
+            limite: lim,
         };
     } catch (e: any) {
         console.warn('[nfseSpCapturadasService] resumo falhou:', e?.message);
-        return { total: 0, emitidas: 0, recebidas: 0, valorEmitidasTotal: 0, valorRecebidasTotal: 0, empresasUnicas: 0 };
+        return { total: 0, emitidas: 0, recebidas: 0, valorEmitidasTotal: 0, valorRecebidasTotal: 0, empresasUnicas: 0, truncado: false, limite: lim };
     }
 }

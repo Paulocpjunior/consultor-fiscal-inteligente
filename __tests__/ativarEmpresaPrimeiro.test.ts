@@ -44,7 +44,9 @@ describe('o banco fica quieto até a ativação', () => {
         // Trazer tudo e filtrar no cliente seria pagar o mesmo preço com outro
         // nome — a consulta tem de ir com o empresaId.
         expect(servico).toMatch(/export const getNotasDaEmpresa/);
-        expect(servico).toMatch(/fetchAllDocs\('simples_notas', \[where\('empresaId', '==', id\)\]\)/);
+        // O FATO é a consulta filtrada por empresaId; as opções (teto, meta)
+        // que vêm depois do filtro não são o assunto desta trava.
+        expect(servico).toMatch(/fetchAllDocs\('simples_notas', \[where\('empresaId', '==', id\)\]/);
     });
 
     it('a ativação é o que dispara a leitura', () => {

@@ -5,6 +5,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧊 AUDITORIA 26/09 — ONDA 2A (leituras com teto + polling) e 2B (paginação)**.
+  2A: as 24 chamadas `fetchAllDocs(` em services/ passam `maxDocs` explícito
+  (constantes `TETO_*` por coleção: empresas/users/contadores 2000,
+  parâmetros 5000, tarefas 20000, simples_notas 5000, documentos 5000 e
+  20000 no `listDocumentos` do painel mensal, que já reporta
+  `meta.truncado`); `listarTarefas(filtros, meta?)` e
+  `getNotasDaEmpresa(id, _user, meta?)` ganham out-param opcional
+  (`{truncado}`) sem mudar o retorno; `resumoNfseSpCapturadas` devolve
+  `truncado/limite`. ⚠️ `simples_notas.data` é gravado em DUAS formas
+  (epoch pela IA, 'AAAA-MM-DD' pelo XML) — range na consulta cairia uma
+  forma; ficou em memória, dito no JSDoc. Polling respeita
+  `visibilityState` em SpConnect (30 s), CapturaDiagnosticoPanel (60 s) e
+  VencimentosBanner (5 min), com `visibilitychange` para pôr em dia ao
+  voltar. Trava `leiturasComTeto.test.ts` (AST do TypeScript: toda chamada
+  tem maxDocs; polling com visibilidade). 2B: `services/paginaLocal.ts`
+  (puro: 200/página, `textoDaContagem`), `components/hooks/usePaginaLocal.ts`
+  (reinicia quando a lista muda de identidade), `components/MostrarMais.tsx`;
+  aplicado em Tarefas, SimplesNacionalDashboard, LucroPresumidoReal/ListView,
+  EmpresasStatusCapturaPanel, UserManagementModal (filtro içado para
+  `useMemo` — hook não entra em IIFE de JSX), NfseNacional,
+  XmlEmpresasMonitoradas, RecuperacaoTributaria, AnaliseRetencoesNfseSP,
+  DipamProdutorRuralPanel e DifalPanel (`SEM_LINHAS` estável para
+  `varredura` nula). Exportações e totais seguem sobre a lista inteira.
+  Travas `paginaLocal.test.ts`, `usePaginaLocal.test.tsx` (renderHook),
+  `listasPaginadas.test.ts` (varredura das 11 telas). PENDENTE pequeno:
+  Tarefas.tsx ainda não passa `meta` ao `listarTarefas` para dizer "N+"
+  quando o teto de 20000 corta.
+
 - **📅 AUDITORIA 26/09 — ONDA 2C: DATA DE HOJE EM BRASÍLIA (dono único) + NODE 22**
   (Paulo: *"vamos matar o restante"*). `sefaz-backend/data-brt.js` (puro):
   `dataBrt(instante)`, `hojeBrt()`, `anoMesBrt()` via Intl com

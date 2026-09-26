@@ -7,6 +7,8 @@ import { formatCnpjCpf } from '../../services/xmlParserService';
 
 import SefazSyncButton from '../SefazSyncButton';
 import CertificadoEmpresaUpload from '../CertificadoEmpresaUpload';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 
 interface Props {
     currentUser: User;
@@ -44,6 +46,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
             return false;
         });
     }, [empresas, busca, fonteFiltro]);
+    const paginaEmpresas = usePaginaLocal(empresasFiltradas, undefined, 'empresas');
 
     return (
         <div className="space-y-3">
@@ -103,7 +106,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {empresasFiltradas.map(e => (
+                            {paginaEmpresas.visiveis.map(e => (
                                 <tr key={e.id}>
                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{e.nome}</td>
                                     <td className="px-3 py-2 text-slate-500 font-mono">{formatCnpjCpf(e.cnpj)}</td>
@@ -122,6 +125,7 @@ const XmlEmpresasMonitoradas: React.FC<Props> = ({ currentUser }) => {
                             ))}
                         </tbody>
                     </table>
+                    <MostrarMais pagina={paginaEmpresas} />
                     </div>
                 )}
             </div>

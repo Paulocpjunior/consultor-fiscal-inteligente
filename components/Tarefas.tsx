@@ -20,6 +20,8 @@ import ModalReatribuir from './Tarefas/ModalReatribuir';
 import PrazoIssModal, { type AlvoPrazoIss } from './PrazoIssModal';
 import ModalMover from './Tarefas/ModalMover';
 import KanbanColuna from './Tarefas/KanbanColuna';
+import { usePaginaLocal } from './hooks/usePaginaLocal';
+import MostrarMais from './MostrarMais';
 import type { User } from '../types';
 import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../services/empresaOption';
@@ -296,6 +298,9 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
         };
     }, [tarefas]);
 
+    // Lista desenha 200 por vez; contadores e kanban seguem sobre o array inteiro.
+    const paginaTarefas = usePaginaLocal(tarefas, undefined, 'tarefas');
+
     return (
         <div className="space-y-4">
             {/* Cabecalho + Resumo */}
@@ -473,7 +478,7 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {tarefas.map(t => {
+                                {paginaTarefas.visiveis.map(t => {
                                     const atrasada = tarefaAtrasada(t);
                                     return (
                                         <tr key={t.id} className={`border-t border-gray-100 dark:border-gray-700 ${atrasada ? 'bg-red-50/40 dark:bg-red-900/10' : ''}`}>
@@ -543,6 +548,7 @@ const Tarefas: React.FC<TarefasProps> = ({ currentUser }) => {
                                 })}
                             </tbody>
                         </table>
+                        <MostrarMais pagina={paginaTarefas} />
                     </div>
                 )}
             </div>
