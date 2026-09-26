@@ -46,7 +46,9 @@ router.get('/listar', requireAuth, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/nbs', async (_req, res) => {
+// 🔒 26/09 (auditoria): a tabela NBS era pública e lia até 2.000 docs por
+// requisição — abuso sem custo para quem chama. É dado interno: exige login.
+router.get('/nbs', requireAuth, async (_req, res) => {
     // Se houver tabela oficial importada via /import-nbs-csv, usa ela.
     // Senao, retorna a tabela curada hardcoded.
     try {

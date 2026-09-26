@@ -34,7 +34,7 @@ import { lerSemMovimentoDaCompetencia, gravarSemMovimentoDeclarado } from './sem
 import { conferirDeclaracaoSemMovimento, textoDaDeclaracaoSemMovimento } from './sem-movimento-declarado.js';
 // A régua da declaração é PURA e mora no dono — a rota só faz I/O.
 import { conferirDeclaracaoCobertura, textoDaDeclaracaoCobertura } from './obrigacao-fora-do-catalogo.js';
-import { normalizarCompetencia } from './competencia.js';
+import { normalizarCompetencia, formasDaCompetencia } from './competencia.js';
 
 /**
  * Cobertura do catálogo para UM cliente.
@@ -291,11 +291,19 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
     );
     const tarefas = tarefasSnaps.map((s) => s.data() || {});
 
-    // ── envios do rito (#293) — sem índice por competência, filtra aqui ──
-    const enviosSnap = await db.collection('impostos_enviados').limit(3000).get();
-    const envios = enviosSnap.docs
-        .map((d) => d.data() || {})
-        .filter((e) => e.competencia === competencia);
+    // ── envios do rito (#293) ────────────────────────────────────────────
+    // 🚨 26/09 (auditoria): lia 3.000 envios de qualquer competência e cortava
+    // em silêncio — a competência mais antiga podia ficar de fora e a etapa 5
+    // acusar "nenhuma guia enviada" sobre envio feito. O rito grava
+    // `competencia` como 'AAAA-MM': igualdade simples na consulta, sem índice.
+    const formasEnvio = formasDaCompetencia(competencia);
+    const enviosSnaps = formasEnvio.length
+        ? await fetchAllDocs(
+            db.collection('impostos_enviados').where('competencia', 'in', formasEnvio.slice(0, 10)),
+            { label: `rotina-envios ${competencia}`, maxDocs: 20000 },
+        )
+        : [];
+    const envios = enviosSnaps.map((s) => s.data() || {});
 
     const docsPorEmpresa = agrupar(documentos, porCnpjToId);
     const tarefasPorEmpresa = agrupar(tarefas, porCnpjToId);

@@ -273,6 +273,13 @@
         { "fieldPath": "tomadorCnpj", "order": "ASCENDING" },
         { "fieldPath": "dhEmi", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "impostos_enviados", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "empresaCnpj", "order": "ASCENDING" },
+        { "fieldPath": "enviadoEm", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -37,6 +37,8 @@ const SEM_PERGUNTA_DE_CANCELAMENTO: Record<string, string> = {
     'sefaz-backend/nfse-sp-routes.js': 'NFS-e não tem evento de cancelamento — ali o campo é a fonte',
     'sefaz-backend/prova-captura-routes.js': 'prova de captura conta documentos; cancelada é uma das contagens',
     'sefaz-backend/sync-routes.js': 'backfill de participante/endereço — não decide imposto',
+    'sefaz-backend/health-consolidado-routes.js': 'saúde do acervo conta ESTRUTURA (chave, competência, direção, valor, empresa); cancelada é documento igual (26/09)',
+    'sefaz-backend/diagnostico-docs-fiscais-routes.js': 'diagnóstico de cadastro dos documentos conta estrutura e duplicata, não apura (26/09)',
 };
 
 function varrer(dir: string, out: string[] = []): string[] {
