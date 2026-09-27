@@ -229,20 +229,27 @@ describe('📞 ligar para o cliente', () => {
         expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
     });
 
-    // 🚨 TRAVA LITERAL TROCADA PELA INTENÇÃO (25/08, 2ª vez neste mesmo bloco).
-    // Ela prendia a frase "Em validação: falta a primeira ligação RECEBIDA" —
-    // e essa frase virou o defeito: com o gravador do SBC provado ligado, a
-    // chamada das 14h52 (dentro da janela) não produziu CDR nem INVITE em três
-    // conferências seguidas, ou seja a Meta ACEITA e NÃO ENTREGA no tronco.
-    // Mandar esperar a primeira ligação era mandar esperar o que não acontece
-    // sozinho. O que a trava garante agora é o COMPORTAMENTO: a linha diz o
-    // estado MEDIDO e não devolve espera ao colaborador.
-    it('o estado da ligação é o MEDIDO, e não manda esperar ligação que não chega', () => {
+    // 🚨 TRAVA TROCADA PELA 3ª VEZ NESTE BLOCO — e desta vez pelo FATO (27/09).
+    // 25/08: ela passou a exigir "Ligação ainda NÃO funciona nos dois
+    // sentidos … não entrega no nosso tronco … Fale por mensagem". Em 23/09 a
+    // ligação COMPLETOU (dentro da grade `call_hours` da Meta, caiu na URA com
+    // áudio) — e a trava manteve a tela dizendo à equipe, por mais quatro
+    // dias, que um recurso provado não funcionava. Trava que prende a
+    // afirmação de um DIA prende o erro do dia seguinte.
+    // O que a tela deve garantir agora, e é isto que se cobra:
+    //  · a ENTRADA é dita como funcionando, com o QUANDO (a grade da Meta);
+    //  · a SAÍDA por API não é oferecida nem prometida (131055 — é do tronco);
+    //  · nenhuma das duas afirmações VELHAS volta — nem a espera de 24/08, nem
+    //    o "não funciona / chamado aberto" de 25/08.
+    it('a tela diz que a ENTRADA funciona e QUANDO, e não repete as afirmações velhas', () => {
         expect(tela).not.toMatch(/Em validação: falta a primeira ligação RECEBIDA/);
-        expect(tela).toMatch(/Ligação ainda NÃO funciona nos dois sentidos/);
-        expect(tela).toMatch(/não entrega no nosso tronco/);
+        expect(tela).not.toMatch(/Ligação ainda NÃO funciona nos dois sentidos/);
+        expect(tela).not.toMatch(/chamado aberto com ela/);
+        // A entrada FUNCIONA, e a régua é dita junto (a grade da Meta).
+        expect(tela).toMatch(/Ligação do cliente para a SP <strong>funciona<\/strong>/);
+        expect(tela).toMatch(/08:00–12:00 e 13:00–17:30/);
         // Estado sem saída é beco: a linha diz o que dá pra fazer HOJE.
-        expect(tela).toMatch(/Fale por mensagem enquanto isso/);
+        expect(tela).toMatch(/Ligue do ramal ou combine por mensagem/);
     });
 
     // 🚨 CÓDIGO MORTO COM CARA DE ENTREGA: a ação de ligar e a porta de fetch
