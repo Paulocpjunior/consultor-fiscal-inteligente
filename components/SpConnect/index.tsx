@@ -5071,23 +5071,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         allowed for SIP enabled numbers". Em modo SIP a saída NÃO
                                                         sai por API — quem disca é o tronco. Botão que a Meta
                                                         recusa por desenho é botão que não faz nada. */}
-                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa. Até 25/08
-                                                        ela dizia "falta a primeira ligação RECEBIDA" — o que fazia
-                                                        parecer que bastava alguém ligar. A medição desmentiu: com o
-                                                        gravador do SBC PROVADO ligado, a chamada das 14h52 (dentro
-                                                        da janela) saiu "Não atendida" no celular e o tronco não
-                                                        registrou CDR nem INVITE em três conferências seguidas. Ou
-                                                        seja: a Meta ACEITA a chamada e NÃO a entrega no tronco.
-                                                        Mandar esperar a primeira ligação seria mandar esperar o que
-                                                        não vai acontecer sozinho — quem destrava é o chamado. */}
+                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa — e o estado
+                                                        MUDOU em 23/09. De 25/08 a 23/09 esta linha afirmou "a Meta
+                                                        aceita a chamada e NÃO entrega no tronco, chamado aberto"
+                                                        com medições verdadeiras por trás: todas as janelas
+                                                        conferidas caíram FORA da grade `call_hours` da Meta
+                                                        (seg–sex 08:00–12:00 e 13:00–17:30, America/Sao_Paulo). Em
+                                                        23/09 o Paulo ligou dentro da grade e a chamada caiu na URA
+                                                        com áudio. Não havia chamado a abrir nem defeito a
+                                                        consertar. Um mês dizendo "não funciona" à equipe sobre um
+                                                        recurso que funcionava é o custo de texto fixo com data:
+                                                        por isso esta linha agora diz O QUE funciona, QUANDO, e o
+                                                        que NÃO sai por aqui (saída por API, 131055). */}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone),
-                                                        não por aqui — a Meta recusa chamada por API em número SIP.
-                                                        <span className="block text-red-600 dark:text-red-400">
-                                                            🛑 Ligação ainda NÃO funciona nos dois sentidos: medido em 25/08, a Meta aceita
-                                                            a chamada e não entrega no nosso tronco (sem INVITE, sem CDR) — chamado aberto com ela.
-                                                            Fale por mensagem enquanto isso.
+                                                        <span className="block text-emerald-600 dark:text-emerald-400">
+                                                            ☎️ Ligação do cliente para a SP <strong>funciona</strong> (provada em 23/09): toca na URA do
+                                                            HitPhone, dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele
+                                                            o botão ☎️ do cliente fica indisponível — isso é regra da Meta, não defeito.
                                                         </span>
+                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone), da SP para o
+                                                        cliente, não por aqui — a Meta recusa chamada por API em número SIP. Precisa falar por voz agora?
+                                                        Ligue do ramal ou combine por mensagem.
                                                     </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (

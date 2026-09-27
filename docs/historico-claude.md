@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **☎️ TEXTO FIXO COM DATA ENVELHECE SOZINHO, E A TRAVA QUE O PRENDE PRENDE O
+  ERRO** (27/09, Paulo: *"sobre as ligações, temos que testar"*). O painel
+  lateral da conversa dizia desde 25/08 *"Ligação ainda NÃO funciona nos dois
+  sentidos … chamado aberto com ela"*, e `permissaoLigacao.test.ts` EXIGIA a
+  frase. A ligação completou em 23/09 (grade `call_hours`), o SBC e o de-para
+  foram corrigidos no dia — a tela da equipe, não: ficou quatro dias afirmando
+  defeito em recurso provado, porque a trava literal a segurava. Correção: a
+  linha diz que a ENTRADA funciona e QUANDO (a grade), que a SAÍDA é do ramal
+  221 (131055), e a trava passou a cobrar essas duas afirmações e a AUSÊNCIA
+  das velhas. `sobreConnect.ts` ganhou revisão 27/09 (ligação, bot+IA
+  confirmados no banco, credencial do Graph) e o item de 25/08 recebeu marca
+  `[❌ CORRIGIDO em 27/09]` em vez de sumir — histórico se corrige, não se
+  apaga. 📌 **Estado do bot medido em 27/09 pelo Paulo, direto no Firestore
+  via REST** (`whatsapp_config/atendimento`): `botAtivo=true`,
+  `botAlcance='todos'`, `triagemIaAtiva=true` — a pergunta *"a IA está
+  ativa?"* tem resposta, e o comando está na conversa; a lacuna que fica é
+  não haver PAINEL com contadores da triagem (classificada / sem certeza /
+  indisponível), hoje só no log do Cloud Run. Teste de ligação pendente:
+  celular liga pelo ☎️ da conversa DENTRO da grade, URA toca; diagnóstico
+  `scripts/sbc-diagnostico.sh` dentro da VM.
 - **🧊 AUDITORIA 26/09 — ONDA 2A (leituras com teto + polling) e 2B (paginação)**.
   2A: as 24 chamadas `fetchAllDocs(` em services/ passam `maxDocs` explícito
   (constantes `TETO_*` por coleção: empresas/users/contadores 2000,

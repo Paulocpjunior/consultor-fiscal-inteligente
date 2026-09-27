@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-08-26';
+export const SOBRE_VERSAO = '2026-09-27';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -269,6 +269,15 @@ export const MANUAL: PassoManual[] = [
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
     {
+        data: '2026-09-27',
+        itens: [
+            '☎️ Ligação de WhatsApp do cliente para a SP FUNCIONA: provada em 23/09, cai na URA do HitPhone com áudio. A linha de 25/08 ("a Meta não entrega no nosso tronco, chamado aberto") estava ERRADA — os testes daquela época caíram fora do horário em que a Meta libera chamada (seg–sex 08:00–12:00 e 13:00–17:30). Fora desse horário o botão ☎️ do cliente nem aparece: é regra da Meta, não defeito.',
+            '📞 A ligação de SAÍDA (SP → cliente) não sai pelo SP Connect: em número SIP a Meta recusa chamada por API. Quem liga é o ramal 221 do HitPhone. O painel da conversa passou a dizer isso em vez de "fale por mensagem enquanto isso".',
+            '🤖 O bot e a IA de triagem estão LIGADOS para todos os clientes (conferido em 27/09 direto no banco): quem escreve uma frase é encaminhado à fila certa quando a IA tem certeza; na dúvida, o menu de sempre.',
+            '🔑 A credencial da Microsoft (app Notificacoes) estava inválida desde 24/09 e foi trocada: a aba ⚙️ → 🔔 Avisos mostra "Credencial do Graph ✅ o Azure emitiu token". Se essa linha ficar ❌, o sino do Teams e o e-mail de guia param juntos — é ali que se olha primeiro.',
+        ],
+    },
+    {
         data: '2026-08-26',
         itens: [
             '🤖 O bot passou a LER o pedido do cliente: quem escreve uma frase de verdade ("preciso da guia do DAS") é encaminhado direto ao departamento, sem passar pelo menu. Ele só faz isso com CERTEZA — na dúvida, o menu de 1 a 8 de sempre. E "bom dia", "oi" e "ok" nunca vão pra IA: esses recebem o menu.',
@@ -286,7 +295,7 @@ export const REVISOES: Revisao[] = [
         data: '2026-08-25',
         itens: [
             '🔔 Aviso NATIVO do Teams: mensagem nova acende o sino de Atividade do próprio Teams (barra da ESQUERDA do aplicativo, não a aba do navegador). Vale a mesma regra de fila e horário do push.',
-            '☎️ Ligação de WhatsApp: medido em 25/08, a Meta aceita a chamada e NÃO entrega no nosso tronco. Não é configuração daqui — há chamado aberto com ela. Enquanto isso, atenda por mensagem.',
+            '☎️ Ligação de WhatsApp: medido em 25/08, a Meta aceita a chamada e NÃO entrega no nosso tronco. Não é configuração daqui — há chamado aberto com ela. Enquanto isso, atenda por mensagem. [❌ CORRIGIDO em 27/09: a ligação funciona; as medições de 25/08 caíram fora do horário em que a Meta libera chamada. Veja a revisão de 27/09.]',
         ],
     },
     {
