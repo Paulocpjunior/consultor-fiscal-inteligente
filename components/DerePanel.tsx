@@ -7,12 +7,13 @@
  * eventos a competência exige.
  *
  * ⚠️ O que ele faz e o que NÃO faz vai na cara da tela: monta a PRÉVIA do
- * D-1001 (do cadastro, conferida contra o XSD oficial) e não transmite nada.
+ * D-1001 (do cadastro) e, desde 27/09, a do D-1011 (PGCC) e do D-1101
+ * (balancete) a partir da PLANILHA da contabilidade — todas conferidas contra
+ * o XSD oficial — e não transmite nada. A planilha é lida no NAVEGADOR
+ * (SheetJS) e só as LINHAS vão ao servidor, que não as guarda.
  * Os leiautes 1.1.0, o histórico e o Anexo II da 1.2.0, o manual do desenvolvedor
  * e os 28 XSD do pacote 1.2.0 estão LIDOS e servidos aqui; faltam o leiaute campo a
- * campo e o Anexo I da 1.2.0, o insumo dos mensais
- * (plano de contas, balancete) é contábil e a transmissão exige credencial do
- * piloto da Reforma.
+ * campo e o Anexo I da 1.2.0, e a transmissão exige credencial do piloto da Reforma.
  * Prometer geração aqui seria a promessa que a tela não cumpre (a lição do ✕
  * de 14/08).
  *
@@ -23,9 +24,40 @@ import React, { useState } from 'react';
 import { auth } from '../services/firebaseConfig';
 import type { TriagemDere, LinhaDere, DeclaracaoDere } from '../sefaz-backend/dere';
 import type { EventoD1001 } from '../sefaz-backend/dere-evento-d1001';
+import type { EventoD1011 } from '../sefaz-backend/dere-evento-d1011';
+import type { EventoD1101 } from '../sefaz-backend/dere-evento-d1101';
+import type { ResumoPlano } from '../sefaz-backend/dere-insumo-contabil';
 import type { ConferenciaXsd } from '../sefaz-backend/dere-xsd-bolso';
 
 type PreviaD1001 = { ok: boolean; evento: EventoD1001; conferenciaXsd: ConferenciaXsd | null; error?: string };
+
+/** Resposta de POST /api/admin/cadastro/dere-mensais-previa — resumos e XML, nunca a lista de contas do cliente. */
+type InsumoLido = { ok: boolean; pendencias: string[]; avisos: string[]; resumo: ResumoPlano | { linhas: number; competenciaDoTitulo: string | null } | null; competencia?: string | null; foraDoPgcc?: { codigo: string; nome: string; motivo: string }[] } | null;
+type PreviaMensais = {
+    ok: boolean;
+    error?: string;
+    empresa?: { cnpj: string; nome: string | null; regimeEspecifico: string | null; codigoD1001: number | null; decisao: string };
+    sugestaoPlanoCtaRef?: { codigo: number | null; motivo: string };
+    insumo?: { plano: InsumoLido; balancete: InsumoLido };
+    d1011?: { evento: EventoD1011; conferenciaXsd: ConferenciaXsd | null } | null;
+    d1101?: { evento: EventoD1101; conferenciaXsd: ConferenciaXsd | null } | null;
+};
+
+/** Lê a 1ª aba da planilha como matriz de células (a forma que o backend espera). Nada é interpretado aqui: quem decide é a régua pura do servidor. */
+async function lerPlanilhaComoLinhas(file: File): Promise<unknown[][]> {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if (!ws) throw new Error(`${file.name}: a planilha não tem aba legível.`);
+    return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
+}
+
+function baixarTexto(nome: string, texto: string) {
+    const url = URL.createObjectURL(new Blob([texto], { type: 'application/xml' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = nome; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const fmtCnpj = (c?: string | null) =>
     String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') || '—';
@@ -61,6 +93,44 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
     // o XSD da Receita antes de qualquer transmissão (que ainda não existe).
     const [previas, setPrevias] = useState<Record<string, PreviaD1001 | 'carregando'>>({});
     const [tpAmb, setTpAmb] = useState<'1' | '2'>('2');
+    // 📥 Prévia dos MENSAIS (D-1011 PGCC + D-1101 balancete) a partir da planilha
+    // da contabilidade (27/09). O que a planilha não traz volta NOMEADO — o app
+    // não inventa conta referencial, codTrib nem frequência de encerramento.
+    const [raizMensais, setRaizMensais] = useState('');
+    const [arqPlano, setArqPlano] = useState<File | null>(null);
+    const [arqBalancete, setArqBalancete] = useState<File | null>(null);
+    const [planoCtaRef, setPlanoCtaRef] = useState('');
+    const [freqEncerr, setFreqEncerr] = useState('');
+    const [iniValidPgcc, setIniValidPgcc] = useState('2026-10-01');
+    const [perApur, setPerApur] = useState('');
+    const [hipoteseCtaRef, setHipoteseCtaRef] = useState(false);
+    const [mensais, setMensais] = useState<PreviaMensais | 'carregando' | null>(null);
+
+    const gerarPreviaMensais = async () => {
+        const decl = r?.declaracoes.find(d => d.raiz === raizMensais) || r?.declaracoes[0];
+        const cnpj = decl?.estabelecimentos[0]?.cnpj;
+        if (!cnpj || !arqPlano) return;
+        setMensais('carregando');
+        try {
+            const plano = await lerPlanilhaComoLinhas(arqPlano);
+            const balancete = arqBalancete ? await lerPlanilhaComoLinhas(arqBalancete) : null;
+            const token = await auth.currentUser?.getIdToken();
+            const resp = await fetch('/api/admin/cadastro/dere-mensais-previa', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cnpj, tpAmb, planoCtaRef, freqEncerr, iniValid: iniValidPgcc, perApur: perApur || undefined,
+                    cCtaRefRegra: hipoteseCtaRef ? 'segmento-1' : 'coluna', plano, balancete,
+                }),
+            });
+            const j = await resp.json();
+            if (!resp.ok && !j?.insumo) throw new Error(j?.error || `HTTP ${resp.status}`);
+            setMensais(j);
+            if (j?.sugestaoPlanoCtaRef?.codigo && !planoCtaRef) setPlanoCtaRef(String(j.sugestaoPlanoCtaRef.codigo));
+        } catch (e: any) {
+            setMensais({ ok: false, error: e?.message || 'Falha ao ler as planilhas ou ao montar a prévia.' });
+        }
+    };
 
     const gerarPrevia = async (d: DeclaracaoDere) => {
         const cnpj = d.estabelecimentos[0]?.cnpj;
@@ -183,12 +253,13 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
 
                     <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 p-2 text-amber-800 dark:text-amber-300">
                         ⚠️ <strong>O CFI monta a PRÉVIA do D-1001 e não transmite nada.</strong> A casa da geração é
-                        o Fiscal (decisão do Paulo, 02/09) — o D-1001 já sai do cadastro, conferido contra o XSD
-                        oficial. Os demais eventos ainda não: faltam os XSD do fechamento (D-1199), do D-2101 e de
-                        dois retornos, o insumo dos mensais (plano de contas comentado, balancete) é contábil, e
-                        a transmissão exige credencial do piloto da Reforma (procuração no e-CAC + portal da
-                        produção restrita). A entrega é por fora; o mês do cliente passa a cobrar a obrigação,
-                        e ela se registra em Vencimentos como entregue fora do app.
+                        o Fiscal (decisão do Paulo, 02/09) — o D-1001 sai do cadastro, e o <strong>D-1011 (PGCC)</strong> e o
+                        <strong>D-1101 (balancete)</strong> saem da <strong>planilha da contabilidade</strong> (plano de contas +
+                        balancete analítico, bloco 📥 abaixo), todos conferidos contra o XSD oficial. O que a planilha não traz
+                        (conta referencial, código de tributação) volta nomeado, com a contagem — o app não inventa código de
+                        tabela. Os demais eventos (D-1106, D-1121, D-2101, D-1199) ainda não saem, e a transmissão exige
+                        credencial do piloto da Reforma (procuração no e-CAC + portal da produção restrita). A entrega é por
+                        fora; o mês do cliente passa a cobrar a obrigação, e ela se registra em Vencimentos como entregue fora do app.
                     </div>
 
                     <div>
@@ -284,6 +355,137 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                                 </ul>
                             </div>
                         )}
+                    {!!r.declaracoes.length && (
+                        <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                            <p className="font-bold text-slate-700 dark:text-slate-200">
+                                📥 Prévia do D-1011 (PGCC) e do D-1101 (Balancete) a partir da planilha da contabilidade
+                            </p>
+                            <p className="text-slate-500">
+                                Suba o <strong>plano de contas</strong> (colunas Conta Contábil · Descrição · Conta de Lançamento S/N · Tipo C/D;
+                                opcionais: Conta Referencial, Código de Tributação, vigência) e o <strong>balancete analítico</strong> do mês
+                                (Código · Conta · Saldo Inicial · Débitos · Créditos · Saldo Final). A planilha é lida aqui no navegador e
+                                <strong> não fica guardada</strong> no servidor: sai o XML conferido contra o XSD e o que faltou, nomeado.
+                            </p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2 text-slate-600 dark:text-slate-300">
+                                <label className="block">Declaração (raiz):{' '}
+                                    <select value={raizMensais || r.declaracoes[0].raiz} onChange={e => setRaizMensais(e.target.value)} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 w-full">
+                                        {r.declaracoes.map(d => <option key={d.raiz} value={d.raiz}>{d.raiz} — {d.estabelecimentos[0]?.nome}</option>)}
+                                    </select>
+                                </label>
+                                <label className="block">Plano referencial ({'{'}planoCtaRef{'}'}):{' '}
+                                    <select value={planoCtaRef} onChange={e => setPlanoCtaRef(e.target.value)} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 w-full">
+                                        <option value="">— escolha (o contador afirma) —</option>
+                                        <option value="1">1 — COSIF (Tabela 22)</option>
+                                        <option value="2">2 — ANS (Tabela 32, plano padrão da ANS)</option>
+                                        <option value="3">3 — SUSEP (Tabela 23)</option>
+                                        <option value="4">4 — SPED (Tabela 14, referencial ECF/ECD)</option>
+                                        <option value="5">5 — PREVIC (Tabela 24)</option>
+                                    </select>
+                                </label>
+                                <label className="block">Encerramento das contas de resultado ({'{'}freqEncerr{'}'}):{' '}
+                                    <select value={freqEncerr} onChange={e => setFreqEncerr(e.target.value)} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 w-full">
+                                        <option value="">— escolha (o balancete confere) —</option>
+                                        <option value="A">A — Anual</option>
+                                        <option value="S">S — Semestral</option>
+                                        <option value="Q">Q — Quadrimestral</option>
+                                        <option value="T">T — Trimestral</option>
+                                        <option value="B">B — Bimestral</option>
+                                        <option value="M">M — Mensal</option>
+                                    </select>
+                                </label>
+                                <label className="block">Início da validade do PGCC ({'{'}iniValid{'}'}):{' '}
+                                    <input type="date" value={iniValidPgcc} onChange={e => setIniValidPgcc(e.target.value)} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 w-full" />
+                                </label>
+                                <label className="block">Plano de contas (.xlsx):{' '}
+                                    <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArqPlano(e.target.files?.[0] || null)} className="block w-full" />
+                                </label>
+                                <label className="block">Balancete analítico (.xlsx, opcional):{' '}
+                                    <input type="file" accept=".xlsx,.xls,.csv" onChange={e => setArqBalancete(e.target.files?.[0] || null)} className="block w-full" />
+                                </label>
+                                <label className="block">Competência do balancete ({'{'}perApur{'}'}, vazio = a do título):{' '}
+                                    <input type="month" value={perApur} onChange={e => setPerApur(e.target.value)} className="p-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 w-full" />
+                                </label>
+                                <label className="flex items-start gap-2 sm:col-span-2">
+                                    <input type="checkbox" checked={hipoteseCtaRef} onChange={e => setHipoteseCtaRef(e.target.checked)} className="mt-1" />
+                                    <span>
+                                        <strong>Hipótese</strong> para a conta referencial ({'{'}cCtaRef{'}'}, obrigatória em toda conta): usar o
+                                        <strong> 1º segmento do código</strong> (antes do primeiro ponto) quando a planilha não traz a coluna.
+                                        Sai carimbada como hipótese — o contador confere contra o plano referencial antes de qualquer transmissão.
+                                        Sem a coluna e sem a hipótese, o D-1011 não sai (e diz quantas contas faltam).
+                                    </span>
+                                </label>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={gerarPreviaMensais}
+                                    disabled={mensais === 'carregando' || !arqPlano}
+                                    title={!arqPlano ? 'Escolha a planilha do plano de contas primeiro' : 'Lê as planilhas, monta o XML do D-1011 (e do D-1101, se houver balancete) e confere contra o XSD'}
+                                    className="btn-press px-3 py-1 rounded-lg bg-slate-700 text-white text-xs font-bold disabled:opacity-40 whitespace-nowrap"
+                                >{mensais === 'carregando' ? 'Lendo e montando…' : '👁 Prévia do D-1011 + D-1101'}</button>
+                                {!arqPlano && <span className="text-slate-500">Falta: a planilha do plano de contas.</span>}
+                            </div>
+                            {mensais && mensais !== 'carregando' && (
+                                <div className="mt-2 space-y-2">
+                                    {mensais.error && <p className="text-red-700 dark:text-red-300">{mensais.error}</p>}
+                                    {mensais.empresa && (
+                                        <p className="text-slate-500">
+                                            {mensais.empresa.nome || fmtCnpj(mensais.empresa.cnpj)} · regime específico no cadastro: {mensais.empresa.regimeEspecifico || '—'}
+                                            {mensais.sugestaoPlanoCtaRef?.codigo ? <> · sugestão de plano referencial: <strong>{mensais.sugestaoPlanoCtaRef.codigo}</strong> ({mensais.sugestaoPlanoCtaRef.motivo})</> : null}
+                                        </p>
+                                    )}
+                                    {([['Plano de contas', mensais.insumo?.plano], ['Balancete', mensais.insumo?.balancete]] as const).map(([rotulo, lido]) => lido && (
+                                        <div key={rotulo} className={`rounded border-l-4 p-2 ${lido.ok ? 'border-slate-300 bg-slate-50 dark:bg-slate-800/40' : 'border-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+                                            <strong>{rotulo}</strong>{lido.resumo && ' — ' + Object.entries(lido.resumo).filter(([, v]) => v != null && typeof v !== 'object').map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+                                            {'porCodNat' in (lido.resumo || {}) && <span> · por codNat {JSON.stringify((lido.resumo as ResumoPlano).porCodNat)}</span>}
+                                            {!!lido.pendencias.length && <ul className="ml-4 list-disc text-red-700 dark:text-red-300">{lido.pendencias.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+                                            {!!lido.avisos.length && <ul className="ml-4 list-disc text-amber-700 dark:text-amber-300">{lido.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+                                            {!!lido.foraDoPgcc?.length && (
+                                                <details className="mt-1"><summary className="cursor-pointer text-slate-500">Contas fora do PGCC ({lido.foraDoPgcc.length}{lido.foraDoPgcc.length >= 40 ? ', mostrando as 40 primeiras' : ''})</summary>
+                                                    <ul className="ml-4 list-disc text-slate-500">{lido.foraDoPgcc.map((c, i) => <li key={i}><span className="font-mono">{c.codigo}</span> {c.nome} — {c.motivo}</li>)}</ul>
+                                                </details>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {([['D-1011 (PGCC)', mensais.d1011, 'D-1011'], ['D-1101 (Balancete)', mensais.d1101, 'D-1101']] as const).map(([rotulo, pv, cod]) => pv && (
+                                        <div key={cod} className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                                            <p className="font-bold text-slate-700 dark:text-slate-200">🧾 {rotulo}</p>
+                                            {!!pv.evento.pendencias.length && (
+                                                <div className="rounded border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-2 text-red-800 dark:text-red-300">
+                                                    <strong>O {cod} não pôde ser montado:</strong>
+                                                    <ul className="ml-4 list-disc">{pv.evento.pendencias.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                                </div>
+                                            )}
+                                            {pv.evento.ok && pv.evento.xml && (
+                                                <div>
+                                                    <p className={pv.conferenciaXsd?.ok ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}>
+                                                        {pv.conferenciaXsd?.ok
+                                                            ? <>✓ XML conferido contra <code>{pv.evento.resumo?.xsd}</code> — nenhum erro de schema.</>
+                                                            : <>✕ O XML NÃO passa no XSD <code>{pv.evento.resumo?.xsd}</code>:</>}
+                                                    </p>
+                                                    {!!pv.conferenciaXsd?.erros.length && <ul className="ml-4 list-disc text-red-700 dark:text-red-300">{pv.conferenciaXsd.erros.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+                                                    <p className="text-slate-500">
+                                                        Id <code>{pv.evento.id}</code> · {Object.entries(pv.evento.resumo || {}).filter(([k, v]) => !['evento', 'xsd', 'namespace', 'codTribs', 'condicionais'].includes(k) && v != null && typeof v !== 'object').map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+                                                    </p>
+                                                    {!!(pv.evento.resumo as any)?.condicionais?.length && (
+                                                        <p className="text-slate-600 dark:text-slate-300">Eventos condicionais acionados pelos codTribs: {(pv.evento.resumo as any).condicionais.map((e: any) => `${e.codigo} (${e.codTribs.join(', ')})`).join(' · ')}</p>
+                                                    )}
+                                                    <ul className="ml-4 list-disc text-amber-700 dark:text-amber-300">{pv.evento.avisos.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                        <button onClick={() => baixarTexto(`${cod}_${pv.evento.id}.xml`, pv.evento.xml!)} className="btn-press px-3 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-xs font-bold whitespace-nowrap">⬇ Baixar XML da prévia</button>
+                                                        <span className="text-slate-500">{Math.round(pv.evento.xml.length / 1024)} KB · sem assinatura</span>
+                                                    </div>
+                                                    <details className="mt-1">
+                                                        <summary className="cursor-pointer text-slate-500">Início do XML (2.000 caracteres)</summary>
+                                                        <pre className="mt-1 p-2 rounded bg-slate-100 dark:bg-slate-800 text-[10px] overflow-x-auto whitespace-pre-wrap break-all">{pv.evento.xml.slice(0, 2000)}{pv.evento.xml.length > 2000 ? '…' : ''}</pre>
+                                                    </details>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     </div>
 
                     <div>

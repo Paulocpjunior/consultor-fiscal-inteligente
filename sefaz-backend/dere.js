@@ -112,10 +112,12 @@ export const EVENTOS_DERE = Object.freeze([
     { codigo: 'D-1011', nome: 'Plano Geral de Contas Comentado (PGCC)', grupo: 'tabela', desde: '2026-10-01', xsd: 'evtPGCC-v1_0_3.xsd',
         nota: 'Obrigatório para todo contribuinte da DeRE — plano referencial COSIF/ANS/SUSEP/SPED/PREVIC ({planoCtaRef} '
             + '1-5; o 5 PREVIC entrou na 1.2.0), contas com {codTrib} da Tabela 11, até 150.000 contas (era 50.000 na '
-            + '1.1.0). Insumo CONTÁBIL: o plano de contas mora no Consultor Contábil.' },
+            + '1.1.0). Insumo CONTÁBIL: desde 27/09 o CFI monta a prévia a partir da PLANILHA do plano de contas '
+            + '(dere-evento-d1011.js); {cCtaRef} e {codTrib} vêm de coluna, nunca de dedução calada.' },
     { codigo: 'D-1101', nome: 'Balancete Mensal', grupo: 'mensal', mensalDesde: '10/2026', xsd: 'evtBalancete-v1_0_1.xsd',
         nota: 'Saldo inicial, movimentos, saldo final e {vApur} por conta analítica (até 90.000 na 1.2.0; era 10.000). '
-            + 'Insumo CONTÁBIL — não sai deste app. É o evento que o D-1199 exige (MS1146). A 1.2.0 rejeita '
+            + 'Insumo CONTÁBIL — desde 27/09 a prévia sai da PLANILHA do balancete analítico (dere-evento-d1101.js), com o '
+            + 'sinal lido pela natureza da RAIZ. É o evento que o D-1199 exige (MS1146). A 1.2.0 rejeita '
             + 'competência FUTURA (REJEITAR_PERAPUR_FUTURO) e período já FECHADO (PERAPUR_FECHADO).' },
     { codigo: 'D-1106', nome: 'Identificação de Aplicações Financeiras', grupo: 'mensal', mensalDesde: '10/2026', xsd: 'evtAplicResTec-v1_0_0.xsd',
         condicional: { codTribs: ['120130001', '120230001', '120330001', '111112701'],
