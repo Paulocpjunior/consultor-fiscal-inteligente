@@ -5,6 +5,66 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏦 "SEGUE ARQUIVO TESTE DO DERE PARA VALIDAÇÃO" — o plano de contas e o
+  balancete viraram D-1011 e D-1101 conferidos contra o XSD, e a PLANILHA disse
+  o que ninguém tinha escrito** (27/09, Paulo, zip com `Plano_de_contas_2026.xlsx`
+  e `Bal_analitico-mes-7-2026.xlsx` de uma operadora de plano de saúde).
+  📖 **MEDIDO ANTES DE ESCREVER UMA LINHA** (contagens, nunca valores — dado de
+  cliente não entra no repo nem no chat): 3.847 contas (3.297 analíticas · 550
+  sintéticas), hierarquia LIMPA com nível máx. 11 e o **pai = maior código que é
+  PREFIXO** (12111.9 → 12111.901 → 12111.9011 — "tira um dígito" devolve 3.222
+  órfãos falsos); balancete de 1.960 linhas, todas no plano, 2 casas, ≤ 9
+  inteiros. 🚨 **O SINAL DO SALDO É PELA NATUREZA DA RAIZ, não pelo tipo C/D da
+  conta**: 20 retificadoras ("(-) Depreciação acumulada", "(-) Glosas") são tipo
+  C no plano e saem NEGATIVAS — lendo pela raiz (1 e 4 devedoras · 2 e 3
+  credoras) a aritmética SF = SI ± D ∓ C fecha em **1.960 de 1.960**; pelo tipo,
+  20 falhas. Negativo = saldo INVERTIDO. E **148 de 150 contas de resultado
+  chegam a julho com saldo inicial ≠ 0** — o encerramento NÃO é mensal,
+  trimestral, semestral nem bimestral (CONFERIR_SALDO_INICIAL exigiria zero em
+  07); entre anual e quadrimestral quem afirma é o contador, e o app RECUSA a
+  frequência que o balancete desmente, dizendo as compatíveis.
+  ✂️ TRÊS DONOS PUROS: `dere-insumo-contabil.js` (lê as duas planilhas pelo NOME
+  das colunas, monta hierarquia/nível/codNat, sinal pela raiz), `dere-evento-
+  d1011.js` (PGCC na ordem do `evtPGCC-v1_0_3.xsd`) e `dere-evento-d1101.js`
+  (balancete na ordem do `evtBalancete-v1_0_1.xsd`); rota `POST
+  /api/admin/cadastro/dere-mensais-previa` (a planilha é lida no NAVEGADOR e só
+  as linhas viajam — o servidor não guarda) e bloco **📥** em ⚙️ Config Admin →
+  🏦 DeRE. Rodado sobre o arquivo REAL: D-1011 com 3.823 contas **passa no XSD**
+  (1,2 MB), D-1101 com 1.463 analíticas passa com frequência A/Q e é RECUSADO
+  com M/T/S/B — exatamente a validação que o arquivo de teste veio provar.
+  🚨 **O QUE A PLANILHA NÃO TRAZ E O APP NÃO INVENTA, dito com a contagem**:
+  (1) **{cCtaRef}** é OBRIGATÓRIO em toda conta e vem da **Tabela 32 — Plano de
+  Contas Padrão da ANS**, que o Anexo I declara *"referência EXTERNA"* (não está
+  no leiaute nem no repo); sem a coluna o D-1011 NÃO sai, e a única derivação é
+  **OPT-IN e CARIMBADA** ("1º segmento do código", hipótese de que o plano
+  interno desdobra o padrão ANS) — MS1077 recusa o que não existir na tabela;
+  (2) **{codTrib}** (Tabela 11, 665 códigos no repo) é obrigatório na analítica
+  — 3.294 sem ele; o PGCC é ACEITO com aviso (MS1103 não interrompe) mas os
+  condicionais D-1106/D-1121/D-2101 só se detectam por ele e o {vApur} sai
+  0,00; (3) {freqEncerr}, {planoCtaRef} e {iniValid} são AFIRMAÇÕES do
+  contribuinte (tela); {iniVig} por conta cai no início do PGCC, dito.
+  ⚠️ **COMPENSAÇÃO (19/29) E APURAÇÃO DO RESULTADO (6) FICAM FORA, contadas**:
+  o XSD só tem {codNat} 1-5 e o leiaute manda informar "as contas patrimoniais e
+  de resultado" — 24 contas, e as 24 saem também do balancete (conta fora do
+  D-1011 não pode estar no D-1101). Decisão NOMEADA para o contador, não código
+  de natureza inventado. PL (23 contas, codNat 3) se reconhece pelo NOME do
+  grupo ("PATRIMÔNIO LÍQUIDO / PATRIMÔNIO SOCIAL"); 5 nomes > 100 caracteres
+  são cortados e DITOS.
+  ⚠️ **{vApur} SÓ COM codTrib**: sem código não há base a apurar (0,00); com
+  ele, o movimento na natureza da conta (credora → créditos, devedora →
+  débitos), que é o que CONFERIR_VAPUR recalcula — estornos ({vAjuste*}) não
+  estão na planilha e ficam de fora, ditos.
+  📌 **REGRA QUE FICA: planilha de contabilidade se lê pelo NOME da coluna e a
+  convenção de SINAL se MEDE contra a aritmética do próprio arquivo antes de
+  virar régua** — a hipótese óbvia (tipo C/D do plano) errava em 20 linhas, e o
+  erro seria natSaldo trocado em retificadora, num evento que a Receita aceita.
+  🚩 **PENDÊNCIA DO PAULO/CONTADOR**: (a) coluna "Conta Referencial" no plano
+  exportado (ou confirmar a hipótese do 1º segmento contra o padrão ANS); (b)
+  coluna "Código de Tributação" (Tabela 11) nas 3.294 analíticas — é ela que
+  liga os condicionais e o {vApur}; (c) confirmar anual × quadrimestral; (d)
+  decidir compensação/apuração com a Receita. D-1106/D-1121/D-2101/D-1199 e a
+  transmissão continuam fora, ditos na tela.
+
 - **☎️ TEXTO FIXO COM DATA ENVELHECE SOZINHO, E A TRAVA QUE O PRENDE PRENDE O
   ERRO** (27/09, Paulo: *"sobre as ligações, temos que testar"*). O painel
   lateral da conversa dizia desde 25/08 *"Ligação ainda NÃO funciona nos dois
