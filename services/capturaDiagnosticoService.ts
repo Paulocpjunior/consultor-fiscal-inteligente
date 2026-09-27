@@ -25,6 +25,11 @@ export interface CronLog {
      * ou pela auto-cura por idade, pra não ficar "travado" eterno.
      */
     status?: string | null;
+    /** 🏷️ 26/09: o nome da rodada pelo fonte (drenagem, intra-dia, noturna, manual…). */
+    rotulo?: string | null;
+    resumo?: string | null;
+    puladasJanela?: number | null;
+    motivo?: string | null;
 }
 
 export interface CapturaStatus {
@@ -32,6 +37,12 @@ export interface CapturaStatus {
     endpointCron: string;
     schedulerEsperado: string;
     ultimoCron: CronLog | null | { erro: string };
+    /**
+     * 🏷️ 26/09 (só NF-e): a última rodada COMPLETA (carteira inteira), separada
+     * da última rodada de qualquer tipo — uma drenagem vazia não é "a captura".
+     * É ela que a saúde do trilho mede.
+     */
+    ultimaCapturaCompleta?: CronLog | null | { erro: string };
     state: {
         total: number;
         travadas: number | null;
@@ -51,7 +62,7 @@ export interface CapturaStatus {
     } | { erro: string };
     docsUltimos7d: number | null;
     /** Top motivos de falha da última execução (hoje só NFSe SP envia). */
-    topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number }> } | null;
+    topFalhas?: { executadoEm: string | null; top: Array<{ motivo: string; quantidade: number; acao?: string | null; codigo?: string | null }> } | null;
     /** Total histórico de docs desta fonte (hoje só NFSe Nacional envia) —
      *  separa "nunca capturou" (elegibilidade) de "capturava e parou" (quebra). */
     docsTotalHistorico?: number | null;
@@ -142,6 +153,11 @@ export interface CronLogItem extends CronLog {
     periodo?: string | null;
     prestadoresAutorizados?: number | null;
     errosResumo?: CronLogErroResumoItem[] | null;
+    /** 🚦 25/09: puladas pela janela de 1 h (não são falhas), resumo com a causa, motivo da recusa. */
+    puladasJanela?: number | null;
+    puladasResumo?: Array<{ cnpj?: string; nome?: string; motivo?: string }> | null;
+    resumo?: string | null;
+    motivo?: string | null;
 }
 
 export async function fetchCronLogs(colecao: CronLogColecao, limit = 20): Promise<CronLogItem[]> {

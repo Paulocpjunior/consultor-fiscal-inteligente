@@ -10,7 +10,7 @@
 import admin from 'firebase-admin';
 import { normalizarCompetencia } from './competencia.js';
 import { arquivarGuiaNoSharePoint, darBaixaDaObrigacao, resolverEmpresa } from './envio-imposto.js';
-import { oQueRefazer, patchDoRefazer, textoDoRefazer } from './refazer-rito-envio.js';
+import { oQueRefazer, patchDoRefazer, textoDoRefazer, patchDoArquivamentoDeclarado } from './refazer-rito-envio.js';
 
 export const COLECAO_ENVIOS = 'impostos_enviados';
 
@@ -123,4 +123,20 @@ export async function refazerRitoDoEnvio({ logId, quem = null, pdfBase64 = null 
         envio: { ...envio, ...(patch || {}) },
         texto: textoDoRefazer(resultado),
     };
+}
+
+/**
+ * 📁 Declara à mão o arquivamento de UM envio (ver `patchDoArquivamentoDeclarado`).
+ * @param {{logId: string, quem: string, comoFoi: string}} p
+ */
+export async function declararArquivamentoDoEnvio({ logId, quem, comoFoi }) {
+    const db = getDb();
+    const ref = db.collection(COLECAO_ENVIOS).doc(String(logId));
+    const snap = await ref.get();
+    if (!snap.exists) return { ok: false, erro: 'Envio não encontrado.' };
+    const envio = { id: snap.id, ...(snap.data() || {}) };
+    const r = patchDoArquivamentoDeclarado({ envio, quem, comoFoi, agoraIso: new Date().toISOString() });
+    if (!r.ok) return r;
+    await ref.set(r.patch, { merge: true });
+    return { ok: true, envio: { ...envio, ...r.patch } };
 }

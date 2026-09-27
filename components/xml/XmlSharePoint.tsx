@@ -25,6 +25,9 @@ interface SharePointLastSync {
     totalDup?: number;
     totalErros?: number;
     empresasComConfigIncompleta?: number;
+    /** 📏 Quantas pastas de Empresas a rodada leu, e em quantas páginas. */
+    pastasLidas?: number | null;
+    pastasPaginas?: number | null;
     erroFatal?: string | null;
     timestamp?: { _seconds: number };
     /** Resultado por empresa — carrega o MOTIVO dos erros (errosDetalhe/erro). */
@@ -71,6 +74,9 @@ const SharePointAutoSyncStatusLine: React.FC<{ lastSync: SharePointLastSync | nu
             {' · '}
             {lastSync.totalNovos ?? 0} novos · {lastSync.totalDup ?? 0} dup · {lastSync.totalErros ?? 0} erros
             {' · comp '}{lastSync.competencia || '—'}
+            {typeof lastSync.pastasLidas === 'number' && (
+                <>{' · '}<span title="Quantas pastas de Empresas a rodada leu no SharePoint — compare com o que existe lá">{lastSync.pastasLidas} pasta(s) lidas em Empresas{lastSync.pastasPaginas ? ` (${lastSync.pastasPaginas} pág.)` : ''}</span></>
+            )}
             {temErroFatal && (
                 <>
                     {' '}— <span className="text-red-700 dark:text-red-300 font-semibold">FALHOU: {lastSync.erroFatal}</span>

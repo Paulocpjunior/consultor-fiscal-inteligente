@@ -65,7 +65,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -126,6 +126,8 @@ jobs:
       - name: Typecheck + testes
         run: |
           npm run lint
+          npm run lint:strict
+          npm audit --prefix proxy-backend --omit=dev --audit-level=moderate
           npm run test:cadastro-contabil
           npm run test:ebef:api
           npx jest --ci
@@ -197,6 +199,8 @@ jobs:
               --region ${{ env.REGION }} \
               --update-env-vars=WHATSAPP_PHONE_NUMBER_ID=1167203206473367,WHATSAPP_TEMPLATE_GUIA=envio_guia_imposto \
               --update-secrets=WHATSAPP_CLOUD_TOKEN=whatsapp-cloud-token:latest \
+              --no-cpu-throttling \
+              --min-instances=1 \
               --no-traffic --tag candidate \
               --quiet; then
               exit 0

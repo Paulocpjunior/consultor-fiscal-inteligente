@@ -62,7 +62,14 @@ export const DETALHES_VIGIADOS = {
     // famílias (Guia da EFD-Contribuições 1.35 e Guia 3.2.3 do EFD ICMS/IPI —
     // os 23 primeiros campos são idênticos). É a MESMA classe do 0500: trava
     // que existe, roda e olha o lugar errado dá sensação de cobertura.
-    D100: { rotulo: 'conhecimentos de transporte (Contribuições)', campos: { 15: 'VL_DOC' } },
+    // 🚨 NUM_DOC (campo 09) — VAZIO em 100% dos D100 (18/09, EDUARDO GUERRA):
+    // a captura lia `nNF` e o CT-e traz `nCT`. A contagem fechava, o PVA
+    // importava e quebrava o relatório de entradas. Número vazio em toda linha
+    // não tem caso legítimo — é leitura que não achou o campo.
+    D100: { rotulo: 'conhecimentos de transporte', campos: { 9: 'NUM_DOC', 15: 'VL_DOC' } },
+    // C100 pelo mesmo motivo (campo 08): a mesma tag lida do jeito errado num
+    // trilho novo deixaria a nota sem número — e a cancelada MANTÉM o NUM_DOC.
+    C100: { rotulo: 'documentos de mercadoria', campos: { 8: 'NUM_DOC' } },
     D190: { rotulo: 'resumo de transporte', campos: { 5: 'VL_OPR' } },
     // F600 — retenção na fonte (Contribuições, 19/08 · caso HS PROJETOS).
     // Posições provadas contra arquivo aceito do E-Fiscal:

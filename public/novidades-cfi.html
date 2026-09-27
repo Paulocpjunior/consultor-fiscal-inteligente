@@ -68,7 +68,7 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 27/09/2026 · leitura de 22 minutos</p>
+            <p>Departamento Fiscal · atualizado em 27/09/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
@@ -77,7 +77,7 @@
 <section>
     <h2>🆕 O que mudou agora (27/09) — leia esta parte primeiro</h2>
 
-    <h3>1. 🏦 <strong>DeRE: o plano de contas e o balancete da contabilidade viram D-1011 e D-1101</strong>, conferidos contra o XSD</h3>
+    <h3>🏦 <strong>DeRE: o plano de contas e o balancete da contabilidade viram D-1011 e D-1101</strong>, conferidos contra o XSD</h3>
     <div class="onde">📍 <strong>Onde:</strong> <strong>⚙️ Config Admin → 🏦 DeRE → bloco 📥 Prévia do D-1011 e do D-1101</strong>.
     Suba a planilha do <strong>plano de contas</strong> (Conta Contábil · Descrição · Conta de Lançamento S/N · Tipo C/D) e, se
     quiser, o <strong>balancete analítico</strong> do mês (Código · Conta · Saldo Inicial · Débitos · Créditos · Saldo Final), escolha
@@ -90,6 +90,656 @@
     inicial diferente de zero, o app recusa mensal/trimestral e diz quais frequências o arquivo admite. Contas de
     <strong>compensação</strong> e de <strong>apuração do resultado</strong> ficam fora dos dois eventos, contadas — o leiaute não tem
     código de natureza para elas. Nada é transmitido.</div>
+
+    <h3>☎️ <strong>SP Connect: a ligação de WhatsApp do cliente para a SP FUNCIONA — o painel da conversa dizia o contrário havia um mês</strong></h3>
+    <p>Desde 25/08 o painel lateral da conversa afirmava "Ligação ainda NÃO funciona nos dois sentidos, chamado aberto
+    com a Meta". Estava errado: a ligação foi provada em 23/09, caindo na URA do HitPhone com áudio. Os testes de agosto
+    tinham caído fora do horário em que a Meta libera chamada (segunda a sexta, 08:00–12:00 e 13:00–17:30). Fora desse
+    horário o botão ☎️ nem aparece no WhatsApp do cliente, e isso é regra da Meta, não defeito. O painel agora diz que a
+    entrada funciona e em que horário. A ligação de saída (SP para o cliente) continua saindo pelo ramal 221 do HitPhone,
+    porque a Meta recusa chamada por API em número SIP.</p>
+    <p><strong>O que fazer:</strong> quem quiser testar liga de um celular pelo ☎️ da conversa da SP, dentro do horário, e
+    o telefone da URA toca. Se não tocar dentro do horário, avise o Paulo com a hora exata.</p>
+    <p><strong>Onde:</strong> SP Connect → conversa com "Ligações AUTORIZADAS" → painel da direita; ⓘ Sobre → revisão de 27/09.</p>
+
+    <h3>🤖 <strong>SP Connect: bot e IA de triagem confirmados LIGADOS para todos os clientes</strong></h3>
+    <p>Conferido direto no banco em 27/09: o bot responde a toda a carteira e a IA lê o texto livre. Quem escreve uma
+    frase ("preciso da segunda via do DAS") é encaminhado à fila certa quando a IA tem certeza, com a nota interna
+    "🤖 Encaminhado pela IA" na conversa. Na dúvida, o cliente recebe o menu de sempre. Não há nada a ligar.</p>
+    <p><strong>Onde:</strong> SP Connect → ⚙️ → 🤖 Bot e mensagens.</p>
+</section>
+
+<section>
+    <h2>Antes disso (26/09)</h2>
+
+    <h3>🧊 <strong>Auditoria, onda 2: nenhuma tela desenha a lista inteira, nenhuma leitura do navegador é sem teto, e a data de hoje é a de Brasília</strong></h3>
+    <p>Dez telas desenhavam a lista completa de uma vez (Tarefas, Simples, Lucro, Status de Captura, Usuários, NFS-e
+    Nacional, Empresas Monitoradas, Recuperação Tributária, Retenções NFS-e SP, DIPAM e DIFAL). Agora mostram 200
+    linhas por vez com "Mostrar mais (N restantes)" e o rodapé "mostrando X de N". Exportações e totais continuam
+    sobre a lista completa. Todas as 24 leituras que o navegador faz direto no banco passaram a ter teto explícito, e
+    as que alimentam telas dizem quando cortaram. O SP Connect, o Diagnóstico de Captura e a faixa de vencimentos
+    param de consultar o servidor quando a aba não está visível. No servidor, "hoje" passou a ser o dia em Brasília:
+    das 21h à meia-noite o horário universal já era amanhã, e uma guia que vence hoje aparecia vencida. O servidor
+    também sobe em Node 22.</p>
+    <p><strong>Onde:</strong> as dez telas citadas; Central de DAS, DARF, DCTFWeb e Vencimentos (cálculo de vencido).</p>
+
+    <h3>💓 <strong>Auditoria, onda 1B: cinco crons que rodavam mudos ganham registro e entram no vigia; o servidor mantém a CPU depois de responder</strong></h3>
+    <p>Saída NFC-e (SAE), saída NF-e via autXML, arquivo do cofre no SharePoint, resumo diário da captura e alertas de
+    documentos no SharePoint rodavam sem deixar registro: se morressem no meio, ninguém via. Agora cada um grava
+    "iniciado" antes de trabalhar e "sucesso" ou "falha" no fim, aparece em Erros e Logs e no vigia de saúde dos crons,
+    e o agendador recebe resposta na hora (o código 4 de "tempo esgotado" do agendador some). O deploy passa a manter
+    a CPU alocada depois da resposta, então o trabalho em segundo plano não é congelado.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Relatórios e Logs → Erros e Logs; Diagnóstico e Saúde → crons.</p>
+
+    <h3>🔒 <strong>Auditoria, onda 1: limite de requisições por usuário, telas de saúde mais leves e histórico de envios na ordem certa</strong></h3>
+    <p>Da auditoria de 26/09 entraram os cinco itens de maior risco e menor custo. O limite de requisições passa a
+    contar por usuário logado (antes um token inventado ganhava um balde novo a cada chamada). As telas de Saúde
+    consolidada e de Diagnóstico dos documentos leem só os campos que contam, em vez do documento inteiro do acervo.
+    O histórico de envios de guias mostra os mais recentes de fato (antes vinham 200 quaisquer). O painel de envios e
+    a Rotina do Mês leem só a competência pedida, e o painel avisa se bateu no teto. A tabela NBS exige login.</p>
+    <p><strong>Onde:</strong> Diagnóstico e Saúde; Vencimentos e Obrigações → Envios; Rotina do Mês.</p>
+
+    <h3>🏷️ <strong>Captura NF-e: o banner e o Diagnóstico dizem QUAL rodada foi — e a última captura completa sai separada da drenagem</strong></h3>
+    <p>Ontem à noite o banner mostrou "Captura SEFAZ concluída às 19:00 — 0 novos XMLs em 0 empresa(s)" e o card da NF-e
+    no Diagnóstico repetiu "0 / 0, 0 novos". Lia-se "não houve captura". Era a drenagem de pendências das 19:00, que só
+    trata empresas com fila na SEFAZ e não achou nenhuma; as capturas de verdade tinham trazido 444 e 344 documentos
+    horas antes. Os dois liam o último registro do log, fosse ele o que fosse. Agora cada rodada diz o que é (captura
+    noturna, intra-dia, manual, retomada, drenagem, dirigida), a drenagem sem alvo diz "nenhuma empresa com fila", e o
+    card da NF-e mostra a última captura completa em primeiro lugar, com a última rodada de qualquer tipo dita ao lado.
+    A saúde do trilho passa a medir a captura completa.</p>
+    <p><strong>Onde:</strong> banner da captura; Central de XMLs → Captura → Diagnóstico de Captura, card NF-e.</p>
+
+    <h2>Antes disso (25/09)</h2>
+
+    <h3>🧱 <strong>EFD Contribuições: o PVA recusava com "Organização hierárquica dos blocos/registros fora dos padrões" (123 erros) — o registro 0500 estava no lugar errado</strong></h3>
+    <p>Na ELS 08/2026 o PVA devolveu 127 erros, 123 deles de hierarquia, um por participante, unidade e item do bloco 0.
+    O registro 0500 (plano de contas, gerado quando a empresa tem a conta da receita financeira cadastrada) saía logo
+    depois do 0140, antes dos 0150/0190/0200, e isso fechava a subárvore do estabelecimento: o PVA passava a esperar o
+    0600 e recusava tudo o que vinha depois. Agora o 0500 sai no lugar do leiaute, depois dos itens e antes do 0990.
+    Gere o arquivo de novo e valide.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → SPED Contribuições → gerar arquivo.</p>
+
+    <h3>🧊 <strong>NFS-e SP: a lista não trava mais o navegador — período do mês por padrão, 200 linhas por vez e rodapé que diz quando pode haver mais</strong></h3>
+    <p>Ao consultar as notas de serviço com CNPJ, direção e período, a tela demorava e o navegador mostrava "Esta página
+    não está respondendo". O rodapé dizia "de 20000 carregadas": a tela pedia 5.000 notas, mas a leitura ignorava o
+    limite e descia até 20.000 documentos inteiros, e depois desenhava as 20.000 linhas de uma vez. Agora a primeira
+    carga é do mês corrente, o período entra na própria consulta quando há CNPJ, o teto de 5.000 é respeitado, a
+    tabela mostra 200 linhas por vez com "Mostrar mais", e o rodapé diz "mostrando X de Y" e avisa quando o teto foi
+    atingido, mandando estreitar o período. Com CNPJ informado, erro de leitura vira mensagem, nunca a carga do acervo
+    inteiro.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Captura → NFS-e SP capturadas.</p>
+
+    <h3>🚦 <strong>Captura NF-e: rodada completa dentro de 1 hora da anterior é recusada — e o aviso diz a causa</strong></h3>
+    <p>Hoje o aviso "Captura SEFAZ 14:19: 0 novos XMLs, 147 falha(s)" apareceu depois de uma sequência que o próprio
+    app produziu: um deploy interrompeu a captura, a retomada automática refez a carteira inteira e, 42 segundos depois
+    do fim, outra rodada completa bateu na trava de 1 hora por CNPJ. Nenhuma nota se perdeu, mas ninguém tinha como
+    saber. Três travas: (1) "Forçar captura agora" recusa dentro de 1 hora da última rodada completa e diz quanto falta;
+    (2) a retomada pós-deploy só refaz rodada agendada, e a empresa já consultada sai como "pulada pela janela", não como
+    falha; (3) toda rodada grava os motivos, inclusive a manual, e o aviso e o banner mostram a causa dominante
+    (ex.: "28 falhas — 20× SEM_CERT"). Em Erros e Logs a coluna Origem passa a mostrar quem disparou.</p>
+    <p><strong>Onde:</strong> banner e aviso da captura; Central de XMLs → Relatórios e Logs → Erros e Logs; Captura Automática → Forçar captura agora.</p>
+
+    <h3>📤 <strong>Central de DAS: "Já enviei esta guia por fora" — um a um ou em lote, sem inventar pagamento</strong></h3>
+    <p>A Central de DAS tem dois eixos que a leitura misturava: o <strong>Pagamento</strong> (pendente → vencido → pago, e
+    "pago" só entra quando alguém marca) e o <strong>Envio</strong> (a guia chegou ao cliente pelo rito). Guia mandada
+    pelo WhatsApp do escritório ou por outra caixa ficava "não enviada" para sempre, e a etapa 5 da Rotina daquela
+    competência ficava âmbar sobre trabalho já feito. Agora você declara o envio: escolhe o meio, a data em que a guia
+    saiu e escreve como chegou ao cliente, com o seu nome. É a mesma régua da cópia do SharePoint. Isso preenche a
+    coluna Envio (📤 Declarado), entra no histórico de envios, fecha a etapa 5 da Rotina da competência e tira a guia
+    do "não enviadas". O app <strong>não envia nada</strong>, <strong>não marca pagamento</strong> e <strong>nunca
+    sobrepõe</strong> um envio já registrado (essa guia volta como "pulada", com o motivo).</p>
+    <p><strong>Onde:</strong> Central de DAS → marque as guias (há o filtro "Não enviadas") → "📤 Já enviei por fora (N)";
+    ou abra a guia e use "📤 Já enviei esta guia por fora". Colaborador só declara guia de empresa da própria carteira.</p>
+
+    <h3>🧾 <strong>EFD Contribuições: CST padrão de PIS/COFINS na saída, como o cadastro do SAGE — 49 para as demais saídas</strong></h3>
+    <p>O CST do PIS/COFINS vinha só do XML e, quando a nota não trazia, tudo caía em 01 (tributada), inclusive remessa,
+    devolução e bonificação. Agora cada empresa cadastra o CST por tipo de saída: venda (ex.: 01 ou 06), exportação
+    (sugestão 08) e demais saídas (sugestão 49). O tipo vem da descrição oficial do CFOP. O cadastro entra onde o XML não
+    traz CST; o que o emissor declarou fica, a menos que você ligue "sobrepor", e aí o arquivo diz quantos itens mudaram.
+    Sem cadastro nada muda, e o aviso do arquivo conta o que caiu no 01, por tipo e CFOP.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → SPED Contribuições → bloco 3, "CST padrão de PIS/COFINS na saída". Grava junto com a natureza da receita.</p>
+
+    <h3>📖 <strong>ADN (NFS-e nacional): o E999 e as outras recusas agora saem traduzidas, com a ação e a reincidência</strong></h3>
+    <p>No Diagnóstico de Captura, o card do ADN mostrava o JSON cru do provedor para cada CNPJ que falhava ("E999 — Erro não
+    catalogado"). Agora o app cataloga o código: diz de quem é a falha (do CNPJ, não do serviço nem do certificado), o que
+    conferir (município aderente ao ADN e habilitação da empresa no ambiente nacional) e há quantas execuções seguidas o
+    erro se repete. CNPJs com a mesma causa aparecem numa linha só. Código que o app ainda não conhece sai dito como
+    desconhecido, com o código e a descrição do ADN.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Captura → Diagnóstico → card "NFSe Nacional ADN" → "Principais motivos de falha".</p>
+
+    <h3>📬 <strong>Quantos clientes já nos mandam XML — por trilho, com CSV</strong></h3>
+    <p>O painel "✅ O cliente fez certo?" ganhou o bloco <strong>"Quem já nos envia XML — por trilho"</strong>: quantos
+    clientes têm o nosso CNPJ no autXML da nota (a SEFAZ entrega ao escritório), quantos mandam pelo cofre de e-mail
+    (xml@) e quantos usam os dois. O botão <strong>⬇️ CSV</strong> baixa a lista completa (cliente, CNPJ, situação, trilho,
+    data e chave da prova) para abrir no Excel. O número sai da apuração, não de cadastro.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Captura → Cobertura de Saída → "✅ O cliente fez certo?" → Apurar aptidão.</p>
+
+    <h3>🏢 <strong>ECD e ECF saem do Fiscal — são do Contábil, como FGTS e INSS são do DP</strong></h3>
+    <p>O catálogo do CFI não gera mais tarefa de ECD nem de ECF, o calendário não as lista e a etapa 4 da Rotina do Mês
+    não as cobra: quem entrega a escrituração contábil é o departamento Contábil (pelo CCI). As tarefas já geradas
+    aparecem contadas na Rotina como "de outro departamento", com quem entrega nomeado.</p>
+    <p><strong>Onde:</strong> Vencimentos e Obrigações → Tarefas → botão <strong>"🏢 Cancelar tarefas de outro departamento
+    (DP: FGTS/INSS · Contábil: ECD/ECF)"</strong> cancela em lote as automáticas ainda abertas (sem competência = todas).
+    Concluídas, canceladas e manuais não mudam.</p>
+
+    <h3>🧾 <strong>EFD Contribuições: o PVA recusava com "Deverá existir um registro M400/M800" — agora o app gera, com a natureza da receita cadastrada</strong></h3>
+    <p>Caso da EDUARDO GUERRA HORTIFRUTI 08/2026: a empresa vende com CST 06 (alíquota zero) e o arquivo saía sem o
+    M400/M410 (PIS) e o M800/M810 (COFINS), que resumem essa receita por natureza. O PVA apontava 2 erros e o mês não fechava.
+    O app passa a somar a receita de saída de cada CST sem ônus (04, 06, 07, 08, 09) e a emitir os quatro registros, iguais
+    ao arquivo aceito da própria empresa em 07/2026.</p>
+    <p><strong>O que você precisa fazer uma vez por empresa:</strong> o código da natureza da receita vem das tabelas da Receita
+    (4.3.13 para CST 06, 4.3.15 para CST 08 etc.) e depende do produto — o app não deduz. Em
+    <strong>SPED Fiscal → SPED Contribuições → "3. Natureza da receita sem ônus (M410/M810)"</strong>, preencha o código
+    do CST que a empresa usa e grave. Sem cadastro o registro não sai e o aviso do arquivo diz o valor, o CST e a tabela.
+    Para hortifrúti o código já provado em arquivo aceito aparece como sugestão (116); ele nunca entra sozinho.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → aba SPED Contribuições, bloco 3; depois gere o arquivo de novo e valide no PVA.</p>
+</section>
+
+<section>
+    <h2>Antes disso (24/09)</h2>
+
+    <h3>🖼️ <strong>O logo do e-mail saía gigante em alguns leitores de e-mail</strong></h3>
+    <p>O e-mail de guia pedia o logo em 52 px, mas leitores como o Outlook para Mac ignoram esse pedido e mostram a
+    imagem no tamanho original — um logo do tamanho da tela no topo da mensagem. Agora a própria imagem é pequena e o
+    tamanho vai fixado de três jeitos. Nada muda no que você faz: o e-mail de guia sai igual, só com o cabeçalho certo.</p>
+
+    <h3>🛡️ <strong>Vigia da credencial do e-mail: se a Microsoft recusar, a Rotina do Mês avisa todo mundo</strong></h3>
+    <p>O e-mail de guia ficou dias sem sair e ninguém soube, porque o próprio alerta de saúde vai por e-mail. Agora o
+    app sonda a credencial todo dia, antes de qualquer alerta, e a Rotina do Mês mostra uma faixa vermelha para todos
+    enquanto a recusa durar, dizendo desde quando e onde corrigir. Se o vigia parar de rodar, a faixa fica amarela:
+    silêncio não é saúde.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês, no topo. Admin pode sondar na hora em Diagnóstico → Configurações Operacionais.</div>
+
+    <h3>📎 <strong>SharePoint: a rodada diz quantas pastas leu — para "N sem pasta" ter com o que se comparar</strong></h3>
+    <p>O card Conexão SharePoint passa a mostrar "N pasta(s) lidas em Empresas (M pág.)", e o motivo de cada empresa
+    sem pasta diz "entre as N pastas lidas". Se N bate com o que existe no SharePoint, a pasta daquela empresa não
+    começa pelo código (ou não existe): confira em "O que existe nesta biblioteca?" antes de criar qualquer pasta.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de Documentos Fiscais → Integrações → Conexão SharePoint.</div>
+
+    <h3>📧 <strong>"Falha no envio: a Microsoft recusou a credencial" — a mensagem agora aponta o segredo certo</strong></h3>
+    <p>O e-mail da guia usa o app "Notificacoes" da Microsoft, e o segredo dele mora em
+    <strong>graph-notificacoes-secret</strong>, não no graph-client-secret (que é do proxy do SharePoint). A mensagem
+    de erro mandava para o lugar errado. Agora ela nomeia o segredo certo e os dois passos que fazem a versão nova
+    valer (revisão nova + tráfego). Enquanto não for resolvido, "Abrir no Outlook Web" continua enviando pela sua caixa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> DCTFWeb / Envios → "Enviar pelo sistema" → texto do erro.</div>
+
+    <h3>🧾 <strong>Resumo completado pela importação manual deixa de pedir ciência</strong></h3>
+    <p>Quando você importava o XML completo por cima de um resumo da SEFAZ, a Rotina continuava dizendo "resumo,
+    manifeste a ciência" — o rótulo velho do resumo sobrevivia à importação. Agora a importação carimba que
+    completou, e a Rotina olha o fato (a nota tem itens e valor) antes do rótulo. As notas já completadas antes
+    desta correção também passam a ser lidas como completas.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → etapa 2. Se a nota continuar como resumo, ela é
+    resumo mesmo: manifeste a ciência e aguarde a captura trazer a completa (cron das 02h) ou importe o XML.</div>
+
+    <h3>🔎 <strong>A etapa 2 da Rotina agora diz QUAL nota está travando — com a chave</strong></h3>
+    <p>"1 nota sem valor/itens (resumo da SEFAZ)" mandava manifestar ciência sem dizer qual nota era, e ninguém
+    achava na movimentação. Agora o card da Rotina e o bloco do fim de mês listam cada nota: número, emitente, data
+    e a <strong>chave de acesso</strong>. Cole a chave na busca da Central de XMLs; o selo "Resumo" marca a nota
+    que ainda não tem o XML completo. Manifeste a ciência ali (ou importe o XML do cliente) e a etapa fecha.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → card da empresa → "Próximo passo · 2. Validar as notas".</div>
+
+    <h3>📋 <strong>Janela de 24h fechada: mande o template SEM digitar o número de novo</strong></h3>
+    <p>Quando passam 24h sem o cliente escrever, a Meta só deixa iniciar por <strong>template aprovado</strong>.
+    Até agora o aviso no rodapé da conversa mandava você sair dali e usar outra tela — onde era preciso
+    <strong>digitar o número outra vez</strong>, de um cliente que já estava aberto na sua frente. Agora o próprio
+    aviso traz o botão <strong>"Enviar template para (nome) ➤"</strong>: ele abre a janela de template já preenchida
+    com o número, o nome e a <strong>fila daquela conversa</strong>.</p>
+    <div class="alerta">⚠️ <strong>Por que isso importa:</strong> redigitar um número é onde nasce o dígito trocado —
+    e um dígito trocado manda a mensagem do cliente para um estranho. O achado é de um colaborador, no atendimento
+    do dia.</div>
+    <div class="onde">📍 <strong>Onde:</strong> SP Connect → abra a conversa → se a janela estiver fechada, o botão
+    aparece na faixa amarela embaixo, no lugar onde você escreveria.</div>
+
+    <h3>📋 <strong>Depois de mandar o template: o balão mostra o texto que o cliente recebeu, e a tela avisa
+    que a janela continua fechada</strong></h3>
+    <p>No primeiro uso do botão, o balão mostrava só o nome do template (<em>"iniciarconversa:"</em>) e nada
+    depois — parecia que a mensagem não tinha saído, e ela tinha. Agora o balão traz o <strong>texto completo</strong>
+    que foi para o cliente. E logo abaixo do botão aparece <strong>"✓ Template enviado às HH:MM"</strong> com o
+    aviso: <strong>a janela de 24h só abre quando o cliente responder</strong> — até lá, só template.</p>
+    <div class="alerta">⚠️ <strong>Não clique de novo se a caixa de escrever continuar travada.</strong> Isso é a regra
+    da Meta, não falha: o cliente já recebeu. Um segundo clique manda o mesmo template outra vez.</div>
+    <div class="onde">📍 <strong>Onde:</strong> na mesma faixa amarela, logo abaixo do botão de enviar template.</div>
+
+    <h3>🔔 <strong>SP Connect: a aba "Avisos" — as quatro formas de ser avisado, num lugar só, com botão de testar tudo</strong></h3>
+    <p>Mensagem nova avisa por <strong>quatro portas</strong>: som, pop-up do navegador, celular (app fechado) e o sino do
+    Teams. Cada uma tem um dono diferente, e até hoje não havia uma tela que mostrasse as quatro juntas — por isso
+    "não estamos recebendo" ficava sem resposta. Agora a ⚙️ do SP Connect abre com a aba <strong>🔔 Avisos</strong>:
+    o estado de cada porta <strong>para você</strong>, o botão que liga cada uma, as suas preferências (tudo nasce
+    ligado; o 24h nasce desligado), e o <strong>🧪 Testar TUDO agora</strong>, que dispara as quatro no mesmo clique e
+    devolve o resultado porta a porta.</p>
+    <div class="alerta">⚠️ <strong>Dentro do Teams só funcionam o som e o sino do Teams.</strong> O Teams não deixa a página
+    mostrar pop-up nem registrar o celular. Para ligar essas duas, abra o SP Connect no navegador (a aba mostra o
+    endereço) e instale como app pelo ícone da barra de endereço — aí avisa com tudo fechado.</div>
+    <p>E a aba responde a pergunta que faltava: <strong>"se chegasse mensagem AGORA, você receberia? Se não, por
+    quê?"</strong> — lida da mesma regra que o servidor usa de verdade (fila, horário, Instagram restrito,
+    preferência). Abaixo, o <strong>último aviso real</strong>: quem recebeu, quem não recebeu e o motivo de cada um.</p>
+    <div class="onde">📍 <strong>Onde:</strong> SP Connect → ⚙️ → primeira aba, <strong>🔔 Avisos</strong>.</div>
+</section>
+
+<section>
+    <h2>Antes disso (23/09)</h2>
+
+    <h3>✅ <strong>SP Connect: atendimento encerrado SAI da sua caixa</strong></h3>
+    <p>Até hoje a conversa encerrada continuava na lista com o selo <strong>✅ resolvida</strong> e ia empilhando.
+    Agora ela sai da caixa assim que você encerra. Nada foi apagado: as encerradas passam a viver numa aba
+    própria, e o rodapé da lista diz quantas saíram.</p>
+    <div class="alerta">⚠️ <strong>Se o cliente escrever de novo, a conversa VOLTA para a caixa</strong> — como
+    atendimento novo, sem dono e na Recepção, para a triagem rodar outra vez. Isso já valia para mensagem de
+    WhatsApp e passou a valer também para <strong>DM do Instagram</strong> e <strong>ligação perdida</strong>,
+    que antes somavam "não lida" e deixavam a conversa marcada como resolvida.</div>
+    <div class="onde">📍 <strong>Onde:</strong> SP Connect → chips acima da lista de conversas. A aba
+    <strong>✅ Encerrados</strong> aparece para <strong>admin e gestor</strong> — quem pode encerrar um
+    atendimento consegue ver o que encerrou.</div>
+
+    <h3>🔒 <strong>"Dar fim de mês" mostra o carimbo na hora — sem precisar clicar duas vezes</strong></h3>
+    <p>O fechamento já gravava no primeiro clique, mas o card só mudava quando a tela inteira terminasse de
+    recarregar, e parecia que nada tinha acontecido. Agora o card vira "🔒 Mês fechado" assim que o backend
+    responde. Se alguém clicar de novo numa competência já fechada, o card mostra o carimbo (quem fechou e quando)
+    em vez de um erro. O eSocial também saiu do calendário do Fiscal: é do DP.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → card da empresa → Dar fim de mês.</div>
+
+    <h3>🧾 <strong>Nota importada à mão não vira mais "resumo da SEFAZ, manifeste a ciência"</strong></h3>
+    <p>A NFS-e (e a NF-e) importada pelo navegador entrava na etapa 2 da Rotina como "sem valor/itens, aguardando a
+    completa", com a ação de manifestar ciência — sobre uma nota inteira, com valor. A leitura do valor olhava um
+    campo que esse import não grava. Agora a etapa lê o valor pelo mesmo dono que o resto do app, o import passa a
+    gravar o campo, e NFS-e sem valor legível recebe a mensagem certa (confira a nota e reimporte o XML completo),
+    porque NFS-e não tem "resumo da SEFAZ".</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → etapa 2 (Validar as notas). Se ainda aparecer, recarregue a página.</div>
+
+    <h3>📭 <strong>Fim de mês de empresa SEM MOVIMENTO: declare, com nome e data, e o mês fecha</strong></h3>
+    <p>Empresa que não emitiu nem recebeu nota no mês ficava com as etapas 1 (Capturar) e 2 (Validar) vermelhas para
+    sempre, e o fim de mês trancado. O app não fecha isso sozinho de propósito: "zero nota" não é "sem movimento" —
+    ele não tem como saber se não houve emissão ou se a captura falhou. Quem sabe é você. No bloco de fim de mês,
+    quando a etapa 1 trava com zero documento, aparece <strong>📭 Esta empresa não teve movimento no mês —
+    declarar</strong>: diga como confirmou (cliente, portal), com a data. As etapas 1 e 2 fecham como "não se
+    aplica", com o seu nome no resumo, e o mês pode fechar. Se chegar documento depois, a declaração cai sozinha
+    e a etapa volta a cobrar, dizendo o que aconteceu. Com nota capturada o botão não aparece, e a rota recusa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Rotina do Mês → card da empresa → bloco "Fim de mês bloqueado" → botão 📭.</div>
+
+    <h2>Antes disso (22/09)</h2>
+
+    <h3>📅 <strong>A DCTFWeb vence no ÚLTIMO DIA ÚTIL do mês seguinte — o app dizia dia 15 e acusava
+    "atrasada" antes da hora</strong></h3>
+    <p>O catálogo de prazos do CFI estava com a regra antiga (dia 15). Desde a competência 01/2025 a DCTFWeb vence
+    no último dia útil do mês seguinte (IN RFB 2.237/2024). Por isso a Rotina do Mês mostrava "DCTFWEB — ATRASADA"
+    no dia 21 para a competência 08/2026, que só vence em 30/09. O catálogo foi corrigido.</p>
+    <div class="alerta">⚠️ <strong>As tarefas de DCTFWeb já criadas continuam com 15/09</strong> até alguém
+    reaplicar a data — veja o item seguinte. Tarefa concluída não muda.</div>
+
+    <h3>🏦 <strong>Admin: agora dá para mudar a data de vencimento de qualquer obrigação — federal, estadual ou
+    municipal — sem esperar atualização do sistema</strong></h3>
+    <p>O Calendário de prazos ganhou a esfera <strong>Federal</strong> (vale para todos os clientes), a opção
+    <strong>"último dia útil do mês"</strong> no lugar do dia fixo e a caixa <strong>"reaplicar nas tarefas
+    abertas"</strong>, que recalcula o vencimento das tarefas ainda não concluídas daquela obrigação, dentro da
+    vigência informada. O cadastro vence o catálogo do app daquela competência em diante; competência anterior
+    continua com a regra que valia nela.</p>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → <strong>Calendário de prazos</strong> →
+    <strong>🏦 Federal</strong>. Para corrigir as tarefas de DCTFWeb já criadas: obrigação <strong>DCTFWEB</strong>,
+    marcar <strong>último dia útil do mês</strong>, meses após a competência = 1, base legal
+    <strong>IN RFB 2.237/2024</strong>, vigência de <strong>2025-01-01</strong>, deixar "reaplicar nas tarefas abertas"
+    marcado e clicar em Cadastrar. O aviso diz quantas tarefas receberam a data.</div>
+
+    <h3>📅 <strong>Admin: "Reaplicar prazos do catálogo" nas tarefas abertas — a tarefa nasce com o prazo
+    do dia e não muda sozinha quando o catálogo muda</strong></h3>
+    <p>Na AFFITTARE 08/2026 o card continuava com "3 atrasada(s)" depois da correção da DCTFWeb: a tarefa guarda
+    o vencimento do dia em que foi criada. O botão recalcula o prazo das tarefas <strong>abertas e automáticas</strong>
+    da competência pelo catálogo atual e pelos prazos cadastrados em Config Admin. Concluídas, canceladas e
+    manuais não mudam. O resultado diz quantas mudaram e de quando para quando.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Vencimentos e Obrigações → <strong>Tarefas</strong> → escolha a
+    competência no filtro → <strong>📅 Reaplicar prazos do catálogo</strong> (só admin). Faça isso depois de
+    corrigir um prazo no catálogo ou no Calendário de prazos.</div>
+
+    <h3>🗂️ <strong>Rotina do Mês: o painel "obrigações do catálogo não confirmadas" agora diz o que vira
+    tarefa e o que não vira</strong></h3>
+    <p>A lista é do catálogo inteiro, não do cliente. Metade dela vira tarefa normalmente (só o prazo pede
+    conferência: SPED Fiscal, EFD-Contribuições) e metade não vira (depende de folha, evento ou cadastro: INSS
+    Patronal, DeRE, DCTFWeb de imune/isenta). Cada linha passou a dizer qual é o caso e o que falta conferir.</p>
+
+    <h3>👥 <strong>FGTS e INSS patronal saíram do catálogo do Fiscal — são do DP</strong></h3>
+    <p>O cron não gera mais tarefa de FGTS nem de INSS patronal (CPP) para nenhum regime, o calendário não as
+    lista, e a etapa 4 da Rotina do Mês deixa de cobrá-las: ela mostra "N tarefa(s) do DP fora da conta" em vez de
+    "Falta: FGTS, INSS_CPP". As tarefas já geradas não somem sozinhas: o admin cancela em lote com o botão
+    <strong>👥 Cancelar tarefas do DP (FGTS/INSS)</strong> em Tarefas (da competência do filtro, ou de todas se o
+    filtro estiver vazio). Só tarefa automática e aberta é cancelada; manual, concluída e cancelada não mudam, e fica
+    registrado quem cancelou e por quê.</p>
+    <div class="onde">📍 <strong>Onde:</strong> 📅 Vencimentos &amp; Obrigações → 📋 Tarefas (Kanban) → botão do admin.</div>
+
+    <h3>📁 <strong>Envios (rito): "Já arquivei à mão" para a cópia que o app não consegue refazer, e a guia registrada
+    por fora agora acha a obrigação certa</strong></h3>
+    <p>Três travas do fim de mês resolvidas. (1) O app não guarda o PDF de DARF e DARE depois do envio — quando a
+    cópia na pasta falhou no dia (credencial recusada), o ♻️ Refazer devolvia "0 arquivado" para sempre. Agora, na
+    pendência de SharePoint, o botão <strong>📁 Já arquivei à mão na pasta IMPOSTOS — registrar</strong> grava a sua
+    declaração (texto, nome e data) e fecha o rito; a Rotina diz "cópia declarada à mão", não "arquivada pelo app".
+    (2) A guia registrada por fora com tipo em texto livre ("DARF PIS, COFINS", "ISS PMSP") passa a dar baixa na
+    obrigação certa (PIS/COFINS, ISS, INSS, IRPJ, CSLL…). (3) Guia cujo tipo não é obrigação do catálogo (DARE de
+    ICMS) deixa de ser pendência "sem tarefa": não há o que baixar, e isso fica dito. O Refazer também passa a contar
+    o que já estava fechado, em vez de mostrar "0 baixado" como se tivesse falhado.</p>
+    <div class="onde">📍 <strong>Onde:</strong> 📅 Vencimentos &amp; Obrigações → 📤 Envios (rito) → bloco da causa.</div>
+
+    <h3>🧮 <strong>Auditoria do dono, 2ª rodada: "conversa iniciada" no WhatsApp sai do CFI, cada pessoa diz por
+    que conta, e clique no Kanban não vira "obrigação entregue"</strong></h3>
+    <p>Três mudanças de honestidade. (1) Iniciar conversa no WhatsApp é atendimento do SP Connect, e template de
+    outra fila é trabalho de outro módulo: os dois ficam fora do recorte, seja quem for o autor. (2) Ao lado de cada
+    pessoa aparece <strong>"CFI por: departamento Fiscal / admin / carteira"</strong> — se o vínculo estiver errado,
+    corrija em Gerenciar Usuários; o app não decide quem é do Fiscal, o cadastro decide. (3) A coluna "Obrigação
+    entregue" virou <strong>"Tarefa concluída no Kanban (clique)"</strong>, porque clique não prova entrega; a baixa
+    feita pelo rito de envio tem coluna própria; e quando alguém conclui 10 ou mais tarefas no mesmo minuto, o painel
+    marca <strong>"⚡ N em lote"</strong> e a ressalva diz o nome: é limpeza ou baixa em massa, não N entregas.</p>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → 🔐 Auditoria do dono, nas duas abas.</div>
+
+    <h3>📤 <strong>A aba "Envios (rito)" voltou a Vencimentos &amp; Obrigações — é lá que fica o ♻️ Refazer o
+    rito</strong></h3>
+    <p>O painel do rito de envio (cópia da guia na pasta IMPOSTOS + baixa da obrigação, por causa pendente) tinha
+    ficado sem porta quando os três hubs de vencimentos viraram um só. Agora é uma sub-aba do hub. Dentro dela,
+    cada causa pendente (pasta não encontrada, credencial recusada, tarefa inexistente) traz o botão
+    <strong>♻️ Refazer o rito destes N</strong> — que não reenvia nada ao cliente, só tenta de novo o
+    arquivamento e a baixa. Use depois de corrigir a causa.</p>
+    <div class="onde">📍 <strong>Onde:</strong> 📅 Vencimentos &amp; Obrigações → aba <strong>📤 Envios (rito)</strong>
+    → bloco da causa → ♻️ Refazer o rito.</div>
+
+    <h3>🚫 <strong>Auditoria do dono: só o Consultor Fiscal — quem é de outro app do escritório fica de fora,
+    contado</strong></h3>
+    <p>A Linha do tempo e o Desempenho somavam gente de todos os módulos (Recepção e RH pelo WhatsApp do SP
+    Connect, lotes Reinf do Contábil). Agora a régua é dita: entra quem tem <strong>departamento Fiscal</strong> no
+    cadastro central, é admin ou tem carteira vinculada; registro gravado por outro app fica de fora mesmo que o
+    autor seja do Fiscal. O que sai <strong>não some</strong>: um bloco "🚫 Fora do escopo do CFI" lista cada
+    autor, quantos registros e o motivo — e se a pessoa atua no Fiscal, o caminho é vincular o departamento em
+    Gerenciar Usuários, nunca dedução.</p>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → <strong>🔐 Auditoria do dono</strong>, nas duas abas,
+    logo abaixo das ressalvas.</div>
+
+    <h3>📊 <strong>Dono: desempenho por colaborador × empresa — o que cada um efetivamente executou nos
+    últimos 2 meses</strong></h3>
+    <p>Uma matriz por colaborador: XML e NFS-e importados à mão, obrigações entregues (tarefas concluídas), guias
+    enviadas ao cliente, DAS e DARE, DCTFWeb e Reinf transmitidas, fim de mês dado — por empresa, com a data do
+    último ato. Cruza com a carteira: mostra as empresas do colaborador que <strong>não receberam nenhum ato no
+    período</strong>, nomeadas. Conta o que está carimbado nas telas; não deduz autor nem mede qualidade, e as
+    ressalvas (trilha que só passou a registrar depois, ato sem autor) vêm antes dos números.</p>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → <strong>🔐 Auditoria do dono</strong> → aba
+    <strong>📊 Desempenho por colaborador × empresa</strong>. Período padrão: últimos 2 meses; filtro por data,
+    busca por colaborador ou empresa, e PDF. Restrito ao dono do escritório.</div>
+
+    <h3>📎 <strong>SharePoint: "264 empresas cuja pasta não foi encontrada" — as pastas existiam; o app lia só
+    as 200 primeiras</strong></h3>
+    <p>O auto-sync diário procurava a pasta de cada cliente na primeira página da lista de "Empresas" no
+    SharePoint, que tem 200 itens. Com mais de 400 clientes, tudo depois da 200ª pasta ficava invisível e o
+    aviso mandava criar a pasta, o que criaria uma duplicada. Agora a lista é lida inteira.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Central de XMLs → Integrações → card <strong>Conexão
+    SharePoint</strong>. Na próxima rodada do auto-sync (ou em "Sincronizar agora") o número de empresas sem pasta
+    cai para as que realmente não têm pasta. <strong>Não crie pasta</strong> por causa do aviso antigo.</div>
+
+    <h3>📎 <strong>"Credencial do SharePoint recusada" na etapa 5, com o card Conexão SharePoint verde:
+    o erro é do dia do envio — refaça o rito, não reenvie a guia</strong></h3>
+    <p>O status do arquivamento fica gravado no instante do envio e não muda sozinho quando a causa é
+    consertada. Na MANTOAN a credencial tinha sido corrigida em 02/09 e a etapa 5 continuava vermelha com o erro
+    daquele dia. A frase da etapa passou a dizer isso e a apontar o caminho.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Vencimentos e Obrigações → <strong>Envios</strong> → na causa
+    "Credencial do SharePoint recusada", <strong>♻️ Refazer o rito</strong>. Ele arquiva de novo no SharePoint e
+    dá a baixa da tarefa. O cliente não recebe nada de novo.</div>
+</section>
+
+<section>
+    <h2>Antes disso (21/09)</h2>
+
+    <h3>🧭 <strong>DIFAL de venda (EC 87/15): o cadastro do E316 puxa as UFs das notas, aplica a todas de uma vez,
+    e há um relatório por UF igual ao do Folhamatic</strong></h3>
+    <p>Na WALDESA eram 13 páginas de DIFAL para lançar. Agora o que a nota traz (UF de destino, valor do DIFAL e do
+    FCP) vem da própria nota; o que a nota não traz (vencimento e código de receita) continua sendo cadastro, mas
+    uma vez só, para todas as UFs. O E316 passou a sair em <strong>duas guias</strong> quando a UF tem FCP — o
+    FCP tem código de receita próprio (na GNRE, 100129/100137; o DIFAL usa 100102/100110) — e a tela lista, ao
+    vivo, o que falta em cada UF; linha incompleta não é mais descartada em silêncio.</p>
+    <div class="onde">📍 <strong>Onde:</strong> SPED Fiscal → <strong>Ajustes E111</strong> → "DIFAL EC 87/15 a
+    recolher por UF de destino": <strong>📥 Puxar UFs desta competência</strong>, preencher vencimento e códigos na
+    barra de cima, <strong>↧ Aplicar a todas as UFs</strong>, 💾 Salvar ajustes, regerar o SPED. O relatório
+    nota a nota está em Relatórios → <strong>🧭 DIFAL/FCP EC 87/15 (por UF)</strong>, com PDF.</div>
+    <div class="alerta">⚠️ Se o PVA acusar <em>"A soma dos campos VL_RECOL_DIFAL … deve ser igual à soma do campo
+    VL_OR dos Registros filhos E316"</em>, é cadastro faltando: o aviso da geração e a própria tela dizem qual UF
+    e qual campo. O app não escolhe "por operação" ou "por apuração" — isso depende de a empresa ter inscrição
+    no estado de destino.</div>
+
+    <h3>📄 <strong>NFS-e de Osasco (e de qualquer prefeitura no leiaute nacional novo, DANFSe v2.0) agora entra
+    pela competência do papel, não pela data de emissão</strong></h3>
+    <p>Um RPS de 03/08 emitido em 01/09 estava entrando em setembro. A DANFSe v2.0 escreve as datas com hífen e
+    usa rótulos diferentes; o leitor do PDF não a entendia, e tudo acabava digitado à mão. Agora o PDF é lido
+    inteiro: competência, emissão, prestador, tomador, valores e retenções. A importação também passou a gravar o
+    fato gerador, e por isso a <strong>📅 Competência do acervo</strong> passa a enxergar as notas importadas por
+    PDF.</p>
+    <div class="onde">📍 <strong>Onde:</strong> XMLs (Entrada/Saída) → Importar → PDF de NFS-e. Nota importada
+    errada antes: reimportar o mesmo PDF cai por cima da anterior. O XML que o portal de Osasco exporta (relatório
+    do sistema próprio) continua não sendo lido — o app lê o XML do padrão nacional.</div>
+
+    <h3>🚚 <strong>Livro de Entradas: o número do CT-e saía como "Ø=Þš —"</strong></h3>
+    <p>Duas causas: o marcador de frete era um emoji que a fonte do PDF não tem, e os conhecimentos capturados
+    antes de 18/09 estavam sem número gravado. O Livro agora recupera o número da chave, como a lista de XMLs já
+    fazia, e o marcador virou o texto "CT-e".</p>
+
+    <h3>🚚 <strong>O frete (CT-e) passou a aparecer no Livro de Entradas, no Resumo por CFOP e na ✏️ CFOP por
+    nota — e o CST do frete agora tem onde ser informado</strong></h3>
+    <p>Na EDUARDO GUERRA (tomadora de frete) o SPED escriturava os conhecimentos no D100/D190, mas <strong>nenhum
+    relatório do CFI os mostrava</strong>: o Livro de Entradas, o Resumo por CFOP e a ✏️ CFOP por nota só
+    olhavam NF-e/NFC-e. O conhecimento não tem "itens" como a nota — o CFOP, o CST e o ICMS moram no cabeçalho do
+    XML — e por isso ele sumia das telas em silêncio, enquanto ia para o arquivo. E não havia <strong>onde
+    informar o CST do frete</strong>: o D190 lia o CST cru do cabeçalho e o ICMS destacado pelo transportador,
+    mesmo em empresa que não se credita do ICMS do frete.</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>🔢 Resumo por CFOP</strong> — o frete aparece
+    no CFOP de entrada de transporte (x352/x353), com a coluna <strong>CT-e</strong> dizendo quantos conhecimentos há
+    na linha, uma frase com o total de fretes do mês e o filtro <strong>🚚 Só fretes (CT-e)</strong>, que é o
+    relatório de fretes para conferência (sai no PDF com esse título). Relatórios → <strong>📕 Livro de
+    Entradas</strong> — cada CT-e é uma linha, marcada com 🚚. Relatórios → <strong>✏️ CFOP por nota</strong> —
+    o CT-e entrou na lista (🚚 na frente do número): a coluna <strong>CST informado</strong> vale para ele, e
+    para quem <strong>não aproveita o crédito de ICMS do frete</strong> há o botão <strong>🚚 CST 90 nos N CT-e sem
+    CST</strong>, que informa 90 (Outras) em todos os conhecimentos de entrada do recorte de uma vez, sem tocar no
+    que já foi informado à mão. O mesmo campo existe no detalhe do documento (Central de Documentos → ✏️ Informar
+    CFOP e CST deste conhecimento).</div>
+    <div class="alerta">⚠️ <strong>O que muda no SPED:</strong> o D190 passou a honrar o CST informado e a régua de
+    crédito — com CST 90 (ou 40/41/50/51/60/70) o registro sai com base, alíquota e ICMS <strong>zero</strong>, e o
+    aviso da geração diz quantos conhecimentos e quanto de ICMS destacado ficou fora do crédito. Optante do Simples
+    já sai sem crédito no frete pelo regime, sem precisar informar nada. Depois de informar, <strong>regere o
+    SPED</strong> e, no PVA, apague a competência antes de importar. Limpar o campo devolve o conhecimento ao
+    destaque do documento.</div>
+</section>
+
+<section>
+    <h2>Antes disso (18/09)</h2>
+
+    <h3>♻️ <strong>Os botões de reler XML paravam no meio da competência — e diziam para clicar de
+    novo</strong></h3>
+    <p>Na J.N. VINATEX de 08/2026 o <strong>♻️ Reler participante e município dos XMLs</strong> recuperou o
+    endereço de 573 clientes e parou: o PVA continuou com <strong>159 recusas</strong> no 0150, e clicar de novo
+    não mudava nada. A causa: cada rodada olhava só os <strong>primeiros 1.000 documentos</strong> da competência
+    (ela tem 3.501) e, na rodada seguinte, olhava <strong>os mesmos 1.000</strong> — já relidos — em vez de seguir
+    adiante. O mesmo defeito estava nos outros três botões (♻️ Reler itens, ♻️ Reler XMLs guardados e 🚚 Reler
+    cabeçalho dos CT-e).</p>
+    <div class="onde">📍 <strong>Onde:</strong> Relatórios → <strong>✏️ CFOP por nota</strong>. Os quatro botões
+    agora percorrem a competência <strong>inteira</strong>, pulando o que já foi relido; o de participantes
+    encadeia as rodadas sozinho, e os outros três dizem quantos documentos ficaram para a próxima e mandam
+    clicar de novo <strong>só quando isso é verdade</strong>. Depois de reler, <strong>regere o SPED</strong> e, no
+    PVA, apague a competência antes de importar.</div>
+    <div class="alerta">⚠️ <strong>Se o DIFAL (E300) não apareceu:</strong> o registro só passou a existir no
+    app às 13h45 de 18/09. Releitura de itens feita <strong>antes</strong> disso não trouxe o grupo do DIFAL —
+    rode o <strong>♻️ Reler itens dos XMLs</strong> de novo (a frase do resultado tem de mostrar
+    <strong>vICMSUFDest em N</strong>), regere e reimporte no PVA. O nome do arquivo carrega a hora da geração:
+    é por ele que se sabe qual arquivo o PVA está avaliando.</div>
+
+    <h3>0. 🧭 <strong>SPED Fiscal: o diferencial de alíquota das VENDAS para fora do estado não era
+    declarado — e o PVA aceitava o arquivo assim</strong></h3>
+    <p>Quando a empresa vende para <strong>consumidor final de outro estado</strong> (pessoa física, ou
+    empresa que não é contribuinte de ICMS), parte do imposto é devida ao estado de destino — é o
+    <strong>DIFAL da EC 87/2015</strong>, mais o <strong>Fundo de Combate à Pobreza</strong>. Na J.N. VINATEX
+    de 08/2026 isso soma <strong>R$ 2.075,18</strong> espalhados por nove estados, e o arquivo do CFI não
+    trazia <strong>nenhum</strong> dos registros que declaram esse valor.</p>
+    <div class="alerta">⚠️ <strong>Por que ninguém tinha percebido:</strong> o PVA <strong>não reclama de
+    registro que não existe</strong>. Ele só confere o que está escrito no arquivo. Então a competência era
+    importada e aceita <strong>afirmando que a empresa não deve diferencial nenhum</strong> — e a diferença
+    só apareceria numa fiscalização, ou comparando com o sistema antigo, que foi o que aconteceu.</div>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. O valor
+    <strong>não é calculado pelo app</strong>: ele já vem pronto dentro da própria nota que a empresa emitiu.
+    O CFI passou a lê-lo e a montar o <strong>C101</strong> (por nota) e o <strong>E300/E310/E316</strong>
+    (um por estado de destino).</div>
+    <div class="onde">📍 <strong>Antes de gerar, faça DUAS coisas:</strong>
+    <strong>(1)</strong> Relatórios → <strong>✏️ CFOP por nota</strong> → <strong>♻️ Reler itens dos
+    XMLs</strong> — as notas capturadas antes de hoje não têm esse valor gravado, e a releitura o traz do XML
+    guardado; <strong>(2)</strong> SPED Fiscal → <strong>Ajustes E111</strong> → bloco <strong>“DIFAL EC 87/15
+    a recolher por UF de destino”</strong>, cadastrando o <strong>vencimento</strong> e o <strong>código de
+    receita</strong> de cada estado para onde a empresa vendeu.</div>
+    <div class="alerta">⚠️ <strong>O código de receita é de cada estado e o app não inventa.</strong> Sem ele,
+    o registro da guia (E316) fica de fora e a geração avisa, dizendo o estado e o valor. É de propósito:
+    código errado o validador aceita, e aí o recolhimento vai para a conta errada.</div>
+    <div class="alerta">⚠️ <strong>Se a geração avisar que há notas sem o dado</strong> (ela nomeia as
+    primeiras), é nota capturada antes de hoje — rode o <strong>♻️ Reler itens dos XMLs</strong> e gere de
+    novo. Sem isso o arquivo continua declarando a menos.</div>
+
+    <h3>1a. 🚚 <strong>SPED Fiscal: o CT-e saía SEM NÚMERO — e o PVA quebrava ao abrir o livro de
+    entradas</strong></h3>
+    <p>Na EDUARDO GUERRA de 08/2026, depois de o arquivo passar a importar, o PVA respondeu
+    <em>“Ocorreu um erro ao gerar o relatório”</em> em Relatórios → Documentos → <strong>Entradas de
+    Mercadorias e Aquisição de Serviços</strong> — só nessa empresa, a única com frete no livro. A causa:
+    a captura lia o número do documento pela tag da NF-e (<code>nNF</code>) e o conhecimento de transporte
+    usa outra (<code>nCT</code>). Todo CT-e capturado estava gravado <strong>sem número</strong>, e o D100
+    saía com o campo <strong>NUM_DOC vazio</strong> — o validador importa, mas não consegue montar o
+    relatório.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. O número
+    agora sai da <strong>chave de acesso</strong> quando o banco não o tem (a chave carrega o número), então
+    basta <strong>regerar</strong> e, no PVA, <strong>apagar a escrituração do mês antes de importar</strong>.
+    Para o número aparecer também na lista de XMLs e nos relatórios do CFI, rode o <strong>🚚 Reler
+    cabeçalho dos CT-e</strong> em Relatórios → ✏️ CFOP por nota (a frase do resultado mostra
+    <strong>numero em N</strong>).</div>
+    <div class="alerta">⚠️ A geração passou a acusar, antes do PVA, documento com número vazio ou diferente
+    do que a chave diz — no C100 e no D100, nas duas famílias de arquivo.</div>
+
+    <h3>1. 🚚 <strong>SPED Fiscal: o registro do frete (D100) saía com dois campos a menos e o PVA
+    não importava o arquivo</strong></h3>
+    <p>Na EDUARDO GUERRA de 08/2026 o validador devolveu <strong>23 recusas</strong> —
+    <em>“o número de campos informado no registro difere do leiaute”</em>, com <strong>esperado 25</strong> e
+    <strong>recebido 23</strong>, uma por conhecimento de transporte. Faltavam os campos <strong>município de
+    origem</strong> e <strong>município de destino</strong> da prestação, que existem no SPED Fiscal e não no
+    SPED Contribuições. Esse erro não recusa um registro: ele <strong>barra o arquivo inteiro na porta</strong>.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> → gerar o arquivo. Nada a fazer:
+    o arquivo já sai com os 25 campos. <strong>Regere a competência</strong> e, no PVA,
+    <strong>apague a escrituração do mês antes de importar</strong> — senão o validador continua mostrando a
+    importação anterior.</div>
+    <div class="alerta">⚠️ <strong>O código do município vem do próprio CT-e</strong> (o cabeçalho do XML diz
+    onde o frete começou e terminou) — e <strong>não é</strong> o município do transportador nem o da sua
+    empresa. Se o conhecimento não trouxer, o campo sai <strong>vazio</strong> e a geração avisa, com o número
+    de cada CT-e: preencher com o município errado passaria no validador e ficaria errado no livro.</div>
+    <div class="onde">📍 <strong>Se o aviso aparecer:</strong> Relatórios → <strong>✏️ CFOP por nota</strong> →
+    <strong>🚚 Reler cabeçalho dos CT-e</strong> e regere. O que sobrar é conhecimento cujo XML não traz o dado
+    — aí é com o transportador.</div>
+
+    <h3>2. 🏠 <strong>SPED: o ENDEREÇO dos clientes e fornecedores parou de sair em branco</strong></h3>
+    <p>Na J.N. VINATEX de 08/2026 o PVA devolveu <strong>732 erros</strong> — <em>“campo obrigatório”</em> no
+    <strong>endereço</strong> de cada participante, em 123 páginas de relatório. O logradouro
+    <strong>sempre esteve no XML</strong> das notas; o app é que não o estava lendo (lia só a cidade e o
+    estado) e dependia de uma consulta externa por CNPJ para preencher — consulta que falha e deixa o campo
+    vazio.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Fiscal</strong> e <strong>SPED
+    Contribuições</strong> → gerar o arquivo. As notas <strong>capturadas a partir de agora</strong> já vêm com
+    o endereço. Para o que já está na base, rode Relatórios → <strong>✏️ CFOP por nota</strong> →
+    <strong>♻️ Reler participante e município dos XMLs</strong> e regere.</div>
+    <div class="alerta">⚠️ <strong>A geração passou a avisar ANTES do PVA</strong>, dizendo quantos
+    participantes estão sem endereço e quais são os primeiros — em <strong>uma linha</strong>, não uma por
+    participante. O que sobrar depois do ♻️ é participante cujo XML não trouxe o dado: aí a correção é no
+    cadastro dele.</div>
+    <div class="alerta">🔧 <strong>Corrigido no mesmo dia:</strong> esse botão <strong>não existia</strong> na
+    aba que o aviso mandava abrir — ele só aparecia na 🌾 DIPAM, atrás de uma pendência de produtor rural que
+    empresa de comércio nunca tem. Agora ele está na <strong>✏️ CFOP por nota</strong>, ao lado dos outros
+    ♻️. Ele <strong>encadeia sozinho</strong> até a fila acabar (a VINATEX tem 3.501 documentos no mês e cada
+    rodada varre 1.000), e a frase do resultado diz <strong>quantos ganharam o endereço</strong> — que é o
+    número que responde à recusa do PVA.</div>
+
+    <h3>3. 🚦 <strong>O aviso da geração passou a mostrar PRIMEIRO o que impede a importação</strong></h3>
+    <p>A lista de “o que o PVA vai recusar” mostra 12 pontos e resumia o resto. Só que a ordem era a ordem em
+    que as conferências rodam — e a mais grave de todas (a que <strong>barra o arquivo inteiro</strong>) era a
+    última, então ela caía fora da lista. Era por isso que as 23 recusas do D100 não apareciam antes do
+    validador.</p>
+    <div class="onde">📍 <strong>Onde:</strong> na caixa de avisos de qualquer geração de SPED. O que impede a
+    importação aparece no topo, marcado com <strong>⛔</strong>, e o cabeçalho diz quantos são. Erro que se
+    repete em várias linhas do mesmo registro agora sai <strong>uma vez</strong>, com a contagem
+    (“São 23 linhas assim”).</div>
+
+    <h3>4. 📋 <strong>Os avisos da geração pararam de sair grudados num parágrafo só</strong></h3>
+    <p>A caixa de avisos juntava tudo numa linha corrida, separando os avisos com o mesmo travessão que as
+    frases usam por dentro — na PWR de 08/2026 eram <strong>cinco avisos</strong> em cerca de 2.500 caracteres
+    de letra miúda. O aviso que explicava a dúvida do mês (por que a receita do PVA é diferente da Memória)
+    era o quarto, e não havia como achá-lo. Agora <strong>cada aviso ocupa uma linha</strong>, com o rótulo
+    dele à vista.</p>
+    <div class="onde">📍 <strong>Onde:</strong> na caixa de avisos de <strong>SPED Fiscal</strong> e
+    <strong>SPED Contribuições</strong>, depois de gerar. Nada a fazer — é só olhar.</div>
+
+    <h3>5. 📐 <strong>“A receita do PVA está diferente do faturamento” — o aviso agora diz o que NÃO dá para
+    fazer</strong></h3>
+    <p>Quando a nota tem <strong>frete</strong> ou <strong>desconto</strong>, o <em>Valor da Receita</em> do
+    M210 e o faturamento da Memória de Apuração <strong>nunca</strong> vão ser iguais — e os dois estão certos:
+    o campo do SPED é a soma das <strong>mercadorias</strong> (sem frete e sem abater desconto), e a Memória
+    parte do <strong>total da nota</strong>. Na PWR de 08/2026 são 17.775,31 contra 18.355,90, e a diferença é
+    exatamente <strong>frete − desconto</strong>.</p>
+    <div class="alerta">⚠️ <strong>Não há como fazer o campo mostrar o total da nota.</strong> Mudar isso no
+    registro dos itens faz o validador recusar o arquivo, e o PVA <strong>refaz</strong> esse bloco a partir
+    dos documentos — escrever outro número ali é escrever num campo que ele sobrescreve. O aviso passou a
+    dizer isso e, quando há frete, a mostrar o único caminho previsto no Guia (registro F100) com o número que
+    ele daria — que também <strong>não</strong> é o da Memória.</div>
+    <div class="onde">📍 <strong>O que conferir:</strong> a <strong>BASE DE CÁLCULO</strong>, não a receita —
+    é ela que a guia paga, e é ela que tem de bater com a Memória de Apuração.</div>
+
+    <h2>Antes disso (17/09)</h2>
+
+    <h3>1. 🚚 <strong>EFD-Contribuições: o frete cobrado do cliente agora entra na base do PIS/COFINS</strong></h3>
+    <p>Em nota de <strong>saída</strong> com frete, o arquivo declarava a base <strong>sem o frete</strong> — ou
+    seja, <strong>menos</strong> do que a guia que o cliente pagou. Na PWR de 08/2026 a diferença era de
+    <strong>R$ 750,00</strong> de base: o PVA mostrava <strong>14.436,83</strong> e a Memória de Apuração
+    <strong>15.186,83</strong>. Agora os dois batem, e com eles o PIS (98,71) e a COFINS (455,60).</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Contribuições</strong> → gerar o arquivo. Quando há
+    frete no mês, a geração mostra um aviso dizendo <strong>quantos documentos</strong> levaram frete, o
+    <strong>total</strong> e a base final — confira essa base contra a <strong>Memória de Apuração</strong>. Em
+    mês sem frete nada aparece, como antes.</div>
+    <div class="alerta">⚠️ <strong>A RECEITA do M210 não muda, só a BASE.</strong> O Guia define o
+    <code>VL_ITEM</code> como “somente o valor das mercadorias”, então o <strong>Valor da Receita</strong> que o
+    PVA mostra continua sendo o das mercadorias. Quem sobe é o <strong>Valor da Base de Cálculo</strong> — e é
+    sobre ele que a contribuição é apurada. <strong>Confira a base, não a receita.</strong></div>
+    <div class="alerta">📌 <strong>O desconto já estava certo.</strong> Ele continua saindo no campo próprio de
+    cada item e reduzindo a base, como antes — o que faltava era só o frete. E na <strong>compra</strong> nada
+    mudou: o frete pago ao fornecedor é outra conta.</div>
+    <div class="alerta">🚩 <strong>Vale regerar as competências anteriores</strong> das empresas que cobram frete
+    na nota. Onde havia frete, o arquivo entregue declarou a <strong>menos</strong> — e o PVA aceita, então isso
+    não apareceu como erro em lugar nenhum.</div>
+
+    <h3>2. 📐 <strong>A geração agora CONCILIA a receita do arquivo com a da Memória de Apuração</strong></h3>
+    <p>A <strong>Receita</strong> que o PVA mostra e a que a <strong>Memória de Apuração</strong> mostra são
+    números <strong>diferentes — e os dois estão certos</strong>. O arquivo declara o valor das
+    <strong>mercadorias</strong> (é o que o Guia manda: “somente o valor das mercadorias”); a Memória parte do
+    <strong>valor contábil da nota</strong>, que é mercadorias <strong>− desconto + frete</strong> e é a receita
+    do IRPJ/CSLL. Na PWR de 08/2026: <strong>17.775,31</strong> no arquivo e <strong>18.355,90</strong> na
+    Memória, diferença de <strong>580,59</strong> = frete 750,00 − desconto 169,41.</p>
+    <div class="onde">📍 <strong>Onde:</strong> <strong>SPED Contribuições</strong> → gerar o arquivo. O aviso
+    traz os dois números, a diferença e as parcelas que a explicam. Em mês sem frete e sem desconto ele não
+    aparece, porque ali os dois números são o mesmo.</div>
+    <div class="alerta">⚠️ <strong>Não há o que corrigir nessa diferença.</strong> Somar o frete ou abater o
+    desconto no valor do item faria o PVA <strong>recusar</strong> o arquivo. O que tem de bater entre as duas
+    telas é a <strong>BASE</strong> — é ela que a guia paga.</div>
+
+    <h3>3. 🧾 <strong>Lucro Real: a NF-e voltava a ficar de fora da receita e da base</strong></h3>
+    <p>Um campo do arquivo (o indicador de escrituração) saía pelo <strong>regime</strong> em vez de pelo tipo de
+    registro. No <strong>Lucro Real</strong> isso fazia o PVA desprezar <strong>todas as notas modelo 55</strong>
+    ao montar a apuração — o arquivo sairia declarando <strong>zero de receita e zero de base</strong> numa
+    empresa com movimento, e o PVA <strong>aceita</strong> assim. Corrigido.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração. Empresas do
+    <strong>Lucro Presumido</strong> nunca foram afetadas (é por isso que ninguém tinha visto).</div>
+
+    <h3>4. 🚚 <strong>SPED ICMS/IPI: “o bloco diz que tem movimento e está vazio” — corrigido</strong></h3>
+    <p>O PVA recusava o arquivo inteiro com <strong>um único erro</strong>: <em>“Registro de abertura do bloco
+    informa que o bloco tem movimento, no entanto nenhum registro foi informado no bloco”</em>, no
+    <strong>D001</strong> (bloco dos conhecimentos de transporte). Acontecia quando <strong>todos</strong> os
+    CT-e da competência ficavam de fora — e a abertura do bloco já tinha sido escrita prometendo movimento.
+    Agora ela só diz “tem movimento” quando o bloco de fato tem.</p>
+    <div class="onde">📍 <strong>Onde:</strong> nada a fazer — vale na próxima geração do
+    <strong>SPED Fiscal</strong>. <strong>E o app já avisava antes do PVA:</strong> a caixa vermelha
+    <strong>“⚠ NÃO TRANSMITA”</strong> na própria tela de geração é esta conferência, e ela dizia a mesma coisa
+    que o validador — vale ler a caixa antes de levar o arquivo ao PVA.</div>
+    <div class="alerta">🚩 <strong>O arquivo passar não quer dizer que o frete foi escriturado.</strong> Quando o
+    CT-e fica de fora, é porque o <strong>CFOP dele não foi capturado</strong> (nos conhecimentos antigos o CFOP
+    não era lido) — e sem ele o frete <strong>não entra no livro</strong>, junto com o ICMS. O aviso da geração
+    agora diz isso com todas as letras, com os números dos conhecimentos. Para recuperar:
+    <strong>Relatórios → ✏️ CFOP por nota → ♻️ Reler itens dos XMLs</strong> e gerar de novo.</div>
 </section>
 
 <section>

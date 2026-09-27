@@ -42,6 +42,7 @@ import { lerDuplicado, type LeituraDuplicado, type DocumentoExistente } from './
 // saída de uma cliente e entrada de outra ganha um documento por lado. O id
 // sai do DONO — montá-lo aqui seria a segunda cópia da identidade.
 import { idDoDocumentoDoLado, carimboDoLado } from '../sefaz-backend/documento-lado.js';
+import { carimboDaCompleta } from '../sefaz-backend/gravacao-nfe-regua.js';
 // A decisão de tirar uma nota da empresa (motivo, autor, lápide) é PURA e mora
 // no dono — aqui só o I/O. Sem isso a régua ficaria dentro de um serviço que o
 // jest não carrega, que é régua sem prova.
@@ -85,6 +86,15 @@ import type {
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
 const MASTER_ADMIN_EMAIL = 'junior@spassessoriacontabil.com.br';
+/** Teto de leitura das coleções de empresas (~213 clientes na casa). */
+const TETO_EMPRESAS = 2000;
+/** Teto de documentos_fiscais em leituras recortadas (CNPJ+período, chave). */
+const TETO_DOCUMENTOS = 5000;
+/**
+ * Teto do dashboard (`listDocumentos`): recorte por competência da casa inteira.
+ * Fica no valor que já valia por default; o truncamento sai em `meta.truncado`.
+ */
+const TETO_DOCUMENTOS_LISTA = 20000;
 const COLLECTIONS = {
     DOCUMENTOS: 'documentos_fiscais',
     CAPTURAS: 'xml_capturas',
@@ -245,8 +255,8 @@ export async function getEmpresasDisponiveis(user: User | null): Promise<Empresa
     try {
         const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas', []),
-            fetchAllDocs('lucro_empresas', []),
+            fetchAllDocs('simples_empresas', [], { maxDocs: TETO_EMPRESAS }),
+            fetchAllDocs('lucro_empresas', [], { maxDocs: TETO_EMPRESAS }),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
@@ -344,8 +354,8 @@ export async function getEmpresasParaPerfilCliente(user: User | null): Promise<E
     try {
         const scope = await getCarteiraScope(user);
         const [simplesSnap, lucroSnap] = await Promise.all([
-            fetchAllDocs('simples_empresas'),
-            fetchAllDocs('lucro_empresas'),
+            fetchAllDocs('simples_empresas', [], { maxDocs: TETO_EMPRESAS }),
+            fetchAllDocs('lucro_empresas', [], { maxDocs: TETO_EMPRESAS }),
         ]);
 
         // 23/05: filtra perdedores do merge de duplicatas
@@ -646,6 +656,16 @@ export async function importXmlManual(input: ImportXmlInput): Promise<ImportXmlR
             // UPGRADE grava com MERGE — o resumo pode já ter recebido eventos
             // (cancelamento chega antes da completa) e um set sem merge os
             // apagaria. É o mesmo desenho do importer do backend.
+            //
+            // 🚨 E O MERGE PRECISA DIZER QUE COMPLETOU (24/09, B & T): sem
+            // `schema`/`tipoDoc`/`temItens` no que chega, o `schema: 'resNFe'`
+            // do resumo sobrevivia ao merge e a Rotina seguia lendo a nota
+            // inteira como "resumo, manifeste a ciência".
+            if (podeCompletar) {
+                Object.assign(paraGravar, carimboDaCompleta(parsed));
+                paraGravar._completadoEm = new Date().toISOString();
+                paraGravar._completadoPorEmail = user.email || null;
+            }
             await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, docId), paraGravar,
                 podeCompletar ? { merge: true } : {});
         } catch (err) {
@@ -835,7 +855,7 @@ export async function listDocumentos(
     try {
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const pageMeta = { truncated: false, count: 0, maxDocs: 0 };
-        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, meta: pageMeta });
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: pageMeta });
         if (meta) meta.truncado = pageMeta.truncated;
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
 
@@ -860,7 +880,7 @@ export async function listDocumentos(
                     : where('competencia', '==', filters.competencia));
             }
             const metaCnpj = { truncated: false, count: 0, maxDocs: 0 };
-            const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, meta: metaCnpj });
+            const snapsCnpj = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, porCnpj, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: metaCnpj });
             if (meta && metaCnpj.truncated) meta.truncado = true;
             const vistos = new Set(docs.map(d => d.id));
             for (const d of snapsCnpj) {
@@ -946,13 +966,9 @@ export async function getDocumentosByChaves(chaves: string[]): Promise<Documento
     const results: DocumentoFiscal[] = [];
     await Promise.all(batches.map(async batch => {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
-                where('chave', 'in', batch),
-                fbLimit(30),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            // `chave in` já limita a 30 chaves por lote; o teto é só garantia.
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [where('chave', 'in', batch)], { maxDocs: TETO_DOCUMENTOS });
+            snaps.forEach(d => {
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);
             });
         } catch (err: any) {
@@ -983,15 +999,12 @@ export async function getDocumentosByCnpjPeriodo(
 
     async function buscar(campo: string) {
         try {
-            const q = query(
-                collection(db!, COLLECTIONS.DOCUMENTOS),
+            const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, [
                 where(campo, '==', cnpjLimpo),
                 where('dhEmi', '>=', dtIniIso),
                 where('dhEmi', '<=', dtFimIso),
-                fbLimit(2000),
-            );
-            const snap = await getDocs(q);
-            snap.docs.forEach(d => {
+            ], { maxDocs: TETO_DOCUMENTOS });
+            snaps.forEach(d => {
                 if (visto.has(d.id)) return;
                 visto.add(d.id);
                 results.push({ id: d.id, ...(d.data() as any) } as DocumentoFiscal);

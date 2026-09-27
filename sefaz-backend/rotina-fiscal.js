@@ -20,7 +20,7 @@
 // ============================================================================
 
 import { classificarUrgencia, diasAteVencimento, urgenciaDominante, URGENCIA_LABEL } from './urgencia-vencimento.js';
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, valorDoDocumento } from './xml-metadata-helper.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 import { acharFichaCompetencia } from './ipi-varredura.js';
@@ -34,9 +34,11 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
+import { podeDeclararSemMovimento, aplicarSemMovimentoDeclarado } from './sem-movimento-declarado.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -119,10 +121,29 @@ const modeloComItens = (chave) => {
 
 export function ehResumoSemCompleta(d) {
     if (!d || cancelado(d)) return false;
+    // 🚨 O FATO VENCE O RÓTULO (24/09, B & T, KRONA 1458345): a completa
+    // importada à mão entrava por `merge` sobre o resumo e o `schema:
+    // 'resNFe'` velho sobrevivia — a nota tinha itens e valor, e a Rotina
+    // mandava manifestar a ciência de uma nota inteira. Itens gravados, ou
+    // importação manual com totais, são a completa; rótulo velho não muda isso.
+    if (d.temItens === true && Number.isFinite(valorDoDocumento(d))) return false;
+    if (String(d.origem || '') === 'manual' && d.totais && Number.isFinite(valorDoDocumento(d))) return false;
     if (/^res(NFe|NFCe|CTe|MDFe)/.test(String(d.schema || ''))) return true;
     if (/^res/.test(String(d.tipoDoc || ''))) return true;
     if (d.temItens === false && modeloComItens(d.chave)) return true;
-    return d.valorTotal == null;
+    // 🚨 O VALOR SAI DO DONO, nunca do campo cru (23/09, RADIO E TV IBIRAPUERA
+    // 08/2026): o import pelo navegador grava **só `totais.vNF`**, nunca
+    // `valorTotal` — e esta linha lia `valorTotal == null`, então toda NFS-e
+    // (e NF-e) importada à mão virava "resumo da SEFAZ, aguardando a
+    // completa", com a ação "manifeste a ciência" sobre uma nota inteira. É
+    // a armadilha das duas formas que o CIAP já pagou em 21/08; o dono é
+    // `valorDoDocumento`, que conhece todas.
+    return !Number.isFinite(valorDoDocumento(d));
+}
+
+/** NFS-e não tem "resumo da SEFAZ": sem valor legível é outro defeito, com outra ação. */
+export function ehNfse(d) {
+    return String(d?.tipo || '').toUpperCase() === 'NFSE' || /^nfse/i.test(String(d?.tipoDoc || ''));
 }
 
 /**
@@ -212,6 +233,10 @@ export function montarRotinaFiscal({
     // 📋 A declaração de que as obrigações FORA DO CATÁLOGO foram entregues por
     // fora (empresa + competência). Ausente, nada muda.
     declaracaoCobertura = null,
+    // 📭 A declaração de que a empresa NÃO TEVE MOVIMENTO na competência
+    // (23/09, E7). Fecha as etapas 1 e 2 como 'na' enquanto não chegar
+    // documento nenhum; chegando, ela cai — dito.
+    declaracaoSemMovimento = null,
 }) {
     const docs = documentos || [];
     // 🚨 A DIREÇÃO SAI DA RÉGUA, NUNCA DO CAMPO GRAVADO. A nota PRÓPRIA de
@@ -264,7 +289,11 @@ export function montarRotinaFiscal({
 
     // ── 2. VALIDAÇÃO ────────────────────────────────────────────────────────
     // Resumo sem a completa não tem valor nem itens: entra na apuração a menor.
-    const resumos = docs.filter(ehResumoSemCompleta).length;
+    const semValor = docs.filter(ehResumoSemCompleta);
+    // NF-e/CT-e sem a completa é "manifeste a ciência"; NFS-e sem valor legível
+    // é XML/leiaute que o leitor não entendeu — a ação é outra.
+    const resumos = semValor.filter((d) => !ehNfse(d)).length;
+    const nfseSemValor = semValor.filter(ehNfse).length;
     const canceladas = docs.filter(cancelado).length;
     // CARTA DE CORREÇÃO é validação: ela pode ter mudado o CFOP/natureza, e o
     // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
@@ -279,11 +308,35 @@ export function montarRotinaFiscal({
     } else if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
             'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
-    } else if (resumos > 0) {
+    } else if (resumos > 0 || nfseSemValor > 0) {
+        const partes = [
+            resumos > 0 ? `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa)` : null,
+            nfseSemValor > 0 ? `${nfseSemValor} NFS-e sem valor legível` : null,
+        ].filter(Boolean);
+        const acoes = [
+            resumos > 0 ? 'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente.' : null,
+            nfseSemValor > 0 ? 'A NFS-e entrou sem <vServ>/valor que o leitor entenda — abra a nota na Central de XMLs e confira o valor; se estiver vazio, reimporte o XML completo (não é caso de manifestação).' : null,
+        ].filter(Boolean);
+        // 🔎 A NOTA VAI NOMEADA (24/09, B & T 08/2026: "não consegui achar a
+        // nota que está pedindo ciência"). Contar sem dizer QUAL é mandar
+        // procurar: número, emitente e CHAVE são o que a busca da Central
+        // de XMLs aceita, e o selo "Resumo" é o que a pessoa vai ver lá.
+        const notas = semValor.slice(0, 20).map((d) => {
+            const emit = d.emitente || d.prestador || {};
+            return {
+                chave: d.chave || null,
+                numero: d.numero || null,
+                tipo: d.tipo || null,
+                emitente: emit.nome || emit.xNome || emit.razaoSocial || null,
+                emitenteCnpj: String(emit.cnpj || emit.cnpjCpf || emit.CNPJ || d.cnpjEmit || '').replace(/\D/g, '') || null,
+                dhEmi: d.dhEmi || d.dataEmissao || null,
+                motivo: ehNfse(d) ? 'nfse-sem-valor' : 'resumo',
+            };
+        });
         eValidacao = etapa('validacao', 'atencao',
-            `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa).`,
-            'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente. Sem isso a apuração sai a menor.',
-            { resumos, canceladas, cce });
+            `${partes.join(' · ')}.`,
+            `${acoes.join(' ')} Sem isso a apuração sai a menor.`,
+            { resumos, nfseSemValor, canceladas, cce, notas, notasCortadas: Math.max(0, semValor.length - notas.length) });
     } else {
         eValidacao = etapa('validacao', 'concluida',
             `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}.`,
@@ -357,8 +410,14 @@ export function montarRotinaFiscal({
     }
 
     // ── 4. OBRIGAÇÕES ───────────────────────────────────────────────────────
-    const concluidas = tarefas.filter((t) => t.status === 'concluida').length;
-    const abertas = tarefas.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
+    // 👥 FGTS e INSS patronal são do DP (Paulo, 22/09): tarefa dessas
+    // obrigações não entra na conta do Fiscal — nem como entregue, nem como
+    // falta. Ela sai CONTADA, com a ação (cancelar em lote em Tarefas).
+    // 🏢 25/09: ECD/ECF são do Contábil — mesma régua, mesma saída.
+    const tarefasDoDp = tarefas.filter((t) => OBRIGACOES_FORA_DO_FISCAL.includes(String(t.obrigacao || '')));
+    const tarefasCfi = tarefas.filter((t) => !OBRIGACOES_FORA_DO_FISCAL.includes(String(t.obrigacao || '')));
+    const concluidas = tarefasCfi.filter((t) => t.status === 'concluida').length;
+    const abertas = tarefasCfi.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada');
     // PRAZO das que estão abertas. A rotina já lia as tarefas e jogava a DATA
     // fora — só contava quantas. Sem prazo, "2/5 entregues" não diz se sobra
     // uma semana ou se venceu ontem, e é justamente o prazo que decide por
@@ -382,7 +441,7 @@ export function montarRotinaFiscal({
         : null;
     const atrasadas = comData.filter((p) => p.urgencia === 'atrasada').length;
     let eObrigacoes;
-    if (tarefas.length === 0) {
+    if (tarefasCfi.length === 0) {
         // Sem tarefa NÃO é "tudo certo" — é sinal de que o cron mensal não gerou.
         eObrigacoes = etapa('obrigacoes', 'atencao',
             'Nenhuma obrigação cadastrada nesta competência.',
@@ -395,17 +454,33 @@ export function montarRotinaFiscal({
             ? ` · ${atrasadas} ATRASADA(S)`
             : (proximo ? ` · próxima ${URGENCIA_LABEL[proximo.urgencia]} (${proximo.obrigacao})` : '');
         eObrigacoes = etapa('obrigacoes', 'pendente',
-            `${concluidas}/${tarefas.length} obrigação(ões) entregue(s)${selo}.`,
+            `${concluidas}/${tarefasCfi.length} obrigação(ões) entregue(s)${selo}.`,
             `Falta: ${abertas.map((t) => t.obrigacao || t.titulo || '—').join(', ')}.`,
             {
-                concluidas, total: tarefas.length,
+                concluidas, total: tarefasCfi.length,
                 abertas: abertas.map((t) => t.obrigacao || t.titulo || '—'),
                 prazo: proximo ? { ...proximo, dominante } : null,
                 atrasadas, semData,
             });
     } else {
-        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefas.length} obrigação(ões) entregue(s).`, null,
-            { concluidas, total: tarefas.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+        eObrigacoes = etapa('obrigacoes', 'concluida', `${tarefasCfi.length} obrigação(ões) entregue(s).`, null,
+            { concluidas, total: tarefasCfi.length, abertas: [], prazo: null, atrasadas: 0, semData: 0 });
+    }
+    if (tarefasDoDp.length) {
+        const abertasDp = tarefasDoDp.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada').length;
+        // "DP: FGTS, INSS_CPP · Contábil: ECD" — quem entrega, nomeado.
+        const porDepto = {};
+        for (const t of tarefasDoDp) {
+            const d = departamentoDaObrigacao(t.obrigacao) || '?';
+            (porDepto[d] = porDepto[d] || new Set()).add(String(t.obrigacao || ''));
+        }
+        const detalheOutroDepto = Object.entries(porDepto).map(([d, set]) => `${d}: ${[...set].join(', ')}`).join(' · ');
+        eObrigacoes = { ...eObrigacoes,
+            resumo: `${eObrigacoes.resumo} · ${tarefasDoDp.length} tarefa(s) de outro departamento fora da conta (${detalheOutroDepto})`,
+            acao: abertasDp
+                ? `${eObrigacoes.acao ? `${eObrigacoes.acao} ` : ''}${abertasDp} tarefa(s) ainda aberta(s) são de outro departamento (${detalheOutroDepto}), não do Fiscal — cancele-as em Vencimentos e Obrigações → Tarefas → "Cancelar tarefas de outro departamento".`
+                : eObrigacoes.acao,
+            tarefasDoDp: tarefasDoDp.length };
     }
 
     // 🚨 TRAVA T1 DO ESCOPO: O CATÁLOGO ADMITE QUE NÃO COBRE ESTE CLIENTE.
@@ -544,6 +619,8 @@ export function montarRotinaFiscal({
     const rito = conferirRitoDosEnvios(envios);
     const enviosOk = rito.filter((r) => r.completo).length;
     const reenvios = rito.filter((r) => r.baixaJaFeitaNaObrigacao).length;
+    // 📁 Cópia DECLARADA à mão fecha o rito, mas vai dita — não é prova do app.
+    const arquivadosDeclarados = rito.filter((r) => r.arquivadoDeclarado).length;
     // ⚠️ CAUSA JUNTO DO NÚMERO: *"veja em Envios (rito) o que ficou sem cópia
     // ou sem baixa"* é "vá procurar" — e quem lê a Rotina está justamente
     // tentando saber o que falta. As causas já vêm nomeadas pelo dono.
@@ -599,6 +676,7 @@ export function montarRotinaFiscal({
             // por que a linha fala de 1 obrigação.
             + (reenvios > 0 ? ` · ${reenvios} reenvio(s) da mesma guia` : '')
             + (declarados > 0 ? ` · ${declarados} DECLARADA(S) como enviada(s) por fora do app` : '')
+            + (arquivadosDeclarados > 0 ? ` · ${arquivadosDeclarados} cópia(s) na pasta DECLARADA(S) à mão` : '')
             + '.',
             null,
             { envios: envios.length, completos: enviosOk, semProva, declarados, reenvios, causas });
@@ -609,6 +687,17 @@ export function montarRotinaFiscal({
     eCaptura = ajusteIss.captura;
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
+
+    // 📭 SEM MOVIMENTO DECLARADO (Paulo, 23/09: *"fechamento de mês de empresas
+    // sem movimento"*). Zero nota não é zero movimento — ausência ≠ zero —,
+    // então a etapa 1 nunca fecharia sozinha. Quem sabe é a pessoa, e ela
+    // DECLARA (autor, data, texto). A porta só aparece com ZERO documento;
+    // a declaração vence o vermelho da captura e da validação, NOMEADA, e cai
+    // sozinha se documento chegar depois.
+    eCaptura = { ...eCaptura, podeDeclararSemMovimento: podeDeclararSemMovimento({ documentos: docs, captura: eCaptura }) };
+    const semMov = aplicarSemMovimentoDeclarado({ captura: eCaptura, validacao: eValidacao, documentos: docs, declaracao: declaracaoSemMovimento });
+    eCaptura = semMov.captura;
+    eValidacao = semMov.validacao;
 
     // 📋 DECLARAR ENVIO POR FORA só faz sentido para guia que o app NÃO enviou.
     //
@@ -664,7 +753,9 @@ export function montarRotinaFiscal({
         etapas,
         fechamento: fechamento || null,
         proximoPasso: (mesFechado || !proxima) ? null
-            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo },
+            : { id: proxima.id, ordem: proxima.ordem, nome: proxima.nome, onde: proxima.onde, acao: proxima.acao, resumo: proxima.resumo,
+                // As notas NOMEADAS viajam no próximo passo — é ali que a pessoa lê.
+                ...(Array.isArray(proxima.notas) && proxima.notas.length ? { notas: proxima.notas, notasCortadas: proxima.notasCortadas || 0 } : {}) },
         progresso: { concluidas: fechadas, total: etapas.length },
         // 'fechado' é FATO (o carimbo). 'ok' passou a querer dizer **pronto
         // para fechar** desde 26/08 — as cinco etapas fecharam e ninguém deu o

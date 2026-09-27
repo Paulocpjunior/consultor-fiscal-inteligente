@@ -88,7 +88,7 @@ export function montarLayoutEmail({
  <tr><td align="center">
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:100%; background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(9,29,141,0.10); font-family:-apple-system,'Segoe UI',Arial,sans-serif;">
    <tr><td style="padding:22px 28px 16px 28px; border-bottom:1px solid #eef1f8;" align="center">
-     <img src="cid:${MARCA.logoCid}" alt="${escaparHtml(MARCA.nome)}" width="52" style="display:block; border:0; margin:0 auto 8px auto;">
+     <img src="cid:${MARCA.logoCid}" alt="${escaparHtml(MARCA.nome)}" width="52" height="74" style="display:block; width:52px; height:74px; max-width:52px; border:0; margin:0 auto 8px auto;">
      <div style="font-size:15px; font-weight:bold; color:${MARCA.marinho}; letter-spacing:0.3px;">${escaparHtml(MARCA.nome)}</div>
      <div style="font-size:11px; color:#7a83a0; text-transform:uppercase; letter-spacing:1px; margin-top:2px;">${escaparHtml(departamento)}</div>
    </td></tr>
@@ -150,7 +150,7 @@ let logoEmailCache;
 export function anexoLogo() {
     if (logoEmailCache === undefined) {
         try {
-            const caminho = path.join(process.cwd(), 'sefaz-backend', 'assets', 'sp-logo-email.png');
+            const caminho = path.join(process.cwd(), 'sefaz-backend', 'assets', 'sp-logo-email-2x.png');
             logoEmailCache = {
                 name: 'sp-logo.png',
                 contentType: 'image/png',

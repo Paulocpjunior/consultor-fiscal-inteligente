@@ -48,7 +48,7 @@ import { conferirContagemDeCamposFiscal, conferirTamanhoDeCamposFiscal } from '.
 
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirPeriodoDoArquivo, conferirCodPartDoC100, POS_DT_FIN_ICMS_IPI,
-    conferirContador0100, conferirCanceladaSoCampos,
+    conferirContador0100, conferirCanceladaSoCampos, conferirEnderecoDo0150, conferirNumDocContraChave,
 } from './sped-c100-regras-comuns.js';
 import { motivoIeInvalida } from './sped-fiscal-format.js';
 
@@ -62,6 +62,12 @@ const num = (v) => {
 };
 const centavos = (n) => Math.round(n * 100);
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+/**
+ * Dinheiro na forma que a pessoa lê (pt-BR). Mensagem de recusa com "1234.56"
+ * obriga quem lê a decidir se o ponto é decimal ou milhar — foi o `R$ 308.07`
+ * do extrato do R-2099 (13/08).
+ */
+const brl = (n) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /**
  * Campos que a NFC-e (COD_MOD 65) NÃO pode informar no C100, com a posição do
@@ -102,6 +108,10 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // MESMO nas duas famílias, e esta recusa valia no EFD-Contribuições sem
     // rodar lá (a "meia trava" do COD_MUN, 22/08).
     for (const e of conferirCodModContraChave(lista)) add(erros, e);
+    // ── R1a. NUM_DOC vazio ou divergente da CHAVE — C100 e D100 ─────────────
+    // 18/09, EDUARDO GUERRA: todo D100 saiu com o número vazio (a captura lia
+    // `nNF` e o CT-e traz `nCT`) e o PVA quebrou o relatório de entradas.
+    for (const e of conferirNumDocContraChave(lista)) add(erros, e);
     // ── R1b. C100 de terceiro sem COD_PART / fora do 0150 ───────────────────
     // 11/09: 493 recusas numa distribuidora — toda entrada capturada pela
     // SEFAZ saía sem o participante (forma achatada). A régua mora no comum.
@@ -110,6 +120,9 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // PVA (ELS · 08/2026, 11/09, 19×) — o COD_PART da cancelada, que o
     // gerador preenchia. A régua mora no comum (as duas famílias têm a exceção).
     for (const e of conferirCanceladaSoCampos(lista)) add(erros, e);
+    // 🚨 0150 sem ENDERECO — campo 10, obrigatório SEM condição (VINATEX,
+    // 18/09, 732 recusas). Mesmo registro nas duas famílias, mesma regra.
+    for (const e of conferirEnderecoDo0150(lista)) add(erros, e);
 
     // ── R2. NFC-e não informa participante nem tributos no C100 ─────────────
     // PVA (mesmo arquivo, 86 ocorrências).
@@ -1634,6 +1647,130 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
         });
     })();
 
+    // ── R46. DIFAL EC 87/15: C101 exige E300 da UF, e o E310 tem de FECHAR ──
+    //
+    // 📖 FONTE — Guia 3.2.3:
+    //  · E300, Validação do Registro: *"O registro é obrigatório se a soma, por
+    //    UF, dos valores dos campos VL_ICMS_UF_DEST dos registros C101 e D101
+    //    for maior que zero; ou VL_ICMS_UF_REM for maior que zero; ou
+    //    VL_FCP_UF_DEST dos registros C101 e D101 for maior que zero"*;
+    //  · E310: *"Registro obrigatório, se existir o registro E300"*;
+    //  · E310 campo 04: *"Somatório dos valores dos campos VL_ICMS_UF_DEST dos
+    //    registros C101 cujo registro pai, C100 tenham IND_OPER = 1 (Saída) …
+    //    se o campo 2 – UF do registro E300 for igual a UF do participante
+    //    informado no campo COD_PART do registro C100"*;
+    //  · E316: *"a soma do valor das obrigações … deve ser igual ao somatório
+    //    dos campos: VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP +
+    //    DEB_ESP_FCP"*.
+    //
+    // 🚨 A AUSÊNCIA É QUE CUSTA CARO AQUI, e por isso a regra existe: o PVA
+    // **não acusa registro que não foi informado**. Um arquivo sem E300/E310
+    // é aceito afirmando que a empresa não deve diferencial nenhum — foi o que
+    // aconteceu com a VINATEX até 18/09, com R$ 2.075,18 de DIFAL declarados
+    // nas próprias notas dela.
+    (() => {
+        const c101s = doReg('C101');
+        const e300s = doReg('E300');
+        const e310s = doReg('E310');
+
+        // (a) Há C101 e não há E300 — a apuração inteira sumiu do arquivo.
+        if (c101s.length && !e300s.length) {
+            const somaDest = c101s.reduce((s, l) => s + num(campos(l)[3]), 0);
+            const somaFcp = c101s.reduce((s, l) => s + num(campos(l)[2]), 0);
+            add(erros, {
+                regra: 'difal-ec87-sem-e300', registro: 'C101', campo: '3 - VL_ICMS_UF_DEST',
+                linha: c101s[0], valor: brl(somaDest), esperado: 'um E300 por UF de destino',
+                mensagem: `${c101s.length} registro(s) C101 declaram R$ ${brl(somaDest)} de DIFAL e `
+                    + `R$ ${brl(somaFcp)} de FCP, e o arquivo NÃO traz nenhum E300/E310 — a apuração do `
+                    + 'diferencial não foi declarada.',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA não acusa registro ausente: o arquivo '
+                    + 'seria ACEITO dizendo que a empresa não deve diferencial nenhum.',
+                fonte: 'Guia Prático 3.2.3, E300: "O registro é obrigatório se a soma, por UF, dos valores '
+                    + 'dos campos VL_ICMS_UF_DEST dos registros C101 e D101 for maior que zero".',
+            });
+        }
+
+        // (b) E300 sem E310 — o Guia é literal ("obrigatório, se existir E300").
+        if (e300s.length && e310s.length < e300s.length) {
+            add(erros, {
+                regra: 'e300-sem-e310', registro: 'E300', campo: '1 - REG', linha: e300s[0],
+                valor: `${e310s.length} E310`, esperado: `${e300s.length} (um por E300)`,
+                mensagem: `O arquivo tem ${e300s.length} registro(s) E300 e ${e310s.length} E310.`,
+                acao: 'Defeito de GERAÇÃO — reporte com o print.',
+                fonte: 'Guia Prático 3.2.3, E310: "Registro obrigatório, se existir o registro E300".',
+            });
+        }
+
+        // (c) A aritmética de CADA E310 — as três fórmulas que o Guia escreve
+        //     por extenso. É a classe do E110 campo 11 (02/08): cada total,
+        //     isolado, parece certo; o que não fecha é a EXPRESSÃO, e nenhum
+        //     validador de FORMA vê isso.
+        for (const l of e310s) {
+            const f = campos(l);
+            const v = (i) => num(f[i]);
+            const conferir = (rotulo, achado, esperadoNum) => {
+                if (Math.abs(achado - esperadoNum) <= 0.01) return;
+                add(erros, {
+                    regra: 'e310-nao-fecha', registro: 'E310', campo: rotulo, linha: l,
+                    valor: brl(achado), esperado: brl(esperadoNum),
+                    mensagem: `O E310 não fecha consigo mesmo em ${rotulo}: declara ${brl(achado)} e a `
+                        + `fórmula do Guia dá ${brl(esperadoNum)}.`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. O PVA recalcula estes campos e recusa.',
+                    fonte: 'Guia Prático 3.2.3, E310, validações dos campos 10, 12, 13, 18, 20 e 21.',
+                });
+            };
+            // 📖 ORDEM DO E310 (2017+): todos os campos do DIFAL (03 a 12) e
+            // só então os do FCP (13 a 22). A tabela do E310 REVOGADO, que
+            // vem antes no mesmo Guia, intercala os dois — ler a errada põe o
+            // FCP na casa do crédito de DIFAL.
+            //   03 sld_cred_ant · 04 tot_deb · 05 out_deb · 06 tot_cred ·
+            //   07 out_cred · 08 sld_dev_ant · 09 deduções · 10 recol ·
+            //   11 sld_cred_transp · 12 deb_esp
+            const debD = v(4) + v(5);
+            const credD = v(3) + v(6) + v(7);
+            conferir('08 - VL_SLD_DEV_ANT_DIFAL', v(8), debD - credD >= 0 ? debD - credD : 0);
+            conferir('10 - VL_RECOL_DIFAL', v(10), v(8) - v(9) >= 0 ? v(8) - v(9) : 0);
+            conferir('11 - VL_SLD_CRED_TRANSPORTAR_DIFAL', v(11),
+                credD + v(9) - debD > 0 ? credD + v(9) - debD : 0);
+            //   13 sld_cred_ant · 14 tot_deb · 15 out_deb · 16 tot_cred ·
+            //   17 out_cred · 18 sld_dev_ant · 19 deduções · 20 recol ·
+            //   21 sld_cred_transp · 22 deb_esp
+            const debF = v(14) + v(15);
+            const credF = v(13) + v(16) + v(17);
+            conferir('18 - VL_SLD_DEV_ANT_FCP', v(18), debF - credF >= 0 ? debF - credF : 0);
+            conferir('20 - VL_RECOL_FCP', v(20), v(18) - v(19) >= 0 ? v(18) - v(19) : 0);
+            conferir('21 - VL_SLD_CRED_TRANSPORTAR_FCP', v(21),
+                credF + v(19) - debF > 0 ? credF + v(19) - debF : 0);
+        }
+
+        // (d) O E316 tem de somar exatamente o que o E310 manda recolher.
+        //     ⚠️ Só acusa quando há E316: a AUSÊNCIA dele tem causa própria (o
+        //     código de receita estadual não cadastrado) e sai no aviso da
+        //     geração, com o lugar de preencher. Dois alarmes para o mesmo
+        //     defeito é o caminho conhecido para a equipe ignorar os dois.
+        const e316s = doReg('E316');
+        if (e316s.length) {
+            const aRecolher = e310s.reduce((s, l) => {
+                const f = campos(l);
+                return s + num(f[10]) + num(f[12]) + num(f[20]) + num(f[22]);
+            }, 0);
+            const somaOr = e316s.reduce((s, l) => s + num(campos(l)[3]), 0);
+            if (Math.abs(aRecolher - somaOr) > 0.01) {
+                add(erros, {
+                    regra: 'e316-nao-bate-e310', registro: 'E316', campo: '3 - VL_OR', linha: e316s[0],
+                    valor: brl(somaOr), esperado: brl(aRecolher),
+                    mensagem: `A soma do VL_OR dos E316 (${brl(somaOr)}) não bate com o que os E310 mandam `
+                        + `recolher (${brl(aRecolher)}).`,
+                    acao: 'Defeito de GERAÇÃO — reporte com o print. Se alguma UF ficou sem o código de '
+                        + 'receita cadastrado (o do DIFAL e, quando há FCP, o do FCP — são duas guias), o E316 '
+                        + 'dela não saiu: cadastre em SPED Fiscal → Ajustes E111.',
+                    fonte: 'Guia Prático 3.2.3, E316 campo 03: "o valor da soma deste campo deve corresponder '
+                        + 'à soma dos campos VL_RECOL_DIFAL + DEB_ESP_DIFAL + VL_RECOL_FCP + DEB_ESP_FCP".',
+                });
+            }
+        }
+    })();
+
     // ── R36. Bem do G125 tem de estar cadastrado no 0300 ────────────────────
     //
     // 📖 FONTE — Guia 3.2.3, G125 campo 02: *"o código informado neste campo
@@ -1705,11 +1842,31 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // ⚠️ Ela é CEGA para o TAMANHO — conta CAMPOS. O FANTASIA de 91 caracteres
     // num campo de 60 tem a contagem certa; quem pega aquilo é a outra trava.
     // ════════════════════════════════════════════════════════════════════════
+    //
+    // 🚨 UMA LINHA POR REGISTRO, NUNCA POR OCORRÊNCIA (18/09, EDUARDO GUERRA ·
+    // 08/2026). O D100 saiu com 23 campos onde o Guia tem 25 e a trava PEGOU —
+    // medido: a R42 gerava **23 erros idênticos**, um por CT-e. Com o corte de
+    // 12 do `resumoPrevalidacao`, os 23 ficaram DEPOIS do corte e o aviso
+    // mandou ler a lista completa no header `X-SPED-Prevalidacao`, que a
+    // própria rota documenta que **a tela não lê**. O defeito não era a trava
+    // desligada: era ela gritar 23 vezes a mesma coisa e o resumo empurrar
+    // tudo para um lugar que ninguém alcança — é o "20 linhas dizendo o mesmo
+    // é o que faz ninguém ler as que importam" (03/09).
+    const porRegistroFora = new Map();
     for (const e of conferirContagemDeCamposFiscal(lista).erros) {
+        const k = `${e.registro}|${e.esperado}|${e.recebido}`;
+        if (!porRegistroFora.has(k)) porRegistroFora.set(k, { ...e, linhas: 0 });
+        porRegistroFora.get(k).linhas += 1;
+    }
+    for (const e of porRegistroFora.values()) {
         add(erros, {
             regra: 'contagem-de-campos', registro: e.registro, campo: `${e.recebido} campos`,
             linha: lista[e.linha - 1], valor: String(e.recebido), esperado: String(e.esperado),
-            mensagem: e.mensagem,
+            // 🚨 Este erro não recusa UM registro: o PVA **não importa o
+            // arquivo**. Por isso ele é içado para o topo do resumo.
+            barraImportacao: true,
+            ocorrencias: e.linhas,
+            mensagem: `${e.mensagem}${e.linhas > 1 ? ` São ${e.linhas} linha(s) assim.` : ''}`,
             acao: 'É defeito de GERAÇÃO, não de cadastro: reporte com o print. '
                 + 'O PVA não importa o arquivo com o registro fora do leiaute.',
             fonte: e.fonte,
@@ -1725,13 +1882,23 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // 🚨 Medindo a SAÍDA com valores longos ela achou dois defeitos vivos: o
     // **H010 campo 08** e o **K200 campos 03 e 06** saíam sem corte nenhum.
     // ════════════════════════════════════════════════════════════════════════
+    // Mesmo agrupamento da R42, e pelo mesmo motivo: campo estourado costuma
+    // estourar em TODAS as linhas do registro.
+    const porCampoLongo = new Map();
     for (const e of conferirTamanhoDeCamposFiscal(lista).erros) {
+        const k = `${e.registro}|${e.campo}|${e.maximo}`;
+        if (!porCampoLongo.has(k)) porCampoLongo.set(k, { ...e, linhas: 0 });
+        porCampoLongo.get(k).linhas += 1;
+    }
+    for (const e of porCampoLongo.values()) {
         add(erros, {
             regra: 'tamanho-de-campo', registro: e.registro,
             campo: `${String(e.campo).padStart(2, '0')}`,
             linha: lista[e.linha - 1], valor: `${e.tamanho} caracteres`,
             esperado: `no máximo ${e.maximo}`,
-            mensagem: e.mensagem,
+            barraImportacao: true,
+            ocorrencias: e.linhas,
+            mensagem: `${e.mensagem}${e.linhas > 1 ? ` São ${e.linhas} linha(s) assim.` : ''}`,
             acao: 'É defeito de GERAÇÃO, não de cadastro — o campo precisa ser cortado no '
                 + 'gerador. Reporte com o print; nome longo no cadastro é legítimo.',
             fonte: 'Guia Prático do EFD ICMS/IPI 3.2.3, coluna "Tam" da tabela do registro '
@@ -1746,12 +1913,33 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     return { erros, avisos, resumo };
 }
 
-/** Texto para os warnings da geração — uma linha por erro, com a ação. */
+/**
+ * Texto para os warnings da geração — uma linha por erro, com a ação.
+ *
+ * 🚨 O QUE BARRA A IMPORTAÇÃO VEM PRIMEIRO (18/09, EDUARDO GUERRA). A lista
+ * era cortada em 12 na ordem em que as regras rodam, e a da CONTAGEM DE CAMPOS
+ * é a ÚLTIMA — então a única recusa que impedia o PVA de importar o arquivo
+ * INTEIRO caiu fora do corte, atrás de avisos que recusam um registro só. E o
+ * "…e mais N" mandava ler o resto no header `X-SPED-Prevalidacao`, que a rota
+ * documenta, na linha de cima, que **a tela não lê**: o resto não estava
+ * escondido, estava inalcançável.
+ *
+ * ⚠️ O corte FICA (12 linhas é o que alguém lê), mas ele deixou de decidir por
+ * ORDEM DE EXECUÇÃO e passou a decidir por GRAVIDADE.
+ */
 export function resumoPrevalidacao(r) {
     if (!r || !r.erros?.length) return [];
+    const barram = r.erros.filter((e) => e.barraImportacao);
+    const resto = r.erros.filter((e) => !e.barraImportacao);
+    const ordenados = [...barram, ...resto];
+    const linha = (e) => `• ${e.barraImportacao ? '⛔ ' : ''}[${e.registro} · ${e.campo}] ${e.mensagem} ${e.acao}`;
     return [
-        `🚦 Pré-validação (o que o PVA vai recusar): ${r.erros.length} ponto(s).`,
-        ...r.erros.slice(0, 12).map((e) => `• [${e.registro} · ${e.campo}] ${e.mensagem} ${e.acao}`),
-        ...(r.erros.length > 12 ? [`• …e mais ${r.erros.length - 12}. A lista completa está no header X-SPED-Prevalidacao.`] : []),
+        `🚦 Pré-validação (o que o PVA vai recusar): ${r.erros.length} ponto(s)`
+        + `${barram.length ? ` — ${barram.length} deles IMPEDEM a importação do arquivo inteiro` : ''}.`,
+        ...ordenados.slice(0, 12).map(linha),
+        ...(ordenados.length > 12
+            ? [`• …e mais ${ordenados.length - 12} ponto(s) de menor gravidade (nenhum deles impede a `
+                + 'importação — os que impedem estão todos acima).']
+            : []),
     ];
 }

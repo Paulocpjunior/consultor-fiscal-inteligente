@@ -23,7 +23,7 @@ import {
 } from './ipi-varredura.js';
 import { getDctfwebProvider, pickIdApuracao, mitPeriodoLabel } from './dctfweb-provider.js';
 import { extrairModeloDebitosMit } from './mit-debitos-builder.js';
-import { relerItensFiscais, relerNotasVazias } from './xml-importer.js';
+import { relerItensFiscais, relerNotasVazias, relerCabecalhoCtes } from './xml-importer.js';
 import { conferirFichaContraDocumentos } from './ficha-x-documentos.js';
 
 const router = express.Router();
@@ -230,6 +230,27 @@ router.post('/reler-notas-vazias', requireAdmin, express.json(), async (req, res
     } catch (e) {
         console.error('[ipi-varredura/reler-notas-vazias]', e);
         return res.status(500).json({ ok: false, error: e?.message || 'Falha ao reler as notas.' });
+    }
+});
+
+// ♻️ CABEÇALHO DOS CT-e — o frete que não entra no bloco D (17/09, EDUARDO
+// GUERRA · 08/2026). Diferente dos DOIS acima, e é por isso que ele existe:
+// `reler-itens-fiscais` só mexe em campos de ITEM (e o CT-e não tem itens) e
+// `reler-notas-vazias` devolve 'fora-do-escopo' para CT-e. Nenhum dos dois
+// alcançava o conhecimento — o dado estava no Storage e não havia caminho.
+// requireAdmin porque ESCREVE em documento fiscal.
+router.post('/reler-cabecalho-ctes', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const empresaId = String(req.body?.empresaId || '').trim();
+        const competencia = normalizarCompetencia(req.body?.competencia);
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Escolha a empresa.' });
+        if (!competencia) return res.status(400).json({ ok: false, error: 'Informe a competência (AAAA-MM).' });
+
+        const r = await relerCabecalhoCtes({ empresaId, competencia, limit: 5000 });
+        return res.json({ ok: true, competencia, ...r });
+    } catch (e) {
+        console.error('[ipi-varredura/reler-cabecalho-ctes]', e);
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao reler os conhecimentos.' });
     }
 });
 

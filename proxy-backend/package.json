@@ -16,6 +16,7 @@
     "helmet": "^8.0.0"
   },
   "overrides": {
+    "qs": "^6.16.0",
     "@protobufjs/utf8": "1.1.1",
     "form-data": "2.5.6",
     "protobufjs": "7.6.5",

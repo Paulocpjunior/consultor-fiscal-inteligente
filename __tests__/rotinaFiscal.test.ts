@@ -660,3 +660,92 @@ describe('podeDeclararEnvio', () => {
         expect(e.podeDeclararEnvio).toBe(true);
     });
 });
+
+// ── 23/09 (RADIO E TV IBIRAPUERA 08/2026): "está falando que a nota está sem
+// valor para manifestar ciência, mas está certinha" ─────────────────────────
+describe('🚨 nota importada à mão NÃO é "resumo da SEFAZ": o valor sai do dono', () => {
+    const nfseNacional = {
+        tipo: 'NFSe', modelo: '99', chave: '53001081209010732000137000000000004326081788210842',
+        totais: { vNF: 2000, vProd: 2000 }, valores: { liquido: 2000, iss: 40, issRetido: true },
+        status: 'autorizado', direcao: 'saida',
+    };
+    it('NFS-e nacional importada pelo navegador (só totais.vNF) tem valor — não é resumo', () => {
+        expect(ehResumoSemCompleta(nfseNacional)).toBe(false);
+        expect(ehResumoSemCompleta({ ...nfseNacional, totais: undefined, valorServicos: 2000 })).toBe(false);
+        expect(ehResumoSemCompleta({ ...nfseNacional, totais: undefined, valores: { total: 2000 } })).toBe(false);
+    });
+    it('NF-e importada à mão com totais.vNF também não é resumo; sem valor nenhum continua sendo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, totais: { vNF: 1500 } })).toBe(false);
+        expect(ehResumoSemCompleta({ chave: CHAVE_55 })).toBe(true);
+    });
+    it('a etapa 2 fecha VERDE com a NFS-e; e NFS-e sem valor legível NÃO manda "manifestar ciência"', () => {
+        const ok: any = montarRotinaFiscal({
+            empresa: { nome: 'RADIO E TV IBIRAPUERA', cnpj: '09010732000137' }, competencia: '2026-08',
+            documentos: [nfseNacional], apuracao: { fonte: 'lucro', totalImpostos: 40 },
+            tarefas: [tarefa({ status: 'concluida' })], envios: [],
+        });
+        expect(etapaDe(ok, 'validacao').status).toBe('concluida');
+        const semValor: any = montarRotinaFiscal({
+            empresa: { nome: 'X', cnpj: '09010732000137' }, competencia: '2026-08',
+            documentos: [{ ...nfseNacional, totais: undefined, valores: undefined }], apuracao: null, tarefas: [], envios: [],
+        });
+        const e2 = etapaDe(semValor, 'validacao');
+        expect(e2.status).toBe('atencao');
+        expect(e2.resumo).toMatch(/1 NFS-e sem valor legível/);
+        expect(e2.acao).not.toMatch(/Manifeste/);
+        expect(e2.acao).toMatch(/reimporte o XML completo/);
+    });
+    it('a projeção da Rotina carrega as formas do valor que o dono lê', () => {
+        const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'sefaz-backend', 'rotina-fiscal-routes.js'), 'utf8');
+        for (const campo of ["'totais.vNF'", "'totais.vServ'", "'valores.total'", "'valores.valorServicos'"]) expect(src).toContain(campo);
+    });
+});
+
+// ── 24/09 (B & T 08/2026): "não consegui achar a nota que está pedindo ciência" ──
+describe('🔎 a etapa 2 NOMEIA a nota que trava (chave, número, emitente)', () => {
+    it('resumo da SEFAZ sai com chave e emitente; viaja no próximo passo', () => {
+        const r: any = montarRotinaFiscal({
+            empresa: { nome: 'B & T', cnpj: '11111111000191' }, competencia: '2026-08',
+            documentos: [
+                { chave: CHAVE_55, schema: 'resNFe', tipo: 'NFe', numero: 4321, emitente: { nome: 'FORNECEDOR LTDA', cnpj: '22222222000191' }, dhEmi: '2026-08-14T10:00:00-03:00', direcao: 'entrada' },
+                doc({ direcao: 'saida', chave: CHAVE_55.replace(/1$/, '2') }),
+            ],
+            apuracao: { fonte: 'lucro', totalImpostos: 10 }, tarefas: [tarefa({ status: 'concluida' })], envios: [],
+        });
+        const e2 = etapaDe(r, 'validacao');
+        expect(e2.status).toBe('atencao');
+        expect(e2.notas).toHaveLength(1);
+        expect(e2.notas[0]).toMatchObject({ chave: CHAVE_55, numero: 4321, emitente: 'FORNECEDOR LTDA', emitenteCnpj: '22222222000191', motivo: 'resumo' });
+        expect(r.proximoPasso.id).toBe('validacao');
+        expect(r.proximoPasso.notas[0].chave).toBe(CHAVE_55);
+    });
+    it('o fim de mês projeta as notas no bloqueio, e as telas as mostram', () => {
+        const { bloqueioDaEtapa } = require('../sefaz-backend/fim-de-mes.js');
+        const b = bloqueioDaEtapa({ id: 'validacao', ordem: 2, nome: 'Validar', status: 'atencao', notas: [{ chave: 'x' }], notasCortadas: 0 });
+        expect(b.notas).toEqual([{ chave: 'x' }]);
+        const fs = require('fs'); const path = require('path');
+        for (const f of ['components/FimDeMesBloco.tsx', 'components/RotinaFiscalPainel.tsx']) {
+            expect(fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).toContain('cole a chave (ou o nº) na busca');
+        }
+    });
+});
+
+// ── 24/09 (B & T, KRONA 1458345): a completa importada à mão NÃO vira "resumo" ─
+describe('🚨 o FATO vence o rótulo: resumo completado à mão deixa de ser resumo', () => {
+    it('schema resNFe velho com itens gravados (temItens) não é resumo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: true, totais: { vNF: 100 } })).toBe(false);
+    });
+    it('schema resNFe velho, importação manual com totais → é a completa (o merge não reescreveu o rótulo)', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: false, origem: 'manual', totais: { vNF: 100 } })).toBe(false);
+    });
+    it('resumo de verdade (SEFAZ, sem itens) continua resumo', () => {
+        expect(ehResumoSemCompleta({ chave: CHAVE_55, schema: 'resNFe', temItens: false, origem: 'sefaz', valorTotal: 100 })).toBe(true);
+    });
+    it('a completa carimba schema/tipoDoc/temItens ao completar (régua pura)', () => {
+        const { carimboDaCompleta } = require('../sefaz-backend/gravacao-nfe-regua.js');
+        expect(carimboDaCompleta({ tipo: 'NFe', itens: [{}] })).toEqual({ schema: 'procNFe', tipoDoc: 'NFe', temItens: true });
+        expect(carimboDaCompleta({ tipo: 'CTe', itens: [] })).toEqual({ schema: 'procCTe', tipoDoc: 'CTe', temItens: false });
+        expect(carimboDaCompleta({ tipo: 'NFSe', itens: [{}] }).schema).toBe('nfse');
+        expect(carimboDaCompleta(null)).toEqual({ schema: null, tipoDoc: null, temItens: false });
+    });
+});

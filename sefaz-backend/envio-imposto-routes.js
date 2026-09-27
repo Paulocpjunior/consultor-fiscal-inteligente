@@ -16,7 +16,7 @@ import { podeAcessarCnpj } from './carteira-auth.js';
 import { montarPainelEnvios } from './envio-imposto-painel.js';
 // ♻️ Refazer o rito de um envio já registrado — o carimbo é histórico e não
 // se move sozinho quando a causa é consertada depois.
-import { refazerRitoDoEnvio } from './refazer-rito-store.js';
+import { refazerRitoDoEnvio, declararArquivamentoDoEnvio } from './refazer-rito-store.js';
 import { executarRitoEnvioImposto, GESTOR_EMAIL } from './envio-imposto.js';
 import { enviarEmail } from './graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './email-layout.js';
@@ -410,9 +410,12 @@ router.get('/historico', requireAuth, async (req, res) => {
         const cnpj = String(req.query.cnpj || '').replace(/\D/g, '');
         const limite = Math.min(Math.max(Number(req.query.limit || 200), 1), 500);
         const db = fa().firestore();
+        // 🚨 26/09 (auditoria): `limit` sem `orderBy` devolvia 200 envios
+        // ARBITRÁRIOS, não os mais recentes — o histórico mentia por omissão.
+        // Índice (empresaCnpj, enviadoEm desc) em firestore.indexes.json.
         let q = db.collection('impostos_enviados');
         if (cnpj) q = q.where('empresaCnpj', '==', cnpj);
-        const snap = await q.limit(limite).get();
+        const snap = await q.orderBy('enviadoEm', 'desc').limit(limite).get();
         const envios = snap.docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .sort((a, b) => {
@@ -452,7 +455,7 @@ router.post('/debitos-ja-enviados', requireAuth, async (req, res) => {
         if (!cnpj || !competencia) {
             return res.status(400).json({ ok: false, error: 'Informe cnpj e competencia.' });
         }
-        if (!(await podeAcessarCnpj(req.user, cnpj))) {
+        if (!(await podeAcessarCnpj(req.user, cnpj)).ok) {
             return res.status(403).json({ ok: false, error: 'Empresa fora da sua carteira.' });
         }
         const db = fa().firestore();
@@ -515,15 +518,28 @@ router.get('/painel', requireAuth, async (req, res) => {
         if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
         const competencia = String(req.query.competencia || '').trim() || null;
         const db = fa().firestore();
-        // Sem índice composto: filtra a competência em memória (o volume é de
-        // dezenas por mês, não de milhares).
-        const snap = await db.collection('impostos_enviados').limit(2000).get();
+        // 🚨 26/09 (auditoria): lia 2.000 envios de QUALQUER competência e
+        // cortava em silêncio. Com competência ('AAAA-MM', como o rito grava) o
+        // filtro vai na consulta (igualdade simples, sem índice composto); o
+        // teto continua e, se bater, a resposta DIZ que cortou.
+        const TETO = 2000;
+        let q = db.collection('impostos_enviados');
+        // A consulta cobre as FORMAS gravadas da competência (dono único:
+        // formasDaCompetencia) — igualdade com o texto cru perderia o registro
+        // gravado na outra forma (trava competenciaReguaUnica).
+        const formas = competencia ? formasDaCompetencia(competencia) : [];
+        if (formas.length) q = q.where('competencia', 'in', formas.slice(0, 10));
+        const snap = await q.limit(TETO).get();
         const envios = snap.docs.map((d) => {
             const x = d.data();
             return { id: d.id, ...x, enviadoEm: x.enviadoEm?.toDate?.()?.toISOString?.() || null };
         });
         const painel = montarPainelEnvios(envios, { competencia });
-        return res.json({ ok: true, gestor: GESTOR_EMAIL, ...painel });
+        const truncado = snap.size >= TETO;
+        return res.json({
+            ok: true, gestor: GESTOR_EMAIL, ...painel, truncado, teto: TETO,
+            ...(truncado ? { aviso: `Lidos ${TETO} envios (teto) — pode haver mais; o painel está incompleto.` } : {}),
+        });
     } catch (e) {
         console.error('[envio-imposto/painel]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -577,12 +593,49 @@ router.post('/refazer-rito', requireAuth, async (req, res) => {
         const baixados = resultados.filter((r) => ['baixada', 'ja-baixada'].includes(r.baixa?.status)).length;
         const semPdf = resultados.filter((r) => r.pdfIndisponivel).length;
         const falhas = resultados.filter((r) => r.ok === false).length;
-        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados`);
+        // ⚠️ "0 baixado(s)" sobre envios cuja baixa JÁ estava fechada lia como
+        // falha (Paulo, 22/09). O que não precisou ser refeito vai CONTADO.
+        const jaFechados = resultados.filter((r) => r.ok !== false && r.refeito === false).length;
+        const semObrigacao = resultados.filter((r) => r.baixa?.status === 'sem-obrigacao').length;
+        console.log(`[envio-imposto/refazer-rito] ${ids.length} envio(s) por ${quem} — ${arquivados} arquivados, ${baixados} baixados, ${jaFechados} já fechados`);
         return res.json({
-            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, resultados,
+            ok: true, total: ids.length, arquivados, baixados, semPdf, falhas, jaFechados, semObrigacao, resultados,
         });
     } catch (e) {
         console.error('[envio-imposto/refazer-rito]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 📁 Declarar à mão o arquivamento de envios cuja cópia o app não consegue
+// refazer (não guarda o PDF). Admin, com texto obrigatório — a régua mora em
+// `patchDoArquivamentoDeclarado`.
+router.post('/refazer-rito/declarar-arquivamento', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, error: 'Apenas administradores' });
+        const ids = Array.isArray(req.body?.logIds) ? req.body.logIds.map(String).filter(Boolean) : [];
+        if (!ids.length) return res.status(400).json({ ok: false, error: 'Informe os envios (logIds).' });
+        if (ids.length > TETO_REFAZER) {
+            return res.status(400).json({ ok: false, error: `São ${ids.length} envios e o teto por rodada é ${TETO_REFAZER}. Rode em partes.` });
+        }
+        const quem = req.user?.email || req.user?.uid || null;
+        const comoFoi = req.body?.comoFoi;
+        const resultados = [];
+        for (const logId of ids) {
+            try {
+                resultados.push({ logId, ...(await declararArquivamentoDoEnvio({ logId, quem, comoFoi })) });
+            } catch (e) {
+                resultados.push({ logId, ok: false, erro: e.message });
+            }
+        }
+        const declarados = resultados.filter((r) => r.ok).length;
+        const recusados = resultados.filter((r) => !r.ok);
+        // Declaração recusada em TODOS é erro de entrada (texto curto…): 400 com a frase.
+        if (!declarados && recusados.length) return res.status(400).json({ ok: false, error: recusados[0].erro, resultados });
+        console.log(`[envio-imposto/declarar-arquivamento] ${declarados}/${ids.length} por ${quem}`);
+        return res.json({ ok: true, total: ids.length, declarados, recusados: recusados.length, resultados });
+    } catch (e) {
+        console.error('[envio-imposto/declarar-arquivamento]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

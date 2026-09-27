@@ -9,6 +9,20 @@
 // Usado pra enriquecer participantes legados que nao tem codMunIBGE/endereco
 // (notas processadas pelo parser antigo). Notas novas ja vem completas do
 // xmlParserService.
+//
+// 🚨 ELA É RESERVA, NUNCA FONTE — e isso custou 732 recusas (18/09, J.N.
+// VINATEX: "Campo obrigatório" no 0150 campo 10, ENDERECO). Até aquele dia o
+// endereço do participante no arquivo fiscal saía DAQUI, porque
+// `extrairParticipantesNfe` lia do <enderDest> só a UF e o município. São dois
+// problemas somados: (1) ela responde OUTRA pergunta — o endereço do CADASTRO
+// da Receita, não o que a NOTA declara (o Guia é literal: o 0150 traz "os
+// dados atualizados no último evento fiscal"); e (2) ela é REDE, então
+// rate-limit, 403 ou timeout deixam um campo OBRIGATÓRIO vazio e o PVA recusa
+// o arquivo inteiro.
+//
+// Hoje quem responde é o XML (o dono da leitura grava os quatro campos), e ela
+// só preenche o que continuar vazio. Se algum dia ela voltar a ser a única
+// fonte de um campo que o documento declara, é o mesmo defeito de volta.
 // ============================================================================
 
 const cache = new Map();       // cnpj -> dados

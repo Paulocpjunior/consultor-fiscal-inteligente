@@ -40,9 +40,15 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { calcularVencimento, type Obrigacao, type RegraObrigacao } from './calendarioFiscal';
-import { fetchAllDocs } from './firestorePaginate';
+import { fetchAllDocs, type FetchAllMeta } from './firestorePaginate';
 
 const COLLECTION = 'tarefas';
+/**
+ * Teto explícito da leitura de tarefas. Quem chama pode saber se bateu no
+ * teto pelo out-param `meta` de `listarTarefas` — lista cortada em silêncio
+ * é a falha que o fetchAllDocs veio substituir.
+ */
+export const TETO_TAREFAS = 20000;
 const COLLECTION_CARTEIRAS = 'carteiras';
 
 export type StatusTarefa = 'a_fazer' | 'em_andamento' | 'concluida' | 'cancelada';
@@ -144,7 +150,13 @@ export async function getTitularDaEmpresa(
 /**
  * Lista tarefas com filtros.
  */
-export async function listarTarefas(filtros: FiltrosTarefa = {}): Promise<Tarefa[]> {
+export async function listarTarefas(
+    filtros: FiltrosTarefa = {},
+    // Out-param opcional: `truncado=true` quando a leitura bateu em TETO_TAREFAS
+    // (pode haver mais tarefas). A tela deve dizer "mostrando X de N+".
+    meta?: { truncado?: boolean },
+): Promise<Tarefa[]> {
+    if (meta) meta.truncado = false;
     if (!isFirebaseConfigured) return [];
     try {
         // Firestore nao suporta muitos filtros 'where' compostos sem indice; faco
@@ -159,7 +171,9 @@ export async function listarTarefas(filtros: FiltrosTarefa = {}): Promise<Tarefa
 
         // Paginação via cursor (fetchAllDocs) substitui o antigo fbLimit(500)
         // que truncava a tela de Tarefas quando a base passava de 500 itens.
-        const snaps = await fetchAllDocs(COLLECTION, constraints);
+        const pageMeta: FetchAllMeta = { truncated: false, count: 0, maxDocs: TETO_TAREFAS };
+        const snaps = await fetchAllDocs(COLLECTION, constraints, { maxDocs: TETO_TAREFAS, meta: pageMeta });
+        if (meta) meta.truncado = pageMeta.truncated;
         let lista = snaps.map(d => docToTarefa(d.id, d.data()));
 
         // Filtros que ficam em memoria

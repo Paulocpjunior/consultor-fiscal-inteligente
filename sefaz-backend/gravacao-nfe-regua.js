@@ -68,3 +68,24 @@ export function decidirGravacaoNFe({ existingData, tipoDoc, schema, chave }) {
     merge: exists && (exData.eventosBeforeNFe || upgrade),
   };
 }
+
+/**
+ * Os campos que a COMPLETA carimba quando COMPLETA um resumo (24/09, B & T,
+ * KRONA 1458345). A importação manual grava com `merge` — o certo, para não
+ * apagar os eventos — mas o documento montado no navegador não traz
+ * `schema`/`tipoDoc`/`temItens`, então o `schema: 'resNFe'` do resumo
+ * SOBREVIVIA ao merge e a Rotina seguia lendo a nota inteira como "resumo,
+ * manifeste a ciência". Quem completa precisa DIZER que completou.
+ *
+ * @param {{tipo?: string|null, itens?: unknown[]}} parsed o XML lido
+ * @returns {{schema: string|null, tipoDoc: string|null, temItens: boolean}}
+ */
+export function carimboDaCompleta(parsed) {
+  const tipo = String(parsed?.tipo || '').trim();
+  const schema = { NFe: 'procNFe', NFCe: 'procNFCe', CTe: 'procCTe', MDFe: 'procMDFe', NFSe: 'nfse' }[tipo] || null;
+  return {
+    schema,
+    tipoDoc: tipo || null,
+    temItens: Array.isArray(parsed?.itens) && parsed.itens.length > 0,
+  };
+}

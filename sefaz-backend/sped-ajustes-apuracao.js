@@ -10,8 +10,11 @@
 // semântica na própria estrutura (Guia Prático EFD ICMS/IPI):
 //   posição 1-2: UF (tem de bater com a UF da empresa)
 //   posição 3:   imposto/apuração — '0' = ICMS próprio (E111),
-//                '1' = ICMS-ST (E220, gerado desde 04/08). Outros valores
-//                (DIFAL/FCP em E310) o CFI ainda não gera.
+//                '1' = ICMS-ST (E220, gerado desde 04/08),
+//                '2' = DIFAL da EC 87/15 e '3' = FCP da EC 87/15, que vão no
+//                E311. O E300/E310/E316 é gerado desde 18/09 a partir do que a
+//                própria nota declara, mas o AJUSTE deles é da tabela da UF de
+//                DESTINO e ainda não tem cadastro — por isso continua recusado.
 //   posição 4:   TIPO do ajuste — é ela que decide o campo do E110:
 //                  0 = Outros débitos          → VL_TOT_AJ_DEBITOS
 //                  1 = Estorno de créditos     → VL_ESTORNOS_CRED
@@ -52,7 +55,23 @@ export function validarCodigoAjuste(codigo, ufEmpresa) {
     // ST (E220). Os dois usam a mesma tabela 5.1.1 e o mesmo tipo no 4º.
     const apuracao = cod[2] === '0' ? 'proprio' : (cod[2] === '1' ? 'st' : null);
     if (!apuracao) {
-        return { ok: false, erro: `Código ${cod} não é de apuração do ICMS próprio nem de ST (3º caractere '${cod[2]}'). DIFAL/FCP vão em E310, que o CFI ainda não gera — lance no PVA por enquanto.` };
+        // ⚠️ 18/09 — A MENSAGEM PASSOU A MENTIR e foi corrigida no MESMO PR em
+        // que o E310 nasceu. Ela dizia *"E310, que o CFI ainda não gera"*, e
+        // isso virou falso: o DIFAL da EC 87/15 passa a sair em E300/E310/E316.
+        // Mensagem que AFIRMA uma regra e está errada é citada de volta como
+        // fato (classe de 28/08, o comentário do M210).
+        //
+        // O que continua verdade é a OUTRA metade: o ajuste de DIFAL/FCP é da
+        // tabela 5.1.1 da UF **de destino**, e o app só cadastra código da UF
+        // da empresa. Aplicá-lo na apuração do estado errado é pior que não
+        // aplicar, então ele continua RECUSADO aqui — nunca some em silêncio.
+        const alvo = cod[2] === '2' ? 'do DIFAL da EC 87/15' : (cod[2] === '3' ? 'do FCP da EC 87/15' : null);
+        return {
+            ok: false,
+            erro: alvo
+                ? `Código ${cod} é de ajuste ${alvo} (3º caractere '${cod[2]}'), que vai no E311 — por UF de DESTINO. O CFI já gera o E300/E310/E316 a partir do que a própria nota declara, mas ainda não cadastra ajuste por UF de destino: lance este ajuste no PVA.`
+                : `Código ${cod} não é de apuração do ICMS próprio nem de ST (3º caractere '${cod[2]}') — o 3º caractere é 0 (próprio), 1 (ST), 2 (DIFAL EC 87/15) ou 3 (FCP EC 87/15).`,
+        };
     }
     const tipo = parseInt(cod[3], 10);
     if (!TIPOS_AJUSTE[tipo]) {

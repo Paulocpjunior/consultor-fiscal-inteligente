@@ -148,6 +148,9 @@ export function bloqueioDaEtapa(e) {
         // outras causas (regime indefinido, prazo de outra UF, UF ausente) há
         // conserto, e declarar por cima apagaria o caminho.
         podeDeclararCobertura: typeof e.podeDeclararCobertura === 'boolean' ? e.podeDeclararCobertura : null,
+        // 📭 E a porta do SEM MOVIMENTO, pela mesma régua: só com zero documento
+        // (etapa 1). Com nota capturada não é "sem movimento".
+        podeDeclararSemMovimento: typeof e.podeDeclararSemMovimento === 'boolean' ? e.podeDeclararSemMovimento : null,
         // As obrigações NOMEADAS: é essa lista que a declaração precisa
         // mencionar, e é ela que a leitura compara depois.
         propostas: Array.isArray(e.propostas) ? e.propostas : null,
@@ -156,6 +159,9 @@ export function bloqueioDaEtapa(e) {
         // sabe para ONDE mandar — e foi assim que a única porta oferecida na
         // VINCENZO virou a que não resolvia nenhuma das duas causas.
         causas: Array.isArray(e.causas) ? e.causas : null,
+        // 🔎 As NOTAS que travam a etapa 2, nomeadas (chave, número, emitente).
+        notas: Array.isArray(e.notas) ? e.notas : null,
+        notasCortadas: Number(e.notasCortadas || 0),
     };
 }
 

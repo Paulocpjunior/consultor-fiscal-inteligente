@@ -19,6 +19,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { indicadorFrete } from './nfe-frete.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
 import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
@@ -26,7 +27,7 @@ import { cstDoLancamento, cstInformadoDoItem } from './cst-correlacao.js';
 // campo cru `n.modelo`, que o importer principal não grava.
 import {
     selecionarNotasBlocoC, avisosDaSelecao, codSitDoDocumento, serieDoDocumento,
-    codItemNoArquivo, unidadeDoItem,
+    numeroDoDocumento, codItemNoArquivo, unidadeDoItem,
 } from './sped-selecao-documentos.js';
 import { modeloDoDoc, participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc-helper.js';
 import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-metadata-helper.js';
@@ -39,6 +40,11 @@ import { regimeDaEmpresa } from './regime-tributario.js';
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
 // leem daqui; eram três leituras, e as três discordavam do manual.
 import { valorOperacaoDosItens } from './valor-operacao-c190.js';
+// DIFAL de SAÍDA (EC 87/15) — o C101 leva o que a PRÓPRIA nota declara no
+// grupo `ICMSUFDest`, e o E310 (bloco E) soma esses mesmos C101 por UF de
+// destino. Quem lê o grupo é o dono, nunca uma leitura nova aqui: o PVA cruza
+// os dois registros, e duas leituras divergiriam dentro do mesmo arquivo.
+import { documentoLevaC101, camposDoC101 } from './difal-ec87-saida.js';
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,7 +102,7 @@ function regimeDoArquivo(dados) {
  * "Este item de ENTRADA credita ICMS para quem escritura?"
  * @returns {{credita: boolean, por: 'informado'|'regime'|'documento'}}
  */
-function creditoIcmsDoItem(item, nota) {
+export function creditoIcmsDoItem(item, nota) {
     const direcao = direcaoEfetivaDoc(nota);
     if (direcao !== 'entrada') return { credita: true, por: 'documento' };
     const coluna = colunaDoCstInformado(cstInformadoDoItem(nota, item));
@@ -110,7 +116,7 @@ function creditoIcmsDoItem(item, nota) {
  * Base, alíquota e ICMS do item COMO VÃO PARA O ARQUIVO — C170, C190 e a soma
  * do C100 leem daqui, um dono só.
  */
-function icmsDoItemNoArquivo(item, nota) {
+export function icmsDoItemNoArquivo(item, nota) {
     const bruto = {
         vBC: parseFloat(item?.vBC || 0),
         vICMS: parseFloat(item?.vICMS || 0),
@@ -173,7 +179,7 @@ function somarTotaisDosItens(nota) {
  * Sempre 3 dígitos (origem + tributação), como o SPED exige. Quando a régua não
  * converte, ele é o do fornecedor — que é o comportamento de sempre.
  */
-function cstDoItemNoArquivo(item, cfopLancado, nota) {
+export function cstDoItemNoArquivo(item, cfopLancado, nota) {
     const cru = getCstIcms(item);
     // O CST informado NAQUELA NOTA vence a régua — a precedência mora no DONO
     // (cstDoLancamento), nunca aqui, senão C170 e C190 divergiriam.
@@ -345,10 +351,12 @@ export function buildBlocoC(dados) {
     // é livro a menor — foi o defeito que a PS VIDROS denunciou.
     if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecao));
 
-    // C001 — Abertura
-    // Indicador de movimento: 0 = Bloco com dados, 1 = Bloco sem dados
-    const indMovimento = notas.length > 0 ? '0' : '1';
-    linhas.push(fmt.buildLine(['C001', indMovimento]));
+    // 🚨 A ABERTURA (C001) VEM NO FIM, derivada do que este gerador EMITIU —
+    // `linhas` aqui é o CONTEÚDO do bloco. Ela decidia pela CONTAGEM DA SELEÇÃO
+    // (`notas.length > 0`), e foi essa forma que produziu o `|D001|0|` sem
+    // conteúdo da EDUARDO GUERRA (17/09) no bloco vizinho. Aqui o laço não
+    // descarta hoje — mas a forma é a mesma, e meia trava protege o cliente que
+    // já quebrou e deixa o próximo descoberto (22/08). Ver `fmt.abrirBloco`.
 
     // Anexa referencia ao objeto dados em cada nota pra que helpers de CFOP
     // possam acessar empresa.dadosFiscais (naturezaAtividade + overrides).
@@ -428,6 +436,29 @@ export function buildBlocoC(dados) {
             // C170s — apenas se a nota nao for cancelada/denegada/inutilizada
             // (Guia Pratico: notas canceladas vao apenas com C100, sem C170)
             if (!docCancelado(nota) && nota.status !== 'denegado' && nota.status !== 'inutilizado') {
+                // ── C101 — DIFAL da EC 87/15, o PRIMEIRO filho do C100 ──────
+                //
+                // Venda interestadual a consumidor final NÃO contribuinte: a
+                // nota que a própria empresa emitiu já traz a partilha no grupo
+                // `ICMSUFDest`, e o C101 só a REPETE (Guia 3.2.3: os três campos
+                // do registro são exatamente os do grupo).
+                //
+                // ⚠️ A ORDEM É DO LEIAUTE: C101 vem ANTES do C170 e do C190.
+                // Registro filho fora de ordem é arquivo que o PVA não importa.
+                //
+                // ⚠️ CANCELADA não leva C101, pela MESMA régua dos outros
+                // filhos: ela sai só com o C100 (Exceção 1), e o débito dela já
+                // fica fora do E310 pelo `docCancelado` do agrupamento.
+                if (documentoLevaC101(nota)) {
+                    const c101 = camposDoC101(nota);
+                    linhas.push(fmt.buildLine([
+                        c101[0],
+                        fmt.formatValue(c101[1], 2),   // VL_FCP_UF_DEST
+                        fmt.formatValue(c101[2], 2),   // VL_ICMS_UF_DEST
+                        fmt.formatValue(c101[3], 2),   // VL_ICMS_UF_REM
+                    ]));
+                }
+
                 // Guia Prático 3.2.3, C100, Exceção 2: NF-e de EMISSÃO PRÓPRIA
                 // (IND_EMIT=0) leva somente C100 + C190 — sem C170.
                 // 🚨 E saída não é a única emissão própria: a nota própria de
@@ -472,12 +503,13 @@ export function buildBlocoC(dados) {
         for (const a of avisosDoValorDaOperacao(comReserva, divergentes)) dados.warnings.push(a);
     }
 
-    // C990 — Encerramento
-    // Total de linhas do bloco INCLUINDO o proprio C990
-    const totalBloco = linhas.length + 1;
-    linhas.push(fmt.buildLine(['C990', totalBloco]));
-
-    return linhas;
+    // C001 — Abertura, DEPOIS do conteúdo (ver o mata-burro acima).
+    // C990 — Encerramento; o total INCLUI a abertura e o próprio C990.
+    return [
+        fmt.abrirBloco('C001', linhas),
+        ...linhas,
+        fmt.buildLine(['C990', linhas.length + 2]),
+    ];
 }
 
 /**
@@ -603,7 +635,9 @@ function buildC100(nota, dados) {
         // E o PVA confere a série contra a que está DENTRO da chave (3 dígitos),
         // então o zero à esquerda é o que faz os dois baterem.
         serieDoDocumento(nota),
-        fmt.sanitizeString(String(nota.numero || ''), 9),
+        // NUM_DOC pela MESMA régua do D100 (`numeroDoDocumento`): o gravado, e a
+        // chave (posições 26-34) como reserva — o PVA confere um contra o outro.
+        fmt.sanitizeString(numeroDoDocumento(nota), 9),
         fmt.sanitizeString(nota.chave || '', 44),
         soCancelavel(fmt.formatDate(nota.dhEmi)),
         soCancelavel(fmt.formatDate(nota.dhSaiEnt || nota.dhEmi)),
@@ -612,7 +646,7 @@ function buildC100(nota, dados) {
         soCancelavel(fmt.formatValue(t.vDesc, 2)),
         '',   // VL_ABAT_NT
         soCancelavel(fmt.formatValue(pick(i.vProd, 'vProd'), 2)),
-        soCancelavel('9'),  // IND_FRT: 9=Sem cobranca frete (default conservador)
+        soCancelavel(indicadorFrete(nota)),
         soCancelavel(fmt.formatValue(t.vFrete, 2)),
         soCancelavel(fmt.formatValue(t.vSeg, 2)),
         soCancelavel(fmt.formatValue(t.vOutro, 2)),

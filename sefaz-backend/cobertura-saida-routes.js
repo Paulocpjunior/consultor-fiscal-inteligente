@@ -104,8 +104,11 @@ router.get('/aptidao-saida', requireAdmin, async (req, res) => {
     const db = getDb();
     const empresas = await carregarEmpresas(db);
 
+    // ⚡ Só os campos que a régua lê: a leitura trazia o documento INTEIRO de
+    // TODA saída do acervo (25/09, auditoria de gargalos).
     const snaps = await fetchAllDocs(
-      db.collection('documentos_fiscais').where('direcao', '==', 'saida'),
+      db.collection('documentos_fiscais').where('direcao', '==', 'saida')
+        .select('empresaCnpj', 'cnpjEmit', 'chave', 'dhEmi', 'createdAt', 'origem', 'capturadoPor', 'autXml', 'autXmlEscritorio'),
       { label: 'aptidao-saida' },
     );
     const docsSaida = snaps.map((s) => {

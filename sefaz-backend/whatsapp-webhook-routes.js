@@ -35,7 +35,7 @@ import {
     caminhoStorageMidia,
 } from './whatsapp-webhook.js';
 import { configWhatsapp, GRAPH_BASE, enviarTextoLivre, enviarMidiaWhatsapp } from './whatsapp-cloud.js';
-import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaValida } from './whatsapp-atendimento.js';
+import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaValida, patchDeReabertura } from './whatsapp-atendimento.js';
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
@@ -256,6 +256,12 @@ async function gravarEventoChamada(db, c) {
         bruto: c.bruto,
         recebidoEm: agora,
     }, { merge: true });
+    // 🚨 REABRE SE ESTAVA ENCERRADA (23/09). Sem isto a ligação do cliente
+    // somava não-lida numa conversa `resolvida` — e, com a aba de encerrados
+    // tirando-a da caixa, ela viraria uma chamada perdida que NINGUÉM vê.
+    // A régua é a do WhatsApp, que já fazia isso inline desde 25/08; aqui ela
+    // vem do DONO, para os três caminhos não divergirem.
+    const convAnterior = (await db.collection('whatsapp_conversas').doc(c.conversaId).get()).data() || {};
     await db.collection('whatsapp_conversas').doc(c.conversaId).set({
         numero: c.conversaId,
         ultimaMensagem: { resumo, direcao: c.direcao, em: c.timestamp || agora },
@@ -263,6 +269,7 @@ async function gravarEventoChamada(db, c) {
         // chamada precisa ver que ela existiu. Só na 1ª gravação do evento.
         ...(!jaExiste && c.direcao === 'entrada'
             ? { naoLidas: admin.firestore.FieldValue.increment(1) } : {}),
+        ...(patchDeReabertura(convAnterior, { direcao: c.direcao, agora }) || {}),
         atualizadoEm: agora,
     }, { merge: true });
     return { jaExiste };
@@ -313,6 +320,10 @@ async function gravarMensagemInstagram(db, m) {
         atualizadoEm: agora,
     }, { merge: true });
 
+    // 🚨 REABRE SE ESTAVA ENCERRADA (23/09) — mesma régua do WhatsApp e da
+    // ligação. O `eco` NÃO reabre: ele é resposta NOSSA por outra plataforma,
+    // e ressuscitar a conversa por causa dele encheria a caixa de volta.
+    const convIgAntes = (await db.collection('whatsapp_conversas').doc(m.conversaId).get()).data() || {};
     await db.collection('whatsapp_conversas').doc(m.conversaId).set({
         numero: m.conversaId,
         canal: 'instagram',
@@ -323,6 +334,7 @@ async function gravarMensagemInstagram(db, m) {
             janela24hAte: janela24hAte(m.timestamp || agora),
             naoLidas: admin.firestore.FieldValue.increment(1),
         }),
+        ...(eco ? {} : (patchDeReabertura(convIgAntes, { direcao: 'entrada', agora }) || {})),
         atualizadoEm: agora,
     }, { merge: true });
     return { contatoNovo: !contato.exists, contatoNome: contato.data()?.nomePerfil || null };

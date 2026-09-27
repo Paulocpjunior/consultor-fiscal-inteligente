@@ -13,6 +13,12 @@
  */
 import { getAuth } from 'firebase/auth';
 
+export interface NotaNomeada {
+    chave: string | null; numero: string | number | null; tipo: string | null;
+    emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null;
+    motivo: 'resumo' | 'nfse-sem-valor';
+}
+
 export interface BloqueioFimDeMes {
     id: string;
     ordem: number;
@@ -35,6 +41,8 @@ export interface BloqueioFimDeMes {
      * prazo de outra UF e UF ausente TÊM conserto — ali a porta não aparece.
      */
     podeDeclararCobertura?: boolean | null;
+    /** 📭 Declarar "sem movimento" resolve ESTE bloqueio? Só com zero documento (etapa 1). */
+    podeDeclararSemMovimento?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
     /**
@@ -43,6 +51,9 @@ export interface BloqueioFimDeMes {
      * `null` fora da etapa 5.
      */
     causas?: string[] | null;
+    /** 🔎 As notas que travam a etapa 2, nomeadas (chave, número, emitente). */
+    notas?: NotaNomeada[] | null;
+    notasCortadas?: number;
 }
 
 export interface FechamentoCompetencia {
@@ -87,7 +98,9 @@ async function chamar(caminho: string, init?: RequestInit): Promise<any> {
     const data = await res.json().catch(() => ({}));
     // A recusa do backend vem COM os bloqueios nomeados — repassar só o texto
     // faria a tela perder justamente o que diz onde resolver.
-    if (!res.ok) return { ok: false, erro: data.erro || `HTTP ${res.status}`, bloqueios: data.bloqueios || [] };
+    // E os campos extras da recusa viajam junto (`jaFechada` + `fechamento`,
+    // 23/09): a tela precisa deles para mostrar o carimbo, não um erro.
+    if (!res.ok) return { ...data, ok: false, erro: data.erro || `HTTP ${res.status}`, bloqueios: data.bloqueios || [] };
     return data;
 }
 

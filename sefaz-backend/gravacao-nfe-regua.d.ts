@@ -20,3 +20,6 @@ export function decidirGravacaoNFe(p: {
     schema: string | null;
     chave: string | null;
 }): DecisaoGravacaoNFe;
+
+/** Os campos que a completa carimba ao completar um resumo (schema/tipoDoc/temItens). */
+export function carimboDaCompleta(parsed: { tipo?: string | null; itens?: unknown[] } | null | undefined): { schema: string | null; tipoDoc: string | null; temItens: boolean };

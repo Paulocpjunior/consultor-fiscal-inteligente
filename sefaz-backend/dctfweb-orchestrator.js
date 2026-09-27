@@ -23,6 +23,7 @@ import {
 import { assertEmissaoLiberada } from './emissao-guard.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { planejarQuotas, resumoDoPlano, RECEITAS_TRIMESTRAIS_QUOTA, QUOTA_VALOR_MINIMO } from './darf-quotas.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 
 const COLLECTION = 'dctfweb_declaracoes';
 // Quotas do trimestral que ainda NÃO podem ser geradas — ver darf-quotas.js.
@@ -227,7 +228,7 @@ export async function registrarQuotasAgendadas({ empresaCnpj, anoPA, mesPA, cate
  */
 export async function listarQuotasAgendadas({ mesRef, cnpjsPermitidos = null } = {}) {
     const db = fa().firestore();
-    const ref = String(mesRef || new Date().toISOString().slice(0, 7));
+    const ref = String(mesRef || anoMesBrt()); // 📅 26/09: competência corrente em Brasília
     const docs = await fetchAllDocs(db.collection(COLLECTION_QUOTAS).where('status', '==', 'agendada'));
     const permitidos = cnpjsPermitidos ? new Set(cnpjsPermitidos.map((c) => String(c).replace(/\D/g, ''))) : null;
     const linhas = docs
@@ -235,7 +236,7 @@ export async function listarQuotasAgendadas({ mesRef, cnpjsPermitidos = null } =
         .filter((q) => String(q.mesRef || '') <= ref)
         .filter((q) => !permitidos || permitidos.has(q.empresaCnpj))
         .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
-    const hojeRef = new Date().toISOString().slice(0, 7);
+    const hojeRef = anoMesBrt();
     return {
         mesRef: ref,
         quotas: linhas.map((q) => ({ ...q, atrasada: String(q.mesRef || '') < hojeRef })),
@@ -332,7 +333,7 @@ export async function gerarDarfsSeparados({
     const naoEmitidos = [];
     const agendadas = [];
     const planoResumos = [];
-    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const hoje = hojeIso || hojeBrt(); // 📅 26/09: Brasília, não UTC
 
     for (const deb of debitosAlvo) {
         if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
@@ -451,7 +452,7 @@ export async function gerarDarfsSeparados({
 // NÃO lê o XML de cada uma (sem custo SERPRO) — só aponta as candidatas; os
 // débitos trimestrais são carregados sob demanda (listarDebitosTrimestrais).
 export async function listarTrimestraisVencendoEsteMes({ cnpjsPermitidos = null, hojeIso } = {}) {
-    const hoje = hojeIso || new Date().toISOString().slice(0, 10);
+    const hoje = hojeIso || hojeBrt(); // 📅 26/09: Brasília, não UTC
     const info = trimestreVencendoEsteMes(hoje);
     if (!info) {
         return { aplicavel: false, motivo: 'Nenhum trimestre de IRPJ/CSLL vence neste mês (vencem em abril, julho, outubro e janeiro).' };

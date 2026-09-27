@@ -9,6 +9,16 @@ export interface XmlParticipanteNfe {
     uf: string | null;
     codMunIBGE: string | null;
     ie: string | null;
+    /**
+     * O que o `<enderEmit>`/`<enderDest>` traz além da UF e do município — e
+     * que este extrator descartava até 18/09. O `logradouro` é o campo 10 do
+     * 0150 (ENDERECO), **obrigatório sem condição** no Guia 3.2.3.
+     */
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cep: string | null;
 }
 
 export interface XmlParticipantesNfe {

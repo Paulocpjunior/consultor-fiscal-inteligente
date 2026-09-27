@@ -32,6 +32,7 @@ command -v gcloud >/dev/null || { echo "❌ gcloud não encontrado. Instale o Go
 command -v node   >/dev/null || { echo "❌ node não encontrado."; exit 1; }
 
 TAG="manual-$(git rev-parse --short HEAD)-$(date +%s)"
+REVISION_NAME="${SERVICE_NAME}-${TAG}"
 COMMIT="$(git rev-parse HEAD)"
 echo "▸ Repositório em $(git rev-parse --abbrev-ref HEAD) · commit ${COMMIT:0:7}"
 
@@ -79,7 +80,7 @@ for attempt in 1 2 3; do
     if gcloud run deploy "$SERVICE_NAME" \
         --image "${IMAGE}:${TAG}" \
         --platform managed --region "$REGION" --project "$PROJECT_ID" \
-        --no-traffic --tag candidate --quiet; then
+        --no-traffic --tag "$TAG" --revision-suffix "$TAG" --quiet; then
         break
     fi
     [ "$attempt" = 3 ] && { echo "❌ Deploy da candidata falhou 3×."; exit 1; }
@@ -90,7 +91,7 @@ done
 # ── 4. Health check ANTES de rotear ─────────────────────────────────────────
 CANDIDATE_URL=$(gcloud run services describe "$SERVICE_NAME" \
     --platform managed --region "$REGION" --project "$PROJECT_ID" --format=json \
-    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const t=JSON.parse(s).status?.traffic||[];const c=t.find(x=>x.tag==="candidate");console.log(c?c.url:"")})')
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const t=JSON.parse(s).status?.traffic||[];const c=t.find(x=>x.tag===process.argv[1]);console.log(c?c.url:"")})' "$TAG")
 
 [ -n "$CANDIDATE_URL" ] || { echo "❌ Não achei a URL da candidata (tag=candidate)."; exit 1; }
 echo "▸ Candidata: $CANDIDATE_URL"
@@ -112,7 +113,7 @@ echo "✓ /ready OK na candidata (processo + Firestore)"
 echo "▸ Roteando 100% do tráfego para a candidata…"
 gcloud run services update-traffic "$SERVICE_NAME" \
     --platform managed --region "$REGION" --project "$PROJECT_ID" \
-    --to-latest --quiet
+    --to-revisions "${REVISION_NAME}=100" --quiet
 
 PROD_URL="${PROD_URL:-https://consultor-fiscal-inteligente-631239634290.us-west1.run.app}"
 curl -sSf "$PROD_URL/ready" >/dev/null && echo "✓ Produção respondendo /ready"

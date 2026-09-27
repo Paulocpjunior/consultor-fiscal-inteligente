@@ -23,22 +23,28 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function adminUser() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function companyAccess(id) {
+      return request.auth != null && (adminUser()
+        || (firestore.exists(/databases/(default)/documents/carteira_acessos/$(request.auth.uid))
+          && id in firestore.get(/databases/(default)/documents/carteira_acessos/$(request.auth.uid)).data.empresaIds)
+        || (firestore.exists(/databases/(default)/documents/simples_empresas/$(id))
+          && firestore.get(/databases/(default)/documents/simples_empresas/$(id)).data.get('createdBy', '') == request.auth.uid)
+        || (firestore.exists(/databases/(default)/documents/lucro_empresas/$(id))
+          && firestore.get(/databases/(default)/documents/lucro_empresas/$(id)).data.get('createdBy', '') == request.auth.uid));
+    }
+
     // XMLs originais da Central de Documentos Fiscais.
-    // - Leitura: usuários autenticados (necessário para baixar pela UI).
-    // - Escrita: usuários autenticados, limitada a 10 MB e content-type XML.
+    // Leitura pela carteira; upload autenticado pelo backend sem token publico.
     match /xmls/{empresaId}/{file} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-                   && request.resource.size < 10 * 1024 * 1024
-                   && (request.resource.contentType == 'application/xml'
-                       || request.resource.contentType == 'text/xml');
-      allow delete: if request.auth != null
-                    && (
-                      // Master admin
-                      request.auth.token.email == 'junior@spassessoriacontabil.com.br'
-                      // ou perfil admin no Firestore
-                      || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                    );
+      allow read: if companyAccess(empresaId);
+      // Upload pela API autenticada: evita tokens permanentes do Firebase.
+      allow create, update: if false;
+      allow delete: if adminUser();
     }
 
     // 🚨 PDFs da importação de NFS-e (NfsePdfImportacao).
@@ -52,19 +58,11 @@ service firebase.storage {
     // É a "rota sem botão" (13/08) do lado do Storage: o caminho existe no
     // código, a permissão não existe, e a falha só aparece no clique.
     //
-    // Mesmo desenho de /xmls: leitura para quem está logado, escrita limitada
-    // ao tipo e ao tamanho, e exclusão só de admin — apagar documento fiscal
-    // não é ação de quem só importa.
+    // Mesmo desenho de /xmls: carteira, upload pelo backend e exclusao admin.
     match /nfse_pdfs/{empresaId}/{file} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-                   && request.resource.size < 20 * 1024 * 1024
-                   && request.resource.contentType == 'application/pdf';
-      allow delete: if request.auth != null
-                    && (
-                      request.auth.token.email == 'junior@spassessoriacontabil.com.br'
-                      || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin'
-                    );
+      allow read: if companyAccess(empresaId);
+      allow create, update: if false;
+      allow delete: if adminUser();
     }
 
     // Default deny — nenhum outro caminho é acessível.

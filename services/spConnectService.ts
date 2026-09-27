@@ -27,7 +27,11 @@ async function req<T>(url: string, init?: RequestInit): Promise<T & { ok: boolea
     return data;
 }
 
-export const listarConversas = () =>
+/**
+ * `encerrados: true` pede a ABA DE ENCERRADOS (Paulo, 23/09) — **só admin**,
+ * e quem recusa é a ROTA (403), nunca o fato de o chip estar escondido.
+ */
+export const listarConversas = (encerrados = false) =>
     req<{
         conversas: ConversaResumo[]; filas: FilaAtendimento[]; minhasFilas: string[] | null;
         papel: 'admin' | 'gestor' | 'colaborador';
@@ -35,7 +39,11 @@ export const listarConversas = () =>
         limiteLeitura?: number | null;
         /** ⚡ Frases do composer (config resolvida — vai de carona porque todo atendente já lê esta rota). */
         respostasRapidas?: string[];
-    }>('/api/admin/whatsapp/conversas');
+        /** Esta resposta É a aba de encerrados. */
+        encerradas?: boolean;
+        /** Quantas saíram da caixa nesta leitura — o número não some (farol honesto). */
+        encerradasOcultas?: number;
+    }>(`/api/admin/whatsapp/conversas${encerrados ? '?situacao=resolvida' : ''}`);
 
 /**
  * Mensagens de uma conversa — as 500 mais recentes. `antesDe` (o timestamp da
@@ -82,7 +90,13 @@ export const iniciarConversa = (p: {
     templateDireto?: { nome: string; idioma: string };
     variaveisPosicionais?: string[];
 }) =>
-    req<{ numero: string; messageId: string; opcoes?: string[]; faltando?: string[]; acao?: string }>(
+    req<{
+        numero: string; messageId: string; opcoes?: string[]; faltando?: string[]; acao?: string;
+        /** O texto que o cliente RECEBEU (corpo aprovado preenchido) — é o que o balão e o aviso mostram. */
+        texto?: string;
+        /** Regra da Meta: template NÃO abre a janela de 24h; só a resposta do cliente abre. */
+        janelaAbreSoComResposta?: boolean;
+    }>(
         '/api/admin/whatsapp/conversas/iniciar',
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
 
@@ -655,3 +669,27 @@ export interface RelatorioAtendimento {
 }
 export const relatorioAtendimento = (dias: number) =>
     req<RelatorioAtendimento>(`/api/admin/whatsapp/relatorio?dias=${dias}`);
+
+// ─── 🔔 Avisos: o painel que responde "por que eu não recebi?" (24/09) ───────
+export interface SimulacaoAviso { receberia: boolean; motivo: string | null }
+export interface AuditoriaAviso {
+    em: string; titulo: string;
+    push: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number };
+    teams: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number; erros: { email: string; etapa: string | null; erro: string }[] };
+}
+export interface StatusAvisosResposta {
+    /** Token do Graph emitido de verdade (cacheado) — a AUDIÊNCIA certa não prova a credencial. */
+    credencialGraph: { ok: boolean; erro: string | null; /** só o TAMANHO, nunca o valor — 40 é o esperado */ tamanhoSegredo?: number };
+    agora: string; noExpediente: boolean; horario: unknown; avisoTeamsAtivo: boolean;
+    teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+    dispositivos: number; prefs: Record<string, boolean>; filaSimulada: string;
+    simulacao: { push: SimulacaoAviso; teams: SimulacaoAviso };
+    ultimoAviso: AuditoriaAviso | null;
+}
+export interface TesteTudoResposta {
+    teams: { ok: true } | { ok: false; etapa: string; erro: string };
+    push: { ok: true; enviados: number; aparelhos: number; mortos: number } | { ok: false; etapa: string; erro: string; mortos?: number };
+    teamsStatus: { graphConfigurado: boolean; clientId: string | null; teamsAppId: string };
+}
+export const statusAvisos = () => req<StatusAvisosResposta>('/api/admin/whatsapp/avisos/status');
+export const testarTodosAvisos = () => req<TesteTudoResposta>('/api/admin/whatsapp/avisos/testar-tudo', { method: 'POST' });

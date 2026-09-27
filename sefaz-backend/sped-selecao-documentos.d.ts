@@ -97,6 +97,7 @@ export function ehItemDeServico(item: unknown): boolean;
  * série; nunca o '1' que o bloco D inventava.
  */
 export function serieDoDocumento(nota: unknown): string;
+export function numeroDoDocumento(nota: unknown): string;
 
 /**
  * COD_ITEM — a CHAVE que liga o item ao cadastro do 0200.

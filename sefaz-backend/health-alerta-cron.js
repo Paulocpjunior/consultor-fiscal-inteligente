@@ -23,6 +23,7 @@ import { listCertsEmpresas } from './cert-storage.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { secretsMatch } from './cron-secret.js';
+import { vigiarCredencialGraph } from './graph-credencial-vigia.js';
 
 const router = express.Router();
 
@@ -191,7 +192,17 @@ router.post('/health-alerta-cron', requireCronAuth, async (req, res) => {
     const dryRun = req.body?.dryRun === true || req.query?.dryRun === '1';
     try {
         const graphOk = isGraphConfigured();
+        // 🛡️ O VIGIA VEM PRIMEIRO (24/09): este alerta sai por e-mail, pela
+        // MESMA credencial — credencial morta = alerta mudo. Sondar e gravar
+        // antes é o que faz a Rotina do Mês acender para todo mundo.
+        let vigia = null;
+        try { vigia = await vigiarCredencialGraph(fa().firestore()); } catch (e) { console.error('[health-alerta-cron] vigia falhou:', e.message); }
         const saude = await calcularSaude();
+        if (vigia && vigia.situacao !== 'ok') {
+            saude.status = 'critico';
+            saude.totais.critico += 1;
+            saude.secoes.email = { credencial: vigia.situacao, desde: vigia.primeiraFalhaEm || null };
+        }
 
         // Le status anterior
         const ref = fa().firestore().collection(COLLECTION).doc(DOC_ID);

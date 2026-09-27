@@ -299,3 +299,16 @@ describe('🚨 o corte não pode engolir o nome do app', () => {
         expect(recortarPreservandoApp(semApp)).toHaveLength(200);
     });
 });
+
+// ── 24/09: o app do e-mail lê `graph-notificacoes-secret`, não `graph-client-secret` ──
+describe('o app do e-mail (59fd4ec9…) manda gravar no segredo CERTO', () => {
+    it('nomeia graph-notificacoes-secret e o passo da revisão nova; nunca manda para o graph-client-secret', () => {
+        const { APPS_AZURE } = require('../sefaz-backend/sharepoint-erro-credencial.js');
+        const onde = APPS_AZURE['59fd4ec9-37bd-472c-9fa7-373461dffd50'].onde;
+        expect(onde).toMatch(/graph-notificacoes-secret/);
+        expect(onde).toMatch(/update-secrets GRAPH_CLIENT_SECRET=graph-notificacoes-secret:latest/);
+        expect(onde).toMatch(/update-traffic/);
+        // O proxy continua no dele.
+        expect(APPS_AZURE['a876887f-a126-424f-8d8a-fc011519855e'].onde).toMatch(/graph-client-secret/);
+    });
+});

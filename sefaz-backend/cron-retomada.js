@@ -21,6 +21,10 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+// 🚦 Trava 2 (25/09): a retomada só refaz rodada AGENDADA. Rodada manual
+// interrompida fica dita no log; refazer sozinho é o que produziu 109 e 147
+// falhas em 25/09 (a carteira inteira de novo dentro da janela de 1 h).
+import { fonteRetomavel } from './rodada-completa-janela.js';
 
 function fa() {
   if (!admin.apps.length) {
@@ -55,6 +59,7 @@ export function selecionarInterrompidosParaRetomar(docs, agoraMs = Date.now(), m
   return (docs || []).filter((d) => {
     if (!d || d.status !== 'interrompido') return false;
     if (d.retomadoEm) return false;
+    if (!fonteRetomavel(d.fonte)) return false;
     const ms = d.interrompidoEm ? Date.parse(d.interrompidoEm) : NaN;
     if (!Number.isFinite(ms)) return false;
     const idade = agoraMs - ms;
@@ -125,9 +130,18 @@ export async function retomarCronsInterrompidos({ port }) {
         continue;
       }
       const url = `http://127.0.0.1:${port}${reg.path}`;
+      // A fonte da rodada nova DIZ que é retomada e de quem (a coluna Origem
+      // de Erros & Logs lê isto); `x-retomada` libera a porta da janela — as
+      // empresas já alcançadas saem como "janela" no laço, sem consulta.
+      const fonteOriginal = String(candidatos[0]?.fonte || reg.label).slice(0, 60);
       const resp = await fetch(url, {
         method: 'POST',
-        headers: { 'x-cron-secret': secret, 'Content-Type': 'application/json' },
+        headers: {
+          'x-cron-secret': secret,
+          'Content-Type': 'application/json',
+          'x-cloudscheduler-jobname': `retomada:${fonteOriginal}`,
+          'x-retomada': '1',
+        },
         body: JSON.stringify(reg.body || {}),
       });
       console.log(`[cron-retomada] ${reg.label}: interrompido há pouco → re-disparado (HTTP ${resp.status})`);

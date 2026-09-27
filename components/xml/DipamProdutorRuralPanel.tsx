@@ -17,9 +17,12 @@ import {
     carregarPainelDipam, varrerDipam, salvarProdutorRural, textoRegistro1400, relerMunicipiosDipam,
     type DipamPainel, type DipamVarreduraLinha,
 } from '../../services/dipamService';
+import { encadearReleitura, fraseDoResultado } from '../../services/relerParticipantes';
 import { validarCpf, formatarCpf } from '../../services/validadorDocumento';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 import { getEmpresasDisponiveis, type EmpresaXmlOption } from '../../services/xmlFiscalService';
 import {
     montarFilaFornecedores, resumirFila, textoDaFila, linhasDoPdf, totaisDoPdf,
@@ -59,9 +62,13 @@ const Caixa: React.FC<{ titulo: string; children: React.ReactNode; extra?: React
     </div>
 );
 
+// Referência estável pra quando ainda não há varredura (senão o hook reinicia a cada render).
+const SEM_LINHAS: DipamVarreduraLinha[] = [];
+
 const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [varredura, setVarredura] = useState<any>(null);
+    const paginaVarredura = usePaginaLocal<DipamVarreduraLinha>(varredura?.linhas ?? SEM_LINHAS, undefined, 'clientes');
     const [carregandoVarredura, setCarregandoVarredura] = useState(false);
     const [empresaId, setEmpresaId] = useState<string | null>(null);
     const [painel, setPainel] = useState<DipamPainel | null>(null);
@@ -222,7 +229,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {varredura.linhas.map((l: DipamVarreduraLinha) => (
+                                    {paginaVarredura.visiveis.map((l: DipamVarreduraLinha) => (
                                         <tr key={l.empresaId} className="border-b border-slate-100 dark:border-slate-700/50">
                                             <td className="py-1.5 pr-2">
                                                 <span className="font-semibold text-slate-700 dark:text-slate-200">{l.nome}</span>
@@ -251,6 +258,7 @@ const DipamProdutorRuralPanel: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = fa
                                     ))}
                                 </tbody>
                             </table>
+                            <MostrarMais pagina={paginaVarredura} />
                         </div>
                     )}
                 </div>
@@ -461,21 +469,26 @@ const DetalheEmpresa: React.FC<{
     };
 
     const relerMunicipios = async () => {
-        if (!empresaId || !painel.competencia) return;
+        const competencia = painel.competencia;
+        if (!empresaId || !competencia) return;
         setRelendo(true); setResultadoReler(null);
         try {
-            const r: any = await relerMunicipiosDipam(empresaId, painel.competencia);
-            if (r?.ok === false) { setResultadoReler(`Falha: ${r.error}`); return; }
-            // O resultado diz O QUE foi recuperado, por causa. O texto antigo
-            // ("N já tinham") mentia: ele contava documentos que o backfill nem
-            // chegou a abrir, porque o sentinela olhava a UF — que existe em
-            // toda nota — em vez do dado que falta.
+            // MESMA rota e MESMA frase da ✏️ CFOP por nota (18/09): o texto do
+            // resultado tem dono (`fraseDoResultado`) porque duas telas
+            // descrevendo o mesmo retorno divergem no primeiro campo novo — foi
+            // assim que o "0 recuperadas · 664 já tinham" conviveu com 427
+            // pendências na tela (13/08). E quem encadeia a fila é o APP: a
+            // competência pode ter mais documentos que o lote.
+            const { total, rodadas, parouPorTeto } = await encadearReleitura(
+                () => relerMunicipiosDipam(empresaId, competencia),
+                { aoProgredir: (acc) => setResultadoReler(fraseDoResultado(acc)) },
+            );
             setResultadoReler(
-                `${r.preenchidas} nota(s) recuperadas do XML`
-                + (r.ganharamFornecedor ? ` · ${r.ganharamFornecedor} ganharam o fornecedor` : '')
-                + (r.ganharamMunicipio ? ` · ${r.ganharamMunicipio} ganharam o município` : '')
-                + ` · ${r.jaTinham} já relidas antes · ${r.semXml} sem arquivo guardado.`
-                + (r.acao ? ` ${r.acao}` : ''),
+                fraseDoResultado(total)
+                + (rodadas > 1 ? ` (${rodadas} rodadas)` : '')
+                + (parouPorTeto
+                    ? ' ⚠️ A fila ainda não zerou — clique de novo para continuar de onde parou.'
+                    : ''),
             );
             onRecarregar();
         } catch (e: any) {

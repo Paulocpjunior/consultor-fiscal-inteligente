@@ -477,7 +477,8 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                         </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                             O CFI recebe as mensagens dos clientes e o destino de cada envio (entregue · lido · falhou, com o
-                            motivo) direto da Meta — em paralelo com a plataforma de atendimento atual, que segue intocada.
+                            motivo) direto da Meta. Quem lê e responde é o <strong>SP Connect</strong>, que atende o
+                            escritório inteiro desde 21/08.
                         </p>
                         {webhook && (
                             <div className="mt-2 space-y-2">
@@ -515,7 +516,19 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                     inteiro. Quem diz qual é o nosso é a Meta (`debug_token`),
                                                     nunca o nome (que não é escolhido por nós). */}
                                                 <span className="text-slate-600 dark:text-slate-300">
-                                                    <strong>Apps assinados na WABA:</strong>{' '}
+                                                    {/* 🚨 QUAL WABA? — 23/09, no corte da Ultra Fox: o
+                                                        portfólio da Meta tem CINCO contas do WhatsApp com
+                                                        o nome IDÊNTICO ("BM - SP Assessoria Contábil").
+                                                        Dizer "assinados na WABA" sem dizer QUAL é a mesma
+                                                        armadilha do "lista de nomes não é resposta": dá
+                                                        para remover um parceiro numa conta e ele seguir
+                                                        em outra, com a tela verde. O backend já resolvia
+                                                        o id pelo número do token e a tela o escondia. */}
+                                                    <strong>Apps assinados na WABA</strong>
+                                                    {webhook.assinaturaWaba.wabaId && (
+                                                        <span className="opacity-60"> {webhook.assinaturaWaba.wabaId}</span>
+                                                    )}
+                                                    <strong>:</strong>{' '}
                                                     {(webhook.assinaturaWaba.apps || []).length ? (
                                                         (webhook.assinaturaWaba.apps || []).map((a, i) => (
                                                             <span key={a.id || i}>
@@ -524,7 +537,17 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                                                     {a.nome || a.id}
                                                                 </span>
                                                                 {a.nosso === true && ' ✓ este é o nosso'}
-                                                                {a.nosso === false && ' — de terceiro'}
+                                                                {/* 🚨 O ID SAI JUNTO, e não é detalhe técnico: é o
+                                                                    ÚNICO jeito de dizer QUAL app de terceiro é qual.
+                                                                    23/09, ao cortar a Ultra Fox: dois apps marcados
+                                                                    "de terceiro" (`Business Agent` e `f-bot`) e
+                                                                    NENHUM chamado Ultra Fox — o nome na Meta não é
+                                                                    escolhido por nós. Sem o id, a decisão "qual eu
+                                                                    removo?" vira palpite, e remover o errado cala o
+                                                                    recebimento do escritório inteiro. */}
+                                                                {a.nosso === false && (
+                                                                    <> — de terceiro <span className="opacity-60">(id {a.id})</span></>
+                                                                )}
                                                             </span>
                                                         ))
                                                     ) : 'NENHUM — é por isso que mensagem real não chega'}
@@ -594,9 +617,16 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                                         )}
                                     </div>
                                 </div>
+                                {/* ⚰️ ESTE TEXTO DIZIA QUE O INBOX ERA "A PRÓXIMA FASE" — e
+                                    seguiu dizendo isso por mais de um mês DEPOIS de a
+                                    operação inteira estar no SP Connect (21/08). Painel de
+                                    admin que descreve um mundo que não existe mais ensina
+                                    errado quem abre para decidir algo, e foi aqui que o
+                                    corte da Ultra Fox veio conferir. */}
                                 <p className="text-[10px] text-slate-400">
-                                    A leitura e a resposta das conversas continuam na plataforma atual — a tela de atendimento
-                                    do CFI é a próxima fase do módulo Comunicação.
+                                    A leitura e a resposta das conversas acontecem no <strong>SP Connect</strong>. Este painel
+                                    é o <strong>canal</strong> (recebimento e entrega) — é aqui que se confere quem está
+                                    assinado na WABA antes de cortar um fornecedor.
                                 </p>
                             </div>
                         )}

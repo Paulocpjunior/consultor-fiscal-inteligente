@@ -87,6 +87,8 @@ export async function gravarCfopEscriturado(i: GravarCfopEscrituradoInput): Prom
 const COLECAO_PARAMETROS = 'cfop_parametros';
 /** O teto que `firestore.rules` exige no `list` desta coleção. */
 const LIMITE_LIST_PARAMETROS = 2000;
+/** Teto de docs lidos por empresa (parâmetros são poucos por empresa). */
+const TETO_PARAMETROS = 5000;
 
 export interface ParametroCfopDoc {
     id?: string;
@@ -133,7 +135,7 @@ export async function lerParametrosCfop(empresaId: string): Promise<LeituraParam
         const snaps = await fetchAllDocs(
             COLECAO_PARAMETROS,
             [where('empresaId', '==', empresaId)],
-            { batchSize: LIMITE_LIST_PARAMETROS },
+            { batchSize: LIMITE_LIST_PARAMETROS, maxDocs: TETO_PARAMETROS },
         );
         return {
             parametros: snaps.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroCfopDoc[],

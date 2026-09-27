@@ -13,6 +13,8 @@ import {
 } from '../../services/nfseNacionalService';
 import { baixarDanfse } from '../../services/danfseGenerator';
 import { usePrompt } from '../dialog/DialogProvider';
+import { usePaginaLocal } from '../hooks/usePaginaLocal';
+import MostrarMais from '../MostrarMais';
 
 interface Props {
     currentUser: User | null;
@@ -93,6 +95,7 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
             );
         });
     }, [docs, busca]);
+    const paginaDocs = usePaginaLocal(docsFiltrados, undefined, 'notas');
 
     return (
         <div className="space-y-6">
@@ -183,7 +186,7 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                             </tr>
                         </thead>
                         <tbody>
-                            {docsFiltrados.map(d => (
+                            {paginaDocs.visiveis.map(d => (
                                 <tr
                                     key={d.id}
                                     onClick={() => setSelecionada(d)}
@@ -203,6 +206,7 @@ const NfseNacionalDashboard: React.FC<Props> = ({ currentUser, onShowToast }) =>
                             ))}
                         </tbody>
                     </table>
+                    <MostrarMais pagina={paginaDocs} />
                 </div>
             )}
 

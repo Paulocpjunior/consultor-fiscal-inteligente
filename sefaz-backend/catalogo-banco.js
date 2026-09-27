@@ -20,6 +20,7 @@ export const CATALOGO_BANCO = [
     // ── Cadastro & acesso ──────────────────────────────────────────────────
     { colecao: 'users', grupo: 'Cadastro & Acesso', funcionalidade: 'Usuários, papéis e departamentos do SaaS (login, admin/colaborador, gate dos módulos irmãos)' },
     { colecao: 'carteiras', grupo: 'Cadastro & Acesso', funcionalidade: 'Carteira de clientes por colaborador' },
+    { colecao: 'carteira_acessos', grupo: 'Cadastro & Acesso', funcionalidade: 'Indice privado de autorizacao por UID, mantido atomicamente pelo backend com os vinculos de carteira' },
     { colecao: 'carteira_observacoes', grupo: 'Cadastro & Acesso', funcionalidade: 'Observação do colaborador sobre um cliente na competência (guia do mês); 1 doc por empresa × competência, escrita só pelo backend' },
     { colecao: 'simples_empresas', grupo: 'Cadastro & Acesso', funcionalidade: 'Empresas do Simples Nacional (cadastro + apuração)' },
     { colecao: 'lucro_empresas', grupo: 'Cadastro & Acesso', funcionalidade: 'Empresas do Lucro Presumido/Real' },
@@ -70,6 +71,7 @@ export const CATALOGO_BANCO = [
 
     // ── Simples / DAS ──────────────────────────────────────────────────────
     { colecao: 'das_emitidos', grupo: 'Simples · DAS', funcionalidade: 'DAS emitidos (PGDAS-D + guia)' },
+    { colecao: 'das_emissao_operacoes', grupo: 'Simples · DAS', funcionalidade: 'Diário privado de emissão: reserva idempotente, recibo PGDAS-D e recuperação de guia sem retransmissão; escrita exclusiva do backend' },
     { colecao: 'pgdas_sem_movimento', grupo: 'Simples · DAS', funcionalidade: 'PGDAS-D de mês sem movimento (declaração sem guia)' },
     { colecao: 'pgdas_atividades_codigos', grupo: 'Simples · DAS', funcionalidade: 'Código oficial de atividade do PGDAS-D cadastrado pelo admin (ISS fixo/SUP)' },
     { colecao: 'ncm_parametros', grupo: 'Cadastro & Acesso', funcionalidade: 'Cadastro de NCM: alíquota interna, IVA-ST (com Portaria e vigência), CEST e redução de base' },

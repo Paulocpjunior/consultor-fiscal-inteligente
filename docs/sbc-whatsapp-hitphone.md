@@ -33,12 +33,21 @@ O SBC é ponte, não destino.
 - ✅ A HIT aceita **INVITE direto de fora** (sem registro/senha) — visto no
   fragmento de INVITE de 23/08. É assim que o SBC entrega a chamada lá.
 - ✅ `calling = ENABLED` no nosso número (sonda de 23/08, build 732).
-- 🚧 **NADA da ponta Meta→SBC foi provado contra chamada real** — nem o
-  payload de escrita do `sip` nas settings (a rota re-lê e mostra o que a Meta
-  guardou), nem o formato do INVITE dela, nem codecs. **A primeira chamada de
-  teste é a prova**, e o ajuste fino sai dos logs do Asterisk
-  (`asterisk -rvvv`), não de dedução. Mesma régua do CT-e (cStat 239): o
-  primeiro erro real vale mais que dez suposições.
+- ✅ **A META ENTREGA O INVITE no SBC** (28/08, 11:03:38): o Asterisk montou
+  sessão no endpoint `meta`. A dúvida de entrega está ENCERRADA.
+- ✅ **A LIGAÇÃO COMPLETA, PONTA A PONTA** (23/09, Paulo: *"liguei e caiu na
+  URA, correto"* … *"ouvi a URA normalmente"*). Chamada feita **dentro da
+  grade**, atendida pela URA, com **áudio nos dois sentidos**. Não há
+  bloqueio, não há chamado a abrir e **não há mídia a consertar**.
+- 📌 **A causa das rodadas perdidas era a GRADE `call_hours` da Meta**, não a
+  infraestrutura: seg–sex 08:00–12:00 e 13:00–17:30 (America/Sao_Paulo), e a
+  VM roda em **UTC**. O teste das 07:50 BRT foi dez minutos antes de a janela
+  abrir. Fora da grade, "nenhum INVITE no log" é a resposta **certa**.
+- ⚰️ **O `Couldn't negotiate stream` do log é de tentativas VELHAS** e não
+  descreve o estado de hoje. O suspeito que este documento carregou por
+  semanas — DTLS-SRTP × o nosso `media_encryption=sdes` — **nunca chegou a ser
+  o problema**. Ver [🔴 O INVITE CHEGA](#-2808--o-invite-chega-a-premissa-do-chamado-caiu)
+  e a [Conclusão](#conclusão).
 
 ## Pré-requisitos (na mão do Paulo)
 
@@ -209,10 +218,13 @@ celular e do WhatsApp; o cliente escolhe o MEIO, não o caminho interno.
 📌 **Isso mata a questão do DTMF antes de ela existir**: não há menu para
 digitar em lugar nenhum, então teclado não decide nada aqui (ver o funil).
 
-⚠️ **E isso NÃO destrava a ligação**: o INVITE da Meta não chega ao tronco
-(medido em 25/08, ver o topo deste documento). O 211 é para onde a chamada vai
-cair **quando** a Meta passar a entregar — trocar o destino agora é preparar o
-terreno, não corrigir o bloqueio.
+⚠️ **E isso NÃO destrava a ligação — nunca destravou, e nem era para.** Escolher
+o destino diz **onde a chamada cai**, não **se ela chega**. Na época esta frase
+existia porque o caso parecia travado; hoje se sabe que o que faltava era
+discar **dentro da grade da Meta** (23/09 — ver a [Conclusão](#conclusão)). A
+régua continua valendo para o futuro: mexer no `SBC_DESTINO` é decisão de
+roteamento interno e **nunca** deve ser lida como conserto de chamada que não
+chega.
 
 ### Caminho SECUNDÁRIO da saída: teclado com prefixo
 
@@ -341,11 +353,24 @@ de código: **caixa única com selo do canal** × **caixas separadas**. A régua
 casa empurra para a caixa única — o cliente é o mesmo, e duas listas fazem a
 mesma pessoa aparecer em dois lugares com estados diferentes.
 
-## 🛑 PROVADO EM 25/08: a Meta NÃO ENTREGA a chamada no tronco
+## 🛑 MEDIDO EM 25-26/08: nenhum INVITE nas janelas conferidas
 
-Depois de um dia inteiro de rodadas, o caso fechou — e fechou com MEDIÇÃO, não
-com dedução. Três hipóteses minhas caíram no caminho (certificado, horário,
-interruptores da Meta); a única que sobreviveu veio de olhar a tela real.
+> ⛔ **ESTA SEÇÃO FOI SUPERADA EM 28/08 — leia antes o
+> [🔴 O INVITE CHEGA](#-2808--o-invite-chega-a-premissa-do-chamado-caiu).**
+> O que está medido aqui continua valendo *para as janelas medidas*; o que
+> **não** vale mais é a leitura geral de que "a Meta não entrega". Em 28/08 o
+> log do Asterisk mostrou uma sessão do endpoint `meta` falhando na negociação
+> de mídia — ou seja, o INVITE chegou e **quebrou do nosso lado**.
+> O título desta seção dizia *"a Meta NÃO ENTREGA a chamada no tronco"* e foi
+> corrigido: ele generalizava uma medição de janela para uma conclusão sobre o
+> outro lado.
+
+Depois de um dia inteiro de rodadas, o caso pareceu fechar — e fechou com
+MEDIÇÃO, não com dedução. Três hipóteses minhas caíram no caminho (certificado,
+horário, interruptores da Meta); a única que sobreviveu veio de olhar a tela
+real. ⚠️ O que faltou foi separar *"não achei INVITE nesta janela"* de *"não
+chega INVITE"* — a primeira é o que foi medido, a segunda é o que o documento
+passou a afirmar.
 
 ### O que está provado do NOSSO lado
 
@@ -507,18 +532,188 @@ elimina de uma vez todas as variáveis que os dois compartilham. É a mesma rég
 do "comparar com o arquivo assinado da PRÓPRIA empresa" (24/08, CF BANK), agora
 em infraestrutura.
 
+## 🔴 28/08 — O INVITE CHEGA. A PREMISSA DO CHAMADO CAIU.
+
+Uma varredura de `ERROR` no log do Asterisk, feita por outro motivo, devolveu a
+linha que inverte o caso:
+
+```
+[2026-08-28 11:03:38] ERROR[35904] res_pjsip_session.c:
+    meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)
+```
+
+🚨 **`meta` é o NOSSO endpoint pjsip** — o `[meta]` do `pjsip.conf`, criado para
+receber o tronco da Meta. Uma sessão só existe nele depois de um **INVITE
+aceito**: o Asterisk casou a chamada com o endpoint, montou a sessão e só então
+falhou ao negociar o áudio. Ou seja:
+
+| Antes deste achado | Depois |
+|---|---|
+| "a chamada não chega ao SBC" | **a chamada CHEGA** |
+| "o problema é de entrega, do lado da Meta" | **o problema é de MÍDIA, do nosso lado** |
+| próximo passo: abrir chamado na Meta | próximo passo: acertar a oferta de mídia do pjsip |
+
+O `(nothing)` é literal: das mídias oferecidas no SDP, **nenhuma** sobreviveu ao
+nosso filtro. Isso tem duas famílias de causa — **codec** ou **perfil de
+transporte** — e uma delas já foi descartada por medição.
+
+### ❌ A minha primeira hipótese estava ERRADA: não é o Opus
+
+Concluí que faltava o codec. Conferido no CLI do Asterisk
+(`module show like opus`), o módulo está **instalado e rodando**:
+
+```
+codec_opus_open_source.so ... Running
+```
+
+E o endpoint já declara `allow=opus,alaw,ulaw`. **Codec ausente está
+descartado** como causa.
+
+### ⚰️ SUPERADA EM 23/09 — a hipótese do transporte nunca precisou ser testada
+
+> 🚨 **NÃO EXECUTE O QUE ESTA SEÇÃO MANDA FAZER.** Ela está aqui como
+> registro, não como instrução. Em 23/09 a ligação **completou**: entrou
+> dentro da grade, caiu na URA e teve áudio. Não há negociação de mídia
+> quebrada para consertar, e **trocar `media_encryption` agora quebraria o que
+> está funcionando**.
+>
+> O que derrubou esta hipótese não foi uma medição do `m=audio` — foi a
+> ligação. As falhas de negociação que ainda estão no log são de tentativas
+> velhas, de fora da grade.
+>
+> 📌 **E é por isso que ela fica escrita.** A seção abaixo é um raciocínio
+> coerente, bem fundamentado e **errado** — apagá-la esconderia o quanto uma
+> hipótese boa se parece com uma causa. Ela também explica por que o próprio
+> texto insistia em *"nada vira configuração antes do `m=audio`"*: a
+> desconfiança estava certa, só não foi longe o bastante para desconfiar da
+> **pergunta**.
+
+<details>
+<summary>O raciocínio de 28/08, preservado (clique para abrir)</summary>
+
+O suspeito seguinte é o **perfil de transporte da mídia**. A Meta entrega
+chamada de WhatsApp com pilha de WebRTC, e ali o SDP costuma oferecer
+`UDP/TLS/RTP/SAVPF` (**DTLS-SRTP**). O nosso endpoint está em:
+
+```ini
+media_encryption=sdes            ; SRTP negociado no SDP → perfil RTP/SAVP
+media_encryption_optimistic=yes  ; aceita cair para RTP/AVP — NÃO fala DTLS
+```
+
+`sdes` e `dtls` são perfis **diferentes**, e o `optimistic` não faz ponte entre
+eles: ele afrouxa para texto claro, não para DTLS. Se a oferta vier em
+`SAVPF`, o pjsip não tem o que casar — e o resultado é exatamente
+`Couldn't negotiate ... (nothing)`.
+
+⚠️ **ISSO É HIPÓTESE, NÃO CAUSA CARIMBADA.** Quem responde é **uma linha**: o
+`m=audio` do SDP que a Meta manda — e ela sai na **seção 7 do
+`sbc-diagnostico.sh`**, junto da contagem de falhas de negociação:
+
+```bash
+cd ~/consultor-fiscal-inteligente && gcloud compute ssh sbc-whatsapp \
+  --project=consultorfiscalapp --zone=us-west1-a \
+  --command='sudo bash -s --' < scripts/sbc-diagnostico.sh
+```
+
+⚠️ **A seção 7 varre o log INTEIRO, não a janela** — de propósito: o erro de
+28/08 é das 11:03 e a varredura daquele dia olhou `08:0`. Recortar pela janela
+esconderia justamente a evidência que inverteu o caso.
+
+- Voltou `UDP/TLS/RTP/SAVPF` ⇒ é DTLS, e a correção é
+  `media_encryption=dtls` (com `dtls_verify`, `dtls_cert_file` e
+  `dtls_setup=actpass` no endpoint).
+- Voltou `RTP/SAVP` ou `RTP/AVP` ⇒ **não é transporte**, e a conta volta para
+  codec/direção do atributo (`sendrecv`), com o SDP inteiro na mão.
+
+Enquanto essa linha não for lida, **nada aqui vira configuração** — trocar
+`sdes` por `dtls` no escuro é o mesmo chute que já custou três rodadas.
+
+</details>
+
+### ⚠️ E as medições de 25-26/08 NÃO foram desmentidas — elas foram limitadas
+
+Nas janelas conferidas de 25 e 26/08 o log tinha mesmo **zero INVITE**, com o
+gravador ligado e provado. Em 28/08 havia um. Existem duas leituras e o
+documento **não escolhe** nenhuma, porque não há medição que separe as duas:
+
+1. algo mudou do lado da Meta entre 26 e 28/08 (a chamada passou a ser
+   entregue); ou
+2. as janelas medidas não cobriram o minuto certo — a tentativa das 08:03 de
+   28/08 foi varrida e deu zero, e a linha de erro é das **11:03:38**, de uma
+   tentativa que ninguém correlacionou.
+
+📌 **REGRA QUE FICA: medição de JANELA não vira conclusão sobre o OUTRO LADO.**
+O log respondia *"não achei INVITE entre X e Y"* e o documento escreveu *"a Meta
+não entrega"*. As duas frases têm custos diferentes: a primeira pede outra
+rodada, a segunda manda abrir chamado acusando terceiro. E o custo se realizou —
+o texto do chamado ficou **seis dias** pronto para enviar afirmando o contrário
+do que o nosso próprio log já provava.
+
+📌 **E A SEGUNDA: achado que inverte um documento entra NO DOCUMENTO no mesmo
+dia.** Em 28/08 eu escrevi que só reescreveria os documentos com a correção
+provada por uma ligação que completasse. Errado: o que esperava prova era a
+CAUSA, não o FATO de o INVITE chegar — e a conclusão velha não é espaço em
+branco, é uma afirmação ativa que a próxima sessão executaria.
+
 ### Conclusão
 
-O que falta não está no SBC nem na configuração que o app escreve. **Não há o
-que consertar deste lado** — o próximo passo é o suporte da Meta, e o texto do
-chamado está abaixo.
+**O caso está FECHADO, e nada havia para consertar.** Em 23/09 o Paulo ligou
+**dentro da grade**, a chamada caiu na URA e ele ouviu o áudio — *"liguei e
+caiu na URA, correto"*, *"ouvi a URA normalmente"*. O caminho Meta → SBC →
+HitPhone funciona ponta a ponta.
+
+**A causa das rodadas perdidas era a grade `call_hours` da Meta**: seg–sex
+08:00–12:00 e 13:00–17:30 em America/Sao_Paulo, contra uma VM que roda em
+**UTC**. O teste das 07:50 BRT foi dez minutos antes de a janela abrir. As
+quatro falhas reais do log caem todas **dentro** dela — o que mudou não foi a
+configuração, foi a hora de discar.
+
+⚠️ **E o que este documento errou vale mais que o que ele acertou.** Ele
+chegou a concluir *"não há o que consertar deste lado — o próximo passo é o
+suporte da Meta"*, com um chamado pronto afirmando quatro vezes algo que o
+nosso próprio log desmentia. Depois corrigiu para *"o caso está aberto, e do
+nosso lado"*, apontando o transporte de mídia — **também errado**. Duas
+conclusões opostas, as duas confiantes, as duas construídas sobre a mesma
+falha: **medir uma JANELA e concluir sobre o OUTRO LADO**.
+
+📌 **REGRA QUE FICA: conclusão em documento não é espaço em branco — é uma
+instrução que alguém executa.** Cada versão errada daqui mandaria a próxima
+sessão fazer algo caro: abrir chamado indevido na Meta, ou trocar
+`media_encryption` num tronco que já funciona. Enquanto a pergunta não tem
+resposta, o documento diz *"não sei"* — nunca um palpite com cara de próximo
+passo.
 
 📌 **REGRA QUE FICA: infraestrutura de diagnóstico se CONFERE antes do teste.**
 As três primeiras rodadas não valeram nada porque o SBC nasceu sem gravar —
 o silêncio não distinguia "não chegou" de "chegou e ninguém anotou". Só depois
 de provar que o gravador estava ligado é que o vazio virou prova.
 
-### Texto do chamado (Meta / suporte da WABA)
+✅ **E O DIAGNÓSTICO PASSOU A MEDIR A PERGUNTA DE HOJE** (seção 7, 23/09): ele
+contava INVITE — dúvida que 28/08 encerrou. Agora conta as falhas de negociação
+e mostra o `m=audio`, e o **veredito parou de mandar à Meta**: janela vazia com
+falha de negociação no log diz *"há PROVA CONTRÁRIA neste mesmo log — a causa é
+NOSSA"* e lembra que o texto do chamado está suspenso.
+📌 **REGRA QUE FICA: quando o achado muda a pergunta, a FERRAMENTA muda junto.**
+Deixar o script contando INVITE manteria de pé a medição que produziu a
+conclusão errada — e ela responderia 🟡 com toda a confiança, apontando o
+suporte da Meta.
+
+### ⛔ Texto do chamado (Meta / suporte da WABA) — SUSPENSO, NÃO ENVIAR
+
+> 🚨 **NÃO ENVIE ESTE TEXTO — e agora não há mais hipótese que o ressuscite.**
+> Ele afirma, quatro vezes, que **nenhum INVITE chega ao nosso SBC**. O log de
+> 28/08 já desmentia isso, e em **23/09 a ligação completou com áudio**.
+> Enviá-lo acusaria a Meta de um defeito que nunca existiu, com a nossa própria
+> evidência contra o chamado — e a volta seria "está tudo certo do nosso lado",
+> que é a resposta mais cara que existe, porque parece resposta.
+>
+> ⚰️ **De "suspenso" ele passou a DESCARTADO.** Fica arquivado por uma razão só:
+> as medições que ele cita são verdadeiras (as janelas de 25-26/08, o
+> experimento do número irmão, a conferência do caminho) — e **medição
+> verdadeira levando a conclusão falsa** é o caso de estudo mais útil deste
+> documento. Todas aquelas janelas caíram fora da grade da Meta.
+
+
 
 🐛 **O `phone_number_id` daqui estava com UM dígito errado até 26/08** —
 `1167203`**`28`**`6473367` onde a tela da Meta mostra `1167203`**`20`**`6473367`.

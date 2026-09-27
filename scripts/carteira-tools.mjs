@@ -181,7 +181,11 @@ async function gravarVinculos(vinculos, dryRun) {
                 atribuidoPor: 'script-carteira-tools',
                 atribuidoEm: admin.firestore.FieldValue.serverTimestamp(),
             });
-            n++;
+            batch.set(db.collection('carteira_acessos').doc(v.colaboradorUid), {
+                empresaIds: admin.firestore.FieldValue.arrayUnion(v.empresaId),
+                atualizadoEm: admin.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true });
+            n += 2;
             if (n % 400 === 0) { await batch.commit(); batch = db.batch(); }
         }
         log.criados++;
@@ -401,7 +405,19 @@ async function cmdMerge(loserId, canonicalId, apply) {
     // re-aponta carteiras do loser
     const cartSnap = await db.collection('carteiras').where('empresaId', '==', loserId).get();
     for (const d of cartSnap.docs) {
-        if (apply) { batch.update(d.ref, { empresaId: canonicalId }); n++; await flush(); }
+        if (apply) {
+            await db.runTransaction(async tx => {
+                const atual = await tx.get(d.ref);
+                if (!atual.exists) return;
+                const uid = atual.data().colaboradorUid;
+                const acl = db.collection('carteira_acessos').doc(uid);
+                await tx.get(acl);
+                const links = await tx.get(db.collection('carteiras').where('colaboradorUid', '==', uid));
+                const empresaIds = [...new Set(links.docs.map(l => l.id === d.id ? canonicalId : l.data().empresaId))].sort();
+                tx.update(d.ref, { empresaId: canonicalId });
+                tx.set(acl, { empresaIds, atualizadoEm: admin.firestore.FieldValue.serverTimestamp() });
+            });
+        }
         log.carteirasRepontadas++;
     }
 

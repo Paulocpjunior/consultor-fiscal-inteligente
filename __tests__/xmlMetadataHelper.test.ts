@@ -27,15 +27,15 @@ describe('xml-metadata-helper', () => {
             </NFe>
         `;
 
+        // 📌 FIXTURE TROCADA (18/09): ela descrevia o extrator que lia CINCO
+        // campos e jogava fora o `xLgr`/`nro`/`xCpl`/`xBairro` do MESMO bloco
+        // — foi essa leitura que deixou 732 participantes sem ENDERECO no 0150
+        // da VINATEX. Aqui o XML não tem endereço nenhum, então tudo volta
+        // null: ausência continua sendo null, nunca string vazia inventada.
+        const vazio = { uf: null, codMunIBGE: null, ie: null, logradouro: null, numero: null, complemento: null, bairro: null, cep: null };
         expect(extrairParticipantesNfe(xml)).toEqual({
-            emitente: {
-                cnpj: '32602701000197', nome: 'J.N. VINATEX COMERCIO LTDA',
-                uf: null, codMunIBGE: null, ie: null,
-            },
-            destinatario: {
-                cnpj: '44388152000189', nome: 'SP ASSESSORIA CONTABIL',
-                uf: null, codMunIBGE: null, ie: null,
-            },
+            emitente: { cnpj: '32602701000197', nome: 'J.N. VINATEX COMERCIO LTDA', ...vazio },
+            destinatario: { cnpj: '44388152000189', nome: 'SP ASSESSORIA CONTABIL', ...vazio },
         });
     });
 });
@@ -49,7 +49,8 @@ describe('endereço do participante (E010 do Exportar SAGE)', () => {
             <enderEmit><xMun>SAO PAULO</xMun><cMun>3550308</cMun><UF>SP</UF></enderEmit>
           </emit>
           <dest><CNPJ>44388152000189</CNPJ><xNome>CLIENTE Y LTDA</xNome><IE>987654</IE>
-            <enderDest><xMun>BELO HORIZONTE</xMun><cMun>3106200</cMun><UF>MG</UF></enderDest>
+            <enderDest><xLgr>AVENIDA AFONSO PENA</xLgr><nro>1500</nro><xBairro>CENTRO</xBairro>
+              <xMun>BELO HORIZONTE</xMun><cMun>3106200</cMun><UF>MG</UF></enderDest>
           </dest>
         </infNFe></NFe>`;
 
@@ -58,6 +59,10 @@ describe('endereço do participante (E010 do Exportar SAGE)', () => {
         expect(p.destinatario).toEqual({
             cnpj: '44388152000189', nome: 'CLIENTE Y LTDA',
             uf: 'MG', codMunIBGE: '3106200', ie: '987654',
+            // 🚨 E o LOGRADOURO junto — é o campo 10 do 0150, obrigatório sem
+            // condição, e ele vem no MESMO <enderDest> de onde a UF já saía.
+            logradouro: 'AVENIDA AFONSO PENA', numero: '1500',
+            complemento: null, bairro: 'CENTRO', cep: null,
         });
         expect(p.emitente.uf).toBe('SP');
         expect(p.emitente.codMunIBGE).toBe('3550308');

@@ -15,6 +15,10 @@ import {
     type NfseSpCapturada,
 } from '../../services/nfseSpCapturadasService';
 import { fetchCronLogs, type CronLogItem } from '../../services/capturaDiagnosticoService';
+// 🧊 25/09: a lista descia 20.000 docs e desenhava 20.000 linhas — "Esta
+// página não está respondendo". Período padrão, páginas de 200 e rodapé
+// honesto vêm do módulo puro.
+import { periodoPadrao, linhasVisiveis, textoDaContagem, LIMITE_DOCS_NFSE_SP } from '../../services/nfseSpListaJanela';
 
 interface Props {
     currentUser: User | null;
@@ -40,8 +44,11 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
     const [direcao, setDirecao] = useState<'todas' | 'saida' | 'entrada'>('todas');
     const [busca, setBusca] = useState('');
     const [cnpjFiltro, setCnpjFiltro] = useState('');
-    const [dataInicio, setDataInicio] = useState('');
+    // Primeira carga = mês corrente. Sem isso a tela pedia o acervo inteiro.
+    const [dataInicio, setDataInicio] = useState(() => periodoPadrao(new Date().toISOString().slice(0, 10)).dataInicio);
     const [dataFim, setDataFim] = useState('');
+    const [truncado, setTruncado] = useState(false);
+    const [paginas, setPaginas] = useState(1);
     const [corrigindo, setCorrigindo] = useState(false);
     const [msgCorrecao, setMsgCorrecao] = useState<string | null>(null);
     const isAdmin = currentUser?.role === 'admin';
@@ -82,12 +89,14 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                     empresaCnpj: cnpjFiltro.replace(/\D/g, '') || undefined,
                     dataInicio: dataInicio || undefined,
                     dataFim: dataFim || undefined,
-                    limite: 5000,
+                    limite: LIMITE_DOCS_NFSE_SP,
                 }),
                 resumoNfseSpCapturadas(),
                 fetchCronLogs('nfsesp_cron_logs', 1).catch(() => [] as CronLogItem[]),
             ]);
-            setNotas(lista);
+            setNotas(lista.notas);
+            setTruncado(lista.truncado);
+            setPaginas(1);
             setResumo(r);
             setUltimoCron(cronLogs[0] || 'erro');
         } catch (e: any) {
@@ -121,6 +130,8 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
         }
         return lista;
     }, [notas, busca]);
+    const visiveis = linhasVisiveis(filtradas.length, paginas);
+    const linhas = useMemo(() => filtradas.slice(0, visiveis), [filtradas, visiveis]);
 
     const exportarCsv = () => {
         const headers = ['Direção', 'Número', 'Data', 'Prestador CNPJ', 'Prestador Nome', 'Tomador CNPJ', 'Tomador Nome', 'Valor Serviços', 'ISS', 'Cód Serviço', 'Discriminação'];
@@ -274,8 +285,8 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                         {corrigindo ? '⏳ Corrigindo…' : '🔧 Corrigir direções'}
                     </button>
                 )}
-                <span className="text-sm text-gray-600 ml-auto">
-                    {filtradas.length} de {notas.length} carregadas
+                <span className={`text-sm ml-auto ${truncado ? 'text-amber-700 dark:text-amber-300 font-semibold' : 'text-gray-600'}`}>
+                    {textoDaContagem({ filtradas: filtradas.length, carregadas: notas.length, visiveis, truncado, limite: LIMITE_DOCS_NFSE_SP })}
                 </span>
             </div>
 
@@ -307,7 +318,7 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtradas.map(n => {
+                            {linhas.map(n => {
                                 const dirEf = calcDirecaoEfetiva(n);
                                 return (
                                 <tr key={n.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -334,6 +345,16 @@ const XmlNfseSpCapturadas: React.FC<Props> = ({ currentUser, refreshKey }) => {
                             })}
                         </tbody>
                     </table>
+                    {visiveis < filtradas.length && (
+                        <div className="p-3 text-center border-t border-slate-200 dark:border-slate-700">
+                            <button
+                                onClick={() => setPaginas((p) => p + 1)}
+                                className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded"
+                            >
+                                Mostrar mais ({filtradas.length - visiveis} restantes)
+                            </button>
+                        </div>
+                    )}
                     {filtradas.length === 0 && (
                         <div className="p-6 text-center text-gray-500 text-sm">
                             Nenhuma NFSe encontrada com esses filtros. Aguarde o cron noturno terminar a captura.

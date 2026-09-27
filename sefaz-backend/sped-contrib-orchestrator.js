@@ -9,6 +9,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 // 🚨 O CONTABILISTA DO 0100 TEM DONO. Este arquivo tinha a SEGUNDA CÓPIA da
 // função — sem o e-mail padrão e sem o `codMunIBGE` sequer existir —, e por
@@ -22,6 +24,10 @@ import {
 } from './sped-contrib-blocos.js';
 import { separarDeclaraveisNoBlocoA } from './sped-a100-declaravel.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+// O 0150 é da PESSOA, não da primeira nota: ausência num documento não apaga
+// presença no outro (18/09, VINATEX — o 'primeiro vence' deixava sem endereço
+// o cliente cujo primeiro documento do mês não tinha sido relido).
+import { mesclarParticipante } from './sped-bloco0-cadastros.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // A receita de aluguel não tem documento — ela entra pelo F550.
 import { receitaDeLocacao, receitaDeDocumentosNoPeriodo } from './receita-sem-documento-f550.js';
@@ -36,7 +42,8 @@ import { acharFichaCompetencia } from './ipi-varredura.js';
 // só via a retenção GRAVADA NO DOCUMENTO. A ficha é a mesma fonte da guia que
 // o cliente paga — calcular aqui faria o DARF e o SPED discordarem.
 import { montarF600DaFicha } from './retencao-f600-da-ficha.js';
-import { direcaoEfetivaDoc, docContaNoLivro } from './xml-metadata-helper.js';
+import { direcaoEfetivaDoc, docContaNoLivro, docCancelado } from './xml-metadata-helper.js';
+import { aplicarCstPadraoNasSaidas, avisosDoCstPadrao } from './cst-pis-cofins-saida.js';
 // TIPO_ITEM do 0200 — serviço é 09, e o item de serviço não leva NCM. O '00'
 // cravado declarava "mercadoria para revenda" até no item sintético da NFS-e.
 import {
@@ -203,7 +210,9 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 
         const docLimpo = String(cnpjBruto).replace(/\D/g, '');
         if (!docLimpo) continue;
-        if (participantesMap.has(docLimpo)) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
 
         let cnpjFinal = '';
         let cpfFinal = '';
@@ -215,7 +224,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             continue;
         }
 
-        participantesMap.set(docLimpo, {
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
             codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjFinal,
@@ -226,7 +235,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
             numero: participanteRaw.numero || '',
             complemento: participanteRaw.complemento || '',
             bairro: participanteRaw.bairro || '',
-        });
+        }));
     }
     const participantes = Array.from(participantesMap.values());
 
@@ -350,6 +359,13 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    // 🧾 CST padrão de PIS/COFINS na saída — o cadastro "como o SAGE" (25/09).
+    // Entra ANTES dos blocos: C170, C175 e M400 leem o mesmo item.
+    const cstPadrao = aplicarCstPadraoNasSaidas(notas, empresa.cstPisCofinsContrib || {}, {
+        direcaoDoDoc: direcaoEfetivaDoc,
+        docFora: docCancelado, // a régua única do cancelamento (evento 110111 inclusive)
+    });
+    warnings.push(...avisosDoCstPadrao(cstPadrao));
     if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     if (colisoesDeItem.length) warnings.push(avisoDeColisaoDeItem(colisoesDeItem));
     const codigosComSufixo = codigosComDuasUnidades(unidadesPorCodigo);
@@ -515,6 +531,9 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         unidadesPorCodItem: unidadesPorCodigo,
         receitaSemDocumento,
         receitaAplicacaoFinanceira,
+        // 🧾 Natureza da receita sem ônus (M410/M810), cadastrada por empresa e CST.
+        naturezaReceita: (empresa && empresa.naturezaReceitaContrib) || {},
+        cstPisCofins: (empresa && empresa.cstPisCofinsContrib) || {},
         contaContabilReceitaFinanceira: empresa?.dadosFiscais?.contaContabilReceitaFinanceira || '',
         contaContabilReceitaFinanceiraNome: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNome || '',
         contaContabilReceitaFinanceiraNivel: empresa?.dadosFiscais?.contaContabilReceitaFinanceiraNivel || '',
@@ -550,6 +569,7 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
  * Monta o arquivo .txt completo do SPED Contribuicoes.
  */
 export async function montarBlocosContribuicoes({ dados }) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
     const linhasBloco0 = buildBloco0Contrib(dados);
     const linhasBlocoA = buildBlocoA(dados);
     const linhasBlocoC = buildBlocoC_Contrib(dados);
@@ -592,5 +612,3 @@ function determinarRegimeApuracao(empresa) {
     if (empresa._regime === 'lucro') return '2';
     return '2';
 }
-
-

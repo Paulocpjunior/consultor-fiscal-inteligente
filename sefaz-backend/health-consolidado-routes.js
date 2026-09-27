@@ -70,7 +70,18 @@ router.get('/', requireAuth, async (req, res) => {
         let documentos = null;
         try {
             const db = fa().firestore();
-            const docs = await fetchAllDocs(db.collection('documentos_fiscais'), { label: 'health/docs' });
+            // 🚨 26/09 (auditoria): esta rota HTTP lia o acervo INTEIRO com o
+            // documento completo (XML, itens, eventos) — a classe do 500 da Central
+            // de DAS (03/08). Só os campos que a contagem usa; a projeção não
+            // pergunta cancelamento porque aqui se conta estrutura, não apuração
+            // (exceção declarada na trava projecaoNaoCegaARegua).
+            const docs = await fetchAllDocs(
+                db.collection('documentos_fiscais').select(
+                    'chave', 'chaveAcesso', 'competencia', 'direcao', 'empresaId', 'empresaCnpj',
+                    'valor', 'valorTotal', 'totalNota', 'valorServicos', 'totais', 'valores', 'vNF',
+                ),
+                { label: 'health/docs' },
+            );
             let semChave = 0, semCompetencia = 0, semDirecao = 0, semValor = 0, semEmpresa = 0;
             const porChave = new Map();
             for (const d of docs) {

@@ -18,6 +18,8 @@ import {
 const COLECAO = 'retencao_parametros';
 /** O teto que `firestore.rules` exige no `list` desta coleção. */
 const LIMITE_LIST = 2000;
+/** Teto de docs lidos por empresa (parâmetros são poucos por empresa). */
+const TETO_PARAMETROS = 5000;
 
 /**
  * Os parâmetros da empresa. Falha de leitura devolve `[]` — o parâmetro é um
@@ -37,7 +39,7 @@ export async function lerParametrosRetencao(empresaId: string): Promise<Parametr
         const snaps = await fetchAllDocs(
             COLECAO,
             [where('empresaId', '==', empresaId)],
-            { batchSize: LIMITE_LIST },
+            { batchSize: LIMITE_LIST, maxDocs: TETO_PARAMETROS },
         );
         return snaps.map(d => ({ id: d.id, ...(d.data() as any) })) as ParametroRetencao[];
     } catch {

@@ -71,6 +71,34 @@ interface Regua {
 
 const REGUAS_VIGIADAS: Regua[] = [
     {
+        nome: 'O DIFAL de SAÍDA da EC 87/15 — o que a NF-e DECLARA, nunca uma conta nova',
+        dono: 'sefaz-backend/difal-ec87-saida.js',
+        comoUsar: "import { difalDoDocumento, montarLinhasDifalBlocoE } from 'sefaz-backend/difal-ec87-saida.js'",
+        porque: '18/09, Paulo, VINATEX 08/2026: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS, precisa ajustar isso '
+            + 'também, que vai no SPED"*. Na venda interestadual a consumidor final não contribuinte o valor JÁ '
+            + 'está na nota que a própria empresa emitiu (grupo `ICMSUFDest`), e ele alimenta DOIS registros que '
+            + 'o PVA cruza: o C101 (por documento) e o E310 campo 04 (Σ dos C101, por UF de destino). Uma segunda '
+            + 'leitura em outro lugar faria o documento e a apuração declararem números diferentes para o MESMO '
+            + 'fato — e recalcular a partilha produziria um valor diferente do que o cliente já transmitiu à '
+            + 'SEFAZ. É o TERCEIRO desenho de DIFAL desta casa (por FORA no Simples, por DENTRO no art. 117, e '
+            + 'este, em registro próprio): a régua de um não serve para o outro.',
+        assinaturas: [
+            // A leitura do grupo escrita à mão fora do dono e da captura.
+            /\bvICMSUFDest\b/,
+            /\bvFCPUFDest\b/,
+            /\bvICMSUFRemet\b/,
+        ],
+        permitido: [
+            // A CAPTURA é quem lê o XML — é dela que o dono depende.
+            'sefaz-backend/xml-importer.js',
+            'services/xmlParserService.ts',
+            // O backfill recupera os campos do XML guardado (lista de nomes).
+            'sefaz-backend/backfill-itens-fiscais.js',
+            // Os tipos declaram os campos do item e dos totais.
+            'types.ts',
+        ],
+    },
+    {
         nome: 'A BASE POR DENTRO do DIFAL de aquisição na apuração (RICMS/SP art. 117 + art. 37 §5º)',
         dono: 'sefaz-backend/difal-art117-apuracao.js',
         comoUsar: "import { baseDifalPorDentro, consolidarDifalArt117 } from 'sefaz-backend/difal-art117-apuracao.js'",

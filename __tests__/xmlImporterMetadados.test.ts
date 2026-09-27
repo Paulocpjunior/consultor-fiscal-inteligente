@@ -27,6 +27,10 @@ const XML = `<?xml version="1.0"?>
 describe('extrairMetadados — contrato do participante', () => {
     const meta = extrairMetadados(XML);
 
+    it.each(['0', '1', '2', '3', '4', '9'])('preserva modalidade de frete %s', codigo => {
+        expect(extrairMetadados(XML.replace('</infNFe>', `<transp><modFrete>${codigo}</modFrete></transp></infNFe>`)).modFrete).toBe(codigo);
+    });
+
     it('devolve o endereço do DESTINATÁRIO (o E010 das saídas depende disso)', () => {
         expect(meta.xNomeDest).toBe('JAIR MAFUZ');
         expect(meta.ufDest).toBe('SP');

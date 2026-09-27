@@ -117,6 +117,7 @@ export interface ParsedXml {
      * notas como saída e a DIPAM/FUNRURAL não as via.
      */
     tpNF?: string | null;
+    modFrete?: string | null;
     dhEmi: string;
     /**
      * A competência que o DOCUMENTO declara — `<Competencia>` no ABRASF,
@@ -306,6 +307,18 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             }
         }
 
+        // ── DIFAL DE SAÍDA (EC 87/2015) — grupo <ICMSUFDest> do ITEM ──────
+        // Paridade OBRIGATÓRIA com o xml-importer.js (regra da casa, provada
+        // campo a campo em `difalEc87Captura.test.ts`). Ausente = undefined,
+        // NUNCA 0: zero aqui vira débito zero num E310 que a SEFAZ lê como
+        // "esta empresa não deve DIFAL".
+        const icmsUfDest = det.getElementsByTagName('ICMSUFDest')[0];
+        const difal = (tag: string): number | undefined => {
+            if (!icmsUfDest) return undefined;
+            const v = getTextContent(icmsUfDest, tag);
+            return v === '' || v === undefined || v === null ? undefined : num(v);
+        };
+
         itens.push({
             nItem: det.getAttribute('nItem') || String(i + 1),
             cProd: getTextContent(prod, 'cProd'),
@@ -340,6 +353,15 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             cstIpi,
             cEnqIpi,
             vBcIpi,
+            vBCUFDest: difal('vBCUFDest'),
+            vBCFCPUFDest: difal('vBCFCPUFDest'),
+            pFCPUFDest: difal('pFCPUFDest'),
+            pICMSUFDest: difal('pICMSUFDest'),
+            pICMSInter: difal('pICMSInter'),
+            pICMSInterPart: difal('pICMSInterPart'),
+            vFCPUFDest: difal('vFCPUFDest'),
+            vICMSUFDest: difal('vICMSUFDest'),
+            vICMSUFRemet: difal('vICMSUFRemet'),
             vPIS,
             cstPis,
             vBcPis,
@@ -397,6 +419,11 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         vBCST: num(getTextContent(icmsTot, 'vBCST')),
         vST: num(getTextContent(icmsTot, 'vST')),
         vFCPST: num(getTextContent(icmsTot, 'vFCPST')),
+        // DIFAL EC 87/15 no total — reserva do grupo por item. Paridade com o
+        // xml-importer.js; ausente = null, nunca 0.
+        vFCPUFDest: getTextContent(icmsTot, 'vFCPUFDest') ? num(getTextContent(icmsTot, 'vFCPUFDest')) : null,
+        vICMSUFDest: getTextContent(icmsTot, 'vICMSUFDest') ? num(getTextContent(icmsTot, 'vICMSUFDest')) : null,
+        vICMSUFRemet: getTextContent(icmsTot, 'vICMSUFRemet') ? num(getTextContent(icmsTot, 'vICMSUFRemet')) : null,
         vProd: num(getTextContent(icmsTot, 'vProd')),
         vFrete: num(getTextContent(icmsTot, 'vFrete')),
         vSeg: num(getTextContent(icmsTot, 'vSeg')),
@@ -430,6 +457,7 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         numero: getTextContent(ide, 'nNF'),
         natOp: getTextContent(ide, 'natOp'),
         tpNF: getTextContent(ide, 'tpNF') || null,
+        modFrete: getTextContent(infNFe, 'modFrete') || null,
         dhEmi: getTextContent(ide, 'dhEmi') || getTextContent(ide, 'dEmi'),
         status,
         emitente,
@@ -597,12 +625,16 @@ function parseNFSeXml(doc: Document, infNfse: Element | undefined): ParsedXml {
     const valorIss = num(getTextContent(valores, 'ValorIss'));
     const issRetido = getTextContent(valores, 'IssRetido');
     const valorIssRetido = num(getTextContent(valores, 'ValorIssRetido'));
-    const valorPis = num(getTextContent(valores, 'ValorPis'));
-    const valorCofins = num(getTextContent(valores, 'ValorCofins'));
+    // GISS/ABRASF com tribFed: campos proprios so entram como retencao
+    // quando o tipo declarado inclui aquele tributo; nao se presume aliquota.
+    const piscofins = valores?.getElementsByTagName('piscofins')[0] || null;
+    const tipoPisCofins = getTextContent(piscofins, 'tpRetPisCofins');
+    const valorPis = num(getTextContent(valores, 'ValorPis') || (['1','3','4','5','9'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vPis') : ''));
+    const valorCofins = num(getTextContent(valores, 'ValorCofins') || (['1','3','4','6','7'].includes(tipoPisCofins) ? getTextContent(piscofins, 'vCofins') : ''));
     const valorInss = num(getTextContent(valores, 'ValorInss'));
     const valorIr = num(getTextContent(valores, 'ValorIr'));
     const valorCsll = num(getTextContent(valores, 'ValorCsll'));
-    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse'));
+    const valorLiquido = num(getTextContent(valores, 'ValorLiquidoNfse') || getTextContent(infNfse, 'ValorLiquidoNfse'));
     const descontoCondicionado = num(getTextContent(valores, 'DescontoCondicionado'));
     const descontoIncondicionado = num(getTextContent(valores, 'DescontoIncondicionado'));
 
@@ -979,12 +1011,14 @@ function parseNFSeNacional(xmlText: string): ParsedXml {
             issRetido: lida.valores.issRetido === true,
             baseCalculo,
             aliquotaIss: lida.valores.aliquotaIss ?? 0,
-            // 🚩 As retenções federais NÃO são lidas (o `<tribFed>` não está
-            // provado neste repo) — e por isso elas NÃO viajam como zero: o
-            // documento sai sem os campos, que é o que faz o Relatório de
-            // Retenções imprimir "?" em vez de "0,00". Zero ali seria a
-            // afirmação de que não houve retenção (regra de 01/08).
-            retencoesLidas: false,
+            retencoesLidas: lida.valores.retencoesFederaisGravadas,
+            ...(lida.valores.retencoesFederaisGravadas ? {
+                ir: lida.valores.ir, inss: lida.valores.inss,
+                pis: lida.valores.pis, cofins: lida.valores.cofins,
+                csll: lida.valores.csll,
+                pccAgregadoDeclarado: lida.valores.pccAgregadoDeclarado,
+                tipoRetencaoContribuicoes: lida.valores.tipoRetencaoContribuicoes,
+            } : {}),
             lacunas: lida.lacunas,
         },
     } as ParsedXml & { _nfseValores?: any };
@@ -1098,6 +1132,7 @@ export function buildDocumentoFiscal(input: {
         // tem como reconhecer a nota própria de entrada e consertar o que já
         // está no banco. Campo que só existe em memória não conserta histórico.
         tpNF: parsed.tpNF ?? null,
+        modFrete: parsed.modFrete ?? null,
         dhEmi: parsed.dhEmi,
         // 🚨 PELO DONO: campo declarado > fato gerador > emissão. Era
         // `competenciaFromIso(parsed.dhEmi)` — a data de EMISSÃO —, e o
@@ -1117,6 +1152,13 @@ export function buildDocumentoFiscal(input: {
             ? { prestador: parsed.emitente, tomador: parsed.destinatario }
             : { emitente: parsed.emitente, destinatario: parsed.destinatario }),
         totais: parsed.totais,
+        // 🚨 `valorTotal` GRAVADO na forma que os leitores por `.select()` leem
+        // (23/09, RADIO E TV IBIRAPUERA): este import gravava só `totais.vNF`,
+        // e a Rotina do Mês tratava a nota importada à mão como "resumo sem
+        // valor". O dono da leitura (`valorDoDocumento`) continua conhecendo
+        // todas as formas; aqui só se deixa de produzir uma nota sem a forma
+        // principal. Ausente continua ausente: nada vira zero.
+        ...(Number.isFinite(Number(parsed.totais?.vNF)) ? { valorTotal: Number(parsed.totais.vNF) } : {}),
         // NFSe valores adicionais (ISS, líquido, etc.)
         ...(isNFSe && nfseValores ? {
             valores: {
@@ -1143,6 +1185,7 @@ export function buildDocumentoFiscal(input: {
                     ir: nfseValores.ir,
                     inss: nfseValores.inss,
                     csll: nfseValores.csll,
+                    ...(nfseValores.pccAgregadoDeclarado !== undefined ? { pccAgregadoDeclarado: nfseValores.pccAgregadoDeclarado, tipoRetencaoContribuicoes: nfseValores.tipoRetencaoContribuicoes } : {}),
                 }),
             },
         } : {}),

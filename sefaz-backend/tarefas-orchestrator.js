@@ -26,8 +26,9 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
-import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente } from './catalogo-obrigacoes.js';
+import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente, OBRIGACOES_DO_DP, OBRIGACOES_DO_CONTABIL, OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao, tarefaDeOutroDepartamentoParaCancelar } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
+import { decidirReaplicacao } from './reaplicar-prazos.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -249,6 +250,204 @@ export async function executarCronMensal(competencia, opts = {}) {
     }
 
     return log;
+}
+
+/**
+ * 📅 Reaplica o prazo ATUAL do catálogo (com os cadastros do admin) nas
+ * tarefas ABERTAS e AUTOMÁTICAS de uma competência.
+ *
+ * 22/09, Paulo, AFFITTARE 08/2026: a regra da DCTFWeb mudou no catálogo e a
+ * tarefa continuou com o dia velho — "3 atrasada(s)" sobre prazo que não
+ * venceu. A tarefa guarda o vencimento do dia em que nasceu; esta ação a
+ * traz para a regra de hoje. Concluída, cancelada e manual NÃO mudam
+ * (`decidirReaplicacao`, puro). O que aconteceu com cada uma sai no log.
+ *
+ * @param {string} competencia "MM/AAAA"
+ * @param {object} [opts] { empresaIdEspecifica?: string, quem?: string }
+ */
+export async function reaplicarPrazosDoCatalogo(competencia, opts = {}) {
+    const comp = assertCompetencia(competencia || competenciaAtual());
+    fa();
+    const db = admin.firestore();
+    const inicio = new Date();
+    const log = {
+        tipo: 'reaplicar-prazos', competencia: comp, quem: opts.quem || null,
+        iniciadoEm: inicio.toISOString(),
+        tarefasLidas: 0, alteradas: 0, iguais: 0, fechadas: 0, manuais: 0, semRegra: 0, semData: 0,
+        empresasSemCadastro: 0,
+        // Cada alteração sai NOMEADA: data de prazo não muda em silêncio.
+        alteracoes: [],
+        erros: [],
+    };
+
+    let prazosMunicipais = [];
+    try {
+        prazosMunicipais = await carregarPrazosMunicipais(db);
+    } catch (e) {
+        log.erros.push(`Calendários indisponíveis: ${e.message} — o catálogo do código respondeu sozinho.`);
+    }
+
+    let q = db.collection('tarefas').where('competencia', '==', comp);
+    if (opts.empresaIdEspecifica) q = q.where('empresaId', '==', String(opts.empresaIdEspecifica));
+    const snap = await q.get();
+    log.tarefasLidas = snap.size;
+
+    // Agrupa por empresa: o mês do cliente é UM cálculo por empresa.
+    const porEmpresa = new Map();
+    snap.forEach((d) => {
+        const t = d.data() || {};
+        const id = String(t.empresaId || '');
+        if (!porEmpresa.has(id)) porEmpresa.set(id, []);
+        porEmpresa.get(id).push({ ref: d.ref, id: d.id, ...t });
+    });
+
+    const lote = [];
+    for (const [empresaId, tarefas] of porEmpresa) {
+        let emp = null; let colecao = null;
+        for (const c of COLECOES) {
+            const doc = await db.collection(c).doc(empresaId).get();
+            if (doc.exists) { emp = doc.data(); colecao = c; break; }
+        }
+        if (!emp) {
+            log.empresasSemCadastro++;
+            log.semRegra += tarefas.length;
+            continue;
+        }
+        let regras = [];
+        try {
+            const mes = mesDoCliente({
+                colecao,
+                regimePadrao: emp.regimePadrao,
+                regimeEspecificoIbsCbs: emp.dadosFiscais?.regimeEspecificoIbsCbs || '',
+                cnae: emp.cnae || emp.dadosFiscais?.cnae || '',
+                uf: emp.dadosFiscais?.uf || emp.uf || '',
+                codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
+                prazosMunicipais,
+            }, comp);
+            regras = mes.obrigacoes || [];
+        } catch (e) {
+            log.erros.push(`Empresa ${empresaId}: ${e.message}`);
+            continue;
+        }
+        for (const t of tarefas) {
+            const regra = regras.find((r) => r.obrigacao === t.obrigacao) || null;
+            const d = decidirReaplicacao({ tarefa: t, regra });
+            if (d.acao === 'alterar') {
+                lote.push({ ref: t.ref, para: regra.vencimento });
+                log.alteradas++;
+                log.alteracoes.push({
+                    tarefaId: t.id, empresaId, empresaNome: t.empresaNome || emp.razaoSocial || emp.nome || '',
+                    obrigacao: t.obrigacao, de: d.de || null, para: d.para,
+                });
+            } else if (d.acao === 'igual') log.iguais++;
+            else if (d.acao === 'fechada') log.fechadas++;
+            else if (d.acao === 'manual') log.manuais++;
+            else if (d.acao === 'sem-data') log.semData++;
+            else log.semRegra++;
+        }
+    }
+
+    // Lotes de 400 (o batch aceita 500 operações).
+    for (let i = 0; i < lote.length; i += 400) {
+        const b = db.batch();
+        for (const { ref, para } of lote.slice(i, i + 400)) {
+            b.update(ref, {
+                vencimento: admin.firestore.Timestamp.fromDate(para),
+                vencimentoAInformar: false,
+                vencimentoReaplicadoEm: new Date().toISOString(),
+                vencimentoReaplicadoPorEmail: opts.quem || null,
+                vencimentoReaplicadoDe: 'catalogo',
+            });
+        }
+        await b.commit();
+    }
+
+    const fim = new Date();
+    log.finalizadoEm = fim.toISOString();
+    log.duracaoMs = fim.getTime() - inicio.getTime();
+    try {
+        await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+        console.warn('[tarefas/reaplicar-prazos] falha ao gravar log:', e.message);
+    }
+    return log;
+}
+
+/**
+ * 👥 CANCELA em lote as tarefas ABERTAS e AUTOMÁTICAS de FGTS/INSS patronal
+ * (Paulo, 22/09: "pode tirar, INSS, FGTS, CPP é do DP"). O cron parou de
+ * gerar; as já geradas ficavam cobrando o Fiscal por trabalho do DP. Manual,
+ * concluída e cancelada não se tocam. Sem competência = todas.
+ *
+ * @param {object} opts  { competencia?: 'MM/AAAA', empresaIdEspecifica?, quem? }
+ */
+export async function cancelarTarefasDeOutroDepartamento(opts = {}) {
+    fa();
+    // 🏢 25/09: DP (FGTS/INSS) e Contábil (ECD/ECF). Sem `departamento` = os dois.
+    const dep = String(opts.departamento || '').toUpperCase();
+    const obrigacoesAlvo = dep === 'DP' ? [...OBRIGACOES_DO_DP]
+        : (dep === 'CONTABIL' || dep === 'CONTÁBIL') ? [...OBRIGACOES_DO_CONTABIL]
+            : [...OBRIGACOES_FORA_DO_FISCAL];
+    const db = admin.firestore();
+    const inicio = new Date();
+    const comp = opts.competencia ? assertCompetencia(opts.competencia) : null;
+    const log = {
+        tipo: 'cancelar-tarefas-outro-departamento', competencia: comp, quem: opts.quem || null,
+        departamento: dep || 'DP+CONTABIL',
+        obrigacoes: obrigacoesAlvo,
+        iniciadoEm: inicio.toISOString(),
+        tarefasLidas: 0, canceladas: 0, jaFechadas: 0, manuais: 0,
+        canceladasPorCompetencia: {},
+        exemplos: [],
+        erros: [],
+    };
+    const lote = [];
+    for (const obrigacao of obrigacoesAlvo) {
+        let q = db.collection('tarefas').where('obrigacao', '==', obrigacao);
+        if (comp) q = q.where('competencia', '==', comp);
+        if (opts.empresaIdEspecifica) q = q.where('empresaId', '==', String(opts.empresaIdEspecifica));
+        const snap = await q.get();
+        log.tarefasLidas += snap.size;
+        snap.forEach((d) => {
+            const t = { id: d.id, ...(d.data() || {}) };
+            if (t.status === 'concluida' || t.status === 'cancelada') { log.jaFechadas++; return; }
+            if (!tarefaDeOutroDepartamentoParaCancelar(t)) { log.manuais++; return; }
+            lote.push({ ref: d.ref, obrigacao });
+            log.canceladas++;
+            const c = String(t.competencia || '?');
+            log.canceladasPorCompetencia[c] = (log.canceladasPorCompetencia[c] || 0) + 1;
+            if (log.exemplos.length < 8) log.exemplos.push(`${obrigacao} ${c} · ${t.empresaNome || t.empresaId || ''}`);
+        });
+    }
+    const motivoDe = (obrigacao) => (departamentoDaObrigacao(obrigacao) === 'Contábil'
+        ? 'Obrigação do Contábil (ECD/ECF) — saiu do catálogo do CFI em 25/09; cancelada em lote pelo admin.'
+        : 'Obrigação do DP (FGTS/INSS patronal) — saiu do catálogo do CFI em 22/09; cancelada em lote pelo admin.');
+    for (let i = 0; i < lote.length; i += 400) {
+        const b = db.batch();
+        for (const { ref, obrigacao } of lote.slice(i, i + 400)) {
+            b.update(ref, {
+                status: 'cancelada',
+                canceladaEm: admin.firestore.FieldValue.serverTimestamp(),
+                canceladaPorEmail: opts.quem || null,
+                cancelamentoMotivo: motivoDe(obrigacao),
+            });
+        }
+        await b.commit();
+    }
+    const fim = new Date();
+    log.finalizadoEm = fim.toISOString();
+    log.duracaoMs = fim.getTime() - inicio.getTime();
+    try {
+        await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+        console.warn('[tarefas/cancelar-dp] falha ao gravar log:', e.message);
+    }
+    return log;
+}
+
+/** Nome de 22/09, mantido: cancela SÓ as do DP. */
+export function cancelarTarefasDoDp(opts = {}) {
+    return cancelarTarefasDeOutroDepartamento({ ...opts, departamento: 'DP' });
 }
 
 /**

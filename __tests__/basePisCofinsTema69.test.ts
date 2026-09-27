@@ -51,9 +51,15 @@ describe('a régua: receita ≠ base, e as duas ≠ vProd', () => {
         const r = receitaEBaseDoDocumento({}, 2500);
         // `desconto`/`receitaBruta` entraram em 24/08 para o aviso da geração
         // dizer QUANTO foi tirado (PWR) — sem itens não há desconto a tirar.
+        //
+        // ⚠️ `frete` SAI SEMPRE, inclusive zerado (16/09): zero aqui é a
+        // RESPOSTA ("não houve frete"), não o default de quem não olhou — e é
+        // o campo que o aviso da geração lê para decidir se nasce mudo. Campo
+        // que só aparece quando há valor faz o leitor confundir ausência com
+        // ausência de medição.
         expect(r).toEqual({
             receita: 2500, base: 2500, icms: 0, temItens: false,
-            descontoDoDocumento: 0, desconto: 0, receitaBruta: 2500,
+            descontoDoDocumento: 0, desconto: 0, receitaBruta: 2500, frete: 0,
         });
     });
 });

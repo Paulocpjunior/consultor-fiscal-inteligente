@@ -43,6 +43,8 @@
 import * as fmt from './sped-fiscal-format.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
+// O número que a CHAVE carrega (posições 26-34) — a régua já existia para o ♻️.
+import { numeroDaChave } from './releitura-notas-vazias.js';
 import { docCancelado, ehEntradaDoEmitente, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 
 /** Rótulos de tipo que NUNCA são mercadoria (bloco C). */
@@ -547,6 +549,29 @@ export function avisoDeTipoItemPresumido(itens, ctx) {
  * três posições … Se não existir Série … informar 000"* — por isso '000' é a
  * resposta final, nunca '1'.
  */
+/**
+ * NUM_DOC — o número do documento (C100 campo 08, D100 campo 09).
+ *
+ * 🚨 O CT-e CAPTURADO NÃO TINHA NÚMERO NENHUM (18/09, EDUARDO GUERRA ·
+ * 08/2026): a captura lia o número pela tag `nNF`, que é da NF-e, e o
+ * conhecimento traz `nCT`. Todo D100 saía com o campo 09 VAZIO —
+ * `|D100|0|1|…|57|00|001|||3526…|` —, o Guia o exige *"maior que zero"* e
+ * confere contra a chave, e o PVA quebrava o relatório de entradas ao gerar
+ * ("Ocorreu um erro ao gerar o relatório") só nesta empresa, a única com
+ * CT-e no livro.
+ *
+ * A chave não mente: o número mora nas posições **26-34**, ao lado da série
+ * (23-25) que `serieDoDocumento` já lê — para NF-e, NFC-e e CT-e igualmente.
+ * O gravado vence; a chave é a RESERVA; sem os dois, vazio (ausência o PVA
+ * acusa, número inventado não).
+ */
+export function numeroDoDocumento(nota) {
+    const gravado = String(nota?.numero ?? '').replace(/\D/g, '').replace(/^0+/, '');
+    if (gravado) return gravado;
+    const daChave = numeroDaChave(nota?.chave || nota?.chaveAcesso || nota?.chNFe || nota?.chCTe);
+    return daChave || '';
+}
+
 export function serieDoDocumento(nota) {
     const gravada = String(nota?.serie ?? '').replace(/\D/g, '');
     if (gravada) return gravada.padStart(3, '0').slice(-3);

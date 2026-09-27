@@ -61,7 +61,12 @@ export interface RotinaEmpresa {
     competencia: string;
     iss: IssDaRotina | null;
     etapas: EtapaRotina[];
-    proximoPasso: { id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string } | null;
+    proximoPasso: {
+        id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string;
+        /** 🔎 Etapa 2: as notas que travam, nomeadas. */
+        notas?: Array<{ chave: string | null; numero: string | number | null; tipo: string | null; emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null; motivo: 'resumo' | 'nfse-sem-valor' }>;
+        notasCortadas?: number;
+    } | null;
     progresso: { concluidas: number; total: number };
     /**
      * `'fechado'` é FATO (o carimbo do fim de mês); `'ok'` quer dizer **pronto
@@ -120,7 +125,9 @@ export interface PainelRotina {
         abrangencia: string;
         status: string;
         dependeDe: string | null;
-        motivo: string;
+        motivo?: string;
+        /** O que falta conferir — é este campo que o backend devolve. */
+        oQueFalta?: string;
     }>;
     rotinas?: RotinaEmpresa[];
     lidos?: { documentos: number; tarefas: number; envios: number };
@@ -161,6 +168,27 @@ export async function declararCoberturaForaDoCatalogo(p: {
     if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
     const token = await u.getIdToken();
     const res = await fetch('/api/admin/rotina-fiscal/cobertura-declarada', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
+
+/**
+ * 📭 DECLARAR QUE A EMPRESA NÃO TEVE MOVIMENTO NA COMPETÊNCIA (23/09).
+ * Nenhuma régua mora aqui — piso do texto, data e autor vivem no backend
+ * (`sem-movimento-declarado.js`), e a rota recusa se houver documento no mês.
+ */
+export async function declararSemMovimento(p: {
+    empresaId: string; empresaCnpj?: string; competencia: string; comoFoi: string; quando: string;
+}): Promise<{ ok: boolean; error?: string; declaracao?: { texto: string } }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/sem-movimento-declarado', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(p),

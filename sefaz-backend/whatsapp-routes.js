@@ -31,7 +31,7 @@ import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
     subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
-    registrarNumeroNaCloudApi, statusDoNumeroNaMeta,
+    registrarNumeroNaCloudApi, statusDoNumeroNaMeta, renderizarCorpoTemplate,
 } from './whatsapp-cloud.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
@@ -52,11 +52,12 @@ import { montarCatalogoCanais, credenciaisDoCanal, validarCanal, cfgDeEnvioDaCon
 import { arquivarMidiasWhatsappNoSharePoint } from './whatsapp-sharepoint-arquivo.js';
 import { cruzarNumerosComCadastro, sugestaoParaNumero } from './whatsapp-vinculo-telefone.js';
 import { montarRelatorioAtendimento } from './whatsapp-relatorio.js';
-import { registrarToken } from './whatsapp-push.js';
-import { COLECAO_TOKENS } from './whatsapp-push-envio.js';
+import { registrarToken, destinatariosDoPush, destinatariosDoAvisoTeams } from './whatsapp-push.js';
+import { COLECAO_TOKENS, lerUsuariosComToken, enviarPushTeste } from './whatsapp-push-envio.js';
 import {
     FILAS_ATENDIMENTO, filaValida, filasVisiveis, conversaVisivel,
-    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram,
+    resolverConfig, papelValido, podeEncerrar, podeAtenderInstagram, conversaEncerrada, podeVerEncerrados,
+    podeIniciarTemplateNaConversa, dentroDoHorario,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
@@ -74,6 +75,7 @@ import {
     assinaturasDoApp,
 } from './instagram-dm.js';
 import { enviarAvisoTeams, statusAvisoTeams } from './teams-aviso.js';
+import { getGraphToken, isGraphConfigured } from './graph-provider.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -507,8 +509,32 @@ router.get('/conversas', requireAuth, async (req, res) => {
             .catch(() => ({ data: () => null }));
         const cfgAtendimento = resolverConfig(cfgDoc.data());
         const respostasRapidas = cfgAtendimento.respostasRapidas;
+        // ═══ ✅ ABA DE ENCERRADOS — ADMIN E GESTOR (Paulo, 23/09) ═══════════
+        // "uma ABA em especial com acesso aos admin somente para atendimentos
+        // encerrados/finalizados para que não ocupe a caixa do colaborador" —
+        // e, na sequência: *"gestor vê ABAS encerramos"*. Quem FECHA vê o que
+        // fechou (gestor encerra qualquer atendimento desde 16/08).
+        //
+        // 🔒 A trava é DA ROTA, não da tela: esconder o chip no navegador
+        // deixaria `?situacao=resolvida` aberto para qualquer colaborador com
+        // o link — é a régua do `allow write: if false` do fim de mês.
+        // A pergunta "quem pode?" tem DONO (`podeVerEncerrados`), lido também
+        // pela tela — regra repetida aqui e no React vira chip que acende
+        // contra rota que recusa.
+        const soEncerradas = String(req.query?.situacao || '') === 'resolvida';
+        if (soEncerradas && !podeVerEncerrados(papel)) {
+            return res.status(403).json({ ok: false, error: 'A aba de encerrados é para admin e gestor.' });
+        }
         let docsConversas = [];
-        if (minhasFilas !== null) {
+        if (soEncerradas) {
+            // ⚠️ Igualdade SEM orderBy, e a ordenação sai em memória — é o
+            // mesmo motivo do galho por fila logo abaixo: `where` + `orderBy`
+            // exigiria índice composto, e índice que falta derruba a aba
+            // inteira em produção.
+            const snap = await db.collection('whatsapp_conversas')
+                .where('status', '==', 'resolvida').limit(TETO_LEITURA_CONVERSAS).get();
+            docsConversas = snap.docs;
+        } else if (minhasFilas !== null) {
             // 🔒 Colaborador de fila lê SÓ as filas dele já na CONSULTA
             // (Paulo, 24/08: "ganhamos mais tempo ao carregar") — antes o
             // servidor varria as 2000 mais recentes da carteira inteira para
@@ -591,8 +617,20 @@ router.get('/conversas', requireAuth, async (req, res) => {
             // da config; lista vazia = sem restrição. Aplica-se POR CIMA da
             // regra de filas, nunca no lugar dela.
             && (cv.canal !== 'instagram' || podeAtenderInstagram(cfgAtendimento, req.user?.email)));
+        // ✅ Encerrado sai da caixa — mas o número NÃO some (farol honesto): a
+        // tela diz quantos ficaram de fora, senão "a lista encolheu" vira
+        // suspeita de conversa perdida. Na própria aba de encerrados não se
+        // filtra nada, óbvio — ela É o recorte.
+        const semEncerradas = soEncerradas ? visiveis : visiveis.filter((cv) => !conversaEncerrada(cv));
         return res.json({
-            ok: true, conversas: visiveis, filas: FILAS_ATENDIMENTO, minhasFilas, papel, respostasRapidas,
+            ok: true,
+            conversas: semEncerradas,
+            filas: FILAS_ATENDIMENTO,
+            minhasFilas,
+            papel,
+            respostasRapidas,
+            encerradas: soEncerradas,
+            encerradasOcultas: soEncerradas ? 0 : visiveis.length - semEncerradas.length,
             limiteLeitura: docsConversas.length >= TETO_LEITURA_CONVERSAS ? TETO_LEITURA_CONVERSAS : null,
         });
     } catch (e) {
@@ -733,10 +771,8 @@ router.get('/conversas/:numero/mensagens', requireAuth, async (req, res) => {
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         // 📷 Instagram é por USUÁRIO: a thread não abre pela URL pra quem a
         // lista esconde (o gate mora na MESMA régua da listagem).
-        if (ehConversaInstagram(numero)) {
-            const { ok: podeIg } = await podeVerConversa(getDb(), req.user, numero);
-            if (!podeIg) return res.status(403).json(RECUSA_INSTAGRAM);
-        }
+        const { ok: podeLer } = await podeVerConversa(getDb(), req.user, numero);
+        if (!podeLer) return res.status(403).json(ehConversaInstagram(numero) ? RECUSA_INSTAGRAM : { ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
         // ⬆️ PAGINAÇÃO — o teto de 500 cortava a conversa CALADO. Ordenar
         // resolveu QUAIS 500 vêm (a mensagem nova sempre entra), mas a
         // conversa antiga continuava terminando numa parede sem aviso: a
@@ -840,13 +876,18 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
         const numeroAlvo = normalizarNumeroBr(p.para);
         if (numeroAlvo) {
             const convExistente = await getDb().collection('whatsapp_conversas').doc(numeroAlvo).get();
-            const cx = convExistente.data() || {};
-            if (convExistente.exists && (cx.status || 'aberta') === 'aberta' && cx.atribuidoA) {
+            const cx = convExistente.exists ? (convExistente.data() || {}) : null;
+            // A decisão tem DONO (`podeIniciarTemplateNaConversa`): quem CONDUZ
+            // pode — é a voz da conversa. A versão inline recusava até o
+            // próprio condutor, e o botão de 24/09 dentro da conversa
+            // transformou isso em "em condução por você" (24/09).
+            const pode = podeIniciarTemplateNaConversa(cx, req.user?.email);
+            if (!pode.ok) {
                 return res.status(409).json({
                     ok: false,
-                    error: `Este número já está em atendimento na fila ${(FILAS_ATENDIMENTO.find((f) => f.id === (cx.fila || 'recepcao')) || {}).rotulo || 'Recepção'}, em condução por ${cx.atribuidoA}.`,
+                    error: `Este número já está em atendimento na fila ${(FILAS_ATENDIMENTO.find((f) => f.id === (cx.fila || 'recepcao')) || {}).rotulo || 'Recepção'}, em condução por ${pode.emConducaoPor}.`,
                     acao: 'Abra a conversa e deixe uma nota interna pra quem conduz, ou peça a transferência de fila — iniciar outro template criaria duas vozes na mesma conversa do cliente.',
-                    emConducaoPor: cx.atribuidoA,
+                    emConducaoPor: pode.emConducaoPor,
                     fila: cx.fila || 'recepcao',
                 });
             }
@@ -894,18 +935,37 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
             return res.status(status).json({ ok: false, error: envio.erro, acao: envio.acao, indeterminado: Boolean(envio.indeterminado) });
         }
 
-        // A conversa nasce na lista — o balão diz O QUE foi mandado (template +
-        // variáveis preenchidas), porque o corpo aprovado mora na Meta.
+        // 🚨 O BALÃO MOSTRA O TEXTO QUE O CLIENTE RECEBEU (24/09). Antes ele
+        // dizia "nome do template + variáveis" porque "o corpo aprovado mora
+        // na Meta" — e um template SEM variável virava `📋 iniciarconversa:` e
+        // nada. O Paulo leu como "não apareceu a mensagem padrão", clicou de
+        // novo, e o cliente recebeu o template DUAS vezes (09:39 e 09:40, ✓✓).
+        // O corpo sempre esteve na Meta; faltava lê-lo aqui. A leitura vem
+        // DEPOIS do envio (falha dela não pode derrubar um envio que já saiu)
+        // e, se não der, o balão volta ao resumo antigo — dito, não escondido.
         const db = getDb();
         const agora = new Date().toISOString();
         const numero = envio.numeroEnviado;
+        let corpoRenderizado = null;
+        try {
+            const aprovados = await listarTemplatesAprovados();
+            const t = aprovados.ok
+                ? (aprovados.templates || []).find((x) => x.nome === nomeTemplate
+                    && (!idiomaTemplate || !x.idioma || x.idioma === idiomaTemplate))
+                : null;
+            if (t?.corpo) corpoRenderizado = renderizarCorpoTemplate(t.corpo, variaveisPosicionais);
+        } catch (e) { console.warn('[whatsapp/iniciar] corpo do template não lido:', e.message); }
         // ⚠️ usar nomeTemplate/variaveisPosicionais (existem nos DOIS ramos);
         // `template`/`mv` só existem no ramo do cadastro — referenciá-los aqui
         // estourava ReferenceError no caminho templateDireto.
-        const resumo = `📋 ${nomeTemplate}: ${variaveisPosicionais.join(' · ')}`.slice(0, 300);
+        const resumo = (corpoRenderizado
+            ? `📋 ${corpoRenderizado}`
+            : `📋 ${nomeTemplate}: ${variaveisPosicionais.join(' · ')}`).slice(0, 300);
         await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
             conversaId: numero, direcao: 'saida', tipo: 'template',
-            texto: resumo, midia: null, timestamp: agora,
+            texto: corpoRenderizado || resumo, template: nomeTemplate,
+            corpoIndisponivel: !corpoRenderizado,
+            midia: null, timestamp: agora,
             statusEntrega: 'enviado', enviadoPor: req.user?.email || null,
         }, { merge: true });
         const contatoRef = db.collection('whatsapp_contatos').doc(numero);
@@ -939,7 +999,13 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
             });
         } catch (e) { console.warn('[whatsapp/iniciar] auditoria falhou:', e.message); }
 
-        return res.json({ ok: true, numero, messageId: envio.messageId });
+        // A tela DIZ o que saiu e que a janela NÃO abriu — sem isso a pessoa
+        // clica de novo (foi o que aconteceu em 24/09).
+        return res.json({
+            ok: true, numero, messageId: envio.messageId,
+            texto: corpoRenderizado || resumo,
+            janelaAbreSoComResposta: true,
+        });
     } catch (e) {
         console.error('[whatsapp/conversas/iniciar]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -1340,6 +1406,8 @@ router.delete('/atendimento-config/imagem-fila/:fila', requireAdmin, async (req,
 async function acaoConversa(req, res, patch, extra = {}) {
     const numero = idConversaDoParam(req.params.numero);
     if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+    const { ok: podeAlterar } = await podeVerConversa(getDb(), req.user, numero);
+    if (!podeAlterar) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
     const agora = new Date().toISOString();
     await getDb().collection('whatsapp_conversas').doc(numero).set(
         { ...patch, atualizadoEm: agora }, { merge: true },
@@ -1365,6 +1433,8 @@ router.post('/conversas/:numero/fila', requireAuth, async (req, res) => {
         const recado = String(req.body?.recado || '').trim();
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         if (!filaValida(fila)) return res.status(400).json({ ok: false, error: `Fila inválida. Válidas: ${FILAS_ATENDIMENTO.map((f) => f.id).join(', ')}` });
+        const { ok: podeTransferir } = await podeVerConversa(getDb(), req.user, numero);
+        if (!podeTransferir) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
 
         const db = getDb();
         const convRef = db.collection('whatsapp_conversas').doc(numero);
@@ -2387,6 +2457,104 @@ router.get('/vinculo-sugestoes', requireAdmin, async (req, res) => {
 // celulares. Quem recebe o quê é decidido no envio, pela MESMA régua de fila
 // do inbox — registrar token não dá acesso a nada.
 
+// ─── 🔔 AVISOS — o painel que responde "por que eu não recebi?" (24/09) ─────
+// Paulo: "quando chega mensagem, não estamos recebendo notificação" e "olhei
+// em configurações e não achei o campo". Duas coisas faltavam: um LUGAR com
+// as quatro camadas (som, pop-up, celular, Teams) e a RESPOSTA por pessoa —
+// a régua de audiência já dizia o motivo de cada veto; ninguém a mostrava.
+// A simulação abaixo usa as MESMAS funções do fan-out real, com uma conversa
+// sintética na primeira fila que a pessoa vê: se ela receberia AGORA, e se
+// não, por quê. Régua única, nunca uma segunda cópia.
+router.get('/avisos/status', requireAuth, async (req, res) => {
+    try {
+        const db = getDb();
+        const uid = req.user?.uid || '_';
+        const [cfgDoc, ultimoDoc, tokDoc, usuarios] = await Promise.all([
+            db.collection('whatsapp_config').doc('atendimento').get().catch(() => ({ data: () => null })),
+            db.collection('whatsapp_config').doc('ultimo_aviso').get().catch(() => ({ data: () => null, exists: false })),
+            db.collection(COLECAO_TOKENS).doc(uid).get().catch(() => ({ data: () => null })),
+            lerUsuariosComToken(db),
+        ]);
+        const config = resolverConfig(cfgDoc.data());
+        const eu = usuarios.find((u) => u.uid === uid) || null;
+        const { filas: minhasFilas } = await perfilAtendimento(db, req.user);
+        const filaSintetica = minhasFilas === null ? null : (minhasFilas[0] || null);
+        const conversa = { fila: filaSintetica, canal: 'whatsapp' };
+        const agora = new Date();
+        const simular = (fn) => {
+            if (!eu) return { receberia: false, motivo: 'seu usuário não está no cadastro central (users)' };
+            const r = fn({ usuarios: [eu], conversa, config, agora, autorDaMensagem: null });
+            if (r.alvos.length) return { receberia: true, motivo: null };
+            return { receberia: false, motivo: r.fora[0]?.motivo || 'motivo não informado' };
+        };
+        const push = simular(destinatariosDoPush);
+        const teams = config.avisoTeamsAtivo
+            ? simular(destinatariosDoAvisoTeams)
+            : { receberia: false, motivo: 'aviso no Teams DESLIGADO na ⚙️ (chave geral)' };
+        const tok = tokDoc.data() || {};
+        // 🔑 A CREDENCIAL DO GRAPH É PROVADA AQUI, sem mandar nada (24/09). No
+        // primeiro "Testar TUDO" real a simulação disse "o sino tocaria" (a
+        // AUDIÊNCIA estava certa) e o envio caiu em AADSTS7000215 — segredo
+        // do app Notificacoes inválido no Secret Manager. A simulação não
+        // pode ser lida como garantia da credencial; então a credencial vira
+        // uma linha própria, medida por um token de verdade (cacheado ~55
+        // min pelo graph-provider — não é uma chamada por clique).
+        // 📏 O TAMANHO do segredo sai junto do erro — nunca o valor. 24/09: o
+        // AADSTS7000215 custou uma tarde até se descobrir que o Secret Manager
+        // tinha 11 caracteres (a máscara `xxx********` copiada da tabela do
+        // Azure) e depois 100 (o texto de um comando). Segredo de app do Azure
+        // tem 40. Uma linha com "tem 11, esperado 40" teria dito tudo.
+        const tamanhoSegredo = String(process.env.GRAPH_CLIENT_SECRET || '').length;
+        let credencialGraph = { ok: false, erro: 'Graph não configurado (GRAPH_CLIENT_ID/TENANT/SECRET).', tamanhoSegredo };
+        if (isGraphConfigured()) {
+            try { await getGraphToken(); credencialGraph = { ok: true, erro: null, tamanhoSegredo }; }
+            catch (e) { credencialGraph = { ok: false, erro: String(e?.message || e).slice(0, 400), tamanhoSegredo }; }
+        }
+        return res.json({
+            ok: true,
+            credencialGraph,
+            agora: agora.toISOString(),
+            noExpediente: config.horario ? dentroDoHorario(config.horario, agora) : true,
+            horario: config.horario || null,
+            avisoTeamsAtivo: Boolean(config.avisoTeamsAtivo),
+            teamsStatus: statusAvisoTeams(),
+            dispositivos: Array.isArray(tok.tokens) ? tok.tokens.length : 0,
+            prefs: tok.prefs || {},
+            filaSimulada: filaSintetica || 'recepcao',
+            simulacao: { push, teams },
+            ultimoAviso: ultimoDoc.exists ? ultimoDoc.data() : null,
+        });
+    } catch (e) {
+        console.error('[whatsapp/avisos/status]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// 🧪 Testa as duas portas que dependem do SERVIDOR (celular e Teams) para a
+// pessoa logada. Som e pop-up são do navegador — a tela dispara os dois no
+// mesmo clique. Cada canal volta com o próprio resultado e o próprio motivo;
+// um não esconde o outro.
+router.post('/avisos/testar-tudo', requireAuth, async (req, res) => {
+    try {
+        const email = req.user?.email;
+        const uid = req.user?.uid;
+        const titulo = '🧪 SP Connect — teste de avisos';
+        const corpo = 'Se você está vendo isto, este canal está funcionando.';
+        const [teams, push] = await Promise.all([
+            email
+                ? enviarAvisoTeams({ email, titulo, corpo }).catch((e) => ({ ok: false, etapa: 'excecao', erro: e.message }))
+                : Promise.resolve({ ok: false, etapa: 'sem-email', erro: 'Sessão sem e-mail — saia e entre de novo.' }),
+            uid
+                ? enviarPushTeste({ uid, titulo, corpo }).catch((e) => ({ ok: false, etapa: 'excecao', erro: e.message }))
+                : Promise.resolve({ ok: false, etapa: 'sem-sessao', erro: 'Sessão inválida.' }),
+        ]);
+        return res.json({ ok: true, teams, push, teamsStatus: statusAvisoTeams() });
+    } catch (e) {
+        console.error('[whatsapp/avisos/testar-tudo]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 router.post('/push/token', requireAuth, async (req, res) => {
     try {
         const uid = req.user?.uid;
@@ -2420,7 +2588,10 @@ router.post('/push/prefs', requireAuth, async (req, res) => {
         if (!uid) return res.status(401).json({ ok: false, error: 'sessão inválida' });
         const p = req.body?.prefs || {};
         const prefs = {};
-        for (const k of ['som', 'popup', 'push', 'pushForaDoExpediente']) {
+        // `avisoTeams` entrou em 24/09: a régua de audiência já lia o opt-out
+        // (whatsapp-push.js), mas a rota descartava a chave — ligar/desligar na
+        // tela não tinha como chegar ao banco.
+        for (const k of ['som', 'popup', 'push', 'pushForaDoExpediente', 'avisoTeams']) {
             if (typeof p[k] === 'boolean') prefs[k] = p[k];
         }
         await getDb().collection(COLECAO_TOKENS).doc(uid).set({ prefs }, { merge: true });

@@ -39,3 +39,15 @@ export function montarPushMensagem(p: {
 }): { titulo: string; corpo: string; tag: string; link: string };
 export function registrarToken(tokensAtuais: string[] | undefined, token: unknown, limite?: number):
     { ok: true; tokens: string[] } | { ok: false; erro: string };
+
+/** Auditoria do último aviso: quem recebeu e quem ficou de fora COM O MOTIVO, por canal (sem texto da mensagem). */
+export function montarAuditoriaAviso(p: {
+    titulo: string;
+    push: { alvos?: { uid?: string; email?: string | null }[]; fora?: { uid?: string; email?: string | null; motivo: string }[]; enviados?: number };
+    teams: { alvos?: { uid?: string; email?: string | null }[]; fora?: { uid?: string; email?: string | null; motivo: string }[]; enviados?: number; erros?: { email: string; etapa: string | null; erro: string }[] };
+    agora?: Date;
+}): {
+    em: string; titulo: string;
+    push: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number };
+    teams: { alvos: (string | null)[]; fora: { email: string | null; motivo: string }[]; enviados: number; erros: { email: string; etapa: string | null; erro: string }[] };
+};

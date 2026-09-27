@@ -651,11 +651,15 @@ export async function gerarRelatorioPdfNfp(params: {
     const paragraph = (text: string, options?: { color?: Rgb; fontSize?: number; style?: 'normal' | 'bold' | 'italic'; indent?: number; width?: number }) => {
         const indent = options?.indent ?? 0;
         const width = options?.width ?? contentW - indent;
-        const lines = pdf.splitTextToSize(text, width) as string[];
-        checkPage(lines.length * 4.6 + 2);
         setText(options?.color || INK, options?.fontSize || 8.5, options?.style || 'normal');
-        pdf.text(lines, margin + indent, y);
-        y += lines.length * 4.6 + 2;
+        const lines = pdf.splitTextToSize(text, width) as string[];
+        for (const line of lines) {
+            checkPage(6.6);
+            setText(options?.color || INK, options?.fontSize || 8.5, options?.style || 'normal');
+            pdf.text(line, margin + indent, y);
+            y += 4.6;
+        }
+        y += 2;
     };
 
     const infoCard = (x: number, cardY: number, w: number, h: number, title: string, value: string, detail: string, accent: Rgb = BLUE) => {
@@ -713,6 +717,19 @@ export async function gerarRelatorioPdfNfp(params: {
         });
         const detailLines = detail ? pdf.splitTextToSize(detail, contentW - 10) as string[] : [];
         const boxH = Math.max(24, 12 + fieldLayouts.reduce((sum, item) => sum + item.height, 0) + (detailLines.length ? detailLines.length * 3.8 + 5 : 0));
+        // A card taller than a page must flow as text, not be moved intact.
+        if (boxH > pageH - 40) {
+            paragraph(title, { style: 'bold', color: accent });
+            for (const field of contentFields) {
+                paragraph(field.label + ':', { style: 'bold', color: MUTED });
+                paragraph(field.value, { indent: 5 });
+            }
+            if (detail) {
+                paragraph('Comentário técnico:', { style: 'bold', color: AMBER });
+                paragraph(detail, { indent: 5 });
+            }
+            return;
+        }
         checkPage(boxH + 5);
         pdf.setFillColor(255, 255, 255);
         pdf.setDrawColor(SOFT_BORDER[0], SOFT_BORDER[1], SOFT_BORDER[2]);

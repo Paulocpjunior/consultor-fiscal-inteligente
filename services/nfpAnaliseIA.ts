@@ -46,17 +46,17 @@ export function montarPromptAnaliseIA(analise: NfpAnaliseEmpresa, opts: GerarAna
         linhas.push(`- [${d.esfera}] ${d.orgao}: ${d.descricao} — ${fmtBRL(d.valorAtualizado ?? d.valorOriginal)} — venc. ${d.dataVencimento} — status: ${d.status}${d.observacao ? ` — obs: ${d.observacao}` : ''}`);
     }
 
-    const certidoes = (analise.certidoes || []).filter(c => c.status !== 'nao_consultada');
+    const certidoes = analise.certidoes || [];
     linhas.push('');
-    linhas.push(`CERTIDÕES (${certidoes.length} consultadas):`);
+    linhas.push(`CERTIDÕES (${certidoes.length} registros; respeitar o status de verificação):`);
     if (!certidoes.length) linhas.push('- nenhuma certidão consultada');
     for (const c of certidoes) {
-        linhas.push(`- [${c.esfera}] ${c.orgao} / ${c.tipo}: ${c.status}${c.motivoImpedimento ? ` — motivo: ${c.motivoImpedimento}` : ''}${c.dataValidade ? ` — validade: ${c.dataValidade}` : ''}`);
+        linhas.push(`- [${c.esfera}] ${c.orgao} / ${c.tipo}: ${c.status}${c.motivoImpedimento ? ` — motivo: ${c.motivoImpedimento}` : ''}${c.dataValidade ? ` — validade: ${c.dataValidade}` : ''}${c.dataEmissao ? ` — emissão: ${c.dataEmissao}` : ''}${c.numeroCertidao ? ` — número: ${c.numeroCertidao}` : ''}`);
     }
 
-    const obrigacoes = (analise.obrigacoes || []).filter(o => o.status !== 'nao_verificada');
+    const obrigacoes = analise.obrigacoes || [];
     linhas.push('');
-    linhas.push(`OBRIGAÇÕES ACESSÓRIAS (${obrigacoes.length} verificadas):`);
+    linhas.push(`OBRIGAÇÕES ACESSÓRIAS (${obrigacoes.length} registros; observações manuais não são confirmação oficial):`);
     if (!obrigacoes.length) linhas.push('- nenhuma obrigação verificada');
     for (const o of obrigacoes) {
         linhas.push(`- [${o.esfera}] ${o.sigla} (${o.periodicidade}): ${o.status}${o.competencia ? ` — competência ${o.competencia}` : ''}${o.observacao ? ` — obs: ${o.observacao}` : ''}`);

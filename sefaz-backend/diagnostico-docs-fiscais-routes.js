@@ -40,7 +40,15 @@ router.get('/', requireAuth, async (req, res) => {
         const { empresaId } = req.query;
 
         const db = fa().firestore();
-        let query = db.collection('documentos_fiscais');
+        // 🚨 26/09 (auditoria): sem empresaId esta leitura trazia o acervo
+        // INTEIRO com o documento completo. Só os campos que o diagnóstico usa;
+        // a projeção não pergunta cancelamento porque aqui se conta estrutura
+        // (exceção declarada na trava projecaoNaoCegaARegua).
+        let query = db.collection('documentos_fiscais').select(
+            'chave', 'chaveAcesso', 'competencia', 'direcao', 'empresaId', 'empresaCnpj', 'empresaNome',
+            'status', '_merged_into',
+            'valor', 'valorTotal', 'totalNota', 'valorServicos', 'totais', 'valores', 'vNF',
+        );
         if (empresaId) query = query.where('empresaId', '==', empresaId);
 
         const docs = await fetchAllDocs(query, { label: 'diagnostico-docs-fiscais' });

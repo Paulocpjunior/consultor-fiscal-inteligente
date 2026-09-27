@@ -128,11 +128,18 @@ export const APPS_AZURE = {
             + 'contêiner sobe.',
     },
     '59fd4ec9-37bd-472c-9fa7-373461dffd50': {
-        nome: 'envio de e-mail pelo Microsoft Graph (guia ao cliente)',
-        onde: 'na variável GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente (Cloud Run). '
-            + '⚠️ O tráfego deste serviço fica PINADO numa revisão: editar a variável cria uma revisão NOVA '
-            + 'a 0% de tráfego, então é preciso rotear o tráfego para ela (ou esperar o próximo deploy, que '
-            + 'carrega a variável junto).',
+        nome: 'envio de e-mail pelo Microsoft Graph (guia ao cliente) — app "Consultor Fiscal Inteligente - Notificacoes"',
+        // 📏 MEDIDO em 24/09 (`gcloud run services describe`): a variável
+        // GRAPH_CLIENT_SECRET deste serviço lê `graph-notificacoes-secret:latest`
+        // — NÃO o `graph-client-secret`, que é do proxy. Gravar no
+        // `graph-client-secret` (foi o que aconteceu, versões 6–8 de 24/09)
+        // não chega a este serviço e ainda troca o segredo do proxy.
+        onde: 'Secret Manager → graph-notificacoes-secret (projeto consultorfiscalapp) — é ESTE o segredo que a '
+            + 'variável GRAPH_CLIENT_SECRET do serviço consultor-fiscal-inteligente lê (medido em 24/09); o '
+            + 'graph-client-secret é do PROXY do SharePoint, outro app. Depois de gravar a versão nova, o :latest '
+            + 'só é lido por uma REVISÃO NOVA: `gcloud run services update consultor-fiscal-inteligente '
+            + '--region us-west1 --update-secrets GRAPH_CLIENT_SECRET=graph-notificacoes-secret:latest` e, como o '
+            + 'tráfego deste serviço fica PINADO numa revisão, `gcloud run services update-traffic … --to-latest`.',
     },
 };
 
@@ -285,7 +292,14 @@ export const ACAO_CREDENCIAL_ENVIO =
     'NÃO é desta empresa e NÃO é a pasta dela: é a credencial do proxy do SharePoint, e enquanto ela '
     + 'não for aceita NENHUM cliente arquiva — a etapa 5 fica travada na carteira inteira. '
     + '⚠️ NÃO reenvie a guia: o cliente já recebeu, e reenviar DUPLICA a cobrança sem resolver isto. '
-    + 'Confira o card "Conexão SharePoint" em Central de XMLs → Integrações.';
+    + 'Confira o card "Conexão SharePoint" em Central de XMLs → Integrações. '
+    // 22/09 (MANTOAN): a credencial tinha sido consertada em 02/09 e a etapa 5
+    // continuava vermelha — o status do rito é um CARIMBO do dia do envio e
+    // não se reavalia sozinho. Sem esta frase, a pessoa mede o cofre, vê tudo
+    // certo e não sabe que o caminho é REFAZER, não reenviar.
+    + 'Se o card já está VERDE, o erro aqui é o carimbo do dia do envio (o rito não se reavalia sozinho): '
+    + 'use ♻️ Refazer o rito em Vencimentos e Obrigações → aba 📤 Envios (rito), no bloco da causa — ele arquiva de novo e dá a baixa, '
+    + 'sem reenviar a guia ao cliente.';
 
 /**
  * A ação COMPLETA para quem está no fim de mês: o que não fazer (reenviar) +

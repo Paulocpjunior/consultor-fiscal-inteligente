@@ -140,11 +140,15 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // Load analysis when empresa changes
     useEffect(() => {
         if (!selectedEmpresaId) { setAnalise(null); analiseBaselineRef.current = null; return; }
+        let cancelled = false;
+        setAnalise(null);
+        analiseBaselineRef.current = null;
         setLoading(true);
         nfpService.getAnalise(selectedEmpresaId)
-            .then(a => { setAnalise(a); analiseBaselineRef.current = a; })
-            .catch(() => { setAnalise(null); analiseBaselineRef.current = null; })
-            .finally(() => setLoading(false));
+            .then(a => { if (!cancelled) { setAnalise(a); analiseBaselineRef.current = a; } })
+            .catch(() => { if (!cancelled) { setAnalise(null); analiseBaselineRef.current = null; } })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
     }, [selectedEmpresaId]);
 
     const selectedEmpresa = useMemo(() => empresas.find(e => e.id === selectedEmpresaId), [empresas, selectedEmpresaId]);
@@ -298,7 +302,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
     }, []);
 
     const saveAnalise = useCallback(async (a: NfpAnaliseEmpresa) => {
-        if (!currentUser) return;
+        if (!currentUser) return false;
         try {
             // O serviço mescla com a versão do servidor antes de gravar —
             // lançamentos de outros colaboradores (departamentos) não são
@@ -307,8 +311,10 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             analiseBaselineRef.current = salva;
             setAnalise(salva);
             onShowToast?.('Análise salva com sucesso');
+            return true;
         } catch (e: any) {
             onShowToast?.('Erro ao salvar: ' + (e?.message || 'desconhecido'));
+            return false;
         }
     }, [currentUser, onShowToast]);
 
@@ -518,7 +524,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             uid,
         });
         setAnalise(nova);
-        await saveAnalise(nova);
+        if (!await saveAnalise(nova)) return;
         onShowToast?.(`Análise manual gerada com ${nova.planoAcao.length} item(ns) no plano de ação.`);
         setTab('dashboard');
     }, [activeEmpresaId, createEmptyAnalise, currentUser, prospectMode, saveAnalise, onShowToast]);
@@ -556,7 +562,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             });
             updated.planoAcao = mesclarPlanoAcao(updated.planoAcao || [], planoGerado);
             setAnalise(updated);
-            await saveAnalise(updated);
+            if (!await saveAnalise(updated)) return;
             onShowToast?.(isMock
                 ? 'Análise concluída com DADOS SIMULADOS (SERPRO em modo teste)'
                 : `Varredura automática concluída — ${updated.planoAcao.length} item(ns) no plano de ação`);
@@ -580,7 +586,7 @@ const NfpProCloud: React.FC<Props> = ({ currentUser, onShowToast }) => {
             });
             const atualizada = { ...completa, analiseIA: bloco };
             setAnalise(atualizada);
-            await saveAnalise(atualizada);
+            if (!await saveAnalise(atualizada)) return;
             onShowToast?.('Análise da IA gerada com sucesso');
         } catch (e: any) {
             onShowToast?.('Erro ao gerar análise da IA: ' + (e?.message || 'desconhecido'));

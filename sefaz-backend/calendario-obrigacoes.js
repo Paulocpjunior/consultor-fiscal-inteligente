@@ -62,46 +62,21 @@ const OBRIGACOES = {
         regimeLabel: 'MEI',
         descricaoTemplate: 'DAS-MEI - ref. {COMP}',
     },
-    INSS_PATRONAL: {
-        tipo: 'INSS',
-        nome: 'INSS Patronal',
-        diaVencimento: 20,
-        mesesApos: 1,
-        regimes: ['simples', 'lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        requireFolha: true,
-        descricaoTemplate: 'INSS Patronal - ref. {COMP}',
-    },
-    FGTS: {
-        tipo: 'FGTS',
-        nome: 'FGTS Digital',
-        diaVencimento: 20,
-        mesesApos: 1,
-        regimes: ['simples', 'lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        requireFolha: true,
-        descricaoTemplate: 'FGTS Digital - ref. {COMP}',
-    },
+    // ❌ INSS_PATRONAL e FGTS saíram (Paulo, 22/09: "é do DP") — o calendário
+    // do Fiscal não lista obrigação do módulo de DP.
     DCTFWEB: {
         tipo: 'DCTFWEB',
         nome: 'DCTFWeb',
-        diaVencimento: 15,
+        // Último dia útil do mês seguinte desde a competência 01/2025 (IN RFB
+        // 2.237/2024). O dia 15 era a IN 2.005/2021 (22/09).
+        diaVencimento: 'ultimo_dia_util',
         mesesApos: 1,
         regimes: ['simples', 'lucro_presumido', 'lucro_real'],
         regimeLabel: 'Federal',
         requireFolha: true,
         descricaoTemplate: 'DCTFWeb - ref. {COMP}',
     },
-    ESOCIAL_S1299: {
-        tipo: 'ESOCIAL',
-        nome: 'eSocial - Fechamento (S-1299)',
-        diaVencimento: 15,
-        mesesApos: 1,
-        regimes: ['simples', 'lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        requireFolha: true,
-        descricaoTemplate: 'eSocial S-1299 (fechamento) - ref. {COMP}',
-    },
+    // ❌ ESOCIAL_S1299 saiu (Paulo, 23/09: "pode tirar eSocial também, é do DP").
     EFD_REINF: {
         tipo: 'EFD-REINF',
         nome: 'EFD-Reinf',
@@ -185,26 +160,8 @@ const OBRIGACOES = {
         periodicidade: 'anual',
         descricaoTemplate: 'DASN-SIMEI - ano-base {ANO_ANTERIOR}',
     },
-    ECD: {
-        tipo: 'ECD',
-        nome: 'ECD - Escrituracao Contabil Digital',
-        diaVencimento: 'ultimo_dia_util',
-        mesAplicavel: 5, // ultimo dia util de maio
-        regimes: ['lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        periodicidade: 'anual',
-        descricaoTemplate: 'ECD - ano-base {ANO_ANTERIOR}',
-    },
-    ECF: {
-        tipo: 'ECF',
-        nome: 'ECF - Escrituracao Contabil Fiscal',
-        diaVencimento: 'ultimo_dia_util',
-        mesAplicavel: 7, // ultimo dia util de julho
-        regimes: ['lucro_presumido', 'lucro_real'],
-        regimeLabel: 'Federal',
-        periodicidade: 'anual',
-        descricaoTemplate: 'ECF - ano-base {ANO_ANTERIOR}',
-    },
+    // ❌ ECD e ECF saíram (Paulo, 25/09: "não é do departamento fiscal e sim do
+    // contábil") — o calendário do Fiscal não lista obrigação do Contábil.
     DIRF: {
         tipo: 'DIRF',
         nome: 'DIRF',

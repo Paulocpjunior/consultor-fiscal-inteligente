@@ -72,6 +72,69 @@ export function conferirCodModContraChave(linhas) {
 }
 
 /**
+ * NUM_DOC × o número que a CHAVE carrega — C100 (campo 08) e D100 (campo 09).
+ *
+ * 🚨 O CT-e CAPTURADO NÃO TINHA NÚMERO NENHUM (18/09, EDUARDO GUERRA · 08/2026).
+ * A captura lia a tag `nNF` (da NF-e) e o conhecimento traz `nCT`, então TODO
+ * D100 saiu com o campo 09 VAZIO. O PVA importou o arquivo (a contagem fechava)
+ * e quebrou ao gerar o relatório de entradas — *"Ocorreu um erro ao gerar o
+ * relatório"* — só nesta empresa, a única com CT-e no livro. Nada acusava
+ * antes: a contagem (R42) e o tamanho (R43) estavam certos.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, D100 campo 09 e C100 campo 08: *"Validação:
+ * o valor informado no campo deve ser maior que '0' (zero)"*; e no campo da
+ * chave: *"Será verificada a consistência da informação dos campos NUM_DOC e
+ * SER com o número do documento e série contidos na chave"*. A chave carrega
+ * o número nas posições **26-34**, e é contra ele que se confere.
+ *
+ * ⚠️ Cancelada/denegada/inutilizada (COD_SIT 02/03/04/05) MANTÉM o NUM_DOC
+ * (Exceção 1 dos dois registros), então a regra vale nelas também — só o
+ * inutilizado (05), que não tem chave, fica sem a segunda metade.
+ *
+ * Os dez primeiros campos do C100 e do D100 são idênticos nas DUAS famílias
+ * (o D100 tem o SUB no 8, então NUM_DOC é 9 e CHV_CTE é 10).
+ */
+export function conferirNumDocContraChave(linhas) {
+    const POS = { C100: { num: 8, chave: 9 }, D100: { num: 9, chave: 10 } };
+    const erros = [];
+    for (const l of (linhas || []).map(String)) {
+        const reg = registroDe(l);
+        const pos = POS[reg];
+        if (!pos) continue;
+        const f = campos(l);
+        const numTxt = String(f[pos.num] || '').replace(/\D/g, '');
+        const chave = String(f[pos.chave] || '').replace(/\D/g, '');
+        const daChave = chave.length === 44 ? chave.slice(25, 34).replace(/^0+/, '') : '';
+        const comum = {
+            registro: reg, campo: `${pos.num} - NUM_DOC`, linha: l,
+            fonte: `Guia Prático 3.2.3, ${reg} campo ${String(pos.num).padStart(2, '0')} (NUM_DOC): "o valor `
+                + 'informado no campo deve ser maior que zero"; e "será verificada a consistência da '
+                + 'informação dos campos NUM_DOC e SER com o número do documento e série contidos na chave" '
+                + '(EDUARDO GUERRA · 08/2026, 18/09: o PVA quebrou o relatório de entradas com o D100 sem número).',
+        };
+        if (!numTxt || Number(numTxt) === 0) {
+            erros.push({
+                ...comum, regra: 'num-doc-vazio', valor: '', esperado: daChave || 'maior que zero',
+                mensagem: `${reg === 'D100' ? 'O CT-e' : 'A nota'} de chave ${chave || '(sem chave)'} saiu SEM número (NUM_DOC vazio).`,
+                acao: 'O PVA exige número maior que zero e o relatório de entradas quebra sem ele. '
+                    + (daChave ? `A chave carrega o número ${daChave}: ` : '')
+                    + 'é defeito de GERAÇÃO/captura — reporte com o print; para CT-e rode o 🚚 Reler cabeçalho dos CT-e.',
+            });
+            continue;
+        }
+        if (daChave && numTxt.replace(/^0+/, '') !== daChave) {
+            erros.push({
+                ...comum, regra: 'num-doc-x-chave', valor: numTxt, esperado: daChave,
+                mensagem: `O ${reg === 'D100' ? 'CT-e' : 'documento'} declara NUM_DOC ${numTxt} e o número contido na chave é ${daChave}.`,
+                acao: 'O PVA confere o número contra a chave. Se o número gravado foi digitado, corrija-o pelo '
+                    + '✏️ Corrigir o número; se veio de captura, reimporte o XML.',
+            });
+        }
+    }
+    return erros;
+}
+
+/**
  * DT_DOC depois do fim do período.
  *
  * Guia Prático 3.2.3, C100 campo 10: *"o valor informado no campo deve ser
@@ -380,3 +443,54 @@ export function conferirCodPartDoC100(linhas) {
     return erros;
 }
 
+
+/**
+ * 🚨 O **ENDERECO** do 0150 — campo 10, obrigatório SEM condição.
+ *
+ * PVA (J.N. VINATEX · 08/2026, 18/09, **732 recusas em 123 páginas**):
+ * *"Campo obrigatório"*, registro **0150**, campo **10 - ENDERECO**.
+ *
+ * 📖 FONTE — Guia Prático 3.2.3, registro 0150, tabela de leiaute: o campo 10
+ * (END, *"Logradouro e endereço do imóvel"*) é **Obrig. `O`**. Ao contrário do
+ * COD_MUN (campo 08, `OC`, obrigatório só para o Brasil), este não tem
+ * condição nenhuma — e o registro é IDÊNTICO nas duas famílias, por isso a
+ * regra nasce no módulo comum (a "meia trava" do COD_MUN, 22/08, na mesma
+ * linha do mesmo registro).
+ *
+ * ⚠️ A AÇÃO APONTA O ♻️, não o cadastro: a causa medida é de LEITURA — o
+ * extrator lia do `<enderDest>` só a UF e o município e descartava o `xLgr`
+ * que vem no mesmo bloco. Mandar digitar 732 endereços seria pedir trabalho
+ * por um dado que está no arquivo (regra de 06/08).
+ */
+export function conferirEnderecoDo0150(linhas) {
+    const sem = [];
+    let primeira = null;
+    for (const l of (linhas || []).map(String)) {
+        if (registroDe(l) !== '0150') continue;
+        const f = campos(l);
+        if (String(f[10] || '').trim()) continue;
+        if (!primeira) primeira = l;
+        sem.push(String(f[3] || f[2] || '(sem nome)').trim());
+    }
+    if (!sem.length) return [];
+    // ⚠️ UMA ENTRADA, NÃO UMA POR PARTICIPANTE. Foram **732** num arquivo só, e
+    // a ação é a MESMA para todos (rodar o ♻️): 732 linhas idênticas no aviso
+    // é o jeito conhecido de ninguém ler as que importam (03/09). A contagem e
+    // os primeiros nomes é o que dá para agir.
+    return [{
+        regra: '0150-sem-endereco', registro: '0150', campo: '10 - ENDERECO',
+        valor: '', esperado: 'logradouro e endereço do imóvel', linha: primeira,
+        ocorrencias: sem.length,
+        mensagem: `${sem.length} participante(s) estão no 0150 sem ENDERECO e o PVA recusa cada um: `
+            + `${sem.slice(0, 5).join(', ')}${sem.length > 5 ? ` e mais ${sem.length - 5}` : ''}.`,
+        // ⚠️ A AÇÃO NOMEIA A ABA — e o botão só passou a existir nela em 18/09.
+        // Até então esta frase mandava rodar uma ferramenta que morava atrás de
+        // uma pendência de produtor rural, invisível para quem não compra de
+        // produtor: aviso que aponta ferramenta se prova contra a ferramenta.
+        acao: 'O logradouro vem do próprio XML (<enderEmit>/<enderDest>) e a captura antiga o '
+            + 'descartava. Rode o ♻️ Reler participante e município dos XMLs em Relatórios → '
+            + '✏️ CFOP por nota e regere; o que sobrar é participante cujo XML não trouxe o dado.',
+        fonte: 'Guia Prático 3.2.3, registro 0150, campo 10 (END) — Obrig. "O", sem condição; '
+            + 'PVA: "Campo obrigatório" (J.N. VINATEX · 08/2026, 18/09, 732 ocorrências).',
+    }];
+}

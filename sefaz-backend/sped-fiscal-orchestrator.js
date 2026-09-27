@@ -8,6 +8,8 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC, convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
 // 🧭 DIFAL de aquisição DENTRO da apuração (RICMS/SP art. 117): o par de E111
@@ -30,6 +32,10 @@ import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bl
 import * as fmtSped from './sped-fiscal-format.js';
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
 import { enrichParticipantesViaBrasilApi } from './brasilapi-cache.js';
+// O 0150 é da PESSOA, não da primeira nota: ausência num documento não apaga
+// presença no outro (18/09, VINATEX — o 'primeiro vence' deixava sem endereço
+// o cliente cujo primeiro documento do mês não tinha sido relido).
+import { mesclarParticipante } from './sped-bloco0-cadastros.js';
 import { montarDipamCompetencia } from './dipam-produtor-rural.js';
 import { carregarProdutoresRurais, lerCondicaoRural, documentosDaContraparte } from './dipam-store.js';
 import { varrerCcesDoPeriodo } from './cce-escrituracao.js';
@@ -202,7 +208,9 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
 
         const docLimpo = String(cnpjBruto).replace(/\D/g, '');
         if (!docLimpo) continue;
-        if (participantesMap.has(docLimpo)) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
 
         // Detecta PF (CPF 11 digitos) vs PJ (CNPJ 14 digitos) pelo tamanho.
         // Documentos com outros tamanhos sao invalidos — loga e pula.
@@ -218,7 +226,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         }
 
         // codPart = documento limpo (suficiente como identificador unico)
-        participantesMap.set(docLimpo, {
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
             codPart: docLimpo,
             nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
             cnpj: cnpjFinal,
@@ -229,7 +237,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             numero: participanteRaw.numero || '',
             complemento: participanteRaw.complemento || '',
             bairro: participanteRaw.bairro || '',
-        });
+        }));
     }
     const participantes = Array.from(participantesMap.values());
 
@@ -638,6 +646,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // o E250 nunca saía e o aviso mandava "informe no cadastro", um cadastro
     // que não existia. Mora no MESMO doc dos ajustes, como o código do C197.
     let obrigacoesStPorUf = {};
+    // 🚨 E316 — a obrigação do DIFAL/FCP da EC 87/15 a recolher, POR UF DE
+    // DESTINO (18/09, VINATEX). Mesma régua e mesma casa do E250: o COD_REC é
+    // código ESTADUAL e o DT_VCTO é o prazo daquele estado — nenhum dos dois
+    // está no documento nem se deduz. Sem eles o E316 não sai e a falta vai
+    // NOMEADA na geração, nunca em silêncio.
+    let obrigacoesDifalEc87PorUf = {};
     // 🧭 DIFAL na apuração (art. 117): códigos dos dois E111 + o informado por
     // nota, no MESMO doc dos ajustes (14/09, HYPE CAFÉ). Trimestral concatena
     // o informado dos três meses; os códigos são os do último doc que os tem.
@@ -654,6 +668,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                 if (s.exists && s.data().difalCodigoAjusteC197) difalCfg = s.data();
                 if (s.exists && s.data().obrigacoesStPorUf) {
                     obrigacoesStPorUf = { ...obrigacoesStPorUf, ...s.data().obrigacoesStPorUf };
+                }
+                if (s.exists && s.data().obrigacoesDifalEc87PorUf) {
+                    obrigacoesDifalEc87PorUf = {
+                        ...obrigacoesDifalEc87PorUf, ...s.data().obrigacoesDifalEc87PorUf,
+                    };
                 }
                 const a117 = s.exists ? (s.data().difalArt117 || null) : null;
                 if (a117) {
@@ -788,6 +807,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         ajustesApuracao,
         difalCodigoAjusteC197: difalCfg.difalCodigoAjusteC197 || '',
         obrigacoesStPorUf,
+        obrigacoesDifalEc87PorUf,
         difalCodObservacao: difalCfg.difalCodObservacao || '',
         difalAliqInternaPadrao: difalCfg.difalAliqInternaPadrao || 18,
         // A alíquota interna INFORMADA por nota na aba do art. 117 vale também
@@ -813,6 +833,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  * @returns {Promise<string>} arquivo .txt em encoding Windows-1252.
  */
 export async function montarBlocos({ dados }) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
     // 🚨 O BLOCO C É MONTADO ANTES DO 0 — a ORDEM DE EXECUÇÃO, não a do arquivo.
     //
     // O `0460` (Tabela de Observações) mora no bloco 0 e só pode existir quando
@@ -894,4 +915,3 @@ function listarCompetenciasPeriodo(inicio, fim) {
     }
     return out;
 }
-

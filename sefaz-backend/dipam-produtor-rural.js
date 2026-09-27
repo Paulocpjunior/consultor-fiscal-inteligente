@@ -552,6 +552,15 @@ export function normalizarParticipantesDoc(doc) {
         ie: d.ieEmit || '',
         uf: d.ufEmit || '',
         codMunIBGE: d.codMunEmit || '',
+        // 🚨 O ENDEREÇO ENTRA AQUI (18/09, VINATEX: 732 recusas do PVA no campo
+        // 10 do 0150). Ele montava CINCO campos, e o coletor do 0150 — que lê
+        // `participanteRaw.logradouro` — recebia `undefined` em TODA nota
+        // capturada automaticamente: o arquivo saía com o ENDERECO vazio e
+        // dependia da BrasilAPI para preencher um campo obrigatório.
+        logradouro: d.logradouroEmit || '',
+        numero: d.nroEmit || '',
+        complemento: d.complementoEmit || '',
+        bairro: d.bairroEmit || '',
     });
     const destinatario = temLado(d.destinatario) ? d.destinatario : (temLado(d.tomador) ? d.tomador : {
         cnpjCpf: d.cnpjDest || d.cnpjDestinatario || '',
@@ -559,6 +568,10 @@ export function normalizarParticipantesDoc(doc) {
         ie: d.ieDest || '',
         uf: d.ufDest || '',
         codMunIBGE: d.codMunDest || '',
+        logradouro: d.logradouroDest || '',
+        numero: d.nroDest || '',
+        complemento: d.complementoDest || '',
+        bairro: d.bairroDest || '',
     });
     return { ...d, emitente, destinatario };
 }

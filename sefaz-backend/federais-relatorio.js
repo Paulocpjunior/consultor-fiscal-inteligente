@@ -12,7 +12,7 @@ export function federaisDoRelatorio(d, base, ajuste) {
         ? { ir: efetiva.ir, pis: efetiva.pis, cofins: efetiva.cofins, csllOuTotal: efetiva.csll, inss: efetiva.inss }
         : bruto;
     const coer = conferirRetencaoFederal({ base, pis: fed.pis, cofins: fed.cofins, csll: fed.csllOuTotal });
-    const csllEhTotal = coer.situacao === 'csll-e-o-total';
+    const csllEhTotal = coer.situacao === 'csll-e-o-total' || (!ajustada && d?.valores?.pccAgregadoDeclarado === true);
     const daOperacao = coer.situacao === 'campos-sao-totais-da-operacao';
     const valores = {
         pis: daOperacao ? 0 : (fed.pis ?? 0),

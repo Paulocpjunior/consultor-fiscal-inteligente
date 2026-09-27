@@ -165,3 +165,27 @@ describe('montarAptidaoSaida', () => {
         expect(texto).toMatch(/Só cobre instruções de quem está em "Sem prova/);
     });
 });
+
+// ── 25/09: "quantificar os clientes que já nos enviam xml usando o email
+// xml@sp ou com o nosso cnpj" ──────────────────────────────────────────────
+describe('resumo.porTrilho — quem já nos envia XML, por trilho', () => {
+    const emp = (cnpj: string, nome: string) => ({ empresaId: cnpj, cnpj, nome });
+    const doc = (cnpj: string, extra: Record<string, unknown>) => ({ empresaCnpj: cnpj, chave: `ch-${cnpj}-${Math.random()}`, dhEmi: diasAtras(3), ...extra });
+    const empresas = [emp('11111111000111', 'AUT'), emp('22222222000122', 'COFRE'), emp('33333333000133', 'AMBOS'), emp('44444444000144', 'SEM PROVA'), emp('55555555000155', 'NAO EMITE')];
+    const docsSaida = [
+        doc('11111111000111', { autXmlEscritorio: true }),
+        doc('22222222000122', { origem: 'email' }),
+        doc('33333333000133', { autXmlEscritorio: true }),
+        doc('33333333000133', { origem: 'email' }),
+        doc('44444444000144', { origem: 'manual' }),
+    ];
+    const r = montarAptidaoSaida({ empresas, docsSaida, agoraMs: HOJE, cnpjEscritorio: ESCRITORIO });
+
+    it('conta autxml, cofre e ambos — e "ambos" entra nas duas colunas', () => {
+        expect(r.resumo.porTrilho).toEqual({ autxml: 2, cofre: 2, ambos: 1, soAutxml: 1, soCofre: 1 });
+    });
+    it('quem só mandou à mão não conta em trilho nenhum — fica em "sem prova"', () => {
+        expect(r.resumo.semProva).toBe(1);
+        expect(r.resumo.porTrilho.autxml + r.resumo.porTrilho.cofre - r.resumo.porTrilho.ambos).toBe(r.resumo.aptos);
+    });
+});

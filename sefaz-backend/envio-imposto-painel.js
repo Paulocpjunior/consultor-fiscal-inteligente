@@ -43,6 +43,11 @@ export function pendenciaSharePoint(e) {
     const st = e?.sharePoint?.status;
     if (!st || st === 'arquivado') return null;
     if (st === 'sem-pdf') return null;
+    // 📁 Arquivado À MÃO, declarado com autor/data/texto (22/09): o app não
+    // guarda o PDF de DARF/DARE depois do envio, então a cópia que falhou por
+    // credencial não tem como ser refeita — a pessoa arquiva na pasta e
+    // DECLARA. Fecha a etapa; sai contado como declarado, nunca como prova.
+    if (st === 'arquivado-declarado') return null;
     if (st === 'sem-config') {
         return {
             causa: 'Empresa sem pasta do SharePoint',
@@ -71,6 +76,9 @@ export function pendenciaBaixa(e) {
     // registra o envio. Tratá-la como pendência punia justamente quem seguiu a
     // ordem certa, e travava o fim de mês da empresa.
     if (st === 'ja-baixada') return null;
+    // Tipo que não nomeia obrigação do catálogo (DARE de ICMS…): não há
+    // tarefa a baixar — desfecho legítimo, dito no motivo (22/09).
+    if (st === 'sem-obrigacao') return null;
     if (st === 'sem-tarefa') {
         return {
             causa: 'Sem obrigação correspondente na aba Vencimentos',
@@ -140,9 +148,13 @@ export function canalComprovaEnvio(canal) {
 export function envioCompletoPeloRito(e, { baixaJaFeitaNaObrigacao = false } = {}) {
     const semBaixa = !baixaJaFeitaNaObrigacao && semRegistroBaixa(e);
     const naoConferido = semRegistroSharePoint(e) || semBaixa;
+    const sp = pendenciaSharePoint(e);
+    const bx = baixaJaFeitaNaObrigacao ? null : pendenciaBaixa(e);
+    // A ETAPA viaja com a pendência: é ela que diz à tela qual saída oferecer
+    // (declarar o arquivamento à mão só cabe na ponta do SharePoint).
     const pendencias = [
-        pendenciaSharePoint(e),
-        baixaJaFeitaNaObrigacao ? null : pendenciaBaixa(e),
+        sp ? { ...sp, etapa: 'sharepoint' } : null,
+        bx ? { ...bx, etapa: 'baixa' } : null,
     ].filter(Boolean);
     return {
         // ⚠️ SEM REGISTRO NÃO É COMPLETO — é NÃO CONFERIDO, e tem ação própria.
@@ -151,6 +163,7 @@ export function envioCompletoPeloRito(e, { baixaJaFeitaNaObrigacao = false } = {
         naoConferido,
         pendencias,
         baixaJaFeitaNaObrigacao,
+        arquivadoDeclarado: String(e?.sharePoint?.status || '') === 'arquivado-declarado',
     };
 }
 
@@ -237,6 +250,8 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         // fila de trabalho: mandar "dê baixa manual" numa tarefa já concluída
         // é alarme com ação impossível.
         reenvios: 0,
+        // 📁 Cópias declaradas à mão — fecham, mas vão DITAS, não somem no "completos".
+        arquivadosDeclarados: 0,
         valorTotal: 0,
     };
 
@@ -255,6 +270,7 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
         const problemas = r.pendencias;
         const semRegistro = r.naoConferido;
         if (r.baixaJaFeitaNaObrigacao) painel.reenvios++;
+        if (r.arquivadoDeclarado) painel.arquivadosDeclarados++;
         if (problemas.length > 0) painel.incompletos++;
         else if (semRegistro) {
             const faltam = [
@@ -271,7 +287,7 @@ export function montarPainelEnvios(envios, { competencia = null } = {}) {
 
         for (const p of problemas) {
             const bucket = painel.pendencias[p.causa]
-                || (painel.pendencias[p.causa] = { qtd: 0, acao: p.acao, empresas: [], envioIds: [] });
+                || (painel.pendencias[p.causa] = { qtd: 0, acao: p.acao, etapa: p.etapa || null, empresas: [], envioIds: [] });
             bucket.qtd++;
             const rotulo = `${e.empresaNome || e.empresaCnpj || '—'} · ${tipo} ${e.competencia || ''}`.trim();
             if (bucket.empresas.length < 50 && !bucket.empresas.includes(rotulo)) bucket.empresas.push(rotulo);

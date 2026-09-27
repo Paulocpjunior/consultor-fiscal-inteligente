@@ -14,6 +14,8 @@ import { criarErroDuplicidadeDas, encontrarConflitoDasAvulso } from './das-dupli
 import { lerCodigoAtividadeSup } from './pgdas-atividade-config.js';
 import { avaliarSemMovimento, montarDeclaracaoSemMovimento, interpretarRecusaSemMovimento, avaliarDeclaracaoJaEntregue } from './pgdas-sem-movimento.js';
 import { candidatosSemMovimento, assertSondaNaoTransmite, lerResultadoCandidato, vereditoDaSonda } from './pgdas-sonda-sem-movimento.js';
+import { assinaturaEmissaoDas, reservarEmissaoDas } from './das-emissao-state.js';
+import { hojeBrt, anoMesBrt, dataBrt } from './data-brt.js';
 
 const COLLECTION = 'das_emitidos';
 
@@ -101,34 +103,55 @@ export async function emitirDasRegular(req) {
     const provider = getDasProvider();
     const mode = getDasMode();
 
-    // 1. Transmite PGDAS-D (com payload detalhado se vier do frontend)
-    const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor, dadosPgdas });
-
-    // 2. Gera o DAS
-    const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
-
-    // 3. Persiste no Firestore
     const db = fa().firestore();
     const docId = `${empresaCnpj}_${competencia}_regular`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const payload = {
-        empresaId,
-        empresaCnpj,
-        empresaNome: empresaNome || '',
-        competencia,
-        tipo: 'regular',
-        valor,
-        ...das,
-        pgdasRecibo: pgdas.recibo,
-        pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
-        pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
-        pgdasTransmitidoEm: pgdas.transmitidoEm,
-        emitidoEm: new Date().toISOString(),
-        modeUsado: mode,
-        statusPagamento: 'pendente',  // pago | pendente | vencido
-        dataPagamento: null,
+    const guiaRef = db.collection(COLLECTION).doc(docId);
+    const ref = db.collection('das_emissao_operacoes').doc(docId);
+    const assinatura = assinaturaEmissaoDas({ empresaId, empresaCnpj, competencia, valor, dadosPgdas });
+    const identidade = {
+        empresaId, empresaCnpj, empresaNome: empresaNome || '', competencia, tipo: 'regular', valor,
     };
-    await db.collection(COLLECTION).doc(docId).set(payload, { merge: true });
-    return { id: docId, ...payload };
+    const reserva = await reservarEmissaoDas(db, ref, assinatura, identidade, guiaRef);
+    if (reserva.concluida) return { id: docId, ...reserva.atual };
+    let reciboPersistido = Boolean(reserva.recuperar);
+    try {
+        if (!reserva.recuperar) {
+            const pgdas = await provider.transmitirPgdasD({ empresaCnpj, competencia, valor, dadosPgdas });
+            await ref.set({
+                pgdasRecibo: pgdas.recibo || '',
+                pgdasNumeroDeclaracao: pgdas.numeroDeclaracao || '',
+                pgdasTipoDeclaracao: pgdas.tipoDeclaracao || 1,
+                pgdasTransmitidoEm: pgdas.transmitidoEm || new Date().toISOString(),
+                emissaoEtapa: 'gerando',
+            }, { merge: true });
+            reciboPersistido = Boolean(pgdas.recibo);
+        }
+        const das = await provider.gerarDas({ empresaCnpj, competencia, valor, tipo: 'regular' });
+        // Payment fields belong to settlement, never to reprinting/recovery.
+        const { statusPagamento: _status, dataPagamento: _data, ...guia } = das;
+        return await db.runTransaction(async tx => {
+            const operacao = (await tx.get(ref)).data() || {};
+            const existente = (await tx.get(guiaRef)).data() || {};
+            const payload = {
+                ...identidade, ...guia,
+                pgdasRecibo: operacao.pgdasRecibo || '',
+                pgdasNumeroDeclaracao: operacao.pgdasNumeroDeclaracao || '',
+                pgdasTipoDeclaracao: operacao.pgdasTipoDeclaracao || 1,
+                pgdasTransmitidoEm: operacao.pgdasTransmitidoEm || '',
+                emitidoEm: new Date().toISOString(), modeUsado: mode,
+                ...(existente.statusPagamento ? {} : { statusPagamento: 'pendente', dataPagamento: null }),
+            };
+            tx.set(guiaRef, payload, { merge: true });
+            tx.set(ref, { emissaoEtapa: 'concluida', emissaoAtualizadaEm: new Date().toISOString() }, { merge: true });
+            return { id: docId, ...existente, ...payload };
+        });
+    } catch (err) {
+        await ref.set({
+            emissaoEtapa: reciboPersistido ? 'guia_pendente' : 'incerta',
+            emissaoAtualizadaEm: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+        throw err;
+    }
 }
 
 /**
@@ -207,6 +230,27 @@ export async function listarDas({ empresaId, competencia, status } = {}) {
     return docs;
 }
 
+/**
+ * Guias LEVES por id (sem o PDF) — para o lote do "já enviei por fora". Ler o
+ * doc inteiro traria o base64 de cada guia; 50 guias seriam ~5 MB por clique.
+ * `in` do Firestore aceita até 30 ids; fatiado em 10 por segurança. Id que não
+ * existe volta como null NA POSIÇÃO do pedido, para o pulo ser nomeado.
+ */
+export async function carregarGuiasLeves(ids) {
+    const db = fa().firestore();
+    const lista = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
+    const porId = new Map();
+    for (let i = 0; i < lista.length; i += 10) {
+        const fatia = lista.slice(i, i + 10);
+        const snap = await db.collection(COLLECTION)
+            .where(admin.firestore.FieldPath.documentId(), 'in', fatia)
+            .select(...CAMPOS_LISTAGEM)
+            .get();
+        snap.docs.forEach((d) => porId.set(d.id, { id: d.id, ...d.data() }));
+    }
+    return lista.map((id) => porId.get(id) || null);
+}
+
 /** PDF/base64 de UM DAS — buscado sob demanda (baixar/imprimir/enviar). */
 export async function getDasPdf(id) {
     const db = fa().firestore();
@@ -228,7 +272,8 @@ export async function getResumoDas() {
         { label: 'das_emitidos/resumo' },
     )).map(d => d.data());
 
-    const hoje = new Date().toISOString().slice(0, 10);
+    // 📅 26/09: hoje em Brasília (às 21h o UTC já é amanhã → vencido a maior).
+    const hoje = hojeBrt();
     let pendentes = 0, vencidos = 0, pagos = 0;
     let valorPendente = 0, valorVencido = 0, valorPago = 0;
     let valorMultaEstimada = 0;
@@ -280,11 +325,9 @@ export async function getResumoDas() {
  */
 export async function processarCronDas() {
     const db = fa().firestore();
-    const hoje = new Date().toISOString().slice(0, 10);
-    const cincoDiasFrente = (() => {
-        const d = new Date(); d.setDate(d.getDate() + 5);
-        return d.toISOString().slice(0, 10);
-    })();
+    // 📅 26/09: hoje e +5 dias em Brasília, não em UTC.
+    const hoje = hojeBrt();
+    const cincoDiasFrente = dataBrt(Date.now() + 5 * 24 * 60 * 60 * 1000);
 
     const snapDocs = await fetchAllDocs(db.collection(COLLECTION), { label: 'das_emitidos/cron' });
     const stats = {
@@ -388,7 +431,7 @@ export async function marcarPago(docId, dataPagamento) {
     const db = fa().firestore();
     await db.collection(COLLECTION).doc(docId).update({
         statusPagamento: 'pago',
-        dataPagamento: dataPagamento || new Date().toISOString().slice(0, 10),
+        dataPagamento: dataPagamento || hojeBrt(),
     });
     return { ok: true };
 }

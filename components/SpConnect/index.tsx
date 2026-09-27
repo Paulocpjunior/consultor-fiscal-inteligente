@@ -31,7 +31,7 @@ import {
     Contato, Etiqueta, relatorioTitular, eliminarDadosTitular,
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
-    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams,
+    relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams, statusAvisos, testarTodosAvisos, StatusAvisosResposta, TesteTudoResposta,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -43,7 +43,7 @@ import {
     avisosDeNovasMensagens, tituloComContador, estadoDaPermissao, faltaNosAvisos,
 } from '../../services/notificacaoConnect';
 import { destravarSom, somDestravado, tocarAviso } from '../../services/somAviso';
-import { pushConfigurado, registrarDispositivo } from '../../services/pushConnect';
+import { pushConfigurado, registrarDispositivo, lerPrefsPush, salvarPrefsPush } from '../../services/pushConnect';
 import {
     SOBRE_VERSAO, POR_QUE, O_QUE_FAZ, DIFERENCIAIS, MANUAL, REVISOES,
     temSobreNaoLido, marcarSobreComoLido, dataBr,
@@ -52,10 +52,11 @@ import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
+    filaParaTemplate,
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
-import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario } from '../../sefaz-backend/whatsapp-atendimento.js';
+import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario, podeVerEncerrados } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../services/sp-connect-message-origin.js';
 import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
 import { interpretarConversaTxt } from '../../services/ultrafox-browser-parser.js';
@@ -110,6 +111,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const fimDaThread = useRef<HTMLDivElement>(null);
     const selRef = useRef<ConversaResumo | null>(null);
     selRef.current = sel;
+    // ⚠️ Ref, não a variável: `recarregar` é um useCallback com deps [] e roda
+    // também no timer de 30s — ler `aba` direto ali congelaria o valor da
+    // primeira renderização, e o refresh silencioso voltaria a pedir a caixa
+    // normal enquanto a pessoa olha a aba de encerrados.
+    const abaRef = useRef<string>('todas');
+    abaRef.current = aba;
     const antigasRef = useRef<MensagemInbox[]>([]);
     antigasRef.current = antigas;
     const mensagensRef = useRef<MensagemInbox[]>([]);
@@ -165,8 +172,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const recarregar = useCallback(async (silencioso = false) => {
         if (!silencioso) setCarregando(true);
         try {
-            const r = await listarConversas();
-            if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return; }
+            // A aba de ENCERRADOS é outro recorte no BANCO, não um filtro da
+            // lista carregada: as resolvidas nem vêm na leitura normal.
+            const r = await listarConversas(abaRef.current === 'encerrados');
+            if (!r.ok) { if (!silencioso) setErro(r.error || 'Falha ao carregar as conversas.'); return null; }
             setErro(null);
             setConversas(r.conversas || []);
             // 🚨 A CONVERSA ABERTA TAMBÉM SE ATUALIZA (24/08). A lista se
@@ -184,10 +193,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             setFilas(r.filas || []);
             setMinhasFilas(r.minhasFilas === undefined ? null : r.minhasFilas);
             if (r.papel) setPapel(r.papel);
+            setEncerradasOcultas(r.encerradasOcultas || 0);
+            // Devolve a lista FRESCA: quem acabou de mandar template numa
+            // conversa precisa reabrir o objeto REAL dela, não um stub (24/09).
+            return r.conversas || [];
         } finally {
             if (!silencioso) setCarregando(false);
         }
     }, []);
+
+    // ✅ Entrar/sair da aba de ENCERRADOS recarrega — ela é outro recorte no
+    // BANCO, não um filtro da lista já carregada. Sem isto o chip acenderia e
+    // a lista continuaria a mesma: botão que não faz nada é pior que botão
+    // nenhum. Só na TRAVESSIA (a chave é o booleano), então trocar entre filas
+    // não gasta leitura.
+    const naAbaEncerrados = aba === 'encerrados';
+    useEffect(() => { void recarregar(true); }, [naAbaEncerrados, recarregar]);
 
     const carregarThread = useCallback(async (numero: string, silencioso = false) => {
         if (!silencioso) setCarregandoMsgs(true);
@@ -227,13 +248,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     }, [carregandoAntigas]);
 
     // Atendimento não vive de F5: lista e thread aberta se renovam a cada 30s.
+    // SÓ com a aba visível: aba esquecida atrás de outra não precisa bater no
+    // servidor a cada 30s; ao voltar para a aba, renova na hora.
     useEffect(() => {
         recarregar();
-        const timer = setInterval(() => {
+        const poll = () => {
+            if (document.visibilityState !== 'visible') return;
             recarregar(true);
             if (selRef.current) carregarThread(selRef.current.numero, true);
-        }, 30_000);
-        return () => clearInterval(timer);
+        };
+        const timer = setInterval(poll, 30_000);
+        const aoVoltar = () => { if (document.visibilityState === 'visible') poll(); };
+        document.addEventListener('visibilitychange', aoVoltar);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener('visibilitychange', aoVoltar);
+        };
     }, [recarregar, carregarThread]);
 
     // 🟢 BATIMENTO DE PRESENÇA — é o que responde "quem está no ar?" na hora
@@ -399,6 +429,23 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // Encerrar/reabrir: admin e gestor, qualquer; colaborador, só o que conduz.
     const podeEncerrarSel = papel === 'admin' || papel === 'gestor' || (sel?.atribuidoA != null && sel.atribuidoA === meuEmail);
     const [situacaoAviso, setSituacaoAviso] = useState<string | null>(null);
+    // 📋 O que acabou de sair por template NESTA conversa — e o aviso de que a
+    // janela continua fechada. 24/09: sem isso a pessoa mandou, nada mudou na
+    // tela, mandou DE NOVO — e o cliente recebeu duas vezes.
+    const [templateEnviado, setTemplateEnviado] = useState<{ numero: string; em: string; texto: string } | null>(null);
+    useEffect(() => {
+        // Aviso é DESTA conversa: trocar de conversa o apaga.
+        if (templateEnviado && templateEnviado.numero !== sel?.numero) setTemplateEnviado(null);
+    }, [sel?.numero, templateEnviado]);
+    // ✅ Quem vê a aba de encerrados — a MESMA função que a rota usa para
+    // recusar. Ler `papel === 'admin' || papel === 'gestor'` aqui seria a
+    // segunda cópia da regra, e no dia em que ela mudar num lado só o chip
+    // acende contra um 403.
+    const veEncerrados = podeVerEncerrados(papel);
+    // ✅ Quantas conversas encerradas saíram da caixa nesta leitura. O número
+    // NÃO some: lista que encolhe sem dizer por quê vira suspeita de conversa
+    // perdida (farol honesto).
+    const [encerradasOcultas, setEncerradasOcultas] = useState(0);
     // ☎️ Pedir a permissão de ligação (fase 2 da chamada). Confirmação antes:
     // é uma MENSAGEM real chegando no cliente, não um ajuste interno.
     const [permLigAviso, setPermLigAviso] = useState<string | null>(null);
@@ -553,6 +600,55 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally { setTeamsTestando(false); }
     };
 
+    // ── 🔔 AVISOS — o painel que responde "por que eu não recebi?" (24/09) ──
+    // Paulo: "como ativar de forma mais extravagante possível e habilitar de
+    // todas as formas" e "olhei em configurações e não achei o campo". São
+    // QUATRO camadas com donos diferentes — som e pop-up (navegador), celular
+    // (FCM) e Teams (Graph) — e nenhuma tela as mostrava JUNTAS com o estado
+    // de cada uma. A simulação e a auditoria vêm do servidor, com a MESMA
+    // régua do fan-out real (destinatariosDoPush/DoAvisoTeams): se a pessoa
+    // não receberia agora, a tela diz o motivo em vez de deixá-la deduzir.
+    const [avisosStatus, setAvisosStatus] = useState<StatusAvisosResposta | null>(null);
+    const [avisosErro, setAvisosErro] = useState<string | null>(null);
+    const [avisosCarregando, setAvisosCarregando] = useState(false);
+    const [prefsAviso, setPrefsAviso] = useState<Record<string, boolean>>({});
+    const [testeTudo, setTesteTudo] = useState<TesteTudoResposta | null>(null);
+    const [testandoTudo, setTestandoTudo] = useState(false);
+    const carregarAvisos = async () => {
+        setAvisosCarregando(true); setAvisosErro(null);
+        try {
+            const [s, p] = await Promise.all([statusAvisos(), lerPrefsPush()]);
+            if (s.ok) setAvisosStatus(s as StatusAvisosResposta); else setAvisosErro(s.error || 'Falha ao ler o estado dos avisos.');
+            if (p.ok) setPrefsAviso(p.prefs || {});
+        } finally { setAvisosCarregando(false); }
+    };
+    const alternarPrefAviso = async (chave: string) => {
+        // Padrão é LIGADO (regra do Paulo: alerta para a equipe nasce ativo);
+        // ausência da chave é "ligado", e o clique inverte a partir daí.
+        const atual = prefsAviso[chave] !== false;
+        const novo = { ...prefsAviso, [chave]: !atual };
+        setPrefsAviso(novo);
+        const r = await salvarPrefsPush(novo);
+        if (!r.ok) setAvisosErro(r.error || 'Não salvou a preferência.');
+        else void carregarAvisos();
+    };
+    const testarTudo = async () => {
+        if (testandoTudo) return;
+        setTestandoTudo(true); setTesteTudo(null);
+        try {
+            // As DUAS camadas do navegador disparam AQUI, no gesto do clique —
+            // é o único momento em que o navegador deixa tocar e mostrar.
+            setSomOk(await destravarSom());
+            tocarAviso();
+            if (permissaoAviso === 'concedida') {
+                try { new Notification('🧪 SP Connect — teste de avisos', { body: 'Se você viu isto, o pop-up do navegador funciona.', icon: '/connect-icon-192.png', tag: 'spconnect-teste' }); } catch { /* o som já provou o gesto */ }
+            }
+            const r = await testarTodosAvisos();
+            if (r.ok) setTesteTudo(r as TesteTudoResposta); else setAvisosErro(r.error || 'A rota de teste não respondeu.');
+        } finally { setTestandoTudo(false); }
+    };
+    const linkNoNavegador = typeof window !== 'undefined' ? `${window.location.origin}/connect` : '/connect';
+
     // ── 🖼️ Imagem por fila: sobe/grava na hora (não fica pendente do
     // "Salvar configuração" — senão trocar de aba sem salvar perderia o
     // upload que já foi pro Storage).
@@ -588,7 +684,10 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    // A aba 🔔 lê o estado ao abrir — o efeito mora DEPOIS do `cfgAba`
+    // (usá-lo antes da declaração estourava TS2448 no tsconfig normal).
+    useEffect(() => { if (cfgAba === 'avisos') void carregarAvisos(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cfgAba]);
 
     // ── 🗄 Arquivo de mídia no SharePoint (o cron roda sozinho; o botão antecipa)
     const [arqRodando, setArqRodando] = useState(false);
@@ -1393,6 +1492,22 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     const [enviandoNova, setEnviandoNova] = useState(false);
     const [erroNova, setErroNova] = useState<string | null>(null);
 
+    /** DONO ÚNICO do carregamento dos templates — as duas portas de abrir o
+     *  modal (✚ Nova e "enviar para este contato") leem daqui. Duas cópias
+     *  divergiriam em silêncio no primeiro filtro que mudasse. */
+    const carregarTemplatesSePreciso = async () => {
+        if (templates.length > 0 || daMeta.length > 0) return;
+        setCarregandoTpl(true);
+        try {
+            const [cad, meta] = await Promise.all([listarTemplates(), listarTemplatesDaMeta()]);
+            if (cad.ok) setTemplates((cad.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
+            if (meta.ok) setDaMeta((meta.templates || []).filter((t) => t.status === 'APPROVED' && !t.temDocumento));
+            if (!cad.ok && !meta.ok) setErroNova(cad.error || 'Falha ao carregar os templates.');
+        } finally {
+            setCarregandoTpl(false);
+        }
+    };
+
     const abrirNova = async () => {
         setNovaAberta(true);
         setErroNova(null);
@@ -1402,17 +1517,41 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setNc((f) => (filasChip.some((x) => x.id === f.departamento)
             ? f
             : { ...f, departamento: filasChip[0]?.id || f.departamento, escolha: '', variaveis: {} }));
-        if (templates.length === 0 && daMeta.length === 0) {
-            setCarregandoTpl(true);
-            try {
-                const [cad, meta] = await Promise.all([listarTemplates(), listarTemplatesDaMeta()]);
-                if (cad.ok) setTemplates((cad.templates || []).filter((t) => t.ativo !== false && !t.temDocumento));
-                if (meta.ok) setDaMeta((meta.templates || []).filter((t) => t.status === 'APPROVED' && !t.temDocumento));
-                if (!cad.ok && !meta.ok) setErroNova(cad.error || 'Falha ao carregar os templates.');
-            } finally {
-                setCarregandoTpl(false);
-            }
-        }
+        await carregarTemplatesSePreciso();
+    };
+
+    /**
+     * ✚ Nova conversa JÁ PREENCHIDA com o contato aberto na tela.
+     *
+     * 🚨 Nasceu de um achado de colaborador (23/09, atendimento do Eduardo
+     * Guerra): com a janela de 24h fechada, o aviso mandava "usar as telas do
+     * módulo" — e lá se REDIGITA o número de quem está aberto na tela.
+     * Redigitar dado que o sistema tem é onde nasce o dígito trocado, e aqui
+     * o erro manda template de cliente para um estranho.
+     *
+     * ⚠️ A fila vem da CONVERSA, não do default: mandar pelo 'fiscal' um
+     * atendimento que está no Contábil trocaria o departamento do protocolo.
+     * Se a fila da conversa não estiver entre as que a pessoa vê (ou for
+     * null, que é Recepção), cai na primeira dela — select com valor fora das
+     * opções renderiza VAZIO e o envio falharia sem dizer por quê (lição de
+     * 16/08, a mesma do dropdown de template).
+     */
+    const abrirNovaPara = async (conversa: ConversaResumo) => {
+        // A escolha mora em `filaParaTemplate` (services/spConnect.ts), pura e
+        // exercitada por execução — é a única parte desta entrega que dá para
+        // PROVAR sem clicar. Aqui a tela só a consome.
+        const filaDaConversa = filaParaTemplate(conversa.fila, filasChip, nc.departamento);
+        setNc({
+            para: conversa.numero,
+            nomeContato: conversa.nome || '',
+            departamento: filaDaConversa,
+            escolha: '',
+            variaveis: {},
+            posicionais: [],
+        });
+        setNovaAberta(true);
+        setErroNova(null);
+        await carregarTemplatesSePreciso();
     };
 
     const templatesDoDep = templates.filter((t) => t.departamento === nc.departamento);
@@ -1437,9 +1576,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             if (!r.ok) { setErroNova(`${r.error}${(r as any).acao ? ` ${(r as any).acao}` : ''}`); return; }
             setNovaAberta(false);
             setNc({ para: '', nomeContato: '', departamento: nc.departamento, escolha: '', variaveis: {}, posicionais: [] });
-            await recarregar(true);
+            // 🐛 O STUB APAGAVA O PAINEL (24/09, print do Paulo: "Atribuída a:
+            // ninguém ainda" logo após o envio). O `recarregar` já traz a
+            // conversa REAL do servidor — e este código a substituía por um
+            // objeto com `fila: null, atribuidoA: null`. Para conversa NOVA o
+            // stub é tudo o que existe; para a que já estava aberta, ele é
+            // dado de mentira. Quem decide é a lista fresca.
+            const lista = await recarregar(true);
+            const real = (lista || []).find((c) => c.numero === r.numero);
             const nova = { numero: r.numero, nome: nc.nomeContato || null, empresaId: null, fila: null, atribuidoA: null, situacao: 'aberta', janela24hAte: null, ultimaMensagem: null, naoLidas: 0, atualizadoEm: null } as ConversaResumo;
-            abrir(nova);
+            abrir(real || nova);
+            // Regra da Meta: template NÃO abre a janela — só a resposta do
+            // cliente abre. A tela DIZ isso, com o texto que saiu e a hora,
+            // senão a pessoa clica de novo achando que não foi.
+            setTemplateEnviado({ numero: r.numero, em: new Date().toISOString(), texto: r.texto || '' });
         } finally {
             setEnviandoNova(false);
         }
@@ -2390,7 +2540,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -2409,68 +2559,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     <strong>Recepção</strong>. Sem nenhuma fila marcada, a pessoa só vê o que ela mesma
                                     conduz. <em>Ser admin do CFI configura o app, mas não dá visão do inbox inteiro.</em>
                                 </p>
-                                {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
-                                    não deixa a página mostrar popup do sistema — quem avisa lá é
-                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
-                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
-                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
-                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
-                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
-                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
-                                        </button>
-                                    </div>
-                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
-                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
-                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
-                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
-                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
-                                    </p>
-                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
-                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
-                                    </button>
-                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
-                                        tipo que faz a pessoa procurar problema onde não há.
-                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
-                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
-                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
-                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
-                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
-                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
-                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
-                                        os dois suspeitos da frente sem mais nenhum teste. */}
-                                    {teamsTeste && (teamsTeste.resultado.ok ? (
-                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
-                                            <p>
-                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
-                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
-                                                declara <code>activities</code>. Nada mais falta configurar.
-                                            </p>
-                                            <p className="text-slate-500 dark:text-slate-400">
-                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
-                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
-                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
-                                                SP Connect está silenciado.
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
-                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
-                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
-                                            <p className="text-slate-500 dark:text-slate-400">
-                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
-                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
-                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
-                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
-                                                3) o SP Connect não instalado no seu Teams.
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
 
                                 {atdErro && <p className="text-[11px] text-red-600 dark:text-red-400">{atdErro}</p>}
                                 {!atdCarregado && !atdErro && <p className="text-[11px] text-slate-400">Carregando usuários…</p>}
@@ -3665,6 +3753,209 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </div>
                         )}
 
+                        {cfgAba === 'avisos' && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                    Mensagem nova avisa por <strong>quatro portas</strong>, e cada uma tem um dono diferente. Aqui
+                                    está o estado de cada uma <strong>para você</strong>, o botão que liga, e — quando não chega —
+                                    <strong> o motivo</strong>, lido da mesma régua que o servidor usa de verdade.
+                                </p>
+                                {dentroDeIframe() && (
+                                    <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 text-[10.5px] text-amber-800 dark:text-amber-300 leading-snug">
+                                        ⚠️ <strong>Você está dentro do Teams.</strong> Aqui só funcionam o <strong>som</strong> e o
+                                        <strong> sino do Teams</strong> — o Teams não deixa a página mostrar pop-up nem registrar o celular.
+                                        Para ligar as outras duas, abra o SP Connect no navegador:{' '}
+                                        <a href={linkNoNavegador} target="_blank" rel="noreferrer" className="font-bold underline">{linkNoNavegador}</a>
+                                        {' '}(e instale como app pelo ícone da barra de endereço — aí avisa com tudo fechado).
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button onClick={testarTudo} disabled={testandoTudo}
+                                        className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {testandoTudo ? 'Testando…' : '🧪 Testar TUDO agora (som, pop-up, celular e Teams)'}
+                                    </button>
+                                    <button onClick={() => void carregarAvisos()} disabled={avisosCarregando}
+                                        className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-40">
+                                        {avisosCarregando ? 'Lendo…' : '🔄 Atualizar'}
+                                    </button>
+                                </div>
+                                {avisosErro && <p className="text-[11px] text-red-600 dark:text-red-400">{avisosErro}</p>}
+
+                                {/* ── as 4 camadas, uma por linha: estado · ação · resultado do teste ── */}
+                                <div className="space-y-1.5">
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>🔊 Som</strong> nesta aba — {somOk ? '✅ liberado' : '❌ ainda travado (o navegador só libera depois de um clique)'}</span>
+                                            {!somOk && <button onClick={async () => { setSomOk(await destravarSom()); tocarAviso(); }} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Liberar e tocar</button>}
+                                        </div>
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.som !== false} onChange={() => void alternarPrefAviso('som')} /> quero som de mensagem nova
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>🔔 Pop-up</strong> do navegador — {permissaoAviso === 'concedida' ? '✅ permitido' : permissaoAviso === 'negada' ? '❌ BLOQUEADO neste navegador' : permissaoAviso === 'sem-suporte' ? '❌ este navegador não mostra' : '❌ ainda não permitido'}</span>
+                                            {permissaoAviso === 'nao-pedida' && !dentroDeIframe() && <button onClick={pedirPermissaoAviso} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Permitir</button>}
+                                        </div>
+                                        {permissaoAviso === 'negada' && !dentroDeIframe() && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">Cadeado 🔒 ao lado do endereço → Notificações → Permitir, e recarregue.</p>}
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.popup !== false} onChange={() => void alternarPrefAviso('popup')} /> quero pop-up de mensagem nova
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span><strong>📱 Celular / app fechado</strong> (push) — {!pushConfigurado().ok ? '❌ não configurado no servidor' : (avisosStatus?.dispositivos || 0) > 0 ? `✅ ${avisosStatus?.dispositivos} aparelho(s) registrado(s)` : '❌ nenhum aparelho registrado nesta conta'}</span>
+                                            {pushConfigurado().ok && !dentroDeIframe() && <button onClick={ligarPush} className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white">Registrar este aparelho</button>}
+                                        </div>
+                                        {!pushConfigurado().ok && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">{pushConfigurado().motivo} {pushConfigurado().acao}</p>}
+                                        {push.msg && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{push.msg}{push.acao ? ` ${push.acao}` : ''}</p>}
+                                        {avisosStatus && (
+                                            <p className={`text-[10px] mt-0.5 ${avisosStatus.simulacao.push.receberia ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                                {avisosStatus.simulacao.push.receberia
+                                                    ? `✅ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, seu celular receberia.`
+                                                    : `❌ Se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, seu celular NÃO receberia: ${avisosStatus.simulacao.push.motivo}.`}
+                                            </p>
+                                        )}
+                                        <label className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.push !== false} onChange={() => void alternarPrefAviso('push')} /> quero aviso no celular
+                                        </label>
+                                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.pushForaDoExpediente === true} onChange={() => void alternarPrefAviso('pushForaDoExpediente')} /> também <strong>fora do expediente</strong> (24h) — nasce desligado: celular apitando de madrugada faz a pessoa desligar tudo
+                                        </label>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px]">
+                                        {avisosStatus && (
+                                            /* 🔑 A credencial vem ANTES da audiência, de propósito: no primeiro
+                                               teste real (24/09) a linha de baixo disse "tocaria" e o envio caiu
+                                               em AADSTS7000215 — a audiência estava certa, o segredo não. Ler a
+                                               simulação como garantia foi exatamente o erro; agora cada fato tem
+                                               a sua linha. */
+                                            <p className={`text-[10px] mb-0.5 ${avisosStatus.credencialGraph.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                                                {avisosStatus.credencialGraph.ok
+                                                    ? '🔑 Credencial do Graph (app Notificacoes): ✅ o Azure emitiu token.'
+                                                    : `🔑 Credencial do Graph (app Notificacoes): ❌ ${avisosStatus.credencialGraph.erro} — sem isto NENHUM aviso no Teams sai (nem e-mail de guia, nem alerta por e-mail).${
+                                                        typeof avisosStatus.credencialGraph.tamanhoSegredo === 'number' && avisosStatus.credencialGraph.tamanhoSegredo !== 40
+                                                            ? ` O segredo configurado tem ${avisosStatus.credencialGraph.tamanhoSegredo} caracteres — um segredo de app do Azure tem 40: o valor gravado no Secret Manager não é o "Valor" do segredo.`
+                                                            : ''}`}
+                                            </p>
+                                        )}
+                                        {avisosStatus && (
+                                            <p className={`text-[10px] mb-1 ${avisosStatus.simulacao.teams.receberia ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                                                {avisosStatus.simulacao.teams.receberia
+                                                    ? `✅ Audiência: se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, você estaria na lista do sino${avisosStatus.credencialGraph.ok ? '' : ' — mas a credencial acima barra o envio'}.`
+                                                    : `❌ Audiência: se chegasse mensagem AGORA na fila ${rotuloCurtoFila(avisosStatus.filaSimulada)}, o sino do seu Teams NÃO tocaria: ${avisosStatus.simulacao.teams.motivo}.`}
+                                            </p>
+                                        )}
+                                        <label className="mb-1 flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                                            <input type="checkbox" checked={prefsAviso.avisoTeams !== false} onChange={() => void alternarPrefAviso('avisoTeams')} /> quero aviso no sino do Teams
+                                        </label>
+                                        {/* 🔔 Aviso nativo do Teams (Paulo, 23/08): o webview do Teams
+                                    não deixa a página mostrar popup do sistema — quem avisa lá é
+                                    o PRÓPRIO Teams (sino de Atividade, com som, aba fechada e
+                                    celular). Mesma audiência do push: filas, horário, IG restrito. */}
+                                <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🔔 Aviso dentro do Teams (sino de Atividade)</p>
+                                        <button onClick={alternarAvisoTeams} disabled={!cfg || cfgSalvando}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full disabled:opacity-40 ${cfg?.avisoTeamsAtivo
+                                                ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                            {cfg?.avisoTeamsAtivo ? 'LIGADO' : 'desligado'}
+                                        </button>
+                                    </div>
+                                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                        O popup do navegador <strong>não funciona dentro do Teams</strong> — quem avisa lá é o
+                                        próprio Teams (banner + som, mesmo com a aba fechada, inclusive no celular). Quem
+                                        recebe segue a <strong>mesma régua do push</strong>: filas, horário e a lista do 📷.
+                                        <strong>Nasce ligado</strong> (alerta para a equipe nasce ativo — regra da casa); o
+                                        teste avisa <strong>só você</strong> e diz o que falta se o aviso ainda não sai.
+                                    </p>
+                                    <button onClick={rodarTesteTeams} disabled={teamsTestando}
+                                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                        {teamsTestando ? 'Enviando…' : '🧪 Testar no meu Teams'}
+                                    </button>
+                                    {/* ✅ 25/08: a frase de sucesso tinha DOIS defeitos, os dois do
+                                        tipo que faz a pessoa procurar problema onde não há.
+                                        (1) Mandava "pode ligar a chave" com a chave JÁ ligada (ela
+                                        nasce ligada) — duas leituras do mesmo fato na mesma tela.
+                                        (2) Dizia "confira o sino" sem dizer ONDE: quem está com o SP
+                                        Connect aberto no NAVEGADOR fica procurando ali, e o sino é
+                                        do aplicativo do Teams. Aviso que aponta um lugar tem de
+                                        apontar um lugar que a pessoa ACHA (regra de 21/08).
+                                        E ela DIZ o que o "aceitou" já prova, porque é isso que tira
+                                        os dois suspeitos da frente sem mais nenhum teste. */}
+                                    {teamsTeste && (teamsTeste.resultado.ok ? (
+                                        <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                                            <p>
+                                                ✅ <strong>O Graph aceitou.</strong> Isso já prova as duas metades: a permissão
+                                                <strong> TeamsActivity.Send</strong> tem consent e o pacote instalado no seu Teams é o que
+                                                declara <code>activities</code>. Nada mais falta configurar.
+                                            </p>
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                O aviso aparece no <strong>aplicativo do Teams</strong> → barra da esquerda →
+                                                <strong> Atividade</strong> (o sino), não nesta aba do navegador. Pode levar alguns segundos.
+                                                Não chegou em ~1 min? Teams → <strong>Configurações → Notificações e atividade</strong>, e veja se o
+                                                SP Connect está silenciado.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-[10.5px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                                            <p>⚠️ Não foi ({teamsTeste.resultado.etapa}): {teamsTeste.resultado.erro}</p>
+                                            {/* A recusa diz o que falta — os três suspeitos, na ordem: */}
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                Suspeitos: 1) permissão <strong>TeamsActivity.Send</strong> (aplicação) sem admin consent no
+                                                app Graph do Azure{teamsTeste.status.clientId ? <> (client id <code>{teamsTeste.status.clientId}</code>)</> : null};
+                                                2) o pacote do Teams instalado é anterior ao <code>activities</code> —
+                                                baixe o atual em <a href="/sp-connect-teams.zip" className="underline">/sp-connect-teams.zip</a> e reenvie;
+                                                3) o SP Connect não instalado no seu Teams.
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                                    </div>
+                                </div>
+
+                                {avisosStatus && (
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        ⏰ Agora: {avisosStatus.noExpediente ? 'DENTRO do expediente do atendimento' : 'FORA do expediente do atendimento — celular e Teams só avisam quem ligou o 24h'}
+                                        {' '}(a grade mora em 🤖 Bot e mensagens → horário).
+                                    </p>
+                                )}
+
+                                {/* ── resultado do "Testar TUDO", canal a canal ── */}
+                                {testeTudo && (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[10.5px] space-y-0.5">
+                                        <p className="font-bold text-slate-700 dark:text-slate-200">Resultado do teste:</p>
+                                        <p>🔊 Som: {somOk ? '✅ tocou (se não ouviu, o volume do aparelho está baixo)' : '❌ o navegador não liberou — clique de novo'}</p>
+                                        <p>🔔 Pop-up: {permissaoAviso === 'concedida' ? '✅ mostrado (canto da tela)' : dentroDeIframe() ? '❌ impossível dentro do Teams' : '❌ sem permissão'}</p>
+                                        <p>📱 Celular: {testeTudo.push.ok ? `✅ enviado para ${testeTudo.push.enviados} de ${testeTudo.push.aparelhos} aparelho(s)` : `❌ ${testeTudo.push.erro}`}</p>
+                                        <p>💼 Teams: {testeTudo.teams.ok ? '✅ o Graph aceitou — veja o sino de Atividade no aplicativo do Teams' : `❌ (${testeTudo.teams.etapa}) ${testeTudo.teams.erro}`}</p>
+                                    </div>
+                                )}
+
+                                {/* ── o último aviso REAL: quem recebeu, quem não e por quê ── */}
+                                {avisosStatus?.ultimoAviso ? (
+                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[10.5px] space-y-0.5">
+                                        <p className="font-bold text-slate-700 dark:text-slate-200">
+                                            Último aviso real — {horaCurta(avisosStatus.ultimoAviso.em, new Date())} · {avisosStatus.ultimoAviso.titulo}
+                                        </p>
+                                        <p>📱 Celular: {avisosStatus.ultimoAviso.push.enviados} enviado(s) para {avisosStatus.ultimoAviso.push.alvos.length} pessoa(s){avisosStatus.ultimoAviso.push.alvos.length ? ` (${avisosStatus.ultimoAviso.push.alvos.join(', ')})` : ''}.</p>
+                                        <p>💼 Teams: {avisosStatus.ultimoAviso.teams.enviados} aceito(s) de {avisosStatus.ultimoAviso.teams.alvos.length}{avisosStatus.ultimoAviso.teams.erros.length ? ` — recusados: ${avisosStatus.ultimoAviso.teams.erros.map((e) => `${e.email} (${e.etapa}: ${e.erro})`).join('; ')}` : ''}.</p>
+                                        {(avisosStatus.ultimoAviso.push.fora.length > 0 || avisosStatus.ultimoAviso.teams.fora.length > 0) && (
+                                            <details className="text-slate-500 dark:text-slate-400">
+                                                <summary className="cursor-pointer">Quem NÃO recebeu, e por quê</summary>
+                                                <ul className="list-disc pl-4">
+                                                    {avisosStatus.ultimoAviso.push.fora.map((f, i) => <li key={`p${i}`}>📱 {f.email || '(sem e-mail)'} — {f.motivo}</li>)}
+                                                    {avisosStatus.ultimoAviso.teams.fora.map((f, i) => <li key={`t${i}`}>💼 {f.email || '(sem e-mail)'} — {f.motivo}</li>)}
+                                                </ul>
+                                            </details>
+                                        )}
+                                    </div>
+                                ) : avisosStatus ? (
+                                    <p className="text-[10px] text-slate-400">Ainda não há aviso real registrado — o registro nasce na próxima mensagem de cliente.</p>
+                                ) : null}
+                            </div>
+                        )}
+
                         {cfgAba === 'bot' && (!cfg ? (
                             <p className="text-[11px] text-slate-400">{cfgErro || 'Carregando…'}</p>
                         ) : (
@@ -3679,11 +3970,16 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             🤖 Bot de triagem {cfg.botAtivo ? 'LIGADO' : 'desligado'}
                                         </span>
                                     </label>
-                                    {/* 🚨 ALCANCE — é o que deixa os DOIS apps de pé.
-                                        A Ultra Fox continua assinada na WABA de propósito
-                                        (é a rede de segurança); os dois recebem a mesma
-                                        mensagem, então quem limita o menu em dobro é a
-                                        lista daqui. */}
+                                    {/* 🚨 ALCANCE — nasceu para deixar os DOIS apps de pé:
+                                        a Ultra Fox seguia assinada na WABA como rede de
+                                        segurança, os dois recebiam a mesma mensagem, e
+                                        quem limitava o menu em dobro era a lista daqui.
+                                        ⚰️ 23/09: essa razão MORREU — "não estamos usando a
+                                        Ultra Fox há mais de 1 mês" (Paulo). O app dela
+                                        assinado hoje só serve para um terceiro receber
+                                        cópia de mensagem de cliente; tirar da WABA é item
+                                        do de-para (§8), não decisão desta tela. O alcance
+                                        continua valendo pelo que ele É: o raio do bot. */}
                                     {cfg.botAtivo && (
                                         <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
                                             <div className="flex gap-1.5 flex-wrap">
@@ -4213,7 +4509,21 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             {chip('todas', `Todas · ${conversas.length}`)}
                             {chip('nao-lidas', `Não lidas · ${naoLidasTotal}`)}
                             {filasChip.map((f) => chip(f.id, `${rotuloCurtoFila(f.id)} · ${contagemFila(f.id)}`))}
+                            {/* ✅ ENCERRADOS — admin e GESTOR (Paulo, 23/09: "gestor vê
+                                ABAS encerramos"). A pergunta tem dono no backend
+                                (`podeVerEncerrados`) e a tela lê o MESMO: chip aceso
+                                contra rota que recusa é o que dá "não funciona".
+                                Esconder o chip é conveniência; quem RECUSA é o 403. */}
+                            {veEncerrados && chip('encerrados', '✅ Encerrados')}
                         </div>
+                        {/* O número não some: lista que encolhe sem dizer por quê vira
+                            suspeita de conversa perdida. Só para quem PODE abrir a aba —
+                            para o colaborador seria alarme sem ação. */}
+                        {veEncerrados && aba !== 'encerrados' && encerradasOcultas > 0 && (
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                {encerradasOcultas} atendimento(s) encerrado(s) fora desta lista — veja em <strong>✅ Encerrados</strong>.
+                            </p>
+                        )}
                     </div>
 
                     {/* Sem `flex-1` no celular: aqui a lista tem a altura do
@@ -4575,7 +4885,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                 ) : (
                                     <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
                                         📋 Janela de 24h fechada — o envio inicial sai por <strong>template aprovado</strong> (regra da Meta).
-                                        O envio de template direto daqui chega na próxima etapa; por enquanto use o envio de guia/template das telas do módulo.
+                                        {/* 🚨 O NÚMERO JÁ ESTÁ AQUI — 23/09, achado de um colaborador no
+                                            atendimento do Eduardo Guerra: o aviso mandava "usar as telas do
+                                            módulo", e lá se REDIGITA o número de quem já está aberto na
+                                            tela. Mesma família do prefixo que o Paulo recusou na ligação:
+                                            reintroduzir à mão um dado que o sistema tem é onde nasce o
+                                            dígito trocado — e aqui o custo é mandar template de cliente
+                                            para um estranho.
+                                            A máquina toda já existia (`/conversas/iniciar` recebe número,
+                                            template e variáveis); faltava o BOTÃO. */}
+                                        <button
+                                            type="button"
+                                            onClick={() => abrirNovaPara(sel)}
+                                            className="ml-1 font-bold underline underline-offset-2 hover:opacity-80">
+                                            Enviar template para {sel.nome || sel.numero} ➤
+                                        </button>
+                                        {templateEnviado && templateEnviado.numero === sel.numero && (
+                                            /* 🚨 SEM ISTO A PESSOA CLICA DE NOVO (24/09): o template saiu
+                                               (✓✓), a tela não mudou nada, e o cliente recebeu duas vezes.
+                                               A janela NÃO abre com template — é regra da Meta — e isso
+                                               tem de estar escrito onde a pessoa está olhando. */
+                                            <p className="mt-1.5 pt-1.5 border-t border-amber-300/60 dark:border-amber-700/60 text-emerald-700 dark:text-emerald-400">
+                                                ✓ Template enviado às {horaCurta(templateEnviado.em, new Date())}
+                                                {templateEnviado.texto ? <>: <em>"{templateEnviado.texto}"</em></> : null}.
+                                                {' '}<strong>A janela de 24h só abre quando o cliente responder</strong> — até lá, só template.
+                                                Não reenvie: o cliente já recebeu.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -4735,23 +5071,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         allowed for SIP enabled numbers". Em modo SIP a saída NÃO
                                                         sai por API — quem disca é o tronco. Botão que a Meta
                                                         recusa por desenho é botão que não faz nada. */}
-                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa. Até 25/08
-                                                        ela dizia "falta a primeira ligação RECEBIDA" — o que fazia
-                                                        parecer que bastava alguém ligar. A medição desmentiu: com o
-                                                        gravador do SBC PROVADO ligado, a chamada das 14h52 (dentro
-                                                        da janela) saiu "Não atendida" no celular e o tronco não
-                                                        registrou CDR nem INVITE em três conferências seguidas. Ou
-                                                        seja: a Meta ACEITA a chamada e NÃO a entrega no tronco.
-                                                        Mandar esperar a primeira ligação seria mandar esperar o que
-                                                        não vai acontecer sozinho — quem destrava é o chamado. */}
+                                                    {/* ⚠️ A frase diz o ESTADO MEDIDO, não a promessa — e o estado
+                                                        MUDOU em 23/09. De 25/08 a 23/09 esta linha afirmou "a Meta
+                                                        aceita a chamada e NÃO entrega no tronco, chamado aberto"
+                                                        com medições verdadeiras por trás: todas as janelas
+                                                        conferidas caíram FORA da grade `call_hours` da Meta
+                                                        (seg–sex 08:00–12:00 e 13:00–17:30, America/Sao_Paulo). Em
+                                                        23/09 o Paulo ligou dentro da grade e a chamada caiu na URA
+                                                        com áudio. Não havia chamado a abrir nem defeito a
+                                                        consertar. Um mês dizendo "não funciona" à equipe sobre um
+                                                        recurso que funcionava é o custo de texto fixo com data:
+                                                        por isso esta linha agora diz O QUE funciona, QUANDO, e o
+                                                        que NÃO sai por aqui (saída por API, 131055). */}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone),
-                                                        não por aqui — a Meta recusa chamada por API em número SIP.
-                                                        <span className="block text-red-600 dark:text-red-400">
-                                                            🛑 Ligação ainda NÃO funciona nos dois sentidos: medido em 25/08, a Meta aceita
-                                                            a chamada e não entrega no nosso tronco (sem INVITE, sem CDR) — chamado aberto com ela.
-                                                            Fale por mensagem enquanto isso.
+                                                        <span className="block text-emerald-600 dark:text-emerald-400">
+                                                            ☎️ Ligação do cliente para a SP <strong>funciona</strong> (provada em 23/09): toca na URA do
+                                                            HitPhone, dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele
+                                                            o botão ☎️ do cliente fica indisponível — isso é regra da Meta, não defeito.
                                                         </span>
+                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone), da SP para o
+                                                        cliente, não por aqui — a Meta recusa chamada por API em número SIP. Precisa falar por voz agora?
+                                                        Ligue do ramal ou combine por mensagem.
                                                     </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (

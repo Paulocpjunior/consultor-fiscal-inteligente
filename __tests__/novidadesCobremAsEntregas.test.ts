@@ -37,6 +37,19 @@ const RAIZ = resolve(__dirname, '..');
  */
 const DATAS_SEM_EFEITO_PARA_QUEM_USA: Record<string, string> = {
     // exemplo: '05/09': 'só varredura de teste — nada muda na tela nem no arquivo',
+    //
+    // ✂️ A exceção de '23/09' SAIU, e foi a própria ressalva dela que mandou:
+    // *"se algo com efeito na TELA subir em 23/09, esta linha SAI: ela é por
+    // DATA e mascararia a entrega de verdade"*. Foi o que aconteceu — no mesmo
+    // dia subiram o carimbo do fim de mês, o sem-movimento declarado e a saída
+    // do eSocial do calendário do Fiscal, todos com novidade escrita. A página
+    // já está em 23/09 por conta deles, então a trava passa sozinha e a linha
+    // só serviria para calar a PRÓXIMA entrega desta data.
+    //
+    // 📌 É a lição da granularidade: exceção por DATA cala tudo o que couber
+    // naquele dia, não só o que ela quis declarar. Se um dia for mesmo preciso
+    // declarar uma entrega sem efeito, o combinado é apagá-la assim que o dia
+    // ganhar uma entrega de verdade — lista que envelhece devolve o silêncio.
 };
 
 /** 'DD/MM' → número comparável. */
@@ -64,7 +77,7 @@ const ordem = (dm: string) => {
  * seja simples e visível em vez de esperta e errada.
  */
 function ultimaEntregaNoClaudeMd(): string {
-    const md = readFileSync(join(RAIZ, 'CLAUDE.md'), 'utf8');
+    const md = readFileSync(join(RAIZ, 'docs', 'historico-claude.md'), 'utf8');
     const datas = [...md.matchAll(/\((\d{2}\/\d{2})(?![/\d])/g)].map((m) => m[1])
         .filter((dm) => {
             const [d, mes] = dm.split('/').map(Number);

@@ -12,6 +12,7 @@
  * fechada — e vem com a ação e o botão que leva à tela certa.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import CredencialEmailFaixa from './CredencialEmailFaixa';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
@@ -141,6 +142,10 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
 
     return (
         <div className="space-y-4">
+            {/* 🛡️ O vigia da credencial do e-mail (24/09): acende para todo mundo
+                enquanto a Microsoft recusar — o alerta por e-mail não alcança
+                quem precisa quando é o e-mail que está morto. */}
+            <CredencialEmailFaixa />
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
@@ -302,20 +307,32 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                 o que este painel NÃO garante
                             </summary>
                             <div className="px-3 pb-3 space-y-1.5">
+                                {/* 22/09 (Paulo: "interfere em alguma coisa?"): a lista misturava
+                                    duas coisas. A "a confirmar" VIRA tarefa com o prazo do catálogo
+                                    (só o prazo pede conferência); a "depende de…" NÃO vira tarefa.
+                                    Uma frase só para as duas dizia o contrário para metade. */}
                                 <p className="text-[11px] text-amber-800 dark:text-amber-300">
                                     Prazo de obrigação é definido por órgão, e o catálogo só carimba o que foi conferido.
-                                    O que está aqui <strong>não vira tarefa automática</strong> — logo não aparece em
-                                    Vencimentos nem na trilha abaixo. Entregue por fora e não dê o mês por fechado
-                                    pela lista.
+                                    Duas situações: <strong>“vira tarefa, prazo a confirmar”</strong> — a obrigação entra em
+                                    Vencimentos com a data do catálogo, e a equipe confere o prazo (o admin corrige em
+                                    ⚙️ Config Admin → Calendário de prazos); <strong>“não vira tarefa”</strong> — depende de
+                                    algo que o app não sabe (folha, evento, cadastro), então não aparece em Vencimentos:
+                                    entregue por fora e não dê o mês por fechado pela lista. Esta lista é do catálogo
+                                    inteiro, não deste cliente.
                                 </p>
                                 {dados.catalogoPendencias.map((p2) => (
-                                    <div key={p2.obrigacao} className="text-[11px] text-slate-700 dark:text-slate-300">
+                                    <div key={`${p2.obrigacao}|${p2.status}|${p2.dependeDe || ''}`} className="text-[11px] text-slate-700 dark:text-slate-300">
                                         <strong>{p2.label}</strong>
                                         <span className="ml-1 px-1 rounded bg-slate-200 dark:bg-slate-700 text-[10px] uppercase">
                                             {p2.esfera}
                                         </span>
                                         <span className="ml-1 font-mono text-[10px] text-slate-500">{p2.abrangencia}</span>
-                                        <span className="block text-slate-500 dark:text-slate-400">{p2.motivo}</span>
+                                        <span className={`ml-1 px-1 rounded text-[10px] ${p2.status === 'ativa'
+                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                                            {p2.status === 'ativa' ? 'vira tarefa · prazo a confirmar' : `não vira tarefa · depende de ${p2.dependeDe || '—'}`}
+                                        </span>
+                                        <span className="block text-slate-500 dark:text-slate-400">{p2.oQueFalta || p2.motivo || ''}</span>
                                     </div>
                                 ))}
                             </div>
@@ -396,6 +413,20 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                 </p>
                                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">{p.resumo}</p>
                                                 {p.acao && <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">→ {p.acao}</p>}
+                                                {/* 🔎 A nota NOMEADA (24/09, B & T 08/2026). */}
+                                                { ((p).notas || []).length > 0 && (
+                                                    <ul className="mt-1 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
+                                                        {(p).notas!.map((n, i) => (
+                                                            <li key={n.chave || i} className="font-mono break-all">
+                                                                {n.motivo === 'resumo' ? '📄 Resumo' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
+                                                                {n.emitente ? ` · ${n.emitente}` : ''}{n.dhEmi ? ` · ${String(n.dhEmi).slice(0, 10).split('-').reverse().join('/')}` : ''}
+                                                                {n.chave ? <span className="block text-[10px] text-slate-500 dark:text-slate-400">chave {n.chave}</span> : null}
+                                                            </li>
+                                                        ))}
+                                                        {((p).notasCortadas || 0) > 0 && <li className="text-slate-500">e mais {(p).notasCortadas} — mostrando {(p).notas!.length}</li>}
+                                                        <li className="text-[10px] text-slate-500 dark:text-slate-400">Na Central de XMLs, cole a chave (ou o nº) na busca — o selo "Resumo" marca a nota sem o XML completo.</li>
+                                                    </ul>
+                                                )}
                                             </div>
                                             <button
                                                 onClick={() => onIrPara?.(p.id, r.empresa)}

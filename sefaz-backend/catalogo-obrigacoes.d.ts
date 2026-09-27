@@ -191,3 +191,15 @@ export function competenciaIsoDe(competencia: string): string;
 
 /** 🏦 A entrada da DeRE no catálogo — `dere.js` importa, nunca recalcula o prazo. */
 export const OBRIGACAO_DERE: ObrigacaoCatalogo;
+
+/** 👥 Obrigações do DP (FGTS, INSS patronal) — fora do catálogo do CFI desde 22/09. */
+export const OBRIGACOES_DO_DP: readonly string[];
+/** Tarefa AUTOMÁTICA e ABERTA de obrigação do DP — a que o admin cancela em lote. */
+export function tarefaDoDpParaCancelar(t: { obrigacao?: string; status?: string; origem?: string } | null | undefined): boolean;
+/** ECD e ECF — são do Contábil (25/09). */
+export declare const OBRIGACOES_DO_CONTABIL: readonly string[];
+/** DP + Contábil: tudo que outro departamento entrega. */
+export declare const OBRIGACOES_FORA_DO_FISCAL: readonly string[];
+/** 'DP' | 'Contábil' | null (é do Fiscal). */
+export declare function departamentoDaObrigacao(obrigacao: string | null | undefined): 'DP' | 'Contábil' | null;
+export declare function tarefaDeOutroDepartamentoParaCancelar(t: { obrigacao?: string; status?: string; origem?: string } | null | undefined): boolean;

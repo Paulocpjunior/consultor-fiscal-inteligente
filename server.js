@@ -4,6 +4,7 @@ import { secretsMatch } from './sefaz-backend/cron-secret.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { criarGeradorDeChave } from './sefaz-backend/rate-limit-chave.js';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -48,6 +49,7 @@ import relatoriosRouter from './sefaz-backend/relatorios-routes.js';
 import migracaoProntidaoRouter from './sefaz-backend/migracao-prontidao-routes.js';
 import filaMigracaoRouter from './sefaz-backend/fila-migracao-routes.js';
 import carteiraObservacoesRouter from './sefaz-backend/carteira-observacoes-routes.js';
+import carteiraAcessosRouter from './sefaz-backend/carteira-acessos-routes.js';
 import creditoAcumuladoRouter from './sefaz-backend/credito-acumulado-routes.js';
 import difalRouter from './sefaz-backend/difal-routes.js';
 import provaCapturaRouter from './sefaz-backend/prova-captura-routes.js';
@@ -86,6 +88,7 @@ import diagnosticoCadastrosRouter from './sefaz-backend/diagnostico-cadastros-ro
 import certMonitorRouter from './sefaz-backend/cert-monitor-routes.js';
 import diagnosticoConfigRouter from './sefaz-backend/diagnostico-config-routes.js';
 import healthConsolidadoRouter from './sefaz-backend/health-consolidado-routes.js';
+import graphCredencialVigiaRouter from './sefaz-backend/graph-credencial-vigia-routes.js';
 import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import saeNfceRouter from './sefaz-backend/sefaz-sp-nfce-routes.js';
@@ -270,10 +273,19 @@ const isCronRequest = (req) => {
     const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
     return secretsMatch(header, secret);
 };
-const rateLimitKey = (req) => {
-    const auth = req.headers.authorization || '';
-    return auth ? `auth:${auth.slice(-48)}` : req.ip;
-};
+// 🔑 26/09 (auditoria): a chave era o FIM do header Authorization — qualquer
+// Bearer inventado ganhava um balde novo por requisição, e o limite só valia
+// para quem não tentava furá-lo. Agora a chave é o uid de um token QUE
+// VERIFICOU (com cache por token); token ausente/forjado/expirado cai no IP.
+// Régua e cache moram em sefaz-backend/rate-limit-chave.js (puro, testado).
+const rateLimitKey = criarGeradorDeChave({
+    verificar: async (token) => {
+        const adminMod = (await import('firebase-admin')).default;
+        if (!adminMod.apps.length) adminMod.initializeApp({ credential: adminMod.credential.applicationDefault() });
+        const decoded = await adminMod.auth().verifyIdToken(token);
+        return decoded?.uid || null;
+    },
+});
 // Limite geral anti-flood em toda a API.
 const apiLimiter = rateLimit({
     windowMs: 60_000, max: 600,
@@ -380,6 +392,7 @@ app.use('/api/admin/relatorios', relatoriosRouter);
 app.use('/api/admin/sped', migracaoProntidaoRouter);
 app.use('/api/admin/sped', filaMigracaoRouter);
 app.use('/api/admin/carteira', carteiraObservacoesRouter);
+app.use('/api/admin/carteira', carteiraAcessosRouter);
 app.use('/api/admin/sped', creditoAcumuladoRouter);
 app.use('/api/admin/difal', difalRouter);
 app.use('/api/admin/empresas-merge', empresasMergeRouter);
@@ -424,6 +437,8 @@ app.use('/api/admin/diagnostico-cadastros', diagnosticoCadastrosRouter);
 app.use('/api/admin/cert-monitor', certMonitorRouter);
 app.use('/api/admin/diagnostico-config', diagnosticoConfigRouter);
 app.use('/api/admin/health-consolidado', healthConsolidadoRouter);
+// 🛡️ Vigia da credencial do e-mail (24/09): o veredito noturno, lido pela faixa da Rotina.
+app.use('/api/admin/credencial-email', graphCredencialVigiaRouter);
 app.use('/api/admin/empresas-perfil', empresasPerfilRouter);
 app.use('/api/admin/prazos-municipais', prazosMunicipaisRouter);
 app.use('/api/admin/cadastro-contabil', cadastroContabilRouter);
@@ -1464,6 +1479,14 @@ app.get('/api/admin/das/envios-cliente', requireAuth, async (req, res) => {
                     anexouPdf: Boolean(x.anexouPdf),
                     enviadoPor: x.enviadoPor || null,
                     enviadoEm: x.enviadoEm?.toDate?.()?.toISOString() || null,
+                    // 📤 Envio DECLARADO por fora (25/09): campo novo => whitelist
+                    // da rota no MESMO PR (lição do #382) — sem isto o histórico
+                    // mostraria "para (vazio)" e ninguém saberia o meio.
+                    meio: x.meio || null,
+                    meioLabel: x.meioLabel || null,
+                    quando: x.quando || null,
+                    comoFoi: x.comoFoi || null,
+                    declaradoPor: x.declaradoPor || null,
                 };
             })
             .filter(e => cnpjsCarteira === null || cnpjsCarteira.includes(e.empresaCnpj))
@@ -3144,13 +3167,21 @@ app.post('/api/admin/sharepoint/cron-alertas', express.json(), async (req, res) 
     if (!secretsMatch(cronSecret, expected)) {
         return res.status(401).json({ ok: false, error: 'Cron nao autorizado' });
     }
-    try {
+    // 💓 26/09 (auditoria): heartbeat antes do trabalho — a varredura das pastas
+    // morta no meio deixa registro, e o Scheduler recebe 200 na hora (era um
+    // dos 13 crons sem log nem heartbeat).
+    const { withCronHeartbeat } = await import('./sefaz-backend/cron-heartbeat.js');
+    const fonte = req.headers['x-cloudscheduler-jobname'] || 'sharepoint-cron-alertas';
+    await withCronHeartbeat({ collection: 'sharepoint_alertas_cron_logs', fonte, res }, async () => {
         const r = await processarAlertasSharePoint();
-        return res.json(r);
-    } catch (err) {
-        console.error('[sharepoint/cron-alertas]', err);
-        return respondeErro(res, err, undefined, { formatoOk: true });
-    }
+        return {
+            ...r,
+            totalEmpresas: r?.empresas ?? r?.totalEmpresas ?? null,
+            totalNovos: r?.docsNovos ?? r?.novos ?? r?.totalNovos ?? 0,
+            falhas: r?.erros ?? r?.falhas ?? 0,
+            sucessos: r?.ok === false ? 0 : 1,
+        };
+    });
 });
 
 // POST /api/tarefas/cron-mensal
@@ -3170,6 +3201,78 @@ app.post('/api/tarefas/cron-mensal', express.json(), async (req, res) => {
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[tarefas/cron-mensal]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
+// POST /api/admin/tarefas/reaplicar-prazos
+//   📅 Reaplica o prazo ATUAL do catálogo (e dos cadastros do admin) nas
+//   tarefas ABERTAS e automáticas de uma competência (22/09, AFFITTARE: a
+//   regra mudou e a tarefa ficou com o dia velho). Admin, com token.
+//   Body: { competencia: "MM/AAAA", empresaId? }
+app.post('/api/admin/tarefas/reaplicar-prazos', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (!/^\d{2}\/\d{4}$/.test(String(competencia || ''))) {
+            return res.status(400).json({ ok: false, error: 'competencia obrigatoria (MM/AAAA)' });
+        }
+        const { reaplicarPrazosDoCatalogo } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await reaplicarPrazosDoCatalogo(competencia, {
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/reaplicar-prazos]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
+// POST /api/admin/tarefas/cancelar-dp
+//   👥 Cancela em lote as tarefas ABERTAS e automáticas de FGTS/INSS patronal
+//   (Paulo, 22/09: "é do DP"). Body: { competencia?: "MM/AAAA", empresaId? }
+//   Sem competência = todas as competências.
+app.post('/api/admin/tarefas/cancelar-dp', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        const { cancelarTarefasDoDp } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarTarefasDoDp({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-dp]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
+// POST /api/admin/tarefas/cancelar-outro-departamento
+//   🏢 25/09: DP (FGTS/INSS) e Contábil (ECD/ECF). Body: { competencia?: "MM/AAAA",
+//   empresaId?, departamento?: "DP" | "CONTABIL" } — sem departamento = os dois.
+app.post('/api/admin/tarefas/cancelar-outro-departamento', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId, departamento } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        if (departamento && !['DP', 'CONTABIL'].includes(String(departamento).toUpperCase())) {
+            return res.status(400).json({ ok: false, error: 'departamento, se informado, é DP ou CONTABIL' });
+        }
+        const { cancelarTarefasDeOutroDepartamento } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarTarefasDeOutroDepartamento({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            departamento: departamento ? String(departamento) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-outro-departamento]', err);
         return respondeErro(res, err, undefined, { formatoOk: true });
     }
 });

@@ -6,7 +6,7 @@
  * do envio, e cada pendência precisa sair com motivo e ação.
  */
 import {
-    montarPainelEnvios, pendenciaSharePoint, pendenciaBaixa, conferirRitoDosEnvios,
+    montarPainelEnvios, pendenciaSharePoint, pendenciaBaixa, conferirRitoDosEnvios, envioCompletoPeloRito,
 } from '../sefaz-backend/envio-imposto-painel.js';
 
 const envio = (over: any = {}) => ({
@@ -244,5 +244,25 @@ describe('reenvio da mesma guia', () => {
         expect(p.resumo).toMatch(/2 reenvio\(s\) da mesma guia/);
         // E a fila de trabalho não ganha "dê baixa manual" numa tarefa concluída.
         expect(Object.keys(p.pendencias)).toHaveLength(0);
+    });
+});
+
+// ── 22/09: desfechos que FECHAM sem serem "arquivado"/"baixada" ─────────────
+
+describe('sem-obrigacao e arquivado-declarado fecham o rito, com a etapa dita', () => {
+    const base = { empresaCnpj: '1', tipo: 'DARE', competencia: '2026-08' };
+    it('tipo sem obrigação do catálogo não é pendência de baixa', () => {
+        expect(pendenciaBaixa({ ...base, baixa: { status: 'sem-obrigacao' } })).toBeNull();
+        expect(pendenciaBaixa({ ...base, baixa: { status: 'sem-tarefa' } })).not.toBeNull();
+    });
+    it('cópia declarada à mão fecha o SharePoint e sai marcada no rito', () => {
+        expect(pendenciaSharePoint({ ...base, sharePoint: { status: 'arquivado-declarado' } })).toBeNull();
+        const r = envioCompletoPeloRito({ ...base, sharePoint: { status: 'arquivado-declarado' }, baixa: { status: 'sem-obrigacao' } });
+        expect(r.completo).toBe(true);
+        expect(r.arquivadoDeclarado).toBe(true);
+    });
+    it('a pendência diz a ETAPA — é ela que decide a saída na tela', () => {
+        const r = envioCompletoPeloRito({ ...base, sharePoint: { status: 'erro', motivo: 'AADSTS7000215' }, baixa: { status: 'sem-tarefa' } });
+        expect(r.pendencias.map((p: any) => p.etapa)).toEqual(['sharepoint', 'baixa']);
     });
 });

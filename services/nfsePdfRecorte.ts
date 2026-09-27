@@ -42,6 +42,12 @@ export interface RecorteNfsePdf {
     dhEmi: string | null;
     /** De onde a competência saiu — número derivado não se apresenta como lido. */
     competenciaOrigem: 'campo-competencia' | 'data-de-emissao' | null;
+    /**
+     * `AAAA-MM-DD` quando o campo "Competência da NFS-e" da DANFSe é um DIA —
+     * é o FATO GERADOR, e é por ele que a 📅 Competência do acervo confere o
+     * mês gravado. `null` quando o papel só escreve MM/AAAA (ABRASF).
+     */
+    dataFatoGerador: string | null;
     /** O que impede o recorte, dito para quem vai clicar em salvar. */
     impedimento: string | null;
 }
@@ -56,7 +62,8 @@ export function dhEmiDaNfsePdf(dataEmissao: unknown): string | null {
     const s = String(dataEmissao ?? '').trim();
     if (!s) return null;
 
-    const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[\sT]+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    // Barra OU hífen: a DANFSe v2.0 escreve "01-09-2026 03:02:21" (Osasco, 21/09).
+    const br = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})(?:[\sT]+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
     if (br) {
         const mes = Number(br[2]);
         if (mes < 1 || mes > 12) return null;
@@ -68,6 +75,20 @@ export function dhEmiDaNfsePdf(dataEmissao: unknown): string | null {
     const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return s;
 
+    return null;
+}
+
+/**
+ * O DIA que o campo de competência declara, quando ele é uma data — a DANFSe
+ * (v1.0 "10/05/2026", v2.0 "03-08-2026") escreve o fato gerador ali. `MM/AAAA`
+ * do ABRASF não é dia e devolve `null`: dia não se inventa a partir do mês.
+ */
+export function diaDoCampoCompetencia(campo: unknown): string | null {
+    const s = String(campo ?? '').trim();
+    let m = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (m) return Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${m[3]}-${m[2]}-${m[1]}` : null;
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return Number(m[2]) >= 1 && Number(m[2]) <= 12 ? s : null;
     return null;
 }
 
@@ -90,7 +111,11 @@ export function recorteDaNfsePdf(parsed: {
 
     const doCampo = normalizarCompetencia(parsed?.competencia);
     if (doCampo) {
-        return { competencia: doCampo, dhEmi, competenciaOrigem: 'campo-competencia', impedimento: null };
+        return {
+            competencia: doCampo, dhEmi, competenciaOrigem: 'campo-competencia',
+            dataFatoGerador: diaDoCampoCompetencia(parsed?.competencia),
+            impedimento: null,
+        };
     }
 
     // ⚠️ Só o DIA vai ao dono: ele reconhece `AAAA-MM-DD` e recusa o que tem
@@ -98,13 +123,14 @@ export function recorteDaNfsePdf(parsed: {
     // aqui é ler a data, não afrouxar a régua de quem valida competência.
     const daData = normalizarCompetencia(String(dhEmi || '').slice(0, 10));
     if (daData) {
-        return { competencia: daData, dhEmi, competenciaOrigem: 'data-de-emissao', impedimento: null };
+        return { competencia: daData, dhEmi, competenciaOrigem: 'data-de-emissao', dataFatoGerador: null, impedimento: null };
     }
 
     return {
         competencia: null,
         dhEmi,
         competenciaOrigem: null,
+        dataFatoGerador: null,
         impedimento: 'Não foi possível ler a competência nem a data de emissão deste PDF. '
             + 'Sem competência a nota não aparece em recorte de mês nenhum — nem na lista, nem no Livro '
             + 'de Serviços Prestados, nem no SPED. Preencha a competência (MM/AAAA) no formulário antes de salvar.',

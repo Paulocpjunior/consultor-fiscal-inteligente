@@ -20,6 +20,7 @@ import admin from 'firebase-admin';
 import { enviarEmail, isGraphConfigured } from './graph-provider.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 import { secretsMatch } from './cron-secret.js';
+import { withCronHeartbeat } from './cron-heartbeat.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { analisarSequenciasSaida } from './prova-saida.js';
 
@@ -357,20 +358,27 @@ function montarHtml({ empresas, desdeMs, agoraMs, provaSaida }) {
 // Cloud Scheduler bate via POST (--http-method=POST nos jobs do
 // setup-cloud-schedulers.sh). Mantemos consistente com os demais crons
 // (cert-alerta-cron, sefaz-cron-noturno, etc). Body vazio = {}.
+// 💓 26/09 (auditoria): heartbeat antes do trabalho — e-mail diário que morre
+// no meio deixa registro, e o Scheduler recebe 200 na hora.
 router.post('/captura-resumo-cron', requireCronAuth, async (req, res) => {
+  const fonte = req.headers?.['x-cloudscheduler-jobname'] || 'captura-resumo-diario';
+  await withCronHeartbeat({ collection: 'captura_resumo_cron_logs', fonte, res }, () => montarEEnviarResumo());
+});
+
+async function montarEEnviarResumo() {
   try {
     const dados = await coletarDados();
     if (dados.empresas.length === 0) {
-      return res.json({ ok: true, motivo: 'Nenhuma empresa com procuracaoEcacAtiva=true', total: 0 });
+      return { ok: true, motivo: 'Nenhuma empresa com procuracaoEcacAtiva=true', total: 0, totalEmpresas: 0, sucessos: 0, falhas: 0 };
     }
 
     const graphOk = isGraphConfigured();
     if (!graphOk) {
-      return res.json({
+      return {
         ok: false,
         motivo: 'Microsoft Graph não configurado — email não enviado',
-        total: dados.empresas.length,
-      });
+        total: dados.empresas.length, totalEmpresas: dados.empresas.length, sucessos: 0, falhas: 1,
+      };
     }
 
     const erros = dados.empresas.filter(e => categorizarCstat(e.cStat) === 'erro').length;
@@ -388,18 +396,22 @@ router.post('/captura-resumo-cron', requireCronAuth, async (req, res) => {
       corpoHtml: montarHtml(dados),
     });
 
-    return res.json({
+    return {
       ok: r.ok,
       total: dados.empresas.length,
+      totalEmpresas: dados.empresas.length,
       totalXmls,
+      totalNovos: totalXmls,
       erros,
+      sucessos: r.ok ? 1 : 0,
+      falhas: r.ok ? 0 : 1,
       provaSaida: dados.provaSaida?.totais || null,
       emailStatus: r.ok ? 'enviado' : `falha: ${r.error || 'desconhecida'}`,
-    });
+    };
   } catch (e) {
     console.error('[captura-resumo-cron] erro:', e);
-    return res.status(500).json({ error: e.message });
+    throw e; // o heartbeat grava status='falha' + erroFatal
   }
-});
+}
 
 export default router;

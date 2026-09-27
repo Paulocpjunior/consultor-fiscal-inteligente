@@ -196,12 +196,22 @@ export function filtrarConversas(
     const b = busca.trim().toLowerCase();
     return lista.filter((c) => {
         if (aba === 'nao-lidas' && !(c.naoLidas > 0)) return false;
+        // ✅ 'encerrados' é RECORTE DO BANCO (a rota devolve só as resolvidas),
+        // não um id de fila. Sem esta linha ela cairia no filtro de fila logo
+        // abaixo, `fila !== 'encerrados'` daria falso em TODAS, e a aba
+        // apareceria vazia — com o servidor tendo devolvido a lista certa.
+        if (aba === 'encerrados') return !b || casaBusca(c, b);
         if (aba !== 'todas' && aba !== 'nao-lidas' && (c.fila || 'recepcao') !== aba) return false;
         if (!b) return true;
-        return (c.nome || '').toLowerCase().includes(b)
-            || c.numero.includes(b.replace(/\D/g, '') || '§')
-            || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
+        return casaBusca(c, b);
     });
+}
+
+/** O texto casa com a conversa? Dono único — a aba de encerrados usa a MESMA. */
+function casaBusca(c: ConversaResumo, b: string): boolean {
+    return (c.nome || '').toLowerCase().includes(b)
+        || c.numero.includes(b.replace(/\D/g, '') || '§')
+        || (c.ultimaMensagem?.resumo || '').toLowerCase().includes(b);
 }
 
 /**
@@ -238,4 +248,32 @@ export function rotuloMidia(m: MensagemInbox['midia'], tipo: string | null): str
     };
     const base = m.nomeArquivo ? `📎 ${m.nomeArquivo}` : (nomes[tipo || ''] || '📎 anexo');
     return m.baixada ? base : `${base} (ainda na Meta — não baixado)`;
+}
+
+/**
+ * Qual FILA usar ao mandar template para uma conversa já aberta.
+ *
+ * 🚨 Nasceu do achado do colaborador (24/09): o botão "Enviar template para
+ * (nome)" abre o modal já preenchido, e a fila **tem de sair da CONVERSA**.
+ * Usar o default do módulo mandaria pelo `fiscal` um atendimento que está no
+ * Contábil — o protocolo trocaria de departamento e o cliente receberia
+ * resposta de outra equipe.
+ *
+ * ⚠️ E o galho do fallback é o caso NORMAL, não a exceção: conversa na
+ * Recepção tem `fila: null`, e colaborador de uma fila só não enxerga as
+ * outras. Um `<select>` cujo valor não está entre as `options` renderiza
+ * **vazio**, e o envio falha sem dizer por quê — a lição de 16/08, a do
+ * dropdown de template que culpava a pessoa errada.
+ *
+ * Função pura de propósito: é a única parte desta entrega que dá para provar
+ * por EXECUÇÃO. O clique só a pessoa prova.
+ */
+export function filaParaTemplate(
+    filaDaConversa: string | null | undefined,
+    filasVisiveis: { id: string }[],
+    padrao: string,
+): string {
+    const visiveis = filasVisiveis || [];
+    if (filaDaConversa && visiveis.some((f) => f.id === filaDaConversa)) return filaDaConversa;
+    return visiveis[0]?.id || padrao;
 }

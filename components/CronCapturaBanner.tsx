@@ -9,6 +9,7 @@
  *  - Polling a cada 5 min para detectar novas execucoes (6h/12h/18h)
  *  - Mostra toast e flash visual quando nova captura e detectada
  */
+import { fraseDaRodadaComTipo } from '../sefaz-backend/rodada-completa-janela.js';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import type { User } from '../types';
 import { getAuth } from 'firebase/auth';
@@ -24,6 +25,24 @@ interface CronStatus {
     duracaoMs?: number;
     fonte?: string;
     erro?: string;
+    /** 🚦 25/09: 'pulada-janela' = rodada recusada (motivo diz quando pode). */
+    status?: string;
+    motivo?: string;
+    puladasJanela?: number;
+    errosResumo?: Array<{ codigo?: string | null; motivo?: string | null }> | null;
+    resumo?: string | null;
+}
+
+/**
+ * A frase da rodada — com a CAUSA dominante das falhas e as puladas pela
+ * janela separadas (25/09). "147 falhas" mudo era o que mandava clicar de novo.
+ * O backend grava `resumo`; sem ele (log antigo) a régua pura monta aqui.
+ */
+function fraseDaRodada(s: CronStatus): string {
+    // 🏷️ 26/09: com o NOME da rodada na frente — "Drenagem de pendências NSU:
+    // nenhuma empresa com fila" em vez de "Captura SEFAZ concluída — 0 novos
+    // XMLs em 0 empresa(s)", que se lia como "não houve captura".
+    return fraseDaRodadaComTipo(s);
 }
 
 interface Props {
@@ -143,10 +162,7 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 if (onShowToast && newData.hasRun) {
                     const execDate = parseTimestamp(newData.executadoEm);
                     const hora = execDate ? formatTimeBRT(execDate) : '';
-                    const msg = (newData.falhas ?? 0) > 0
-                        ? `Captura SEFAZ ${hora}: ${newData.totalNovosXmls ?? 0} novos XMLs, ${newData.falhas} falha(s)`
-                        : `Captura SEFAZ ${hora}: ${newData.totalNovosXmls ?? 0} novos XMLs em ${newData.totalEmpresas ?? 0} empresas`;
-                    onShowToast(msg);
+                    onShowToast(`${hora} — ${fraseDaRodada(newData)}`);
                 }
 
                 // Browser push notification (works even if tab is in background)
@@ -221,7 +237,7 @@ const CronCapturaBanner: React.FC<Props> = ({ currentUser, onShowToast }) => {
     if (hasErro) {
         message = `Captura SEFAZ falhou as ${timeStr} — ${status.erro}`;
     } else {
-        message = `Captura SEFAZ concluida as ${timeStr} — ${status.totalEmpresas ?? 0} empresa(s), ${status.totalNovosXmls ?? 0} novos XMLs, ${status.falhas ?? 0} falha(s)`;
+        message = `${timeStr} — ${fraseDaRodada(status)}`;
     }
 
     return (

@@ -39,6 +39,7 @@ import {
 } from '../sefaz-backend/xml-metadata-helper.js';
 // O LADO da contraparte tem dono — ver o comentário na função abaixo.
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
+import { numeroDoDocumento } from '../sefaz-backend/sped-selecao-documentos.js';
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -145,7 +146,8 @@ export function escrituraveisNoLivroDeEntradas<T>(
     const centavos = (v: number) => Math.round((Number(v) || 0) * 100);
     const chave = (d: any) => `${contraparteNormalizada(d).doc}|${centavos(valorDe(d))}`;
     const fora = (d: any, parte: { nome: string; doc: string }, motivo: string): NotaExcluidaDoLivro => ({
-        numero: String(d?.numero ?? '—'),
+        // Gravado ou da chave (26-34): CT-e capturado antes de 18/09 não tem `numero`.
+        numero: numeroDoDocumento(d) || '—',
         data: String(d?.dhEmi ?? '').slice(0, 10),
         participante: parte.nome || parte.doc || '—',
         valor: Number(valorDe(d)) || 0,

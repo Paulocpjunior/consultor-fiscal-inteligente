@@ -54,7 +54,9 @@ import { reconferirCancelamento } from '../../services/reconferirCancelamentoSer
 import { drenarReconferencia, fraseDaDrenagem, fraseDoVeredito, numerosPorRecusa } from '../../services/reconferenciaEncadeada';
 // ♻️ Releitura das notas "vazias" (sem itens/nº) a partir do XML guardado —
 // Paulo, 19/08: o colaborador digitava CFOP no escuro em nota sem item.
-import { relerNotasVazias, relerItensFiscais } from '../../services/ipiVarreduraService';
+import { relerNotasVazias, relerItensFiscais, relerCabecalhoCtes } from '../../services/ipiVarreduraService';
+import { relerMunicipiosDipam } from '../../services/dipamService';
+import { encadearReleitura, fraseDoResultado, fraseDoRestaram } from '../../services/relerParticipantes';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFiscalService';
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
@@ -87,7 +89,7 @@ export type AbaId =
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
-    | 'apuracao-icms';
+    | 'apuracao-icms' | 'difal-ec87';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -102,7 +104,19 @@ import CfopCerebroPainel, { type FornecedorOpcao } from '../CfopCerebroPainel';
 // nota de material de escritório passaria batido (Paulo, 17/08, caso Kalunga).
 import { textoDoCfop, FONTE_CFOP, cfopsInexistentes } from '../../sefaz-backend/cfop-catalogo.js';
 import { cstDoLancamento, cstInformadoDoItem, resumirCst } from '../../sefaz-backend/cst-correlacao.js';
+// 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o conhecimento não tem `itens[]`
+// e por isso sumia do Livro, do Resumo por CFOP e da ✏️ CFOP por nota — não
+// havia ONDE informar o CST do frete. O cabeçalho vira o item sintético e
+// passa pela MESMA alocação/régua da nota de mercadoria.
+import {
+    itensParaEscriturar, cfopDoCte, cstDoCte, icmsDestacadoDoCte,
+} from '../../sefaz-backend/cte-escrituracao.js';
+import { ehConhecimentoDeTransporte, numeroDoDocumento } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
+import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/cteCstEmLote';
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
+// 🧭 O detalhamento do DIFAL de saída (EC 87/15) — mesma seleção do E300/E310.
+import { detalharDifalPorUf } from '../../sefaz-backend/difal-ec87-saida.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -112,6 +126,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'cfop-nota', label: '✏️ CFOP por nota' },
             { id: 'impostos-resumo', label: '🧾 ICMS · IPI · ISS' },
             { id: 'uf', label: '🗺️ Resumo por UF' },
+            { id: 'difal-ec87', label: '🧭 DIFAL/FCP EC 87/15 (por UF)' },
             { id: 'canceladas', label: '🚫 Canceladas/Faltantes' },
             { id: 'aliquota', label: '➗ Por alíquota' },
             { id: 'produto', label: '📦 Por produto' },
@@ -140,7 +155,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
 ];
 
 const ABAS_POR_EMPRESA: AbaId[] = [
-    'livro', 'cfop', 'cfop-nota', 'impostos-resumo', 'uf',
+    'livro', 'cfop', 'cfop-nota', 'impostos-resumo', 'uf', 'difal-ec87',
     'canceladas', 'aliquota', 'produto', 'participante',
     'serv-tomados', 'serv-prestados', 'serv-codigo', 'retencoes',
 ];
@@ -391,6 +406,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                     erroParametrosCfop={erroParametrosCfop}
                     onRebuscar={() => buscar(empresa.id)} />
             )}
+            {aba === 'difal-ec87' && docsRecorte && empresa && (
+                <AbaDifalEc87 docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} />
+            )}
             {aba === 'canceladas' && docsRecorte && empresa && (
                 <AbaCanceladas docs={docsRecorte} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado}
                     onRebuscar={() => buscar(empresa.id)} />
@@ -527,11 +545,16 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         // dedup do art. 136 logo abaixo: a nota do PRODUTOR ficava sem par e
         // entrava no livro, com a própria contada do outro lado. A compra
         // dobrava, em dois livros diferentes.
+        // 🚚 O CT-e ENTRA NO LIVRO (21/09): o D100/D190 do SPED o escritura
+        // desde 21/08 e o Livro do CFI o escondia — tela e arquivo divergindo.
         const filtrados = docs.filter(d => direcaoEfetivaDoc(d) === direcao && docValido(d)
-            && ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo));
+            && (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)));
         const montar = (d: any) => {
-            const contabil = d.totais?.vNF || d.valorTotal || 0;
-            const a = alocarTributacaoIcms(d.itens || [], contabil, ctxAlocacaoDoDoc(d, {
+            const ehCte = ehConhecimentoDeTransporte(d);
+            const contabil = ehCte ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0);
+            // O cabeçalho do CT-e vira o item sintético — MESMA alocação.
+            const itensDoDoc: any[] = itensParaEscriturar(d);
+            const a = alocarTributacaoIcms(itensDoDoc, contabil, ctxAlocacaoDoDoc(d, {
                 naturezaAtividade: natureza.natureza,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
                 parametrosCfop: cerebroAtivo(parametrosCfop),
@@ -552,7 +575,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             // Na saída ela devolve o CFOP original, e nota própria de entrada
             // (art. 136), que já nasce 1xxx, passa intacta.
             const cfopsEscriturados = Array.from(new Set(
-                (d.itens || [])
+                itensDoDoc
                     .map((i: any) => ({ i, c: String(i.cfop || '').replace(/\D/g, '') }))
                     .filter(({ c }: any) => Boolean(c))
                     // O ITEM vai junto (11/09): nota mista sai com dois CFOPs
@@ -565,7 +588,18 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             ));
             return {
                 data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                numero: d.numero || '—',
+                // "CT-e" diz que a linha é frete — quem confere o livro procura
+                // o conhecimento pelo número, e um "1234" solto entre NF-e não
+                // conta que é CT-e.
+                //
+                // 🚨 EM TEXTO, NÃO EM EMOJI (21/09, EDUARDO GUERRA): o 🚚 ia
+                // para o PDF e a Helvetica do jsPDF não o tem — saía "Ø=Þš" no
+                // lugar do número. E o número vem de `numeroDoDocumento`, a
+                // mesma régua do D100: o gravado, ou o da CHAVE (posições
+                // 26-34) — os CT-e capturados antes de 18/09 foram gravados
+                // sem `numero` (a captura lia `nNF`, tag da NF-e) e o Livro
+                // imprimia "—" enquanto a lista de XMLs mostrava o número.
+                numero: (ehCte ? 'CT-e ' : '') + (numeroDoDocumento(d) || '—'),
                 participante: parte?.nome || '—',
                 cfops: cfopsEscriturados.join(' ') || '—',
                 contabil, ...a,
@@ -573,7 +607,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         };
         const r = direcao === 'entrada'
             ? escrituraveisNoLivroDeEntradas(
-                filtrados, montar, (d: any) => d.totais?.vNF || d.valorTotal || 0, empresa.cnpj)
+                filtrados, montar, (d: any) => (ehConhecimentoDeTransporte(d) ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0)), empresa.cnpj)
             : { linhas: filtrados.map(montar), excluidas: [] as any[] };
         return {
             linhas: r.linhas.sort((x: any, y: any) => x.data.localeCompare(y.data)
@@ -795,22 +829,33 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
 
     const linhas = useMemo(() => {
         return docs
-            .filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) && docValido(d))
+            // 🚚 O CT-e ENTRA AQUI (21/09): é nesta aba que se informa CFOP e CST
+            // por documento, e o frete não tinha ONDE — o conhecimento não tem
+            // item, mas o campo por NOTA é exatamente o que ele precisa.
+            .filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && docValido(d))
             .map((d: any) => {
+                const ehCte = ehConhecimentoDeTransporte(d);
                 const direcao = direcaoEfetivaDoc(d) as 'entrada' | 'saida';
                 // O que ESTA sessão gravou vence o que veio do recorte — sem isso
                 // a linha voltaria ao valor antigo até alguém recarregar a tela,
                 // que é a "ação sem efeito visível" de 16/08.
                 const informado = gravado[d.id] !== undefined ? gravado[d.id] : (d.cfopEscriturado || '');
                 const docEfetivo = { ...d, cfopEscriturado: informado };
-                const daRegua = cfopsDistintosDaNota(d, direcao, ctx);
-                const cru = String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
-                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx, d.itens?.[0] || null);
+                // O CFOP do CT-e mora no cabeçalho: a régua sem o informado é a
+                // correlação dele (5352 → 1352), e o ITEM é `null` de propósito.
+                const cru = ehCte
+                    ? cfopDoCte(d)
+                    : String(d.itens?.[0]?.cfop || '').replace(/\D/g, '');
+                const daRegua = ehCte
+                    ? (cru ? [String(correlacionarCfop(cru, direcao, ctx) || cru)] : [])
+                    : cfopsDistintosDaNota(d, direcao, ctx);
+                const origem = origemDoCfopLancamento(docEfetivo, cru, direcao, ctx, ehCte ? null : (d.itens?.[0] || null));
                 const parte: any = contraparteDoc(d);
                 return {
                     id: d.id,
                     data: (d.dhEmi || '').slice(0, 10).split('-').reverse().join('/'),
-                    numero: d.numero || '—',
+                    // Gravado ou da chave (26-34): CT-e antigo não tem `numero`.
+                    numero: numeroDoDocumento(d) || '—',
                     // A CHAVE é o que permite ver a nota (DANFE/consulta) — o
                     // pedido de 19/08: "colocar ao lado de Nº NF a opção de
                     // visualizar a nota (chave de acesso, pdf da nota)".
@@ -837,15 +882,17 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                     // ganha o selo ✂️ ao lado, porque uma linha só não conta a
                     // nota mista inteira.
                     cst: cstDoLancamento(
-                        d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || '',
+                        ehCte ? cstDoCte(d) : (d.itens?.[0]?.cstIcms || d.itens?.[0]?.cst || ''),
                         informado || daRegua[0] || '',
                         cstInformadoDoItem(
                             { ...d, cstEscriturado: cstGravado[d.id] !== undefined ? cstGravado[d.id] : d.cstEscriturado },
-                            d.itens?.[0],
+                            ehCte ? null : d.itens?.[0],
                         ),
                     ),
                     porItem: resumoEscrituracaoItens(d),
-                    valor: d.totais?.vNF || d.valorTotal || 0,
+                    valor: ehCte ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0),
+                    ehCte,
+                    icmsDestacado: ehCte ? icmsDestacadoDoCte(d) : 0,
                 };
             })
             .sort((a, b) => a.data.localeCompare(b.data) || String(a.numero).localeCompare(String(b.numero)));
@@ -938,6 +985,37 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
         }
     };
 
+    // 🚚 CST EM LOTE NOS CT-e (21/09, EDUARDO GUERRA: *"nessa empresa não
+    // aproveitamos o crédito de ICMS sobre os fretes"*). A decisão é da
+    // empresa e vale para o mês inteiro; digitar 34 conhecimentos todo mês é
+    // passar o trabalho adiante. Quem escolhe os alvos é o dono puro; quem
+    // grava é a MESMA `gravarCstEscriturado`, um por vez e carimbado — e o que
+    // já foi informado à mão não é tocado.
+    const ctesSemCst = useMemo(() => ctesSemCstInformado(linhas), [linhas]);
+    const [loteCte, setLoteCte] = useState<string | null>(null);
+    const informarCstNosCtes = async (cst: string) => {
+        const alvos = ctesSemCstInformado(linhas);
+        if (!alvos.length) return;
+        if (!window.confirm(fraseDaConsequenciaDoLote(alvos, cst))) return;
+        setErro(null);
+        setLoteCte(`0/${alvos.length}`);
+        let feitos = 0;
+        try {
+            for (const l of alvos) {
+                const r = await gravarCstEscriturado({ documentoId: l.id, cst, porEmail: currentUser?.email || '' });
+                setCstGravado(g => ({ ...g, [l.id]: r.cst }));
+                feitos += 1;
+                setLoteCte(`${feitos}/${alvos.length}`);
+            }
+            onShowToast?.(`CST ${cst} informado em ${feitos} CT-e. Regere o SPED: o D190 sai com a tributação informada.`, 'success');
+        } catch (e: any) {
+            // O que já gravou FICA gravado (cada um é carimbado); o que faltou vai dito.
+            setErro(`${e?.message || 'Falha ao gravar o CST.'} — ${feitos} de ${alvos.length} CT-e ficaram informados; os demais continuam sem CST.`);
+        } finally {
+            setLoteCte(null);
+        }
+    };
+
     /** Notas "vazias" do recorte — sem itens (CFOP/CST em branco) ou sem nº. */
     const vazias = linhas.filter(l => !l.cfopCru || l.numero === '—').length;
 
@@ -961,12 +1039,89 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.semXml ? `${r.semXml} sem arquivo guardado (buraco de captura — 📋 Status por Empresa)` : '',
                 r.naoPareadas ? `${r.naoPareadas} não pareada(s) — itens gravados ≠ itens do XML, ficaram intactas` : '',
             ].filter(Boolean);
-            setResultadoReler(partes.length
+            setResultadoReler((partes.length
                 ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
-                : `♻️ ${r.examinadas} examinada(s) — nada a completar.`);
+                : `♻️ ${r.examinadas} examinada(s) — nada a completar.`)
+                // O que a rodada NÃO viu vai DITO — e "clique de novo" só é
+                // verdade porque a fila passou a andar por cursor (18/09).
+                + fraseDoRestaram(r.restaram));
             if (r.atualizadas) onRebuscar?.();
         } catch (e: any) {
             setResultadoReler(`♻️ Falha ao reler os itens: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
+    // 🚚 RELER O CABEÇALHO DOS CT-e (17/09, EDUARDO GUERRA · 08/2026): o CFOP
+    // do conhecimento mora no CABEÇALHO do XML e a captura antiga só lia o de
+    // dentro de <prod>. Sem ele o CT-e é descartado do bloco D — com razão,
+    // porque cravar um CFOP declararia a natureza da operação de transporte no
+    // escuro — e o frete fica fora do livro.
+    const relerCtes = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            const r = await relerCabecalhoCtes(empresa.id, competencia);
+            if (!r.examinados) {
+                // Zero CT-e no recorte NÃO é "nada a fazer": ou a empresa não
+                // tomou frete no mês, ou o conhecimento não foi capturado — e as
+                // duas pedem ações opostas. Dizer só "0" faria concluir a errada.
+                setResultadoReler('🚚 Nenhum CT-e neste recorte. Ou a empresa não tomou frete na competência, ou o conhecimento não foi capturado — confira o 📋 Status por Empresa antes de dar o bloco D por vazio.');
+                return;
+            }
+            const campos = Object.entries(r.campos || {}).map(([c, n]) => `${c} em ${n}`).join(', ');
+            const partes = [
+                r.recuperados ? `${r.recuperados} recuperado(s) do XML guardado (${campos})` : '',
+                r.jaCompletos ? `${r.jaCompletos} já completo(s)` : '',
+                r.jaRelidos ? `${r.jaRelidos} já relido(s) nesta versão` : '',
+                r.semMudanca ? `${r.semMudanca} relido(s) e o XML não traz mais nada` : '',
+                r.xmlSemCfop ? `${r.xmlSemCfop} sem CFOP no próprio XML — o conhecimento não declara, e o app não inventa: peça o arquivo correto ao transportador` : '',
+                r.semArquivo ? `${r.semArquivo} sem arquivo guardado (buraco de captura — 📋 Status por Empresa)` : '',
+                r.falhas ? `${r.falhas} falha(s) de leitura` : '',
+            ].filter(Boolean);
+            setResultadoReler(`🚚 ${r.examinados} CT-e examinado(s): ${partes.join(' · ')}.`
+                + (r.recuperados ? ' Regere o SPED — e, no PVA, apague a competência antes de importar o arquivo novo.' : '')
+                + fraseDoRestaram(r.restaram));
+            if (r.recuperados) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`🚚 Falha ao reler os CT-e: ${e?.message || 'erro inesperado'}.`);
+        } finally {
+            setRelendo(false);
+        }
+    };
+
+    // ♻️ RELER PARTICIPANTE, ENDEREÇO E MUNICÍPIO (18/09, J.N. VINATEX ·
+    // 08/2026): o PVA devolveu **732 recusas** de "Campo obrigatório" no
+    // ENDEREÇO do 0150, o aviso da geração mandou rodar o ♻️ AQUI — e o botão
+    // não existia nesta aba. Ele vivia só no painel da 🌾 DIPAM, dentro do
+    // bloco de pendências de PRODUTOR RURAL, onde uma comércio de tecidos
+    // nunca chega: a ferramenta era inalcançável justamente para quem o aviso
+    // mandava usá-la (o achado 18, 21/08).
+    //
+    // ⚠️ MESMA ROTA, MESMA FRASE — o texto do resultado vem do dono
+    // (`fraseDoResultado`), nunca escrito de novo aqui.
+    const relerParticipantes = async () => {
+        setRelendo(true);
+        setResultadoReler(null);
+        try {
+            // A fila é maior que o lote (a VINATEX tem 3501 documentos no
+            // recorte contra 1000 por direção): quem encadeia é o APP, não a
+            // pessoa clicando quatro vezes — a régua do teto, de 02/09.
+            const { total, rodadas, parouPorTeto } = await encadearReleitura(
+                () => relerMunicipiosDipam(empresa.id, competencia),
+                { aoProgredir: (acc) => setResultadoReler(fraseDoResultado(acc)) },
+            );
+            setResultadoReler(
+                fraseDoResultado(total)
+                + (rodadas > 1 ? ` (${rodadas} rodadas)` : '')
+                + (parouPorTeto
+                    ? ' ⚠️ A fila ainda não zerou — clique de novo para continuar de onde parou.'
+                    : ''),
+            );
+            if (total.preenchidas || total.ganharamEndereco) onRebuscar?.();
+        } catch (e: any) {
+            setResultadoReler(`♻️ Falha ao reler os participantes: ${e?.message || 'erro inesperado'}.`);
         } finally {
             setRelendo(false);
         }
@@ -987,9 +1142,10 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                 r.semItemNoXml ? `${r.semItemNoXml} com XML guardado sem itens legíveis — mande o caso ao time` : '',
                 r.falhas ? `${r.falhas} falha(s) de leitura` : '',
             ].filter(Boolean);
-            setResultadoReler(partes.length
+            setResultadoReler((partes.length
                 ? `♻️ ${r.examinadas} examinada(s): ${partes.join(' · ')}.`
-                : `♻️ ${r.examinadas} examinada(s) — nada a preencher: as NF-e do recorte já estão completas.`);
+                : `♻️ ${r.examinadas} examinada(s) — nada a preencher: as NF-e do recorte já estão completas.`)
+                + fraseDoRestaram(r.restaram));
             if (r.preenchidas || r.ganharamNumero) onRebuscar?.();
         } catch (e: any) {
             setResultadoReler(`♻️ Falha ao reler: ${e?.message || 'erro inesperado'}.`);
@@ -1087,8 +1243,49 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                         className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
                     >{relendo ? '♻️ Relendo…' : '♻️ Reler itens dos XMLs'}</button>
                 )}
+                {/* ♻️ CABEÇALHO DOS CT-e (17/09, EDUARDO GUERRA · 08/2026): os
+                    dois botões acima NÃO alcançam conhecimento de transporte —
+                    um só mexe em campos de ITEM (e o CT-e não tem itens) e o
+                    outro trata CT-e como fora do escopo. Sem o CFOP do
+                    cabeçalho o conhecimento não vira D100/D190 e o frete fica
+                    fora do livro, com o bloco D saindo vazio no PVA. */}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={relerCtes}
+                        disabled={relendo}
+                        title="Relê o CABEÇALHO dos CT-e guardados e completa CFOP, CST, alíquota e ICMS — é lá que o conhecimento os declara. Sem eles o frete não entra no bloco D do SPED. Só preenche o que está vazio."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo…' : '🚚 Reler cabeçalho dos CT-e'}</button>
+                )}
+                {/* ♻️ PARTICIPANTE E ENDEREÇO (18/09, J.N. VINATEX · 08/2026):
+                    o PVA recusou 732 participantes por ENDEREÇO em branco no
+                    0150, o aviso da geração manda rodar o ♻️ NESTA aba — e o
+                    botão só existia no painel da 🌾 DIPAM, atrás de uma
+                    pendência de produtor rural que empresa nenhuma de comércio
+                    tem. Aviso que aponta ferramenta se prova contra a
+                    ferramenta (a régua do 🚚, 17/09). */}
+                {currentUser?.role === 'admin' && (
+                    <button
+                        onClick={relerParticipantes}
+                        disabled={relendo}
+                        title="Relê os XMLs guardados e completa o PARTICIPANTE das notas: logradouro, número, complemento, bairro, município, CNPJ/CPF e nome. É o que resolve a recusa do PVA no campo 10 (ENDERECO) do registro 0150. Só preenche o que está vazio, e a fila é encadeada sozinha até zerar."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{relendo ? '♻️ Relendo…' : '♻️ Reler participante e município dos XMLs'}</button>
+                )}
+                {/* 🚚 O CST DO FRETE, DE UMA VEZ — só aparece quando há CT-e de
+                    entrada sem CST informado no recorte. A consequência (base e
+                    ICMS zero, e quanto de ICMS destacado fica fora) vai DITA no
+                    confirm, antes do clique. */}
+                {ctesSemCst.length > 0 && (
+                    <button
+                        onClick={() => void informarCstNosCtes('90')}
+                        disabled={loteCte !== null}
+                        title="Informa a tributação 90 (Outras — sem crédito de ICMS) em todos os CT-e de ENTRADA deste recorte que ainda não têm CST informado. Não toca no que já foi informado à mão. Cada conhecimento fica gravado com quem informou."
+                        className="btn-press px-3 py-2 text-sm rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 font-semibold whitespace-nowrap disabled:opacity-60"
+                    >{loteCte ? `🚚 Gravando ${loteCte}…` : `🚚 CST 90 nos ${ctesSemCst.length} CT-e sem CST (frete sem crédito)`}</button>
+                )}
                 <span className="text-xs text-slate-500">
-                    {linhas.length} nota(s) · {comCarimbo} com CFOP informado
+                    {linhas.length} documento(s){linhas.some(l => l.ehCte) ? ` · ${linhas.filter(l => l.ehCte).length} CT-e` : ''} · {comCarimbo} com CFOP informado
                 </span>
             </div>
             {resultadoReler && (
@@ -1192,7 +1389,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             )}
             {!linhas.length ? (
                 <p className="mt-3 text-sm text-slate-500">
-                    Nenhuma NF-e/NFC-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
+                    Nenhuma NF-e/NFC-e/CT-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
                     veja Prova de captura e Cobertura de Saída.
                 </p>
             ) : (
@@ -1218,6 +1415,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                 <tr key={l.id} className="border-b border-slate-100 dark:border-slate-800">
                                     <td className="py-1 pr-2 whitespace-nowrap">{l.data}</td>
                                     <td className="py-1 pr-2 font-mono whitespace-nowrap">
+                                        {l.ehCte && <span title="Conhecimento de transporte (CT-e) — frete. O CFOP e o CST vêm do cabeçalho do XML; o CST informado aqui vale no D190 do SPED, no Livro e no Resumo por CFOP.">🚚 </span>}
                                         {l.numero}
                                         {/* 🔎 VER A NOTA — pedido de 19/08. O link é o
                                             portal NACIONAL da NF-e (consulta pela chave),
@@ -1228,12 +1426,15 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
                                             faz nada é pior que botão nenhum. */}
                                         {l.chave.length === 44 && (
                                             <>
-                                                <a
+                                                {/* O portal da NF-e não consulta CT-e (modelo 57): o
+                                                    link só aparece na nota — link que leva a
+                                                    "chave inválida" é pior que link nenhum. */}
+                                                {!l.ehCte && <a
                                                     href={`https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=&nfe=${l.chave}`}
                                                     target="_blank" rel="noreferrer"
                                                     title="Consultar esta NF-e no portal nacional (abre em outra aba — o portal pede o captcha)"
                                                     className="ml-1 text-blue-600 dark:text-blue-400 hover:underline"
-                                                >🔎</a>
+                                                >🔎</a>}
                                                 <button
                                                     onClick={() => {
                                                         void navigator.clipboard?.writeText(l.chave);
@@ -1361,9 +1562,14 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         }) as { regime: string }).regime,
         [cadastroFiscal, empresa?.fonte],
     );
-    const linhas = useMemo(
+    // 🚚 "SÓ FRETES" — o relatório específico de frete que o Paulo pediu
+    // (21/09) é o Resumo por CFOP recortado nas linhas com CT-e: o CFOP de
+    // transporte (x352/x353) já separa o frete da mercadoria, e uma segunda
+    // conta divergiria da primeira.
+    const [soFretes, setSoFretes] = useState(false);
+    const todasAsLinhas = useMemo(
         () => resumoPorCfop(
-            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo)),
+            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)),
             {
                 naturezaAtividade: natureza.natureza,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
@@ -1373,17 +1579,30 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         ),
         [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao],
     );
+    const linhas = useMemo(
+        () => (soFretes ? todasAsLinhas.filter(l => (l.ctes || 0) > 0) : todasAsLinhas),
+        [todasAsLinhas, soFretes],
+    );
     const totCfop = useMemo(() => linhas.reduce(
         (t, l) => ({ ipiCusto: t.ipiCusto + (l.ipiCusto || 0), st: t.st + (l.st || 0) }),
         { ipiCusto: 0, st: 0 },
     ), [linhas]);
+    /** Os fretes do recorte INTEIRO — o número que responde "quanto de frete tem este mês". */
+    const fretes = useMemo(() => todasAsLinhas.filter(l => (l.ctes || 0) > 0).reduce(
+        (t, l) => ({
+            ctes: t.ctes + l.ctes, contabil: t.contabil + l.contabil, base: t.base + l.base,
+            icms: t.icms + l.icms, outras: t.outras + l.outras,
+        }),
+        { ctes: 0, contabil: 0, base: 0, icms: 0, outras: 0 },
+    ), [todasAsLinhas]);
 
     const pdf = () => rodar(() => gerarRelatorioPdf({
-        titulo: `Resumo por CFOP — ${fmtComp(competencia)}`,
+        titulo: `Resumo por CFOP${soFretes ? ' — só fretes (CT-e)' : ''} — ${fmtComp(competencia)}`,
         subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${linhas.length} CFOP(s)`,
         colunas: [
             { titulo: 'E/S', largura: 5 }, { titulo: 'CFOP', largura: 7 },
             { titulo: 'Notas', largura: 6, alinhamento: 'direita' },
+            { titulo: 'CT-e', largura: 5, alinhamento: 'direita' },
             { titulo: 'Itens', largura: 6, alinhamento: 'direita' },
             { titulo: 'Vlr. Contábil', largura: 12, alinhamento: 'direita' },
             { titulo: 'Base ICMS', largura: 12, alinhamento: 'direita' },
@@ -1396,10 +1615,17 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             // alocação, então eles não podem mostrar colunas diferentes.
             { titulo: 'ICMS ST', largura: 9, alinhamento: 'direita' },
         ],
-        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
+        linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.ctes || 0, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
         identificacao,
         observacoes: [
             'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
+            ...(fretes.ctes ? [
+                `🚚 Fretes (CT-e): ${fretes.ctes} conhecimento(s) · contábil ${fmtBRL(fretes.contabil)} · base ICMS `
+                + `${fmtBRL(fretes.base)} · ICMS creditado ${fmtBRL(fretes.icms)} · Outras ${fmtBRL(fretes.outras)}. `
+                + 'O CT-e entra pelo cabeçalho do XML (CFOP do transportador correlacionado para a entrada, x352/x353); '
+                + 'o CST informado em Relatórios → ✏️ CFOP por nota vence — CST 90 tira base e ICMS do frete, no '
+                + 'Livro, aqui e no D190 do SPED.',
+            ] : []),
             'Nas ENTRADAS o CFOP é o CORRELACIONADO (o XML da compra traz o do fornecedor) — natureza da atividade '
             + `"${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
             ...(totCfop.ipiCusto ? [
@@ -1421,12 +1647,26 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             <div className="flex items-center gap-2 flex-wrap">
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
                 <span className="text-xs text-slate-500">{linhas.length} CFOP(s) no recorte</span>
+                {fretes.ctes > 0 && (
+                    <label className="text-xs flex items-center gap-1 cursor-pointer" title="Mostra só os CFOPs que têm conhecimento de transporte — é o relatório de fretes para conferência.">
+                        <input type="checkbox" checked={soFretes} onChange={e => setSoFretes(e.target.checked)} />
+                        🚚 Só fretes (CT-e)
+                    </label>
+                )}
             </div>
+            {fretes.ctes > 0 && (
+                <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                    🚚 <strong>Fretes (CT-e):</strong> {fretes.ctes} conhecimento(s) · contábil {fmtBRL(fretes.contabil)} · base ICMS{' '}
+                    {fmtBRL(fretes.base)} · ICMS creditado {fmtBRL(fretes.icms)} · Outras {fmtBRL(fretes.outras)}.
+                    {' '}O CST informado em <strong>✏️ CFOP por nota</strong> vence — CST 90 tira base e ICMS do frete, aqui, no Livro e no D190 do SPED.
+                </p>
+            )}
             {linhas.length > 0 && (
                 <div className="overflow-x-auto max-h-80 overflow-y-auto">
                     <table className="w-full text-xs">
                         <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800">
                             <tr><th className="text-left py-1">E/S</th><th className="text-left">CFOP</th><th className="text-right">Notas</th>
+                                <th className="text-right" title="Quantos dos documentos desta linha são CT-e (frete)">CT-e</th>
                                 <th className="text-right">Contábil</th><th className="text-right">Base</th><th className="text-right">ICMS</th>
                                 <th className="text-right">Isentas</th><th className="text-right">Outras</th></tr>
                         </thead>
@@ -1436,6 +1676,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
                                     <td className="py-1">{l.direcao === 'entrada' ? 'E' : 'S'}</td>
                                     <td className="font-mono">{l.cfop}</td>
                                     <td className="text-right">{l.notas}</td>
+                                    <td className="text-right">{l.ctes ? `🚚 ${l.ctes}` : ''}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.contabil)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.base)}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.icms)}</td>
@@ -1547,6 +1788,110 @@ const AbaUf: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificac
                     </table>
                 </div>
             )}
+        </Card>
+    );
+};
+
+// ─── DIFAL/FCP EC 87/15 — Detalhamento das notas, por UF de destino ─────────
+//
+// 🧭 21/09, Paulo (WALDESA, *"13 páginas de DIFAL para lançar"*): *"seria
+// interessante um relatório das notas que possuem DIFAL com detalhamento, até
+// mesmo se precisar fazer esse cadastro, igual esse da Sage"*. É o
+// *"Saídas/Prestações com Débito de DIFAL/FCP — Detalhamento das Notas"* do
+// Folhamatic: por UF, nota a nota, com o DIFAL e o FCP que cada uma declara.
+//
+// A seleção é a MESMA do E300/E310 (`detalharDifalPorUf`, importada): o que
+// este relatório soma é o que o SPED declara. E ele diz, por UF, se há FCP —
+// porque o FCP é a SEGUNDA guia do E316 e precisa do próprio código.
+
+const AbaDifalEc87: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, identificacao, truncado, cadastroFiscal }) => {
+    const { gerando, rodar } = usePdf();
+    const ufEmpresa = String(cadastroFiscal?.uf || '').toUpperCase();
+    const det = useMemo(() => detalharDifalPorUf(docs, ufEmpresa, empresa.cnpj), [docs, ufEmpresa, empresa.cnpj]);
+    const fmtData = (iso: string) => (iso ? iso.split('-').reverse().join('/') : '—');
+    const fmtDoc = (d: string) => (d.length === 14 ? fmtCnpj(d)
+        : d.length === 11 ? d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : (d || '—'));
+    const ufsComFcp = det.grupos.filter(g => g.fcp > 0).map(g => g.uf);
+
+    const observacoes = [
+        'Valores lidos do grupo ICMSUFDest da própria NF-e (o app não recalcula). Mesma seleção do E300/E310 do SPED: '
+        + 'saída modelo 55, não cancelada, com diferencial declarado, agrupada pela UF do destinatário.',
+        'Cada UF é uma guia (E316). O FCP tem código de receita PRÓPRIO e sai em E316 separado — '
+        + (ufsComFcp.length ? `há FCP em: ${ufsComFcp.join(', ')}.` : 'nenhuma UF tem FCP nesta competência.'),
+        'Vencimento e código de receita por UF: SPED Fiscal → Ajustes E111 → "DIFAL EC 87/15 a recolher por UF de destino" '
+        + '(o botão "Puxar UFs desta competência" traz esta mesma lista).',
+        ...(ufEmpresa ? [] : ['UF da empresa não cadastrada: a operação interna (sem DIFAL) não pôde ser separada — confira o cadastro.']),
+        ...(det.semUf.length ? [`${det.semUf.length} nota(s) com DIFAL SEM UF do destinatário ficaram fora: nº ${det.semUf.slice(0, 10).join(', ')}${det.semUf.length > 10 ? '…' : ''}.`] : []),
+        ...(det.mesmaUf.length ? [`${det.mesmaUf.length} nota(s) declaram DIFAL com destinatário na própria UF (${ufEmpresa}) e ficaram fora: nº ${det.mesmaUf.slice(0, 10).join(', ')}${det.mesmaUf.length > 10 ? '…' : ''}.`] : []),
+        ...(truncado ? ['Lista cortada no recorte carregado: gere de novo com o acervo completo antes de conferir totais.'] : []),
+    ];
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `DIFAL/FCP EC 87/15 — Detalhamento das notas — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s) de destino`,
+        colunas: [
+            { titulo: 'UF', largura: 5 },
+            { titulo: 'Emissão', largura: 9 },
+            { titulo: 'Número', largura: 9 },
+            { titulo: 'Mod.', largura: 5 },
+            { titulo: 'CNPJ/CPF', largura: 14 },
+            { titulo: 'Razão Social', largura: 32 },
+            { titulo: 'Valor do DIFAL', largura: 12, alinhamento: 'direita' },
+            { titulo: 'Valor do FCP', largura: 12, alinhamento: 'direita' },
+        ],
+        linhas: det.grupos.flatMap(g => [
+            ...g.notas.map(n => [g.uf, fmtData(n.data), n.numero || '—', n.modelo, fmtDoc(n.cnpjCpf), n.nome || '—', n.difal, n.fcp]),
+            [g.uf, '', '', '', '', `TOTAL ${g.uf} — ${g.documentos} nota(s)`, g.difal, g.fcp],
+        ]),
+        totais: ['', '', '', '', '', `TOTAL GERAL — ${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s)`, det.totais.difal, det.totais.fcp],
+        identificacao,
+        observacoes,
+        fileName: `difal-ec87-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-center gap-3">
+                <BotaoPdf onClick={pdf} disabled={!det.grupos.length} gerando={gerando} />
+                <span className="text-xs text-slate-500">
+                    {det.grupos.length
+                        ? `${det.totais.documentos} nota(s) · ${det.grupos.length} UF(s) · DIFAL ${fmtBRL(det.totais.difal)} · FCP ${fmtBRL(det.totais.fcp)}`
+                        : 'Nenhuma saída com DIFAL da EC 87/15 nesta competência (ou o grupo ICMSUFDest não foi capturado — ♻️ Reler itens dos XMLs).'}
+                </span>
+            </div>
+            {observacoes.slice(1).map((o, i) => (
+                <p key={i} className="text-[11px] text-slate-500 mt-1">{o}</p>
+            ))}
+            {det.grupos.map(g => (
+                <div key={g.uf} className="mt-4 overflow-x-auto">
+                    <div className="flex items-center justify-between text-xs font-bold border-b border-slate-300 dark:border-slate-600 pb-1">
+                        <span>{g.uf} · {g.documentos} nota(s)</span>
+                        <span className="font-mono">DIFAL {fmtBRL(g.difal)} · FCP {fmtBRL(g.fcp)}{g.fcp > 0 ? ' · ⚠️ FCP: segunda guia' : ''}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500">
+                            <tr>
+                                <th className="text-left py-1">Emissão</th><th className="text-left">Número</th><th className="text-left">Mod.</th>
+                                <th className="text-left">CNPJ/CPF</th><th className="text-left">Razão Social</th>
+                                <th className="text-right">DIFAL</th><th className="text-right">FCP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {g.notas.map(n => (
+                                <tr key={n.chave || `${n.numero}-${n.data}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1">{fmtData(n.data)}</td>
+                                    <td className="font-mono">{n.numero || '—'}</td>
+                                    <td>{n.modelo}</td>
+                                    <td className="font-mono">{fmtDoc(n.cnpjCpf)}</td>
+                                    <td className="max-w-[260px] truncate" title={n.nome}>{n.nome || '—'}</td>
+                                    <td className="text-right font-mono">{fmtBRL(n.difal)}</td>
+                                    <td className="text-right font-mono">{fmtBRL(n.fcp)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ))}
         </Card>
     );
 };

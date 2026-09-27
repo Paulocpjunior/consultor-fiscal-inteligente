@@ -30,12 +30,15 @@ const RAIZ = join(__dirname, '..');
 const SEM_PERGUNTA_DE_CANCELAMENTO: Record<string, string> = {
     'sefaz-backend/backlog-entrada-routes.js': 'conta resumo × completa (a fila da manifestação), não valor',
     'sefaz-backend/cofre-checklist-routes.js': 'mede ADOÇÃO do cofre de saída — quem chegou, não quanto vale',
+    'sefaz-backend/cobertura-saida-routes.js': 'aptidão da saída mede o TRILHO por que a nota chegou (autXML/cofre), não valor — nota cancelada ainda prova a configuração (25/09)',
     'sefaz-backend/conferencia-chaves-routes.js': 'presença da chave; a 2ª consulta do arquivo TEM o trio',
     'sefaz-backend/fila-migracao-routes.js': 'diagnóstico da fila de migração (mesma exceção da varredura de cancelada)',
     'sefaz-backend/migracao-prontidao-routes.js': 'diagnóstico de prontidão',
     'sefaz-backend/nfse-sp-routes.js': 'NFS-e não tem evento de cancelamento — ali o campo é a fonte',
     'sefaz-backend/prova-captura-routes.js': 'prova de captura conta documentos; cancelada é uma das contagens',
     'sefaz-backend/sync-routes.js': 'backfill de participante/endereço — não decide imposto',
+    'sefaz-backend/health-consolidado-routes.js': 'saúde do acervo conta ESTRUTURA (chave, competência, direção, valor, empresa); cancelada é documento igual (26/09)',
+    'sefaz-backend/diagnostico-docs-fiscais-routes.js': 'diagnóstico de cadastro dos documentos conta estrutura e duplicata, não apura (26/09)',
 };
 
 function varrer(dir: string, out: string[] = []): string[] {

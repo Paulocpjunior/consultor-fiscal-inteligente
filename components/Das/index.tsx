@@ -12,6 +12,7 @@ import {
 import { getEmpresas as getEmpresasSimples } from '../../services/simplesNacionalService';
 import CobrancaModal from './CobrancaModal';
 import EnviosHistoricoModal from './EnviosHistoricoModal';
+import DeclararEnvioModal from './DeclararEnvioModal';
 import EmpresaSearchSelect from '../xml/EmpresaSearchSelect';
 import { paraEmpresaOptions } from '../../services/empresaOption';
 
@@ -37,6 +38,12 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [mostrarFormAvulso, setMostrarFormAvulso] = useState(false);
     // null = fechado; '' = aberto sem filtro; 'NNNNNNNNNNNNNN' = aberto filtrado por CNPJ
     const [historicoEnviosCnpj, setHistoricoEnviosCnpj] = useState<string | null>(null);
+    // 📤 "Já enviei por fora" (25/09): seleção em lote + o modal da declaração.
+    // O eixo Envio é separado do eixo Pagamento — declarar o envio nunca marca
+    // pagamento, e a tela não mistura os dois.
+    const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+    const [declararEnvio, setDeclararEnvio] = useState<DasEmitido[] | null>(null);
+    const [filtroEnvio, setFiltroEnvio] = useState<'' | 'nao-enviadas' | 'enviadas'>('');
 
     // Form avulso
     const [novoEmpresaId, setNovoEmpresaId] = useState('');
@@ -75,8 +82,35 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
     useEffect(() => { carregar(); }, [filtroStatus, filtroEmpresa]);
 
+    // Filtro de ENVIO é local: a lista já veio, e "não enviadas" é o que a
+    // pessoa seleciona para declarar em lote.
+    const docsVisiveis = useMemo(() => {
+        if (filtroEnvio === 'nao-enviadas') return docs.filter((d) => !d.ultimoEnvioCliente);
+        if (filtroEnvio === 'enviadas') return docs.filter((d) => Boolean(d.ultimoEnvioCliente));
+        return docs;
+    }, [docs, filtroEnvio]);
+    const naoEnviadas = useMemo(() => docs.filter((d) => !d.ultimoEnvioCliente).length, [docs]);
+
+    const alternarSelecao = (id: string) => setSelecionadas((prev) => {
+        const n = new Set(prev);
+        if (n.has(id)) n.delete(id); else n.add(id);
+        return n;
+    });
+    const todasVisiveisSelecionadas = docsVisiveis.length > 0 && docsVisiveis.every((d) => selecionadas.has(d.id));
+    const alternarTodasVisiveis = () => setSelecionadas((prev) => {
+        if (todasVisiveisSelecionadas) {
+            const n = new Set(prev);
+            docsVisiveis.forEach((d) => n.delete(d.id));
+            return n;
+        }
+        return new Set([...prev, ...docsVisiveis.map((d) => d.id)]);
+    });
+    const guiasSelecionadas = useMemo(() => docs.filter((d) => selecionadas.has(d.id)), [docs, selecionadas]);
+
     const valorEmCentavos = (valor: number): number => Math.round((Number(valor) || 0) * 100);
     const cnpjLimpo = (cnpj: string): string => String(cnpj || '').replace(/\D/g, '');
+
+    const formatDataDia = (iso: string | null | undefined): string => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
 
     const formatDataEnvio = (iso: string, curto = false): string => {
         try {
@@ -375,9 +409,26 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         rotuloVazio="Todas as empresas"
                     />
                 </div>
-                {(filtroStatus || filtroEmpresa) && (
+                <div className="flex gap-1 text-xs" role="group" aria-label="Filtro de envio">
+                    {([
+                        ['', 'Todas'],
+                        ['nao-enviadas', `Não enviadas (${naoEnviadas})`],
+                        ['enviadas', `Enviadas (${docs.length - naoEnviadas})`],
+                    ] as const).map(([valor, rotulo]) => (
+                        <button
+                            key={valor || 'todas'}
+                            onClick={() => setFiltroEnvio(valor)}
+                            className={`px-2 py-1 rounded border ${filtroEnvio === valor
+                                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 font-bold'
+                                : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}
+                        >
+                            {rotulo}
+                        </button>
+                    ))}
+                </div>
+                {(filtroStatus || filtroEmpresa || filtroEnvio) && (
                     <button
-                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); setEmpresaEscolhida(''); }}
+                        onClick={() => { setFiltroStatus(''); setFiltroEmpresa(''); setEmpresaEscolhida(''); setFiltroEnvio(''); }}
                         className="text-xs text-slate-500 hover:text-slate-700 underline"
                     >
                         Limpar filtros ✕
@@ -385,16 +436,43 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 )}
             </div>
 
+            {/* Barra do lote: aparece só com seleção. */}
+            {selecionadas.size > 0 && (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-sm">
+                    <span className="font-semibold">{selecionadas.size} guia(s) selecionada(s)</span>
+                    <button
+                        onClick={() => setDeclararEnvio(guiasSelecionadas)}
+                        className="btn-press px-3 py-1.5 bg-slate-700 text-white font-bold rounded-lg hover:bg-slate-800 text-xs"
+                        title="Registra que estas guias já foram enviadas ao cliente por fora do app — com meio, data e quem. Não marca pagamento."
+                    >
+                        📤 Já enviei por fora ({selecionadas.size})
+                    </button>
+                    <button onClick={() => setSelecionadas(new Set())} className="text-xs text-slate-500 hover:text-slate-700 underline">
+                        Limpar seleção
+                    </button>
+                </div>
+            )}
+
             {/* Tabela */}
             {loading ? (
                 <div className="text-center py-12 text-slate-500">Carregando...</div>
-            ) : docs.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">Nenhum DAS encontrado.</div>
+            ) : docsVisiveis.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                    {docs.length === 0 ? 'Nenhum DAS encontrado.' : `Nenhuma guia ${filtroEnvio === 'enviadas' ? 'enviada' : 'sem envio'} nesta lista (${docs.length} no total).`}
+                </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-900/50 text-left">
                             <tr>
+                                <th className="px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Selecionar todas as guias visíveis"
+                                        checked={todasVisiveisSelecionadas}
+                                        onChange={alternarTodasVisiveis}
+                                    />
+                                </th>
                                 <th className="px-4 py-2 font-medium">Empresa</th>
                                 <th className="px-4 py-2 font-medium">Competência</th>
                                 <th className="px-4 py-2 font-medium">Tipo</th>
@@ -405,12 +483,20 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {docs.map(d => (
+                            {docsVisiveis.map(d => (
                                 <tr
                                     key={d.id}
                                     onClick={() => setSelecionado(d)}
-                                    className="border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                                    className={`border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 ${selecionadas.has(d.id) ? 'bg-sky-50/60 dark:bg-sky-900/10' : ''}`}
                                 >
+                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                            type="checkbox"
+                                            aria-label={`Selecionar ${d.empresaNome} ${d.competencia}`}
+                                            checked={selecionadas.has(d.id)}
+                                            onChange={() => alternarSelecao(d.id)}
+                                        />
+                                    </td>
                                     <td className="px-4 py-2">{d.empresaNome}</td>
                                     <td className="px-4 py-2 font-mono text-xs">{d.competencia}</td>
                                     <td className="px-4 py-2">
@@ -442,7 +528,14 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         </span>
                                     </td>
                                     <td className="px-4 py-2">
-                                        {d.ultimoEnvioCliente ? (
+                                        {d.ultimoEnvioCliente?.canal === 'fora-do-app' ? (
+                                            <span
+                                                className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-bold whitespace-nowrap"
+                                                title={`Envio DECLARADO por ${d.ultimoEnvioCliente.declaradoPor || d.ultimoEnvioCliente.enviadoPor || '—'} — ${d.ultimoEnvioCliente.meioLabel || 'meio não informado'} em ${formatDataDia(d.ultimoEnvioCliente.quando)}. O app não enviou esta guia e não tem prova de entrega.`}
+                                            >
+                                                📤 Declarado {formatDataDia(d.ultimoEnvioCliente.quando)}
+                                            </span>
+                                        ) : d.ultimoEnvioCliente ? (
                                             <span
                                                 className="px-2 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 text-[10px] font-bold whitespace-nowrap"
                                                 title={`Enviado para ${d.ultimoEnvioCliente.para} em ${formatDataEnvio(d.ultimoEnvioCliente.enviadoEm)}${d.ultimoEnvioCliente.enviadoPor ? ` por ${d.ultimoEnvioCliente.enviadoPor}` : ''}${d.ultimoEnvioCliente.anexouPdf ? ' (PDF anexado)' : ''}`}
@@ -572,7 +665,22 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
 
                             <div>
                                 <div className="text-xs text-slate-500 mb-1">Envio ao cliente</div>
-                                {selecionado.ultimoEnvioCliente ? (
+                                {selecionado.ultimoEnvioCliente?.canal === 'fora-do-app' ? (
+                                    <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-1">
+                                        <div>
+                                            📤 Envio <strong>declarado</strong> por {selecionado.ultimoEnvioCliente.declaradoPor || selecionado.ultimoEnvioCliente.enviadoPor || '—'} —{' '}
+                                            {selecionado.ultimoEnvioCliente.meioLabel || 'meio não informado'} em {formatDataDia(selecionado.ultimoEnvioCliente.quando)}.
+                                            {selecionado.ultimoEnvioCliente.comoFoi ? <> "{selecionado.ultimoEnvioCliente.comoFoi}".</> : null}
+                                            {' '}O app não enviou esta guia e não tem prova de entrega.
+                                        </div>
+                                        <button
+                                            onClick={() => setHistoricoEnviosCnpj(cnpjLimpo(selecionado.empresaCnpj))}
+                                            className="underline font-bold hover:text-amber-700"
+                                        >
+                                            Ver histórico completo desta empresa
+                                        </button>
+                                    </div>
+                                ) : selecionado.ultimoEnvioCliente ? (
                                     <div className="rounded-lg border border-sky-200 dark:border-sky-900/60 bg-sky-50 dark:bg-sky-900/20 px-3 py-2 text-xs text-sky-800 dark:text-sky-200 space-y-1">
                                         <div>
                                             ✉ Enviado para <strong className="font-mono">{selecionado.ultimoEnvioCliente.para}</strong> em {formatDataEnvio(selecionado.ultimoEnvioCliente.enviadoEm)}
@@ -590,8 +698,15 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-slate-500">
-                                        Ainda não enviado ao cliente por e-mail.
+                                    <div className="text-sm bg-slate-50 dark:bg-slate-900/40 px-3 py-2 rounded text-slate-500 flex flex-wrap items-center justify-between gap-2">
+                                        <span>Ainda não enviado ao cliente por e-mail.</span>
+                                        <button
+                                            onClick={() => setDeclararEnvio([selecionado])}
+                                            className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200"
+                                            title="Registra que esta guia já foi enviada por fora do app — com meio, data e quem. Não marca pagamento."
+                                        >
+                                            📤 Já enviei esta guia por fora
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -637,6 +752,20 @@ const DasDashboard: React.FC<Props> = ({ currentUser, onShowToast }) => {
                     onClose={() => setCobrancaDas(null)}
                     onShowToast={(m) => onShowToast?.(m)}
                     onEnviado={() => { carregar(); setSelecionado(null); }}
+                />
+            )}
+
+            {declararEnvio && (
+                <DeclararEnvioModal
+                    guias={declararEnvio}
+                    currentUser={currentUser}
+                    onClose={() => setDeclararEnvio(null)}
+                    onDeclarado={(r) => {
+                        setSelecionadas(new Set());
+                        setSelecionado(null);
+                        onShowToast?.(r.resumo);
+                        carregar();
+                    }}
                 />
             )}
 

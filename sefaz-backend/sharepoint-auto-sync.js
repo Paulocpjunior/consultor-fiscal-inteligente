@@ -645,8 +645,11 @@ router.post('/auto-sync', async (req, res) => {
         // resolve o caminho, e 416 linhas de "pasta não encontrada" mandariam
         // criar 416 pastas que talvez já existam.
         let pastasDeEmpresas;
+        let pastasMeta = { total: null, paginas: null };
         try {
-            pastasDeEmpresas = await listarPastasDeEmpresas();
+            const lidas = await listarPastasDeEmpresas({ comMeta: true });
+            pastasDeEmpresas = lidas.nomes;
+            pastasMeta = { total: lidas.total, paginas: lidas.paginas };
         } catch (e) {
             const motivo = `Não foi possível listar as pastas de ${PASTA_RAIZ} no SharePoint: ${e.message}`;
             console.error(`[auto-sync] abortado: ${motivo}`);
@@ -705,6 +708,10 @@ router.post('/auto-sync', async (req, res) => {
             totalNovos, totalDup, totalErros,
             totalSemPasta, totalLimite,
             empresasComConfigIncompleta,
+            // 📏 Quantas pastas de Empresas a rodada LEU (e em quantas páginas):
+            // é o número que se compara com o SharePoint quando "N sem pasta" parece alto.
+            pastasLidas: pastasMeta.total,
+            pastasPaginas: pastasMeta.paginas,
             erroFatal: null,
             results,
         });
@@ -724,6 +731,8 @@ router.post('/auto-sync', async (req, res) => {
                 semPasta: totalSemPasta, limite: totalLimite,
             }),
             empresasComConfigIncompleta,
+            pastasLidas: pastasMeta.total,
+            pastasPaginas: pastasMeta.paginas,
             results,
         });
     } catch (err) {

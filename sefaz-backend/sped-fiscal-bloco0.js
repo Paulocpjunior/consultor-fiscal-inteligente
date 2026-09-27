@@ -39,6 +39,7 @@ import {
 // custado a recusa do COD_MUN, corrigida em metade delas.
 import {
     build0150, build0190, avisoParticipantesSemMunicipio,
+    avisoParticipantesSemEndereco,
 } from './sped-bloco0-cadastros.js';
 
 const VERSAO_LEIAUTE = '020';  // Leiaute 020 vigente desde 01/01/2026
@@ -134,6 +135,11 @@ function buildBloco0(dados) {
     }
     const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
+    // O campo 10 (ENDERECO) é obrigatório SEM condição — e a recusa dele veio
+    // 732 vezes num arquivo só (VINATEX, 18/09). Aviso próprio porque a AÇÃO é
+    // outra: ali é o ♻️ que relê o XML, aqui é o cadastro do participante.
+    const avisoEnd = avisoParticipantesSemEndereco(dados.participantes);
+    if (avisoEnd && Array.isArray(dados.warnings)) dados.warnings.push(avisoEnd);
 
     // ── 0190 — Unidades de Medida ───────────────────────────────────────
     for (const u of dados.unidades || []) {

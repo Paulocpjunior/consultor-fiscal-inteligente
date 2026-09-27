@@ -35,6 +35,8 @@ import {
 } from '../services/empresaStatusCapturaService';
 import { captureFromSefaz, type DfeDocProcessado } from '../services/dfeCaptureService';
 import EmpresaDadosFiscaisModal from './EmpresaDadosFiscaisModal';
+import { usePaginaLocal } from './hooks/usePaginaLocal';
+import MostrarMais from './MostrarMais';
 import type { User } from '../types';
 
 interface Props {
@@ -418,6 +420,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
         };
         return data.empresas.filter(e => passaStatus(e) && passaColaborador(e));
     }, [data, filtro, busca, filtroColaborador]);
+    const paginaEmpresas = usePaginaLocal(empresasFiltradas, undefined, 'empresas');
 
     // Colaboradores distintos presentes na carteira (para o dropdown de filtro).
     const colaboradores = useMemo(() => {
@@ -753,7 +756,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {empresasFiltradas.map(e => {
+                        {paginaEmpresas.visiveis.map(e => {
                             const dias = diasAteVencimento(e.certVenceEm);
                             const certCor =
                                 e.tipoCert === 'nenhum' ? 'bg-red-100 text-red-800 border-red-300' :
@@ -1088,6 +1091,7 @@ const EmpresasStatusCapturaPanel: React.FC<Props> = ({ currentUser }) => {
                         })}
                     </tbody>
                 </table>
+                <MostrarMais pagina={paginaEmpresas} />
                 {empresasFiltradas.length === 0 && (
                     <div className="p-6 text-center text-gray-500 text-sm">Nenhuma empresa com esse filtro.</div>
                 )}

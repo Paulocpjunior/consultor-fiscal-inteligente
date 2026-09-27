@@ -41,7 +41,7 @@
 import { validarCnpj } from './documento-dv.js';
 import {
     conferirCodModContraChave, conferirDtDocNoPeriodo, conferirContador0100, conferirCodPartDoC100, POS_DT_FIN_CONTRIBUICOES,
-    conferirPeriodoDoArquivo as periodoDoArquivoComum,
+    conferirPeriodoDoArquivo as periodoDoArquivoComum, conferirEnderecoDo0150, conferirNumDocContraChave,
 } from './sped-c100-regras-comuns.js';
 // A contagem oficial dos 184 registros lidos por inteiro no Guia 1.35 — gerada
 // por `scripts/extrair-leiaute-contrib.mjs`, não escrita à mão.
@@ -1609,7 +1609,14 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // (no ICMS/IPI é o 5). Carimbar a posição do vizinho faria a regra ler
         // o nome da empresa como se fosse data.
         ...conferirCodModContraChave(linhas),
+        // NUM_DOC vazio/divergente da chave — os dez primeiros campos do C100 e
+        // do D100 são os mesmos nas duas famílias (18/09, EDUARDO GUERRA).
+        ...conferirNumDocContraChave(linhas),
         ...conferirCodPartDoC100(linhas),
+        // 🚨 O 0150 é o MESMO registro nas duas famílias, e o campo 10
+        // (ENDERECO) é obrigatório SEM condição — 732 recusas num arquivo só
+        // (VINATEX, 18/09). Deixá-la numa família é a meia trava de sempre.
+        ...conferirEnderecoDo0150(linhas),
         ...conferirDtDocNoPeriodo(linhas, POS_DT_FIN_CONTRIBUICOES),
         ...conferirConsolidacao1900(linhas).erros,
         ...conferirM205ComValorZero(linhas).erros,

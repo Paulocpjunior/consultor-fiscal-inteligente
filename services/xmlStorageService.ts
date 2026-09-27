@@ -8,8 +8,6 @@
 
 import {
     ref as storageRef,
-    uploadString,
-    getDownloadURL,
     deleteObject,
 } from 'firebase/storage';
 import { storage, isFirebaseStorageConfigured } from './firebaseConfig';
@@ -36,6 +34,20 @@ export interface UploadResult {
     storageUrl: string;
 }
 
+export async function uploadArquivoOriginal(empresaId: string, path: string, file: Blob): Promise<UploadResult> {
+    const { getAuth } = await import('firebase/auth');
+    const user = getAuth().currentUser;
+    if (!user) throw new XmlStorageError('Sessão expirada. Entre novamente.');
+    const form = new FormData();
+    form.append('empresaId', empresaId); form.append('storagePath', path); form.append('arquivo', file, 'original');
+    const response = await fetch('/api/admin/sefaz/arquivo-original-upload', {
+        method: 'POST', headers: { Authorization: `Bearer ${await user.getIdToken()}` }, body: form,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new XmlStorageError(result.error || 'Não foi possível guardar o arquivo original.');
+    return result;
+}
+
 /** Faz upload do XML original como string UTF-8. */
 export async function uploadXml(
     empresaId: string,
@@ -43,16 +55,23 @@ export async function uploadXml(
     xmlText: string,
     fallbackName?: string,
 ): Promise<UploadResult> {
-    if (!isFirebaseStorageConfigured || !storage) {
-        throw new XmlStorageError('Firebase Storage não está configurado.');
-    }
     const path = buildStoragePath(empresaId, chave, fallbackName);
-    const ref = storageRef(storage, path);
-    const snap = await uploadString(ref, xmlText, 'raw', {
-        contentType: 'application/xml',
+    return uploadArquivoOriginal(empresaId, path, new Blob([xmlText], { type: 'application/xml' }));
+}
+
+export async function baixarArquivoOriginal(documentoId: string, pdf = false): Promise<void> {
+    const { getAuth } = await import('firebase/auth');
+    const user = getAuth().currentUser;
+    if (!user) throw new XmlStorageError('Sessão expirada. Entre novamente.');
+    const response = await fetch(`/api/admin/sefaz/arquivo-original/${encodeURIComponent(documentoId)}`, {
+        headers: { Authorization: `Bearer ${await user.getIdToken()}` },
     });
-    const url = await getDownloadURL(snap.ref);
-    return { storagePath: path, storageUrl: url };
+    if (!response.ok) throw new XmlStorageError((await response.json()).error || 'Falha ao baixar arquivo');
+    const url = URL.createObjectURL(await response.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = `documento.${pdf ? 'pdf' : 'xml'}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**

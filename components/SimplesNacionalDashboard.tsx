@@ -8,6 +8,8 @@ import EmpresaSearchSelect from './xml/EmpresaSearchSelect';
 import { paraEmpresaOption } from '../services/empresaOption';
 import SimplesBaseVarreduraModal from './SimplesBaseVarreduraModal';
 import { empresaBateBusca, prefixoCodCliente } from '../services/buscaEmpresa';
+import { usePaginaLocal } from './hooks/usePaginaLocal';
+import MostrarMais from './MostrarMais';
 
 interface SimplesNacionalDashboardProps {
     empresas: SimplesNacionalEmpresa[];
@@ -111,6 +113,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
         () => empresasComResumo.filter(e => empresaBateBusca(busca, e)),
         [empresasComResumo, busca],
     );
+    const paginaEmpresas = usePaginaLocal(empresasFiltradas, undefined, 'empresas');
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -206,7 +209,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                 </tr>
                             </thead>
                             <tbody>
-                                {empresasFiltradas.map(e => (
+                                {paginaEmpresas.visiveis.map(e => (
                                     <tr key={e.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600/20">
                                         <td className="px-6 py-4 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                                             {prefixoCodCliente(e) && (
@@ -343,6 +346,7 @@ const SimplesNacionalDashboard: React.FC<SimplesNacionalDashboardProps> = ({ emp
                                 ))}
                             </tbody>
                         </table>
+                        <MostrarMais pagina={paginaEmpresas} />
                     </div>
                 </div>
             ) : (

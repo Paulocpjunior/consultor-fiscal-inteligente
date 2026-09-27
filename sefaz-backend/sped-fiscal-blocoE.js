@@ -32,6 +32,10 @@ import { montarLinhasE111 } from './sped-ajustes-apuracao.js';
 // tela prometer um imposto e o arquivo declarar outro.
 import { apurarIcmsProprio } from './apuracao-icms-raicms.js';
 import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
+// DIFAL de SAÍDA (EC 87/15) — E300/E310/E316, por UF de DESTINO. É o TERCEIRO
+// desenho de DIFAL da casa e o único que sai em registro próprio: ele não toca
+// o E110 (mata-burro de 14/09 — a régua de um não serve para o outro).
+import { montarLinhasDifalBlocoE, avisoDifalNaoCapturado } from './difal-ec87-saida.js';
 import { montarLinhasE510 } from './sped-bloco-ipi-e510.js';
 import { avisosDeSaldoAnterior } from './saldo-anterior-apuracao.js';
 // Régua ÚNICA: o modelo vem dela (o campo cru não existe em nota capturada) e
@@ -276,6 +280,48 @@ export function buildBlocoE(dados) {
                     + 'antes de transmitir.',
                 );
             }
+        }
+    }
+
+    // ── DIFAL DE SAÍDA — EC 87/2015 (E300/E310/E316) ──────────────────────
+    //
+    // 🚨 18/09, Paulo, VINATEX: *"tem DIFERENCIAL DE ALÍQUOTA NAS SAÍDAS,
+    // precisa ajustar isso também, que vai no SPED"*. O relatório do e-Fiscal
+    // dela lista o DIFAL venda a venda por UF (BA 323,29 + FCP 44,54, CE
+    // 162,06, MG 1.428,99, MS 160,84) e o CFI não declarava NADA — nem C101,
+    // nem E300/E310/E316. E o pior: **ausência de registro o PVA não acusa**,
+    // então o arquivo era aceito afirmando que a empresa não deve diferencial.
+    //
+    // ⚠️ A ORDEM É DO LEIAUTE: E300 vem DEPOIS do E250 (ST) e ANTES do E500
+    // (IPI). O PVA lê a ordem — bloco fora de sequência não é importado.
+    //
+    // ⚠️ Só UF de DESTINO: *"A partir de janeiro de 2019, deixa de ser
+    // obrigatória a apresentação do registro E300 para a UF de origem"*
+    // (Guia 3.2.3). É o que o relatório dela confirma — SP não está na lista.
+    if (regime === 'lucro') {
+        const difal = montarLinhasDifalBlocoE({
+            notas: dados.notas,
+            ufEmpresa: uf,
+            dtIni: fmt.formatCompetenciaInicio(dados.competenciaInicio),
+            dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
+            mesRef: formatMesRef(dados.competenciaFim),
+            obrigacoesPorUf: dados.obrigacoesDifalEc87PorUf || {},
+            ajustes: dados.ajustesApuracao,
+        });
+        // O módulo devolve ARRAYS de campos — quem forma a linha é o
+        // `buildLine`, igual ao E111 e ao ST. Empurrar string crua foi o que
+        // grudou o bloco G inteiro numa linha só (29/08).
+        for (const campos of difal.linhas) linhas.push(fmt.buildLine(campos));
+        if (Array.isArray(dados.warnings)) dados.warnings.push(...difal.avisos);
+
+        // 🚨 O SILÊNCIO É O DEFEITO CARO, e ele tem data: a captura só passou a
+        // ler o grupo `ICMSUFDest` em 18/09. Nota capturada antes disso não o
+        // tem gravado, então a competência sairia SEM o bloco — e o PVA aceita.
+        // A prova de que há algo a declarar é o CFOP 6107/6108 (venda a NÃO
+        // contribuinte), que é o mesmo sinal que o painel 🚦 usa desde 05/08.
+        if (Array.isArray(dados.warnings)) {
+            const aviso = avisoDifalNaoCapturado(dados.notas, uf);
+            if (aviso) dados.warnings.push(aviso);
         }
     }
 

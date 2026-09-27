@@ -1,6 +1,8 @@
 import { User, UserRole, AccessLog } from '../types';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
+/** Teto de leitura de `users` (dezenas de contas na casa). */
+const TETO_USERS = 2000;
 // 🚨 A "ROTA SEM BOTÃO" DO SENTRY (achado da auditoria de 04/09): `setUser`
 // existia em services/sentry.ts desde o PR #56 e NINGUÉM a chamava. O Sentry
 // recebia todo erro do app e nenhum chegava identificado — quando um aparecia,
@@ -280,7 +282,7 @@ export const login = async (
 export const getAllUsers = async (): Promise<User[]> => {
     if (isFirebaseConfigured && db) {
         try {
-            const snaps = await fetchAllDocs('users');
+            const snaps = await fetchAllDocs('users', [], { maxDocs: TETO_USERS });
             return snaps.map(d => d.data() as User);
         } catch (e: any) {
             if (e.code === 'permission-denied') {

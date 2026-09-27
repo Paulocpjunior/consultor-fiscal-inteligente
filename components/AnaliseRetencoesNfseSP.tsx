@@ -22,6 +22,8 @@ import {
 } from '../services/retencoesNfseAnalyzer';
 import { getEmpresas as getSimplesEmpresas } from '../services/simplesNacionalService';
 import type { User } from '../types';
+import { usePaginaLocal } from './hooks/usePaginaLocal';
+import MostrarMais from './MostrarMais';
 
 type LinhaAnalisada = LinhaNfseCsv & { analise: AnaliseRetencoes };
 
@@ -167,6 +169,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
         if (filtro === 'inconsistencias') return linhas.filter(l => (l.analise.inconsistencias?.length || 0) > 0);
         return linhas.filter(l => !l.analise.temAlgumaRetencao);
     }, [linhas, filtro]);
+    const paginaLinhas = usePaginaLocal(linhasFiltradas, undefined, 'notas');
 
     const exportarPDF = async () => {
         if (linhas.length === 0) return;
@@ -410,7 +413,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {linhasFiltradas.map((l, i) => {
+                                    {paginaLinhas.visiveis.map((l, i) => {
                                         const contraparte = l.direcao === 'Emitida' ? l.tomadorNome : l.prestadorNome;
                                         return (
                                             <tr key={`${l.numero}-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -471,6 +474,7 @@ const AnaliseRetencoesNfseSP: React.FC<Props> = ({ currentUser }) => {
                                     })}
                                 </tbody>
                             </table>
+                            <MostrarMais pagina={paginaLinhas} />
                         </div>
                         {linhasFiltradas.length === 0 && (
                             <div className="p-4 text-center text-sm text-gray-500">

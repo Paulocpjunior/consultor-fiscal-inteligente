@@ -186,19 +186,23 @@ export function lerNfseNacional(xml) {
 
     if (servico === null) lacunas.push('valor do serviço não encontrado (<vServ>)');
 
-    // 🚩 RETENÇÕES FEDERAIS FICAM DE FORA, NOMEADAS — e isso é decisão.
-    //
-    // O bloco `<tribFed>` do leiaute nacional (IRRF, CSLL, PIS/COFINS) NÃO é
-    // emitido pelo `nfse-nacional-dps-builder.js` deste repo, então não há
-    // aqui NENHUMA prova dos nomes das tags dele. Chutá-los produziria uma de
-    // duas coisas, e as duas são piores que a ausência: valor lido do campo
-    // errado, ou ZERO com cara de "não houve retenção" — que é justamente o
-    // que o Relatório de Retenções e o R-4020 leem para declarar.
-    //
-    // Por isso o documento nasce com `retencoesFederaisGravadas: false`, que é
-    // o mesmo carimbo que o app já usa para dizer *"ausente ≠ zero retido"*.
-    // Fecha com um XML nacional REAL que tenha retenção.
-    lacunas.push('retenções federais (IRRF/CSLL/PIS/COFINS) não lidas — leiaute do <tribFed> não provado neste repo');
+    // NT 007/2026: vRetCSLL agrega as contribuicoes indicadas por tpRetPisCofins.
+    // vPis/vCofins sao apuracao propria, nao parcelas adicionais de retencao.
+    const tribFed = tag(txt, 'tribFed');
+    const tipoContrib = tribFed ? tag(tribFed, 'tpRetPisCofins') : null;
+    const contribuicoes = tribFed ? numero(tag(tribFed, 'vRetCSLL')) : null;
+    const tipoConhecido = ['0', '3', '4', '5', '6', '7', '8', '9'].includes(tipoContrib);
+    const retencoesLidas = !!tribFed && tipoConhecido && (tipoContrib === '0' ? (contribuicoes === null || contribuicoes === 0) : contribuicoes !== null);
+    const federais = retencoesLidas ? {
+        ir: numero(tag(tribFed, 'vRetIRRF')) ?? 0,
+        inss: numero(tag(tribFed, 'vRetCP')) ?? 0,
+        pis: tipoContrib === '5' ? contribuicoes : 0,
+        cofins: tipoContrib === '6' ? contribuicoes : 0,
+        csll: ['3', '4', '7', '8', '9'].includes(tipoContrib) ? contribuicoes : 0,
+        pccAgregadoDeclarado: ['3', '4', '7', '9'].includes(tipoContrib),
+        tipoRetencaoContribuicoes: tipoContrib,
+    } : {};
+    if (!retencoesLidas) lacunas.push('retenções federais: bloco tribFed ausente ou tipo de contribuicoes ainda nao conferivel');
 
     return {
         chave,
@@ -218,7 +222,8 @@ export function lerNfseNacional(xml) {
             // vira `null`, que o leitor distingue de "a nota diz que não".
             issRetido: tpRetIss === null || tpRetIss === '' ? null : tpRetIss === '1',
             liquido,
-            retencoesFederaisGravadas: false,
+            retencoesFederaisGravadas: retencoesLidas,
+            ...federais,
         },
         lacunas,
     };
