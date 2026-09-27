@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<!-- PAR OBRIGATÓRIO: este guia e a fonte em docs/ se atualizam JUNTOS.
+     `guiaParDuplo` barra o build se as revisões divergirem. -->
+<meta name="guia-id" content="dere-planilha">
+<meta name="guia-revisao" content="2026-09-27">
+<title>Guia do Colaborador — DeRE: testar o plano de contas e o balancete · SP Assessoria Contábil</title>
+<style>
+    :root {
+        --azul: #0E3BFA; --azul-escuro: #091D8D;
+        --tinta: #1e293b; --cinza: #64748b; --borda: #e2e8f0;
+        --verde: #059669; --vermelho: #dc2626; --ambar: #b45309;
+        --fundo-suave: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0; padding: 0; color: var(--tinta); background: var(--fundo-suave);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6; font-size: 16px;
+    }
+    header {
+        background: linear-gradient(135deg, var(--azul-escuro), var(--azul));
+        color: #fff; padding: 28px 20px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 4px; }
+    header .wrap { display: flex; align-items: center; gap: 16px; }
+    header img { height: 52px; background: #fff; border-radius: 10px; padding: 6px; }
+    header h1 { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+    header p { margin: 4px 0 0; font-size: .85rem; opacity: .9; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+    section {
+        background: #fff; border: 1px solid var(--borda); border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 18px;
+    }
+    h2 { font-size: 1.15rem; color: var(--azul-escuro); margin: 0 0 10px; }
+    h3 { font-size: 1rem; margin: 18px 0 6px; }
+    .onde {
+        background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;
+        padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
+    }
+    .quando {
+        border-left: 4px solid var(--azul); background: var(--fundo-suave);
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    .alerta {
+        border-left: 4px solid var(--ambar); background: #fffbeb;
+        padding: 8px 14px; border-radius: 0 8px 8px 0; font-size: .92rem; margin: 10px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--borda); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: var(--fundo-suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--cinza); }
+    .tabela-rolagem { overflow-x: auto; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+    pre {
+        background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    }
+    ul, ol { padding-left: 22px; }
+    li { margin: 4px 0; }
+    .selo { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .selo-verde { background: #ecfdf5; color: var(--verde); }
+    .selo-vermelho { background: #fef2f2; color: var(--vermelho); }
+    .selo-ambar { background: #fffbeb; color: var(--ambar); }
+    footer { text-align: center; font-size: .8rem; color: var(--cinza); padding: 0 20px 40px; }
+    strong { color: var(--azul-escuro); }
+    @media print {
+        body { background: #fff; }
+        section { border: none; padding: 8px 0; break-inside: avoid; }
+        header { background: var(--azul-escuro); -webkit-print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+<header>
+    <div class="wrap">
+        <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
+        <div>
+            <h1>Guia do Colaborador — DeRE: plano de contas e balancete</h1>
+            <p>Como testar a prévia do D-1011 e do D-1101, o que é resultado certo e o que pedir ao contador · Consultor Fiscal Inteligente</p>
+        </div>
+    </div>
+</header>
+<main>
+
+<section>
+    <h2>📌 O que você precisa saber antes de tudo</h2>
+    <div class="quando"><strong>A DeRE declara PLANO DE CONTAS e BALANCETE, não retenções.</strong>
+    O D-1011 é o plano de contas comentado (PGCC) e o D-1101 é o balancete do mês. O CFI monta os dois
+    a partir da <strong>planilha que a contabilidade exporta</strong> e confere o XML contra o schema
+    oficial da Receita. <strong>Nada é transmitido</strong> — é prévia.</div>
+    <p>A planilha é lida no <strong>seu navegador</strong>. Só as linhas vão ao servidor, e ele
+    <strong>não guarda</strong> nada: sai o XML, a conferência e a lista do que faltou.</p>
+    <div class="alerta"><strong>O bloco é só para admin.</strong> A tela vive em
+    <strong>⚙️ Config Admin → 🏦 DeRE</strong>; quem não tem perfil de administrador não a vê.</div>
+</section>
+
+<section>
+    <h2>🧭 Passo a passo do teste</h2>
+    <div class="onde">📍 <strong>Onde:</strong> ⚙️ Config Admin → 🏦 DeRE → <strong>Consultar</strong> → rolar até
+    <strong>📥 Prévia do D-1011 (PGCC) e do D-1101 (Balancete)</strong>.</div>
+    <ol>
+        <li>Escolha a <strong>declaração</strong> (a raiz do CNPJ da empresa).</li>
+        <li>Plano referencial: <strong>2 — ANS</strong> para operadora de plano de saúde. Para outros regimes, quem
+            afirma é o contador (banco → COSIF, seguradora → SUSEP, demais → SPED).</li>
+        <li>Encerramento das contas de resultado: comece por <strong>A — Anual</strong>. O balancete confere a escolha.</li>
+        <li>Início da validade do PGCC: <strong>01/10/2026</strong> (1ª competência da DeRE).</li>
+        <li>Suba a planilha do <strong>plano de contas</strong> (colunas Conta Contábil · Descrição · Conta de Lançamento S/N ·
+            Tipo de Conta C/D) e a do <strong>balancete analítico</strong> (Código · Conta · Saldo Inicial · Débitos · Créditos ·
+            Saldo Final). Deixe a competência em branco: o título do balancete diz o mês.</li>
+        <li>Marque a caixa da <strong>hipótese da conta referencial</strong> (1º segmento do código) e clique em
+            <strong>👁 Prévia do D-1011 + D-1101</strong>.</li>
+    </ol>
+</section>
+
+<section>
+    <h2>✅ O que é resultado certo</h2>
+    <div class="tabela-rolagem">
+    <table>
+        <tr><th>Teste</th><th>Como fazer</th><th>Resultado esperado</th></tr>
+        <tr><td>1. Caminho feliz</td><td>Anual + hipótese marcada</td>
+            <td><span class="selo selo-verde">✓ XML conferido</span> nos dois eventos. Avisos com CONTAGEM: contas analíticas sem código de
+            tributação, contas fora do PGCC (compensação e apuração), sintéticas fora do balancete.</td></tr>
+        <tr><td>2. Frequência errada</td><td>Trocar para <strong>M — Mensal</strong> e gerar de novo</td>
+            <td><span class="selo selo-vermelho">D-1101 RECUSADO</span> dizendo quantas contas de resultado têm saldo inicial diferente
+            de zero e quais frequências o balancete admite. <strong>Se passar, é defeito.</strong></td></tr>
+        <tr><td>3. Sem conta referencial</td><td>Desmarcar a hipótese e gerar</td>
+            <td><span class="selo selo-vermelho">D-1011 RECUSADO</span> dizendo quantas contas estão sem conta referencial. O campo é
+            obrigatório em toda conta e a planilha não o traz.</td></tr>
+    </table>
+    </div>
+    <div class="alerta"><strong>Se algo sair diferente:</strong> mande o <strong>print inteiro</strong> da tela, com a versão do app
+    (rodapé → 📗 Como conferir uma entrega) e o número do teste. Não descreva o problema, mande o print.</div>
+</section>
+
+<section>
+    <h2>🧮 Por que o app recusa em vez de completar</h2>
+    <ul>
+        <li><strong>Conta referencial</strong> ({cCtaRef}): é o código do Plano de Contas Padrão da ANS de cada conta. A Receita chama
+            a tabela de "referência externa" — ela não está no leiaute. O app não adivinha código de tabela oficial; a hipótese do
+            1º segmento sai <strong>carimbada como hipótese</strong> para o contador conferir.</li>
+        <li><strong>Código de tributação</strong> ({codTrib}, Tabela 11): diz à Receita qual regra de IBS/CBS vale para a conta. Sem ele o
+            PGCC é aceito com aviso, mas os eventos condicionais (D-1106, D-1121, D-2101) não se detectam e a base de apuração sai zero.</li>
+        <li><strong>Frequência de encerramento</strong>: se as contas de receita e despesa chegam ao mês com saldo inicial diferente de zero,
+            o encerramento não é daquele mês. O balancete prova o que NÃO é; o que É, o contador afirma.</li>
+        <li><strong>Compensação e apuração do resultado</strong>: o leiaute só tem natureza para ativo, passivo, PL, receita e despesa. Essas
+            contas ficam fora dos dois eventos, contadas, até a Receita ou o contador dizer o contrário.</li>
+    </ul>
+</section>
+
+<section>
+    <h2>📨 O que pedir ao contador do cliente</h2>
+    <p>A mesma exportação do plano de contas com <strong>duas colunas a mais</strong>:</p>
+    <ol>
+        <li><strong>Conta Referencial</strong> — o código do plano padrão da ANS correspondente a cada conta.</li>
+        <li><strong>Código de Tributação</strong> — o código da Tabela 11 da DeRE (9 dígitos) em cada conta analítica.</li>
+    </ol>
+    <p>E duas confirmações: a <strong>frequência de encerramento</strong> (anual ou quadrimestral, no caso testado) e o tratamento das
+    contas de <strong>compensação</strong> e de <strong>apuração do resultado</strong>.</p>
+    <div class="alerta">Na dúvida, não preencha por conta própria: coluna errada vira XML aceito com dado errado, e isso a Receita não devolve.</div>
+</section>
+
+</main>
+<footer>
+    SP Assessoria Contábil · Consultor Fiscal Inteligente · guia revisado em 27/09/2026
+</footer>
+</body>
+</html>

@@ -64,6 +64,8 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   liga os condicionais e o {vApur}; (c) confirmar anual × quadrimestral; (d)
   decidir compensação/apuração com a Receita. D-1106/D-1121/D-2101/D-1199 e a
   transmissão continuam fora, ditos na tela.
+  📗 **Guia do teste** (`/guia-dere-planilha.html`, par duplo com `docs/guia-colaborador-dere-planilha.md`, 27/09):
+  roteiro dos três testes com critério de aceite e o pedido ao contador — botão no bloco 📥.
 
 - **☎️ TEXTO FIXO COM DATA ENVELHECE SOZINHO, E A TRAVA QUE O PRENDE PRENDE O
   ERRO** (27/09, Paulo: *"sobre as ligações, temos que testar"*). O painel
