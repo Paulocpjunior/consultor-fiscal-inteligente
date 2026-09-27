@@ -21,6 +21,21 @@
 | `07-manual-do-desenvolvedor-v1.0.2.txt` | 1.0.2 | 18/08/2026 | APIs (Receita Integra, lote, consulta), assinatura XMLDSig, certificados, produção restrita |
 | `xsd/` (**28 arquivos**) | 0.0.1–1.0.3 | pacote "06 - Arquivos XSD v1.2.0", 16/09/2026 (substitui o parcial da Nota Orientativa 2026) | TODO evento tem schema. Lote: `envioLoteDere`/`retornoLoteDere`. Tabela: `evtInfoContrib` (D-1001, **idêntico ao de 02/09**), `evtPGCC-v1_0_3` (D-1011). Mensais: `evtBalancete-v1_0_1` (D-1101), `evtAplicResTec` (D-1106), `evtRelDeducoes` (D-1121), `evtDebOpOfPublic` (D-2101), `evtReabertMensal` (D-1198), `evtFechMensal` (D-1199). Transacionais (preliminares): `evtServRemPreco` (D-2201), `evtServRemTarifa` (D-2202), `evtOperFinanc` (D-2211), `evtAntecReceb` (D-2221), `evtArrendMerc` (D-2231), `evtArranjoCredDest` (D-2241), `evtArranjoPartic` (D-2242), `evtSegPrevCap` (D-2251), `evtPlAssistSaude` (D-3201), `evtIdApostPrem` (D-4201). Retornos: `evtRetornoTabela` (D-9001), `evtRetornoBalan` (D-9101), `evtRetornoAplicFin` (D-9106), `evtRetornoRDed` (D-9112), `evtRetornoTitPub` (D-9121), `evtRetornoReabert` (D-9198), `evtRetornoMensal` (D-9199), `evtRetornoTransac` (D-9209). As versões antigas `evtBalancete-v1_0_0` e `evtPGCC-v1_0_2` SAÍRAM (só o `maxOccurs` de `infoConta` e o namespace mudaram; namespace antigo é MS0009) |
 
+## O que o app GERA a partir destes arquivos (27/09/2026)
+
+| Evento | Gerador (puro) | Insumo | XSD conferido |
+|---|---|---|---|
+| D-1001 Informações do Contribuinte | `sefaz-backend/dere-evento-d1001.js` | cadastro (Dados Fiscais → DeRE) | `evtInfoContrib-v1_0_1.xsd` |
+| D-1011 PGCC | `sefaz-backend/dere-evento-d1011.js` | planilha do plano de contas (`dere-insumo-contabil.js`) | `evtPGCC-v1_0_3.xsd` |
+| D-1101 Balancete Mensal | `sefaz-backend/dere-evento-d1101.js` | planilha do balancete analítico + o PGCC | `evtBalancete-v1_0_1.xsd` |
+
+O que a planilha da contabilidade **não traz** e o app **não inventa**: `{cCtaRef}`
+(Tabela 32 — Plano de Contas Padrão da ANS, **referência externa**: o Anexo I diz que
+"as informações detalhadas desta tabela não constam no corpo deste documento"),
+`{codTrib}` (Tabela 11 — está aqui, mas quem classifica a conta é o contador),
+`{freqEncerr}` e `{planoCtaRef}`. Colunas opcionais "Conta Referencial", "Código de
+Tributação", "Início/Fim de vigência" no plano exportado completam o insumo.
+
 ## O que NÃO está aqui (e por isso o app não afirma)
 
 - **01 — Manual de Orientação do Usuário (MOD 1.0.1)**: quem está obrigado em

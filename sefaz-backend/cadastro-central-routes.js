@@ -13,6 +13,7 @@
 //   GET /api/admin/cadastro/fechamentos/:cnpj?competencia=
 //   GET /api/admin/cadastro/dere-carteira?competencia=      (🏦 DeRE — a fila)
 //   GET /api/admin/cadastro/dere-d1001-previa?cnpj=&tpAmb=  (🏦 DeRE — prévia do D-1001, sem transmitir)
+//   POST /api/admin/cadastro/dere-mensais-previa           (🏦 DeRE — prévia do D-1011 + D-1101 a partir da PLANILHA da contabilidade; não grava)
 //
 // Ideia do Paulo (07/08), depois que a colaboradora recebeu "CNPJ não
 // cadastrado" para uma empresa cadastrada. O mesmo cliente vive no CFI, no
@@ -37,6 +38,10 @@ import { montarCadastroEmpresas, soDigitos } from './cadastro-central.js';
 import { triarCarteira } from './triagem-terceiro-setor.js';
 import { triarCarteiraDere } from './dere.js';
 import { montarEventoD1001 } from './dere-evento-d1001.js';
+import { montarEventoD1011, sugerirPlanoCtaRef } from './dere-evento-d1011.js';
+import { montarEventoD1101 } from './dere-evento-d1101.js';
+import { lerPlanoDeContas, lerBalancete } from './dere-insumo-contabil.js';
+import { decidirDereNoCadastro } from './dere-regimes.js';
 import { conferirXmlContraXsd } from './dere-xsd-bolso.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
 import { regimeDaEmpresa } from './regime-tributario.js';
@@ -149,6 +154,81 @@ router.get('/dere-d1001-previa', autorizar, async (req, res) => {
         return res.json({ ok: evento.ok && !!conferenciaXsd?.ok, evento, conferenciaXsd, regimeCatalogo: regime });
     } catch (e) {
         return res.status(500).json({ ok: false, error: e?.message || 'Falha ao montar a prévia do D-1001.' });
+    }
+});
+
+/**
+ * 🧾 PRÉVIA DO D-1011 (PGCC) + D-1101 (BALANCETE) A PARTIR DA PLANILHA DA
+ * CONTABILIDADE (27/09/2026 — Paulo: "segue arquivo teste do DeRE para
+ * validação": plano de contas + balancete analítico em .xlsx). O navegador lê
+ * as planilhas e manda as LINHAS (arrays de células); aqui a régua pura decide
+ * (`dere-insumo-contabil.js`, `dere-evento-d1011.js`, `dere-evento-d1101.js`)
+ * e o XML é conferido contra o XSD oficial. NÃO grava, NÃO assina, NÃO
+ * transmite — e não guarda a planilha: dado contábil de cliente entra, sai
+ * conferido e não fica.
+ *
+ * Body: { cnpj, tpAmb, planoCtaRef, freqEncerr, iniValid, fimValid, cCtaRefRegra,
+ *         perApur, plano: unknown[][], balancete?: unknown[][] }
+ * O que a planilha não traz (cCtaRef, codTrib, vigência por conta) volta
+ * NOMEADO com a contagem — é resposta, não erro (200 com evento.ok=false).
+ */
+router.post('/dere-mensais-previa', autorizar, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const cnpj = soDigitos(b.cnpj);
+        if (cnpj.length !== 14) return res.status(400).json({ ok: false, error: 'Informe o CNPJ com 14 dígitos.' });
+        if (!Array.isArray(b.plano) || !b.plano.length) return res.status(400).json({ ok: false, error: 'Envie as linhas da planilha do PLANO DE CONTAS (plano: unknown[][]).' });
+        const db = getDb();
+        const ref = await acharEmpresaCadastrada(db, cnpj);
+        if (!ref) return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não foi encontrado no cadastro do CFI.` });
+        const snap = await db.collection(ref.colecao).doc(ref.empresaId).get();
+        const doc = { id: snap.id, colecao: ref.colecao, ...(snap.data() || {}) };
+        const regime = regimeDaEmpresa(doc).regime;
+        const veredicto = decidirDereNoCadastro(doc, { regimeCatalogo: regime });
+        const sugestaoPlanoCtaRef = sugerirPlanoCtaRef(veredicto.codigoD1001);
+        const tpAmb = b.tpAmb === '1' || b.tpAmb === 1 ? 1 : 2;
+
+        const plano = lerPlanoDeContas(b.plano);
+        const balancete = Array.isArray(b.balancete) && b.balancete.length ? lerBalancete(b.balancete) : null;
+
+        const conferir = (evento) => {
+            if (!evento.ok) return null;
+            const xsd = lerXsdServido(evento.resumo.xsd);
+            return xsd
+                ? conferirXmlContraXsd(evento.xml, xsd)
+                : { ok: false, erros: [`XSD ${evento.resumo.xsd} não encontrado no servidor — a prévia saiu SEM conferência de schema.`], avisos: [], raiz: null, namespace: null };
+        };
+
+        let d1011 = null;
+        if (plano.ok) {
+            const evento = montarEventoD1011({
+                cnpj, contas: plano.contas, planoCtaRef: b.planoCtaRef, freqEncerr: b.freqEncerr,
+                iniValid: b.iniValid, fimValid: b.fimValid, cCtaRefRegra: b.cCtaRefRegra,
+            }, { tpAmb });
+            d1011 = { evento, conferenciaXsd: conferir(evento) };
+        }
+        let d1101 = null;
+        if (balancete && plano.ok && balancete.ok) {
+            const evento = montarEventoD1101({
+                cnpj, perApur: b.perApur || balancete.competencia, balancete, contasPgcc: plano.contas,
+                foraDoPgcc: plano.foraDoPgcc, freqEncerr: b.freqEncerr,
+            }, { tpAmb });
+            d1101 = { evento, conferenciaXsd: conferir(evento) };
+        }
+        // A lista de contas NÃO volta (são milhares e são do cliente); volta o resumo e o que ficou de fora, nomeado.
+        const semContas = (lido) => lido && { ok: lido.ok, pendencias: lido.pendencias, avisos: lido.avisos, resumo: lido.resumo, competencia: lido.competencia ?? null };
+        return res.json({
+            ok: !!(d1011?.evento.ok && d1011?.conferenciaXsd?.ok) && (!balancete || !!(d1101?.evento.ok && d1101?.conferenciaXsd?.ok)),
+            empresa: { cnpj, nome: doc.razaoSocial || doc.nome || null, regimeEspecifico: veredicto.regimeEspecifico, codigoD1001: veredicto.codigoD1001, decisao: veredicto.decisao },
+            sugestaoPlanoCtaRef,
+            insumo: {
+                plano: { ...semContas(plano), foraDoPgcc: plano.foraDoPgcc.slice(0, 40).map((c) => ({ codigo: c.codigo, nome: c.nome, motivo: c.motivo })) },
+                balancete: semContas(balancete),
+            },
+            d1011, d1101,
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e?.message || 'Falha ao montar a prévia do D-1011/D-1101.' });
     }
 });
 
