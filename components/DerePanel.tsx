@@ -357,9 +357,17 @@ const DerePanel: React.FC<{ onShowToast?: (m: string) => void }> = ({ onShowToas
                         )}
                     {!!r.declaracoes.length && (
                         <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-2">
-                            <p className="font-bold text-slate-700 dark:text-slate-200">
-                                📥 Prévia do D-1011 (PGCC) e do D-1101 (Balancete) a partir da planilha da contabilidade
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-bold text-slate-700 dark:text-slate-200">
+                                    📥 Prévia do D-1011 (PGCC) e do D-1101 (Balancete) a partir da planilha da contabilidade
+                                </p>
+                                {/* Guia do colaborador: HTML estático servido pelo próprio app (public/ → dist/),
+                                    par duplo com docs/guia-colaborador-dere-planilha.md — o roteiro de teste e o que pedir ao contador. */}
+                                <a href="/guia-dere-planilha.html" target="_blank" rel="noreferrer"
+                                    className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-bold whitespace-nowrap">
+                                    📗 Guia do teste
+                                </a>
+                            </div>
                             <p className="text-slate-500">
                                 Suba o <strong>plano de contas</strong> (colunas Conta Contábil · Descrição · Conta de Lançamento S/N · Tipo C/D;
                                 opcionais: Conta Referencial, Código de Tributação, vigência) e o <strong>balancete analítico</strong> do mês
