@@ -5,6 +5,30 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **☎️ LIGAÇÃO RECEBIDA VIRA LINHA NA CONVERSA (CDR) + 📞 PEDIDO DE RETORNO
+  VIRA PENDÊNCIA** (28/09, itens 3 e 4 da fila que o Paulo aprovou: *"Pode
+  seguir na sua ordem!"*). A Meta não manda evento de chamada em modo SIP
+  (25/08); o agente da VM (`sbc-agente-saida.py` 1.1.0) acompanha o
+  `Master.csv` por offset (`/var/spool/asterisk/tmp/sbc-agente-cdr.offset`;
+  1ª vez = fim do arquivo, SEM backfill; rotação = recomeça, idempotente por
+  uniqueid) e manda só as linhas de ENTRADA da Meta (`de-meta`/`PJSIP/meta-`,
+  nunca `meta-saida` nem `lig_…`) para `POST /sbc/cdr` (segredo do agente).
+  `interpretarCdrDeEntrada` (puro, em `whatsapp-chamadas.js`) lê src → número
+  (plano B: clid), disposição → accepted/missed/busy/failed, `start` UTC + Z;
+  a rota grava pela MESMA `gravarEventoChamada` do webhook (exportada de
+  `whatsapp-webhook-routes.js`; sem import circular). Linha sem número fica
+  em `whatsapp_chamadas_sem_numero` com o src cru; a aba ☎️ conta recebidas e
+  sem-número (`whatsapp_config/sbc_agente.cdr`). 📞 Retorno: o webhook, ao
+  ver `naturezaDoEventoCru === 'pedido-de-retorno'`, lê o mínimo sem conhecer
+  o leiaute (`lerPedidoDeRetorno`: `from`/`wa_id`, NUNCA display_phone_number)
+  e grava linha `retorno_<hash>` + `retornoDeLigacao {pedidoEm, atendidoEm:null}`
+  + não-lida + reabertura; a lista mostra o chip "📞 pediu retorno" até
+  `/ligar` (`atendidoComo: 'ligacao'`) ou `situacao=resolvida`
+  (`encerrado-sem-ligar`); sem número → `whatsapp_config/pedidos_retorno`.
+  Trava `cdrEntradaSbc.test.ts` executa o python (leitura incremental,
+  linha pela metade, rotação) e compara a régua "é entrada da Meta?" nos
+  dois lados. ⚠️ NÃO PROVADO: a forma do src da Meta e o leiaute do pedido de
+  retorno — os dois saem do dado real, contados na aba ☎️.
 - **📥 ULTRA FOX CANCELADA — o importador SAIU do app** (28/09, Paulo: *"Pode
   seguir na sua ordem! Ultrafox já caiu está fora"*). Removidos: aba ⚙️ → 📥 e
   o botão 📥 em 📇 (`SpConnect/index.tsx`), rotas `/importar-ultrafox` e

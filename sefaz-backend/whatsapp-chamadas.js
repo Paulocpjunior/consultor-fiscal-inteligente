@@ -450,6 +450,7 @@ export function traduzirEventoChamada(evento) {
         terminate: 'encerrada', terminated: 'encerrada', ended: 'encerrada',
         ringing: 'tocando', missed: 'perdida', rejected: 'recusada', reject: 'recusada',
         failed: 'falhou', no_answer: 'não atendida', unanswered: 'não atendida',
+        busy: 'ocupado',
     };
     const e = String(evento || '').toLowerCase();
     return mapa[e] || (e || 'evento');
@@ -600,4 +601,90 @@ export function resumoDaPermissao(p) {
     return p.resposta === 'aceita'
         ? '✅ O cliente AUTORIZOU ligações de WhatsApp'
         : '🚫 O cliente recusou ligações de WhatsApp';
+}
+
+// ═══ ☎️ A LIGAÇÃO RECEBIDA VIRA LINHA NA CONVERSA — PELO CDR DO SBC (28/09) ══
+// Em modo SIP a Meta NÃO manda evento de chamada no webhook (medido em 25/08):
+// a ligação que o cliente faz pelo ☎️ cai na URA e o SP Connect não fica
+// sabendo. Quem sabe é o CDR do Asterisk (Master.csv), e o agente da VM (o
+// mesmo do click-to-call) passa a mandar as linhas de ENTRADA para
+// POST /sbc/cdr. Aqui só se INTERPRETA a linha — puro, testável.
+//
+// ⚠️ O que NÃO está provado: a forma do `src` (o From que a Meta manda no
+// INVITE). Se vier o E.164 do cliente, a linha cai na conversa dele; se vier
+// outra coisa, `numero` volta null, a linha fica guardada SEM conversa e a
+// aba ☎️ mostra quantas ficaram assim — com o src cru, para a régua nascer do
+// dado real, não de dedução.
+
+/** Só dígitos; E.164 sem o + tem 10 a 15. Fora disso, não é número de cliente. */
+function numeroDoCdr(bruto) {
+    const d = String(bruto || '').replace(/\D/g, '');
+    return /^\d{10,15}$/.test(d) ? d : null;
+}
+
+/**
+ * Uma linha do CDR já separada em campos (o agente manda como objeto).
+ * Devolve `{ ehEntradaDaMeta: false }` para tudo que não é ligação que a Meta
+ * entregou (perna HIT, click-to-call, teste local) — quem chama descarta.
+ */
+export function interpretarCdrDeEntrada(cdr) {
+    const c = cdr && typeof cdr === 'object' ? cdr : {};
+    const canal = String(c.channel || '');
+    const contexto = String(c.dcontext || '');
+    const conta = String(c.accountcode || '');
+    // A perna que a META abriu: contexto de-meta, ou canal do endpoint `meta`
+    // (nunca `meta-saida`, que é a nossa perna de saída). Click-to-call tem
+    // accountcode `lig_…` e já é tratado pelo próprio pedido.
+    const daMeta = contexto === 'de-meta' || /^PJSIP\/meta-(?!saida)/.test(canal);
+    if (!daMeta || conta.startsWith('lig_')) return { ehEntradaDaMeta: false };
+    const uniqueid = String(c.uniqueid || '').trim();
+    if (!uniqueid) return { ehEntradaDaMeta: false };
+    const disp = String(c.disposition || '').trim().toUpperCase();
+    const evento = disp === 'ANSWERED' ? 'accepted'
+        : disp === 'NO ANSWER' ? 'missed'
+            : disp === 'BUSY' ? 'busy'
+                : 'failed';
+    const billsec = Number(c.billsec);
+    // `src` primeiro; o clid ("Nome" <numero>) é o plano B. VM em UTC e
+    // cdr_csv com usegmtime=no ⇒ o carimbo é UTC sem sufixo: acrescenta-se Z.
+    const numero = numeroDoCdr(c.src) || numeroDoCdr(String(c.clid || '').match(/<([^>]+)>/)?.[1]);
+    const inicio = String(c.start || '').trim();
+    const timestamp = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(inicio) ? `${inicio.replace(' ', 'T')}Z` : null;
+    return {
+        ehEntradaDaMeta: true,
+        numero,
+        srcCru: String(c.src || ''),
+        callId: `sbc_${uniqueid.replace(/[^0-9A-Za-z]/g, '_')}`,
+        evento,
+        duracaoSegundos: Number.isFinite(billsec) && billsec > 0 ? billsec : null,
+        timestamp,
+        atendida: disp === 'ANSWERED',
+    };
+}
+
+/**
+ * 📞 PEDIDO DE RETORNO DE LIGAÇÃO — o que dá para ler SEM conhecer o leiaute.
+ *
+ * O evento continua não provado (ver `naturezaDoEventoCru`). O que se faz é o
+ * mínimo honesto: procurar, nas chaves que a Meta usa para o CLIENTE em
+ * qualquer webhook (`from`, `wa_id`), um número plausível. Achou ⇒ a conversa
+ * dele ganha a pendência; não achou ⇒ `numero: null`, o cru já está gravado
+ * e a aba ☎️ conta quantos ficaram sem dono. NUNCA se lê `display_phone_number`
+ * nem `phone_number_id` — esses são NOSSOS.
+ */
+export function lerPedidoDeRetorno(payload) {
+    let texto;
+    try { texto = JSON.stringify(payload || {}); } catch { return { numero: null, phoneNumberId: null }; }
+    const pega = (chave) => {
+        const m = texto.match(new RegExp(`"${chave}"\\s*:\\s*"(\\+?\\d{10,15})"`));
+        return m ? m[1].replace(/\D/g, '') : null;
+    };
+    const numero = pega('from') || pega('wa_id') || pega('caller') || null;
+    const pid = texto.match(/"phone_number_id"\s*:\s*"(\d+)"/);
+    return { numero, phoneNumberId: pid ? pid[1] : null };
+}
+
+/** A linha que entra na conversa quando o cliente pede retorno. */
+export function resumoDoPedidoDeRetorno() {
+    return '📞 O cliente pediu RETORNO de ligação (fora do horário da Meta) — ligue de volta pelo ☎️ desta conversa ou responda por mensagem.';
 }

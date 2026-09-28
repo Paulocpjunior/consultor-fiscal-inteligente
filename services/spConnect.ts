@@ -84,6 +84,8 @@ export interface ConversaResumo {
     permissaoLigacao?: { status: 'pendente' | 'aceita' | 'recusada'; pedidoEm?: string | null; em?: string | null; expiraEm?: string | null } | null;
     /** ☎️ O último click-to-call desta conversa (pedido ao SBC): estado + ramal + quem pediu. */
     ultimaLigacaoSaida?: { id: string; status: string; ramal: string; em: string | null; detalhe?: string | null; por?: string | null } | null;
+    /** 📞 O cliente pediu retorno de ligação (fora do horário da Meta). Pendente enquanto `atendidoEm` for null. */
+    retornoDeLigacao?: { pedidoEm: string; atendidoEm: string | null; atendidoPor?: string | null; atendidoComo?: string | null } | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
     naoLidas: number;
     atualizadoEm: string | null;

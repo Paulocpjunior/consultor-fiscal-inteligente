@@ -133,7 +133,7 @@ atendida" — não caiu no primeiro toque. Conta, permissão, janela e aparelho 
 da lista de causas; o que quebra é específico da entrega **SIP**. ⚠️ Falta
 confirmar na aba "Configurações de ligação" de cada número que o 3155 realmente
 não está em modo SIP — o app só escreveu `sip.servers[]` para o 3337, mas quem
-responde é a Meta. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sairá do **CDR do SBC**, nunca da Meta |
+responde é a Meta. ⚠️ Em modo SIP **não chega evento de chamada no webhook** (só `call_permission_reply`), então o registro da ligação na conversa sai do **CDR do SBC**, nunca da Meta — ✅ **construído em 28/09**: o agente da VM manda as linhas de entrada para `/sbc/cdr` e elas viram linha na conversa (atendida/perdida), 🟡 não provado até a 1ª ligação com o agente no ar; e o **pedido de retorno** vira chip 📞 na lista até alguém ligar ou encerrar |
 | Custo | mensalidade da plataforma **[Paulo]** | só o custo de conversa da Meta | 🆕 é o ganho econômico da troca |
 
 ## 6. Operação e administração

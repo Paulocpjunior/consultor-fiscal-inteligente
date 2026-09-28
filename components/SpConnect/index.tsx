@@ -782,11 +782,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // ☎️ O agente do click-to-call na VM do SBC está vivo? Lido ao abrir a
     // aba: "no ar há N s" ou "parado/nunca" — farol honesto, nunca deduzido
     // do segredo existir.
-    const [agenteSbc, setAgenteSbc] = useState<{ segredoConfigurado: boolean; agente: { vivo: boolean; texto: string }; pendentes: number } | null>(null);
+    const [agenteSbc, setAgenteSbc] = useState<{
+        segredoConfigurado: boolean; agente: { vivo: boolean; texto: string }; pendentes: number;
+        cdr?: { recebidas: number; semNumero: number; ultimaEm: string | null }; retornosSemNumero?: number;
+    } | null>(null);
     const [agenteSbcErro, setAgenteSbcErro] = useState<string | null>(null);
     const lerAgenteSbc = async () => {
         const r = await agenteSbcStatus();
-        if (r.ok) { setAgenteSbc({ segredoConfigurado: r.segredoConfigurado, agente: r.agente, pendentes: r.pendentes }); setAgenteSbcErro(null); }
+        if (r.ok) { setAgenteSbc({ segredoConfigurado: r.segredoConfigurado, agente: r.agente, pendentes: r.pendentes, cdr: r.cdr, retornosSemNumero: r.retornosSemNumero }); setAgenteSbcErro(null); }
         else setAgenteSbcErro(r.error || 'Não consegui ler o estado do agente.');
     };
     useEffect(() => {
@@ -2656,6 +2659,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 em 👥 Atendentes) → ele atende → o SBC disca o cliente no WhatsApp. Sem <code>META_SIP_DESTINO</code>
                                                 no SBC, o ramal toca e a perna do cliente é recusada com motivo no log.
                                             </p>
+                                            {/* ☎️ ENTRADA pelo CDR: a Meta não avisa o webhook em modo SIP, então quem
+                                                registra a ligação RECEBIDA na conversa é o mesmo agente, lendo o CDR.
+                                                Zero recebidas com o agente no ar não é defeito: é "ninguém ligou desde
+                                                que ele subiu" (sem backfill, de propósito). */}
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                📥 Ligações <strong>recebidas</strong> registradas nas conversas pelo CDR do SBC:{' '}
+                                                <strong>{agenteSbc.cdr?.recebidas ?? 0}</strong>
+                                                {agenteSbc.cdr?.ultimaEm ? ` (última ${new Date(agenteSbc.cdr.ultimaEm).toLocaleString('pt-BR')})` : ' — nenhuma desde que o agente subiu'}
+                                                {(agenteSbc.cdr?.semNumero ?? 0) > 0 && (
+                                                    <span className="block text-amber-700 dark:text-amber-400">
+                                                        ⚠️ {agenteSbc.cdr?.semNumero} ligação(ões) chegaram com um <code>src</code> que não é número de cliente —
+                                                        ficaram em <code>whatsapp_chamadas_sem_numero</code> com o cru. É dali que sai a régua do From da Meta.
+                                                    </span>
+                                                )}
+                                                {(agenteSbc.retornosSemNumero ?? 0) > 0 && (
+                                                    <span className="block text-amber-700 dark:text-amber-400">
+                                                        ⚠️ {agenteSbc.retornosSemNumero} pedido(s) de retorno de ligação chegaram sem número legível — o cru está em
+                                                        "Ver eventos de chamada (crus)".
+                                                    </span>
+                                                )}
+                                            </p>
                                         </>
                                     )}
                                 </div>
@@ -4404,6 +4428,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">↪ de {rotuloCurtoFila(c.transferidaDe)}</span>
                                                 )}
                                                 {j.aberta && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">janela aberta</span>}
+                                                {/* 📞 PENDÊNCIA: o cliente pediu retorno de ligação e ninguém ligou
+                                                    nem encerrou. Some quando alguém liga pelo ☎️ ou encerra. */}
+                                                {c.retornoDeLigacao && !c.retornoDeLigacao.atendidoEm && (
+                                                    <span title={`Pediu retorno de ligação em ${new Date(c.retornoDeLigacao.pedidoEm).toLocaleString('pt-BR')} — ligue pelo ☎️ da conversa`}
+                                                        className="text-[9px] font-bold px-1.5 py-px rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">📞 pediu retorno</span>
+                                                )}
                                                 {!c.empresaId && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">vincular</span>}
                                             </div>
                                         </div>

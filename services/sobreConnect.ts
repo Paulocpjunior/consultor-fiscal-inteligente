@@ -271,6 +271,7 @@ export const MANUAL: PassoManual[] = [
             'Clique em "☎️ Ligar para … pelo WhatsApp". O SEU ramal toca primeiro — atenda. Quando você atende, a ligação sai para o WhatsApp do cliente.',
             'A linha abaixo do botão acompanha: "aguardando o SBC" → "tocando o seu ramal" → atendida / não atendida / ocupado / falhou (com o motivo).',
             'Sem ramal cadastrado, o botão recusa e diz onde cadastrar (⚙️ → 👥 Atendentes, um admin faz).',
+            'Ligação que o CLIENTE faz pelo ☎️ do WhatsApp entra na conversa como "atendida" (com a duração) ou "perdida" — perdida conta como não lida. E o chip vermelho "📞 pediu retorno" na lista é o cliente que tentou ligar fora do horário e pediu retorno: ligue de volta pelo ☎️ (o chip some) ou encerre.',
         ],
         atencao: 'A Meta só aceita ligação de WhatsApp dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele, a chamada é recusada — fale por mensagem. E ligue de onde o seu ramal está: é ele que toca.',
     },
@@ -284,6 +285,8 @@ export const REVISOES: Revisao[] = [
             '☎️ LIGAR PARA O CLIENTE pelo WhatsApp, de dentro da conversa: com a permissão aceita, o botão "☎️ Ligar para … pelo WhatsApp" toca o SEU ramal primeiro e, quando você atende, disca o cliente. O status (tocando o ramal, atendida, não atendida, ocupado, falhou) aparece abaixo do botão e entra como linha na conversa. Precisa de ramal cadastrado (⚙️ → 👥, admin) e do agente do SBC no ar (⚙️ → ☎️ mostra).',
             '👥 Cadastro de RAMAL por atendente em ⚙️ → Atendentes e filas — é onde a ligação de saída toca.',
             '📥 A aba "Importar Ultra Fox" saiu da ⚙️: a plataforma foi cancelada e o backup dela já está dentro do SP Connect desde 21/08 (os contatos e mensagens importados continuam, marcados "veio do backup").',
+            '☎️ A ligação que o CLIENTE faz pelo WhatsApp passa a aparecer na conversa: "atendida" com a duração, ou "perdida" (conta como não lida e reabre a conversa encerrada). Só a partir de agora; as antigas não entram.',
+            '📞 "Pedir retorno de ligação" (o que o cliente vê fora do horário) vira pendência: linha na conversa, não lida, e o chip vermelho "📞 pediu retorno" na lista até alguém ligar de volta pelo ☎️ ou encerrar.',
         ],
     },
     {

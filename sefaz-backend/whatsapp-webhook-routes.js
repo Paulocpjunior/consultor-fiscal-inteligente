@@ -39,7 +39,10 @@ import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaVa
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
-import { extrairEventosChamada, resumoDaChamada, resumoDaPermissao } from './whatsapp-chamadas.js';
+import {
+    extrairEventosChamada, resumoDaChamada, resumoDaPermissao,
+    naturezaDoEventoCru, lerPedidoDeRetorno, resumoDoPedidoDeRetorno,
+} from './whatsapp-chamadas.js';
 import {
     filasParaTriagem, valeClassificar, montarPromptTriagem,
     interpretarRespostaTriagem, decidirDestinoDaTriagem,
@@ -235,7 +238,7 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
  * 🚨 Chamada NÃO abre a janela de 24h — janela é de MENSAGEM (regra da Meta);
  * afirmá-la por ligação liberaria texto livre que a Meta vai recusar depois.
  */
-async function gravarEventoChamada(db, c) {
+export async function gravarEventoChamada(db, c) {
     const agora = new Date().toISOString();
     const resumo = resumoDaChamada(c);
     const ref = db.collection('whatsapp_mensagens').doc(`call_${c.callId}_${c.evento || 'evento'}`);
@@ -834,6 +837,45 @@ router.post('/webhook', async (req, res) => {
         if (ch.ilegiveis.length) {
             console.warn('[whatsapp/chamadas] eventos de chamada ilegíveis:', ch.ilegiveis.length,
                 '— o cru está em whatsapp_webhook_eventos (é dele que sai a régua).');
+        }
+
+        // ── 📞 PEDIDO DE RETORNO DE LIGAÇÃO (28/09) — vira PENDÊNCIA de alguém.
+        // Fora do horário da Meta o cliente vê "Pedir retorno de ligação" e a
+        // promessa "entraremos em contato" — feita em nosso nome. O leiaute do
+        // evento segue não provado; o que se faz é o mínimo honesto: achar o
+        // número do cliente nas chaves que a Meta usa para ele (from/wa_id).
+        // Achou ⇒ linha na conversa (conta não-lida, reabre encerrada) + carimbo
+        // `retornoDeLigacao` que a lista mostra como chip até alguém LIGAR pelo
+        // ☎️ ou encerrar. Não achou ⇒ conta em whatsapp_config/pedidos_retorno
+        // e o cru (já gravado no passo 1) é a régua para a próxima versão.
+        if (naturezaDoEventoCru(req.body) === 'pedido-de-retorno') {
+            const pr = lerPedidoDeRetorno(req.body);
+            if (pr.numero) {
+                const ref = db.collection('whatsapp_mensagens').doc(`retorno_${hash}`);
+                const jaExiste = (await ref.get()).exists;
+                await ref.set({
+                    conversaId: pr.numero, direcao: 'entrada', tipo: 'chamada',
+                    texto: resumoDoPedidoDeRetorno(), eventoChamada: 'callback_request',
+                    midia: null, timestamp: agora, statusEntrega: null, phoneNumberId: pr.phoneNumberId,
+                    brutoHash: hash, recebidoEm: agora,
+                }, { merge: true });
+                const convRef = db.collection('whatsapp_conversas').doc(pr.numero);
+                const convAnterior = (await convRef.get()).data() || {};
+                await convRef.set({
+                    numero: pr.numero,
+                    retornoDeLigacao: { pedidoEm: agora, atendidoEm: null, hash },
+                    ultimaMensagem: { resumo: '📞 pediu retorno de ligação', direcao: 'entrada', em: agora },
+                    ...(!jaExiste ? { naoLidas: admin.firestore.FieldValue.increment(1) } : {}),
+                    ...(patchDeReabertura(convAnterior, { direcao: 'entrada', agora }) || {}),
+                    atualizadoEm: agora,
+                }, { merge: true });
+                console.log(`[whatsapp/retorno] pedido de retorno de ${pr.numero} (evento ${hash})`);
+            } else {
+                await db.collection('whatsapp_config').doc('pedidos_retorno').set({
+                    semNumero: admin.firestore.FieldValue.increment(1), ultimoHash: hash, ultimoEm: agora,
+                }, { merge: true });
+                console.warn(`[whatsapp/retorno] pedido de retorno SEM número legível — cru em whatsapp_webhook_eventos/${hash}`);
+            }
         }
         // 🔔 Ligação do cliente notifica como mensagem — MESMA régua de filas e
         // horário do push (a regra do Paulo vale aqui também). Best-effort.

@@ -90,3 +90,15 @@ export function lerEstadoDaChamada(calling: unknown): {
  *  provado, então ele só ACHA o evento cru — a régua nasce do evento real. */
 export function ehEventoDeChamada(payload: unknown): boolean;
 export function rotularEventoCru(payload: unknown): string;
+
+// ── ☎️ CDR de ENTRADA do SBC → linha na conversa (28/09) ──────────────────
+export function interpretarCdrDeEntrada(cdr: unknown):
+    | { ehEntradaDaMeta: false }
+    | {
+        ehEntradaDaMeta: true; numero: string | null; srcCru: string; callId: string;
+        evento: 'accepted' | 'missed' | 'busy' | 'failed'; duracaoSegundos: number | null;
+        timestamp: string | null; atendida: boolean;
+    };
+/** Lê o mínimo do pedido de retorno sem conhecer o leiaute: `from`/`wa_id`. */
+export function lerPedidoDeRetorno(payload: unknown): { numero: string | null; phoneNumberId: string | null };
+export function resumoDoPedidoDeRetorno(): string;
