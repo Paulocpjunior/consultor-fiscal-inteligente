@@ -152,6 +152,26 @@ describe('🚨 o período do 0000 tem de ser um MÊS INTEIRO', () => {
         expect(r[0].mensagem).not.toMatch(/PRIMEIRO dia/);
     });
 
+    // 🏁 SITUAÇÃO ESPECIAL (28/09, GIRY): o Guia abre exceção — abertura no
+    // DT_INI, encerramento/fusão/cisão/incorporação no DT_FIN. Sem esta
+    // exceção o arquivo de encerramento CERTO era acusado (alarme falso).
+    it('encerramento (IND_SIT_ESP=4) pode fechar antes do último dia — e o DT_INI continua cobrado', () => {
+        expect(erros(conferirPeriodoDoArquivo, ['|0000|006|0|4||01082026|20082026|X|1|SP|3|||0|'])).toEqual([]);
+        for (const sit of ['1', '2', '3']) {
+            expect(erros(conferirPeriodoDoArquivo, [`|0000|006|0|${sit}||01082026|15082026|X|1|SP|3|||0|`])).toEqual([]);
+        }
+        const r = erros(conferirPeriodoDoArquivo, ['|0000|006|0|4||05082026|20082026|X|1|SP|3|||0|']);
+        expect(r).toHaveLength(1);
+        expect(r[0].mensagem).toMatch(/PRIMEIRO dia/);
+    });
+
+    it('abertura (IND_SIT_ESP=0) pode começar depois do dia 1 — e o DT_FIN continua cobrado', () => {
+        expect(erros(conferirPeriodoDoArquivo, ['|0000|006|0|0||05082026|31082026|X|1|SP|3|||0|'])).toEqual([]);
+        const r = erros(conferirPeriodoDoArquivo, ['|0000|006|0|0||05082026|20082026|X|1|SP|3|||0|']);
+        expect(r).toHaveLength(1);
+        expect(r[0].mensagem).toMatch(/último dia/);
+    });
+
     it('arquivo sem 0000 não é acusado por esta regra', () => {
         expect(erros(conferirPeriodoDoArquivo, ['|C100|1|0|X|55|00|1|1|C|01072026|01072026|10,00|'])).toEqual([]);
     });

@@ -80,6 +80,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     // 🏁 Situação especial do 0000 (GIRY 1365, 28/09): '' = arquivo normal.
     const [situacaoEspecialContrib, setSituacaoEspecialContrib] = useState<'' | '0' | '1' | '2' | '3' | '4'>('');
     const [dataEventoContrib, setDataEventoContrib] = useState<string>('');
+    // 🔁 Original × retificadora (28/09): '1' exige o recibo da escrituração anterior.
+    const [tipoEscrituracaoContrib, setTipoEscrituracaoContrib] = useState<'0' | '1'>('0');
+    const [numRecAnteriorContrib, setNumRecAnteriorContrib] = useState<string>('');
     // 🧾 Natureza da receita sem ônus (M410/M810) — cadastro por empresa e CST.
     // PVA da EDUARDO GUERRA 08/2026 (25/09): sem M400/M800 o arquivo é recusado,
     // e o código depende do produto (tabelas 4.3.13 etc.) — é cadastro, nunca chute.
@@ -335,9 +338,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 setMensagemContrib({ tipo: 'error', titulo: 'Situação especial sem a data do evento', detalhes: 'Informe a data do evento (encerramento, cisão, fusão, incorporação ou abertura): é ela que vai no 0000.' });
                 return;
             }
+            if (tipoEscrituracaoContrib === '1' && !numRecAnteriorContrib.trim()) {
+                setMensagemContrib({ tipo: 'error', titulo: 'Retificadora sem o recibo anterior', detalhes: 'Informe o número do recibo da escrituração já transmitida (0000 campo 05).' });
+                return;
+            }
             const body = {
                 empresaId, competencia: competenciaContrib,
                 ...(situacaoEspecialContrib ? { situacaoEspecial: situacaoEspecialContrib, dataEvento: dataEventoContrib } : {}),
+                ...(tipoEscrituracaoContrib === '1' ? { tipoEscrituracao: '1', numRecAnterior: numRecAnteriorContrib } : {}),
             };
 
             const resp = await fetch('/api/admin/sped-contrib/gerar', {
@@ -995,6 +1003,42 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                 : situacaoEspecialContrib
                                     ? 'A data vai no DT_FIN do 0000; o DT_INI segue o 1º dia do mês. Tem de estar dentro da competência escolhida.'
                                     : 'Só para abertura, cisão, fusão, incorporação ou encerramento.'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* 🔁 ORIGINAL × RETIFICADORA (28/09): TIPO_ESCRIT e NUM_REC_ANTERIOR do 0000. */}
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Tipo de escrituração (0000, campo TIPO_ESCRIT)
+                        </label>
+                        <select
+                            value={tipoEscrituracaoContrib}
+                            onChange={e => { setTipoEscrituracaoContrib(e.target.value as '0' | '1'); if (e.target.value === '0') setNumRecAnteriorContrib(''); setMensagemContrib(null); }}
+                            className="w-full p-2.5 text-sm rounded-lg outline-none"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            <option value="0">0 · Original</option>
+                            <option value="1">1 · Retificadora (substitui a escrituração já transmitida)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Nº do recibo da escrituração anterior {tipoEscrituracaoContrib === '1' ? '(obrigatório)' : ''}
+                        </label>
+                        <input
+                            type="text"
+                            value={numRecAnteriorContrib}
+                            disabled={tipoEscrituracaoContrib !== '1'}
+                            maxLength={41}
+                            placeholder="como o PVA/Receitanet devolveu na transmissão"
+                            onChange={e => { setNumRecAnteriorContrib(e.target.value.toUpperCase()); setMensagemContrib(null); }}
+                            className="w-full p-2.5 text-sm rounded-lg outline-none font-mono disabled:opacity-50"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        />
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                            Vai no 0000 campo 05, em maiúsculas, até 41 caracteres. Retificadora sem recibo é recusada aqui, antes do PVA.
                         </p>
                     </div>
                 </div>

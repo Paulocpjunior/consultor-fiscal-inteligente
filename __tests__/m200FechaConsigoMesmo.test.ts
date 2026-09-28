@@ -415,7 +415,8 @@ describe('🔒 a contribuição do período tem um cálculo só', () => {
     });
 
     it('o M100/M500 lê o dono, não refaz a conta', () => {
-        expect(src).toMatch(/Math\.min\(dispPis, vlContribPis\)/);
-        expect(src).toMatch(/Math\.min\(dispCof, vlContribCofins\)/);
+        // 28/09: o desconto total sai de vlContribPis (o dono) e é repartido pelos M100 por grupo da 4.3.6.
+        expect(src).toMatch(/Math\.min\(totalPisEntrada, vlContribPis\)/);
+        expect(src).toMatch(/Math\.min\(totalCofinsEntrada, vlContribCofins\)/);
     });
 });
