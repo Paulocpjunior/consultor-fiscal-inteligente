@@ -5,6 +5,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 ELS 3ª RODADA DO PVA (28/09, após o plano de contas: 1315 → 19 erros +
+  50 avisos)**: 1 COD_MUN 0150 (Ovidio, produtor PF) · 8 COD_CTA em A170
+  tomado (cadastro: falta a conta do uso servicos-tomados) · 9 VL_PIS + 1
+  VL_COFINS do C100 "menor que a soma dos itens" por 1–2 centavos · 50 avisos
+  CST 50 em banana (cadastro NCM 0803 → 73 ainda não feito). Consertos do
+  gerador: (1) C100 soma os valores IMPRESSOS dos C170 (`impresso()` via
+  `fmt.formatValue`) — o PVA soma o arquivo com 2 casas por item, e a soma
+  crua arredondada fica abaixo quando os terceiros decimais se acumulam
+  (fixture 100/107/350 a 1,65%: crua 9,19 × impressa 9,20); trava
+  `c100SomaDosItensImpressos.test.ts`. (2) `participantes-municipio-xml.js`:
+  `completarMunicipioDosParticipantes({participantes, notas, empresaCnpj,
+  baixarXml})` relê o XML guardado (`storagePath` em `xmls/`, NF-e mod 55 não
+  cancelada, até 3 por participante) e preenche `codMunIBGE` + endereço que
+  faltar SÓ NA MEMÓRIA, pelo lado do participante (`ladoDoParticipanteNoXml`:
+  emitente na compra, destinatário na venda); devolve preenchidos / semXml /
+  semDadoNoXml / falhas e um aviso; chamado nos DOIS orquestradores (contrib e
+  fiscal) logo após `completarFreteDasNotas`. Nunca 9999999, nunca grava.
+  Trava `participantesMunicipioXml.test.ts`. Novidade 28/09.
+
 - **🐳 DEPLOY 1057 CAIU NO `docker push` COM 502 DO ARTIFACT REGISTRY (28/09)**:
   build, testes e todas as camadas ok; o manifesto final levou "502 Bad
   Gateway". O app do GitHub não pode reexecutar job nem disparar

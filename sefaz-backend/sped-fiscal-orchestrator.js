@@ -9,6 +9,7 @@
 
 import admin from 'firebase-admin';
 import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { completarMunicipioDosParticipantes } from './participantes-municipio-xml.js';
 import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0 } from './sped-fiscal-bloco0.js';
 import { buildBlocoC, convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
@@ -834,6 +835,12 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
  */
 export async function montarBlocos({ dados }) {
     await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+    // ♻️ COD_MUN do 0150 relido do XML guardado quando o documento veio sem
+    // (28/09, ELS: produtor rural PF). Só na memória; o que faltar segue dito.
+    const relMun = await completarMunicipioDosParticipantes({
+        participantes: dados.participantes, notas: dados.notas, empresaCnpj: dados.empresa?.cnpj,
+    });
+    if (relMun.aviso && Array.isArray(dados.warnings)) dados.warnings.push(relMun.aviso);
     // 🚨 O BLOCO C É MONTADO ANTES DO 0 — a ORDEM DE EXECUÇÃO, não a do arquivo.
     //
     // O `0460` (Tabela de Observações) mora no bloco 0 e só pode existir quando
