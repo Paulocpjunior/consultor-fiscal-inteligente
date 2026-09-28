@@ -14,10 +14,11 @@
 
 import { Router } from 'express';
 import admin from 'firebase-admin';
-import { requireAuth } from './require-admin.js';
+import { requireAuth, requireAdmin } from './require-admin.js';
 import { getEmpresaIdsDaCarteira, podeAcessarEmpresaId } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
-import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia } from './rotina-fiscal.js';
+import { montarRotinaFiscal, resumirFunil, acharApuracaoDaCompetencia, normalizarParametrosRotina, PARAMETROS_ROTINA_PADRAO } from './rotina-fiscal.js';
+import { lerParametrosRotina, gravarParametrosRotina, conferirParametrosRotina } from './rotina-parametros-store.js';
 import { mesDoCliente, pendenciasDeConfirmacao } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 // 🚨 O DONO DO INSUMO DA ROTINA — módulo PURO. A rota do ato montava este
@@ -254,6 +255,9 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // detalhe fica na aba própria, aqui só sinaliza a obrigação.
                 // tpNF=0 = nota própria de entrada (produtor no destinatário).
                 'valorTotal', 'temItens', 'schema', 'tipoDoc', 'chave', 'emitente', 'destinatario', 'tpNF', 'origem',
+                // 📨 Carimbo da completa importada à mão (28/09): é o que separa
+                // "completada sem ciência" de "veio inteira da SEFAZ".
+                '_completadoEm',
                 // 🚨 AS FORMAS DO VALOR QUE `valorDoDocumento` LÊ (23/09, RADIO E TV
                 // IBIRAPUERA): o import pelo navegador grava só `totais.vNF` — sem
                 // estes campos na projeção, a nota chegava "sem valor" à etapa 2
@@ -343,8 +347,11 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
     const coberturasDeclaradas = await lerCoberturasDaCompetencia(db, competencia);
     // 📭 Idem para o "sem movimento": uma query, mapa por empresa.
     const semMovimentoDeclarados = await lerSemMovimentoDaCompetencia(db, competencia);
+    // ⚙️ Parâmetros do escritório (28/09): uma leitura; a empresa pode sobrepor.
+    const { parametros: parametrosEscritorio } = await lerParametrosRotina(db);
 
     const rotinas = empresas.map((e) => montarRotinaFiscal({
+        parametros: normalizarParametrosRotina(parametrosEscritorio, e.rotinaParametros),
         // TRAVA T1 DO ESCOPO: o catálogo diz se cobre este cliente. A flag
         // existia desde 11/08 e nenhuma tela lia — obrigação que não vira
         // tarefa não aparecia em lugar nenhum, e o mês fechava assim mesmo.
@@ -549,6 +556,33 @@ router.post('/sem-movimento-declarado', requireAuth, async (req, res) => {
         return res.json({ ok: true, declaracao: { ...doc, texto: textoDaDeclaracaoSemMovimento(conf.declaracao) } });
     } catch (e) {
         console.error('[rotina-fiscal/sem-movimento-declarado]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── ⚙️ Parâmetros da Rotina (28/09) ──────────────────────────────────────
+// Leitura para todos (a tela diz qual régua está valendo); gravação só admin.
+router.get('/parametros', requireAuth, async (_req, res) => {
+    try {
+        const { parametros, gravado } = await lerParametrosRotina(getDb());
+        return res.json({ ok: true, parametros, padrao: PARAMETROS_ROTINA_PADRAO, gravado });
+    } catch (e) {
+        console.error('[rotina-fiscal/parametros GET]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/parametros', requireAdmin, async (req, res) => {
+    try {
+        const conf = conferirParametrosRotina(req.body);
+        if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+        const { parametros, gravado } = await gravarParametrosRotina(getDb(), {
+            valores: conf.valores, por: req.user?.email || req.user?.uid || null,
+        });
+        console.log(`[rotina-fiscal] parâmetros gravados por ${req.user?.email || '?'}:`, conf.valores);
+        return res.json({ ok: true, parametros, padrao: PARAMETROS_ROTINA_PADRAO, gravado });
+    } catch (e) {
+        console.error('[rotina-fiscal/parametros POST]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

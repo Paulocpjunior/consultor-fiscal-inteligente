@@ -64,7 +64,7 @@ export interface RotinaEmpresa {
     proximoPasso: {
         id: string; ordem: number; nome: string; onde: string; acao: string | null; resumo: string;
         /** 🔎 Etapa 2: as notas que travam, nomeadas. */
-        notas?: Array<{ chave: string | null; numero: string | number | null; tipo: string | null; emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null; motivo: 'resumo' | 'nfse-sem-valor' }>;
+        notas?: Array<{ chave: string | null; numero: string | number | null; tipo: string | null; emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null; motivo: 'resumo' | 'nfse-sem-valor' | 'sem-ciencia' }>;
         notasCortadas?: number;
     } | null;
     progresso: { concluidas: number; total: number };
@@ -189,6 +189,42 @@ export async function declararSemMovimento(p: {
     if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
     const token = await u.getIdToken();
     const res = await fetch('/api/admin/rotina-fiscal/sem-movimento-declarado', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
+
+// ── ⚙️ Parâmetros da Rotina (28/09) ──────────────────────────────────────
+// A régua (o que cada valor faz, o padrão) mora em `sefaz-backend/rotina-fiscal.js`.
+export type CienciaAposCompletaManual = 'exigir' | 'dispensar';
+export interface ParametrosRotina { cienciaAposCompletaManual: CienciaAposCompletaManual }
+export interface ParametrosRotinaResposta {
+    ok: boolean; error?: string;
+    parametros?: ParametrosRotina;
+    padrao?: ParametrosRotina;
+    gravado?: { atualizadoEm?: string; atualizadoPor?: string | null } | null;
+}
+
+export async function lerParametrosRotina(): Promise<ParametrosRotinaResposta> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/parametros', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return data;
+}
+
+/** Só admin grava (o backend trava). */
+export async function salvarParametrosRotina(p: Partial<ParametrosRotina>): Promise<ParametrosRotinaResposta> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/parametros', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(p),

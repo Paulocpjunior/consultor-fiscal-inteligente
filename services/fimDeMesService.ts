@@ -16,7 +16,7 @@ import { getAuth } from 'firebase/auth';
 export interface NotaNomeada {
     chave: string | null; numero: string | number | null; tipo: string | null;
     emitente: string | null; emitenteCnpj: string | null; dhEmi: string | null;
-    motivo: 'resumo' | 'nfse-sem-valor';
+    motivo: 'resumo' | 'nfse-sem-valor' | 'sem-ciencia';
 }
 
 export interface BloqueioFimDeMes {
