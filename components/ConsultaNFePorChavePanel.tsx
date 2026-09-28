@@ -213,7 +213,7 @@ const ConsultaNFePorChavePanel: React.FC = () => {
                                             O escritório não é emitente nem destinatário desta NFe (destinatário: <strong>{formatCnpj(resultado.detalhes?.destinatario.cnpj)}</strong>),
                                             e mesmo assim a SEFAZ a entregou ao nosso CNPJ — só a tag <strong>autXML</strong> da nota explica isso.
                                             Use <strong>"Consultar + Importar"</strong> pra gravar esta nota na base; as próximas notas do emissor
-                                            entram pela captura e aparecem no trilho <strong>autXML</strong> da Cobertura de Saída.
+                                            entram pela captura e aparecem no trilho <strong>autXML</strong> em Captura → 📤 Cobertura de Saída.
                                         </div>
                                     </div>
                                 )}

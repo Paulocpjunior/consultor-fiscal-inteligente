@@ -43,6 +43,7 @@ type TabId =
     | 'empresas-status'
     | 'backlog-entrada'
     | 'prova-captura'
+    | 'cobertura-saida'
     | 'documentos'
     | 'dipam'
     | 'difal'
@@ -76,6 +77,11 @@ const GRUPOS: Array<{ id: GrupoId; label: string; subs: Array<{ id: TabId; label
             { id: 'captura-auto', label: '🛰️ Diagnóstico' },
             { id: 'empresas-status', label: '📋 Status por Empresa' },
             { id: 'prova-captura', label: '🔎 Prova de captura' },
+            // Cobertura de Saída (28/09): quem já nos manda o XML de saída e se
+            // o cliente configurou certo. Vivia no FIM da página Importar →
+            // Manual & Cofre, e a Novidade apontava para uma aba que não
+            // existia (Paulo: "esta tela não está ativa").
+            { id: 'cobertura-saida', label: '📤 Cobertura de Saída' },
             { id: 'backlog-entrada', label: '📥 Backlog Entrada' },
             { id: 'sae_nfce', label: '🧾 NFC-e Saída (SP)' },
             { id: 'nfse_sp_captura', label: '🛰️ Portal SP' },
@@ -358,11 +364,6 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                                 onImported={() => setRefreshKey(k => k + 1)}
                             />
                         </Suspense>
-                        {/* autXML: saída mod 55 automática via DistDFe (cert do
-                            escritório). Fica junto do ZIP — ambos completam saída. */}
-                        <Suspense fallback={null}>
-                            <AutXmlHarvest />
-                        </Suspense>
                         {/* Cofre CFI: XML por e-mail — substitui o cofre da SIEG.
                             É por aqui que a saída mod 55 entra (a SEFAZ não
                             entrega a saída ao próprio emissor). */}
@@ -371,6 +372,28 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                         </Suspense>
                         <Suspense fallback={null}>
                             <CofreControlePanel />
+                        </Suspense>
+                        {/* Ponteiro (lição de 28/07: função que muda de lugar
+                            "sumiu" para a equipe). Colheita autXML, checklist do
+                            cofre e "o cliente fez certo?" moraram aqui até 28/09. */}
+                        <div className="text-xs text-slate-600 dark:text-slate-300 border border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3">
+                            Colheita autXML, checklist do cofre e <strong>"✅ O cliente fez certo?"</strong> agora ficam em{' '}
+                            <button
+                                type="button"
+                                onClick={() => { setGrupo('captura'); setTab('cobertura-saida'); }}
+                                className="underline font-semibold text-blue-700 dark:text-blue-300"
+                            >
+                                🛰️ Captura → 📤 Cobertura de Saída
+                            </button>.
+                        </div>
+                    </div>
+                )}
+                {tab === 'cobertura-saida' && (
+                    <div className="space-y-4">
+                        {/* autXML: saída mod 55 automática via DistDFe (cert do
+                            escritório) + "quem ainda não está ligado". */}
+                        <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando cobertura de saída…</p>}>
+                            <AutXmlHarvest />
                         </Suspense>
                         {/* Checklist de migração: quem tem saída 55 e ainda não
                             recebe via cofre → configurar e-mail no emissor. */}

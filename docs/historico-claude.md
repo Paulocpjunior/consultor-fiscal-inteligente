@@ -5,6 +5,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📤 COBERTURA DE SAÍDA GANHOU PORTA (28/09)** (Paulo, print da Novidade de
+  25/09: *"esta tela não está ativa"*). O caminho "Captura → Cobertura de
+  Saída → ✅ O cliente fez certo?" nunca existiu como aba: `AptidaoSaidaPanel`,
+  `AutXmlHarvest` (colheita + cobertura) e `CofreChecklistPanel` eram os três
+  últimos blocos de `tab === 'importacao'` (Importar → Manual & Cofre), e
+  CapturaDiagnosticoPanel, ConsultaNFePorChavePanel, Relatorios (3×) e a
+  Novidade apontavam para a aba fantasma. Nasce `TabId 'cobertura-saida'` no
+  grupo Captura com os três blocos; Importar fica com manual/digitada/ZIP/
+  cofre e um ponteiro clicável para a aba nova (lição de 28/07: função que
+  muda de lugar "sumiu"). Textos corrigidos nos 4 componentes, no guia
+  `guia-saida-mod55.html` e na Novidade. Trava
+  `centralCoberturaSaidaPorta.test.ts`: sub-aba existe em Captura, os três
+  painéis montam só nela (sem montagem dupla), e o "Onde:" da Novidade nomeia
+  um rótulo de aba que existe. REGRA: "Onde:" de Novidade se escreve lendo o
+  `GRUPOS` da Central, não de memória.
+
 - **🏦 "SEGUE ARQUIVO TESTE DO DERE PARA VALIDAÇÃO" — o plano de contas e o
   balancete viraram D-1011 e D-1101 conferidos contra o XSD, e a PLANILHA disse
   o que ninguém tinha escrito** (27/09, Paulo, zip com `Plano_de_contas_2026.xlsx`
