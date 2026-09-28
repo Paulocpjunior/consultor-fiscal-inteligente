@@ -24,6 +24,8 @@ import {
 
 const raiz = process.cwd();
 const ler = (p: string) => fs.readFileSync(path.join(raiz, p), 'utf8');
+// O python executado pelos testes NÃO pode deixar __pycache__ no repositório.
+const SEM_BYTECODE = { ...process.env, PYTHONDONTWRITEBYTECODE: '1' };
 
 const AGORA = new Date('2026-09-28T13:00:00Z');
 const aceita = { permissaoLigacao: { status: 'aceita', expiraEm: '2026-10-04T00:00:00Z' } };
@@ -117,7 +119,7 @@ describe('o call file — linha a linha, porque é ele que o Asterisk executa', 
             'ag = importlib.util.module_from_spec(spec); spec.loader.exec_module(ag)',
             `sys.stdout.write(ag.montar_call_file(${JSON.stringify(args.ramal)}, ${JSON.stringify(args.numero)}, ${JSON.stringify(args.pedidoId)}, ${JSON.stringify(args.nomeContato)}))`,
         ].join('\n');
-        const saida = execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+        const saida = execFileSync('python3', ['-c', py], { encoding: 'utf8', env: SEM_BYTECODE });
         expect(saida).toBe(esperado);
     });
 
@@ -129,7 +131,7 @@ describe('o call file — linha a linha, porque é ele que o Asterisk executa', 
             'r = ag.traduzir({"disposition": "NO ANSWER", "dstchannel": "PJSIP/meta-saida-0001", "billsec": 0, "lastdata": ""})',
             'sys.stdout.write(json.dumps([r[0], r[3]]))',
         ].join('\n');
-        const [status, detalhe] = JSON.parse(execFileSync('python3', ['-c', py], { encoding: 'utf8' }));
+        const [status, detalhe] = JSON.parse(execFileSync('python3', ['-c', py], { encoding: 'utf8', env: SEM_BYTECODE }));
         const js = traduzirResultado({ encontrado: true, disposicao: 'NO ANSWER', pernaCliente: true, billsec: 0, lastdata: null });
         expect(status).toBe(js.status);
         expect(detalhe).toBe(js.detalhe);
@@ -293,8 +295,11 @@ describe('fiação: rota, agente, tela e SBC', () => {
         expect(agente).toMatch(/o agente fica parado/);
         expect(agente).toMatch(/os\.replace\(tmp, destino\)/);   // escreve e MOVE: nada pela metade no spool
         expect(agente).toMatch(/Master\.csv/);
-        // Sintaxe: bash -n do setup e py_compile do agente.
+        // Sintaxe: bash -n do setup e o parse do agente. 🐛 A 1ª versão usava
+        // `py_compile`, que GRAVA scripts/__pycache__/*.pyc — e o `git add -A`
+        // do commit levou o bytecode para o repositório. O parse por `ast`
+        // confere a sintaxe sem escrever nada.
         execFileSync('bash', ['-n', path.join(raiz, 'scripts/setup-sbc-whatsapp.sh')]);
-        execFileSync('python3', ['-m', 'py_compile', path.join(raiz, 'scripts/sbc-agente-saida.py')]);
+        execFileSync('python3', ['-c', 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1])', path.join(raiz, 'scripts/sbc-agente-saida.py')], { env: SEM_BYTECODE });
     });
 });
