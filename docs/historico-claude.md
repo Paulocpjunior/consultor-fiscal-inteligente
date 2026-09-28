@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📨 MANIFESTAÇÃO: SUCESSO É FATO GRAVADO, NUNCA HTTP 200 (28/09)** (Paulo,
+  validando a etapa 2: *"consigo marcar como ciente, porém quando atualizo
+  ele volta a aparecer como sem ciência"*). `/manifest-one` devolvia 200 com
+  o retorno CRU da SEFAZ (`{retorno:{cStatLote, eventos[{cStat,xMotivo}]}}`)
+  e `manifestarUmaChave` só olhava `r.erro`; a Rotina e o Diagnóstico
+  mostravam ✔ para qualquer 200, enquanto `manifestarUma` só gravava o
+  evento com cStat 135/136. Nasce `manifestacao-desfecho.js` (puro):
+  `desfechoDaManifestacao(retorno)` → aceita (135/136) · ja-existia (573,
+  duplicidade: grava o evento com `jaExistiaNaSefaz: true`) · recusada
+  (cStat + xMotivo ditos) · sem-resposta (lote); `eventoDaManifestacao`.
+  `manifestarUma` grava nos dois primeiros e devolve `result.desfecho`
+  (auditoria em `manifestacoes_log.desfecho`); a rota responde
+  `{ok, desfecho, idAttr, retorno}` e passa a aceitar COLABORADOR para
+  ciência da própria carteira (`empresaId` no corpo, `podeAcessarEmpresaId`),
+  como o `/manifest-pending`. Front: `manifestacaoGravada(r)` e
+  `motivoDaManifestacaoNaoGravada(r)` no `manifestoService`; Rotina e
+  CapturaDiagnosticoPanel só mostram ✔ quando gravou e mostram o cStat/motivo
+  quando não. Trava `manifestacaoDesfecho.test.ts` (régua + nenhum chamador
+  decide pela ausência de `erro`). PENDENTE: saber o que a SEFAZ respondeu
+  nas 9 tentativas do Paulo (a tela agora diz; `manifestacoes_log` guarda).
+
 - **📗 M100/M500 COD_CRED DE TRÊS DÍGITOS, UM POR TIPO DE CRÉDITO (28/09, ELS
   08/2026)** (Paulo, com o arquivo de 25/09 e o PVA: *"faltaram estes 2
   ajustes"* — "Tamanho do campo inválido/incorreto — COD_CRED", M100 e M500,

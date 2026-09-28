@@ -78,17 +78,33 @@ router.get('/manifest-elegiveis', authUser, async (req, res) => {
   }
 });
 
-router.post('/manifest-one', requireAdmin, async (req, res) => {
+// 🚨 Colaborador manifesta CIÊNCIA da própria carteira também por esta rota
+// (28/09): o botão 📨 da etapa 2 da Rotina é dele. Mesma régua do
+// /manifest-pending — só ciência, só com empresaId da carteira; os demais
+// tipos afirmam sobre a operação e seguem admin.
+router.post('/manifest-one', authUser, async (req, res) => {
   try {
-    const { chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false } = req.body || {};
+    const { chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId = null } = req.body || {};
     if (!chNFe || !cnpjDestinatario) {
       return res.status(400).json({ erro: 'chNFe e cnpjDestinatario são obrigatórios' });
     }
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin) {
+      if (tipo !== 'ciencia') {
+        return res.status(403).json({ erro: 'Só administradores manifestam confirmação/desconhecimento — esses afirmam sobre a operação e não se desfazem.' });
+      }
+      if (!empresaId) {
+        return res.status(400).json({ erro: 'Informe a empresa: fora de admin a ciência é por cliente da sua carteira.' });
+      }
+      const check = await podeAcessarEmpresaId(req.user, empresaId);
+      if (!check.ok) return res.status(check.status).json({ erro: check.error });
+    }
     const r = await manifestarUma({
       chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun,
-      capturadoPor: req.user,
+      capturadoPor: req.user, empresaId: empresaId || null,
     });
-    res.json(r);
+    // O retorno cru da SEFAZ é grande (SOAP inteiro) e a tela só precisa do desfecho.
+    res.json({ ok: r.desfecho ? r.desfecho.registraEvento : false, desfecho: r.desfecho || null, idAttr: r.idAttr, dryRun: r.dryRun, retorno: r.retorno || null });
   } catch (e) {
     console.error('[manifest-one] erro:', e);
     res.status(500).json({ erro: e.message });
