@@ -8,6 +8,7 @@
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
 import { conferirSituacaoEspecial } from './sped-contrib-situacao-especial.js';
+import { conferirTipoEscrituracao } from './sped-contrib-escrituracao.js';
 import {
     conferirContagemDeCampos, conferirPerfilConsolidado, avisosDaPrevalidacaoContrib,
 } from './sped-contrib-campos.js';
@@ -63,7 +64,7 @@ router.get('/preview', requireAdmin, async (req, res) => {
  */
 router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId, situacaoEspecial, dataEvento } = req.body || {};
+        const { empresaId, situacaoEspecial, dataEvento, tipoEscrituracao, numRecAnterior } = req.body || {};
         const comp = competenciaParaGerarArquivo((req.body || {}).competencia);
         if (!comp.ok) return res.status(400).json({ error: comp.erro });
         const competencia = comp.competencia;
@@ -72,10 +73,15 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // coletar — recusa dita, nunca arquivo normal em silêncio.
         const sit = conferirSituacaoEspecial({ situacaoEspecial, dataEvento, competencia });
         if (!sit.ok) return res.status(400).json({ error: 'SITUACAO_ESPECIAL_INVALIDA', message: sit.erro });
+        // 🔁 Original × retificadora (28/09): mesma régua — recusa dita antes de coletar.
+        const esc = conferirTipoEscrituracao({ tipoEscrituracao, numRecAnterior });
+        if (!esc.ok) return res.status(400).json({ error: 'TIPO_ESCRITURACAO_INVALIDO', message: esc.erro });
 
         const dados = await coletarDadosContribuicoes({ empresaId, competencia });
         dados.situacaoEspecial = sit.valor;
+        dados.escrituracao = esc.valor;
         if (sit.valor) dados.warnings.push(`[situação especial] ${sit.valor.aviso}`);
+        if (esc.valor.aviso) dados.warnings.push(`[retificadora] ${esc.valor.aviso}`);
 
         const txt = await montarBlocosContribuicoes({ dados });
 
@@ -123,7 +129,7 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         const cnpj = (dados.empresa.cnpj || '').replace(/\D/g, '');
         // O nome diz que é situação especial (SITESP<código>): o arquivo de
         // encerramento não pode ser confundido com o mensal do mesmo mês.
-        const periodo = competencia.replace('-', '') + (sit.valor ? `_SITESP${sit.valor.indSitEsp}` : '');
+        const periodo = competencia.replace('-', '') + (sit.valor ? `_SITESP${sit.valor.indSitEsp}` : '') + (esc.valor.tipoEscrit === '1' ? '_RETIF' : '');
         const filename = nomeDoArquivoSped({ familia: 'SPED_CONTRIB', cnpj, periodo });
 
         // 🚨 E A TELA PASSA A DIZER QUAL ARQUIVO ELA ESTÁ DESCREVENDO. O número

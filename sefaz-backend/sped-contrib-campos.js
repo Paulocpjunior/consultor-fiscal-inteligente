@@ -1520,6 +1520,40 @@ export function conferirEstabelecimentosContrib(linhas) {
  * crédito de entrada, e as seis empresas fechadas por recibo são todas
  * CUMULATIVAS — a mesma sorte do IPI em E200/E210 e do Bloco H zerado.
  */
+/**
+ * 📖 COD_CRED DO M100/M500 É DE TRÊS DÍGITOS, DA TABELA 4.3.6.
+ *
+ * PVA da ELS 08/2026 (25/09): "Tamanho do campo inválido/incorreto — COD_CRED"
+ * duas vezes (M100 e M500), sobre `01`. O Guia 1.35 dá o campo 02 como
+ * **C 003**, "conforme a Tabela 4.3.6": grupo (1 tributada MI · 2 não
+ * tributada MI · 3 exportação) + tipo (01 básica … 09 imobiliária, 99 outros).
+ */
+export const CODIGOS_TIPO_CREDITO = new Set(
+    ['1', '2', '3'].flatMap((g) => ['01', '02', '03', '04', '05', '06', '07', '08', '09', '99'].map((t) => `${g}${t}`)),
+);
+
+export function conferirCodCredDoM100(linhas) {
+    const erros = [];
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg !== 'M100' && reg !== 'M500') continue;
+        const cod = String(c[1] ?? '').trim();
+        if (CODIGOS_TIPO_CREDITO.has(cod)) continue;
+        erros.push({
+            regra: 'm100-cod-cred', registro: reg, campo: '02 - COD_CRED', linha: l,
+            valor: cod || '(vazio)', esperado: 'código de 3 dígitos da Tabela 4.3.6 (101, 201, 301, …)',
+            mensagem: `O ${reg} traz COD_CRED "${cod || '(vazio)'}" — o PVA recusa com "Tamanho do campo inválido/incorreto" `
+                + '(ELS 08/2026). O código tem três dígitos: grupo da receita a que o crédito se vincula (1 tributada '
+                + 'no mercado interno · 2 não tributada · 3 exportação) + tipo (01 alíquota básica …).',
+            acao: 'Defeito de GERAÇÃO — reporte com o print. O grupo vem da CST da aquisição (50/51/52), o tipo do 0110 campo 04.',
+            fonte: `Guia Prático da EFD-Contribuições 1.35, ${reg} campo 02: "Código de Tipo de Crédito apurado no período, `
+                + 'conforme a Tabela 4.3.6" — C 003.',
+        });
+    }
+    return { erros };
+}
+
 export function conferirCreditoDoM100(linhas) {
     const erros = [];
     for (const l of (linhas || [])) {
@@ -1638,6 +1672,8 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         // AJUSTE e como DIFERIDO, e o disponível saía ZERO. Contagem de campos
         // certa, casas trocadas — a família do M210 da MANTOAN (18/08).
         ...conferirCreditoDoM100(linhas).erros,
+        // 📖 COD_CRED de três dígitos (ELS 08/2026): a recusa do PVA que faltava.
+        ...conferirCodCredDoM100(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

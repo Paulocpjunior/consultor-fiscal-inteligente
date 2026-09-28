@@ -39,6 +39,8 @@ import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-do
 import { regimeDaEmpresa, semFinsLucrativos } from './regime-tributario.js';
 // 🏁 Situação especial do 0000 (abertura/cisão/fusão/incorporação/encerramento), 28/09.
 import { conferirSituacaoEspecial } from './sped-contrib-situacao-especial.js';
+// 🔁 Original × retificadora (TIPO_ESCRIT / NUM_REC_ANTERIOR), 28/09.
+import { conferirTipoEscrituracao } from './sped-contrib-escrituracao.js';
 
 const COD_VER = '006';  // Versao 006 vigente desde 01/01/2026
 
@@ -178,12 +180,15 @@ function build0000(dados) {
     // (DT_INI na abertura; DT_FIN nas demais). Aceita também a forma crua
     // {situacaoEspecial, dataEvento} para quem monta `dados` sem a rota.
     const sit = situacaoDo0000(dados);
+    // 🔁 RETIFICADORA (28/09): `dados.escrituracao` conferido pela rota (ou
+    // cru). Sem ele, original com recibo vazio — o de sempre.
+    const esc = escrituracaoDo0000(dados);
     return fmt.buildLine([
         '0000',
         COD_VER,
-        '0',  // TIPO_ESCRIT: 0=Original
+        esc.tipoEscrit,        // TIPO_ESCRIT: 0=Original, 1=Retificadora
         sit ? sit.indSitEsp : '',   // IND_SIT_ESP: vazio = normal
-        '',   // NUM_REC_ANTERIOR: vazio (original)
+        esc.numRecAnterior,    // NUM_REC_ANTERIOR: só na retificadora
         sit?.dtIni || fmt.formatCompetenciaInicio(competenciaInicio),
         sit?.dtFin || fmt.formatCompetenciaFim(competenciaFim),
         fmt.sanitizeString(empresa.nome, 100),
@@ -194,6 +199,16 @@ function build0000(dados) {
         fmt.sanitizeString(df.indNatPJ || '00', 2),
         df.indAtividade === 'industrial' ? '0' : '1',
     ]);
+}
+
+/** Original × retificadora já conferida, ou conferida agora a partir da forma crua. Inválida = recusa (throw). */
+function escrituracaoDo0000(dados) {
+    const e = dados.escrituracao;
+    if (!e) return { tipoEscrit: '0', numRecAnterior: '' };
+    if (typeof e === 'object' && 'tipoEscrit' in e) return e;
+    const conf = conferirTipoEscrituracao(typeof e === 'object' ? e : { tipoEscrituracao: e, numRecAnterior: dados.numRecAnterior });
+    if (!conf.ok) throw new Error(`0000 escrituração: ${conf.erro}`);
+    return conf.valor;
 }
 
 /** A situação especial já conferida, ou conferida agora a partir da forma crua. Inválida = recusa (throw), nunca arquivo normal em silêncio. */

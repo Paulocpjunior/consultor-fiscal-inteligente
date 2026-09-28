@@ -77,7 +77,19 @@
 <section>
     <h2>🆕 O que mudou agora (28/09) — leia esta parte primeiro</h2>
 
-    <h3>🏁 <strong>SPED Contribuições: situação especial (encerramento, cisão, fusão, incorporação, abertura) sai do próprio Consultor</strong></h3>
+    <h3>📗 <strong>SPED Contribuições: o M100/M500 sai com o código de crédito de três dígitos da Tabela 4.3.6, um registro por tipo de crédito</strong></h3>
+    <p>ELS (Distribuidora de Bananas) 08/2026, PVA de 25/09: duas recusas "Tamanho do campo inválido/incorreto — COD_CRED",
+    no M100 e no M500. O gerador escrevia "01" (dois dígitos) e somava todo o crédito de entrada num registro só. O
+    Guia diz que o campo tem três dígitos e que sai um M100 por tipo de crédito: o grupo vem da CST da aquisição (50 =
+    crédito vinculado à receita tributada no mercado interno → 1xx; 51 = não tributada → 2xx; 52 = exportação → 3xx) e o
+    tipo é 01, alíquota básica. Na ELS, as 211 entradas são CST 50: o arquivo passa a sair com <strong>101</strong> no M100
+    e no M500, mesmos valores. Crédito comum a mais de um tipo de receita (CST 53 a 56), presumido (60 a 66) e aquisição
+    sem direito a crédito (70 em diante) ficam fora do M100 e do desconto, ditos no aviso da geração com valor e o que
+    fazer: o app não rateia crédito, quem rateia é o PVA (0110 = rateio) ou a pessoa (M105 à mão). A conferência interna
+    passa a acusar o código curto antes do PVA. Regere o arquivo da ELS e valide.</p>
+    <p><strong>Onde:</strong> Central de XMLs → SPED Fiscal → aba SPED Contribuições → Gerar.</p>
+
+    <h3>🏁 <strong>SPED Contribuições: situação especial (encerramento, cisão, fusão, incorporação, abertura) e escrituração RETIFICADORA saem do próprio Consultor</strong></h3>
     <p>GIRY (1365): "vou gerar um EFD de encerramento — essa opção será habilitada no Consultor? Gerei, validei no PVA e
     continua como um arquivo normal." Não havia campo: o registro 0000 saía sempre como mensal comum. Agora a aba SPED
     Contribuições tem <strong>Situação especial</strong> (os cinco códigos do leiaute) e <strong>Data do evento</strong>.
@@ -85,7 +97,13 @@
     DT_INI (abertura); o outro extremo segue o mês. Situação sem data, ou data fora da competência, é recusa dita, nunca
     arquivo normal em silêncio. O nome do arquivo ganha <code>_SITESP4</code> (encerramento) para não se confundir com o
     mensal, e o aviso da geração diz o que foi escrito no 0000. Confira no PVA antes de assinar.</p>
-    <p><strong>Onde:</strong> Central de XMLs → SPED Fiscal → aba SPED Contribuições → bloco 2 (Competência) → Situação especial + Data do evento.</p>
+    <p>Na mesma tela entrou o <strong>Tipo de escrituração</strong>: "0 · Original" (o de sempre) ou "1 · Retificadora", com o
+    <strong>Nº do recibo da escrituração anterior</strong> (o que o PVA/Receitanet devolveu na transmissão que está sendo
+    retificada). O 0000 recebe TIPO_ESCRIT=1 e o recibo no NUM_REC_ANTERIOR, em maiúsculas, até 41 caracteres. Retificadora sem
+    recibo, ou recibo em arquivo original, é recusa dita antes do PVA. O nome do arquivo ganha <code>_RETIF</code>. Encerramento
+    e retificadora podem ir juntos no mesmo arquivo. E a conferência interna do período deixou de acusar "DT_FIN não é o
+    último dia do mês" quando há situação especial: era alarme falso sobre arquivo certo.</p>
+    <p><strong>Onde:</strong> Central de XMLs → SPED Fiscal → aba SPED Contribuições → bloco 2 (Competência) → Situação especial + Data do evento · Tipo de escrituração + Nº do recibo anterior.</p>
 
     <h3>📨 <strong>"Manifeste a ciência" na nota completada à mão voltou — e agora é parâmetro do escritório</strong></h3>
     <p>Um colaborador avisou: <em>"não tô mais recebendo a mensagem pra manifestar ciência"</em> (B &amp; T). O ajuste

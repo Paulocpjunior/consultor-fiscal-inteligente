@@ -315,6 +315,45 @@ const IND_PGTO_PADRAO = '0';
  */
 const CSTS_COM_CREDITO = new Set(['50', '51', '52', '53', '54', '55', '56']);
 
+/**
+ * 📖 O TIPO DO CRÉDITO SEGUE A CST DO ITEM (Tabela 4.3.7 → Tabela 4.3.6).
+ *
+ * PVA da ELS (DISTRIBUIDORA DE BANANAS) 08/2026, 25/09: "Tamanho do campo
+ * inválido/incorreto — COD_CRED" no M100 e no M500. O gerador escrevia
+ * `'01'` (2 dígitos); o Guia 1.35 diz **C 003** e a Tabela 4.3.6 dá o código
+ * em três partes: o GRUPO (1 = crédito vinculado à receita tributada no
+ * mercado interno · 2 = vinculado à receita NÃO tributada no MI · 3 =
+ * vinculado à exportação) e o TIPO (01 alíquota básica · 02 alíquotas
+ * diferenciadas · 03 por unidade · …). O grupo vem da CST da aquisição
+ * (50/51/52); o tipo, do 0110 campo 04 (COD_TIPO_CONT), que o app escreve
+ * sempre `1` (alíquota básica).
+ *
+ * CST 53–56 (crédito COMUM a mais de um tipo de receita) só se distribui por
+ * rateio (0111) ou apropriação direta — o app não rateia, e escolher um grupo
+ * seria inventar. 60–66 (presumido: 106 agroindústria / 107 outros) idem.
+ * 70+ não gera crédito nenhum. Esses três casos saem NOMEADOS no aviso e
+ * FORA do M100/M500 e do desconto, nunca somados em silêncio.
+ */
+export function grupoDoCreditoPeloCst(cst) {
+    const c = String(cst ?? '').trim().padStart(2, '0');
+    if (c === '50') return '1';
+    if (c === '51') return '2';
+    if (c === '52') return '3';
+    if (['53', '54', '55', '56'].includes(c)) return 'comum';
+    if (['60', '61', '62', '63', '64', '65', '66'].includes(c)) return 'presumido';
+    return null;
+}
+
+/** Os grupos da Tabela 4.3.6 que viram M100/M500 (1 tributada MI · 2 não tributada · 3 exportação). */
+const GRUPOS_DE_CREDITO_EMITIDOS = ['1', '2', '3'];
+
+/** Tabela 4.3.6: grupo + tipo. `codTipoCont` é o 0110 campo 04 (1 básica → 01, 2 diferenciadas → 02). */
+export function codCredDoGrupo(grupo, codTipoCont = '1') {
+    if (!GRUPOS_DE_CREDITO_EMITIDOS.includes(String(grupo))) return null;
+    return `${grupo}${String(codTipoCont) === '2' ? '02' : '01'}`;
+}
+const ROTULO_DO_GRUPO = { comum: 'CST 53–56 (crédito comum a mais de um tipo de receita)', presumido: 'CST 60–66 (crédito presumido)', semCredito: 'CST sem direito a crédito (70 em diante)' };
+
 /** Descrição do item quando o documento não traz itens capturados. */
 function descricaoDoServico(nota) {
     const d = nota?.discriminacao || nota?.descricaoServico || nota?.servico?.discriminacao;
@@ -1420,6 +1459,13 @@ export function buildBlocoM(dados) {
     // deveria mostrá-la.
     let totalPisSaida = 0, totalCofinsSaida = 0, totalBcSaida = 0, totalReceitaSaida = 0;
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
+    /** Crédito de entrada POR GRUPO da Tabela 4.3.6 (ver grupoDoCreditoPeloCst). */
+    const creditos = {};
+    const acumularCredito = (grupo, bc, pis, cofins, itens) => {
+        const g = grupo || 'semCredito';
+        const c = creditos[g] || (creditos[g] = { bc: 0, pis: 0, cofins: 0, itens: 0 });
+        c.bc += bc; c.pis += pis; c.cofins += cofins; c.itens += itens;
+    };
     /** Quanto de ICMS saiu da base — vai no aviso, para o número ser conferível. */
     let icmsExcluido = 0;
     /** Desconto incondicional tirado da receita — vai no aviso, com a contagem. */
@@ -1528,16 +1574,30 @@ export function buildBlocoM(dados) {
             // inventar crédito. O que muda aqui é só o DESCONTO, que reduz o
             // valor da aquisição em qualquer leitura.
             const vlEntrada = rb.receita;
-            totalBcEntrada += vlEntrada;
-            let pis = 0, cofins = 0;
-            for (const item of (nota.itens || [])) {
-                pis += parseFloat(item.vPIS || 0);
-                cofins += parseFloat(item.vCOFINS || 0);
+            // 📖 O crédito segue a CST de cada item (Tabela 4.3.7 → 4.3.6) —
+            // ver grupoDoCreditoPeloCst. Nota inteira num grupo só (o caso de
+            // sempre) acumula como antes; nota com CST misturadas vai item a item.
+            const itensNota = nota.itens || [];
+            const grupos = new Set(itensNota.map((i) => grupoDoCreditoPeloCst(getCstPis(i, regimeApuracao, 'entrada'))));
+            if (grupos.size <= 1) {
+                const g = grupos.size ? [...grupos][0] : grupoDoCreditoPeloCst(getCstPis({}, regimeApuracao, 'entrada'));
+                let pis = 0, cofins = 0;
+                for (const item of itensNota) {
+                    pis += parseFloat(item.vPIS || 0);
+                    cofins += parseFloat(item.vCOFINS || 0);
+                }
+                if (pis === 0) pis = vlEntrada * aliq.pis;
+                if (cofins === 0) cofins = vlEntrada * aliq.cofins;
+                acumularCredito(g, vlEntrada, pis, cofins, itensNota.length || 1);
+            } else {
+                for (const item of itensNota) {
+                    const g = grupoDoCreditoPeloCst(getCstPis(item, regimeApuracao, 'entrada'));
+                    const base = receitaDoItem(item);
+                    const pis = parseFloat(item.vPIS || 0) || base * aliq.pis;
+                    const cofins = parseFloat(item.vCOFINS || 0) || base * aliq.cofins;
+                    acumularCredito(g, base, pis, cofins, 1);
+                }
             }
-            if (pis === 0) pis = vlEntrada * aliq.pis;
-            if (cofins === 0) cofins = vlEntrada * aliq.cofins;
-            totalPisEntrada += pis;
-            totalCofinsEntrada += cofins;
         }
     }
 
@@ -1554,6 +1614,28 @@ export function buildBlocoM(dados) {
     // defeito que o M210 com COD_CONT do outro regime tinha.
     // ⚠️ Não há ICMS a excluir aqui: aluguel não tem ICMS destacado, então
     // receita e base coincidem — e é o valor da FICHA, não um derivado.
+    // Só os grupos com código na Tabela 4.3.6 entram no M100/M500 e no desconto.
+    for (const g of GRUPOS_DE_CREDITO_EMITIDOS) {
+        const c = creditos[g];
+        if (!c) continue;
+        totalBcEntrada += c.bc; totalPisEntrada += c.pis; totalCofinsEntrada += c.cofins;
+    }
+    // (`isNaoCumulativo` nasce mais abaixo; aqui a mesma régua, sem adiantar a const.)
+    if ((regimeApuracao === '1' || regimeApuracao === '3') && Array.isArray(dados.warnings)) {
+        for (const g of ['comum', 'presumido', 'semCredito']) {
+            const c = creditos[g];
+            if (!c || c.itens === 0) continue;
+            const semCred = g === 'semCredito';
+            dados.warnings.push(
+                `[crédito] ${c.itens} item(ns) de ENTRADA com ${ROTULO_DO_GRUPO[g]}: aquisição ${c.bc.toFixed(2)}`
+                + (semCred ? ' — não gera crédito; ficou fora do M100/M500.'
+                    : `, PIS ${c.pis.toFixed(2)} / COFINS ${c.cofins.toFixed(2)} ficaram FORA do M100/M500 e do desconto no `
+                    + 'M200/M600: o app não rateia crédito comum nem sabe se o presumido é da agroindústria (106) ou outro (107). '
+                    + 'Com 0110 campo 03 = 2 (rateio) o PVA calcula em "Gerar Apurações"; com 1 (apropriação direta) informe o M105/M505 à mão.'),
+            );
+        }
+    }
+
     const receitaSemDoc = Math.max(0, parseFloat(dados.receitaSemDocumento || 0) || 0);
     if (receitaSemDoc > 0) {
         totalReceitaSaida += receitaSemDoc;
@@ -1773,25 +1855,34 @@ export function buildBlocoM(dados) {
     // houve"), nunca o default de quem não achou o dado (regra de 06/08). O
     // IND_DESC_CRED e o saldo saem do que o M200 de fato desconta.
     if (isNaoCumulativo && totalPisEntrada > 0) {
+        // 📖 UM M100 POR TIPO DE CRÉDITO (Guia 1.35: "deve ser gerado um registro
+        // M100 específico para cada tipo de crédito apurado"), com o COD_CRED de
+        // TRÊS dígitos da Tabela 4.3.6 (ELS 08/2026, 25/09: o PVA recusou '01').
         // O quanto o M200 vai de fato descontar — o mesmo número, calculado no
-        // mesmo lugar: dois cálculos fariam o M100 e o M200 discordarem sobre
-        // o crédito usado, dentro do mesmo arquivo.
-        const dispPis = totalPisEntrada;
-        const descPis = Math.min(dispPis, vlContribPis);
-        linhas.push(fmt.buildLine([
-            'M100', '01', '0',
-            fmt.formatValue(totalBcEntrada),
-            fmt.formatValue(aliq.pis * 100, 4),
-            '', '',
-            fmt.formatValue(totalPisEntrada),   // 08 VL_CRED
-            fmt.formatValue(0),                 // 09 VL_AJUS_ACRES — não há ajuste
-            fmt.formatValue(0),                 // 10 VL_AJUS_REDUC
-            fmt.formatValue(0),                 // 11 VL_CRED_DIF — não há diferimento
-            fmt.formatValue(dispPis),           // 12 VL_CRED_DISP = 08+09-10-11
-            descPis >= dispPis ? '0' : '1',     // 13 IND_DESC_CRED (0 total · 1 parcial)
-            fmt.formatValue(descPis),           // 14 VL_CRED_DESC
-            fmt.formatValue(dispPis - descPis), // 15 SLD_CRED = 12 - 14
-        ]));
+        // mesmo lugar — é repartido pelos grupos na ordem 1 → 2 → 3: dois
+        // cálculos fariam o M100 e o M200 discordarem sobre o crédito usado.
+        let restantePis = Math.min(totalPisEntrada, vlContribPis);
+        for (const g of GRUPOS_DE_CREDITO_EMITIDOS) {
+            const c = creditos[g];
+            if (!c || !(c.pis > 0)) continue;
+            const dispPis = c.pis;
+            const descPis = Math.min(dispPis, restantePis);
+            restantePis -= descPis;
+            linhas.push(fmt.buildLine([
+                'M100', codCredDoGrupo(g), '0',
+                fmt.formatValue(c.bc),
+                fmt.formatValue(aliq.pis * 100, 4),
+                '', '',
+                fmt.formatValue(dispPis),           // 08 VL_CRED
+                fmt.formatValue(0),                 // 09 VL_AJUS_ACRES — não há ajuste
+                fmt.formatValue(0),                 // 10 VL_AJUS_REDUC
+                fmt.formatValue(0),                 // 11 VL_CRED_DIF — não há diferimento
+                fmt.formatValue(dispPis),           // 12 VL_CRED_DISP = 08+09-10-11
+                descPis >= dispPis ? '0' : '1',     // 13 IND_DESC_CRED (0 total · 1 parcial)
+                fmt.formatValue(descPis),           // 14 VL_CRED_DESC
+                fmt.formatValue(dispPis - descPis), // 15 SLD_CRED = 12 - 14
+            ]));
+        }
     }
 
     // M200 — Contribuicao PIS do periodo
@@ -2003,14 +2094,20 @@ export function buildBlocoM(dados) {
     }));
 
     if (isNaoCumulativo && totalCofinsEntrada > 0) {
-        const dispCof = totalCofinsEntrada;
-        const descCof = Math.min(dispCof, vlContribCofins);
+        // Mesma régua do M100: um M500 por grupo, COD_CRED de três dígitos.
+        let restanteCof = Math.min(totalCofinsEntrada, vlContribCofins);
+        for (const g of GRUPOS_DE_CREDITO_EMITIDOS) {
+        const c = creditos[g];
+        if (!c || !(c.cofins > 0)) continue;
+        const dispCof = c.cofins;
+        const descCof = Math.min(dispCof, restanteCof);
+        restanteCof -= descCof;
         linhas.push(fmt.buildLine([
-            'M500', '01', '0',
-            fmt.formatValue(totalBcEntrada),
+            'M500', codCredDoGrupo(g), '0',
+            fmt.formatValue(c.bc),
             fmt.formatValue(aliq.cofins * 100, 4),
             '', '',
-            fmt.formatValue(totalCofinsEntrada),  // 08 VL_CRED
+            fmt.formatValue(dispCof),             // 08 VL_CRED
             fmt.formatValue(0),                   // 09 VL_AJUS_ACRES
             fmt.formatValue(0),                   // 10 VL_AJUS_REDUC
             fmt.formatValue(0),                   // 11 VL_CRED_DIF
@@ -2019,6 +2116,7 @@ export function buildBlocoM(dados) {
             fmt.formatValue(descCof),             // 14 VL_CRED_DESC
             fmt.formatValue(dispCof - descCof),   // 15 SLD_CRED = 12 - 14
         ]));
+        }
     }
 
     // M600 — Contribuicao COFINS do periodo. Mesmo leiaute do M200 (provado no

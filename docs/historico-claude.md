@@ -5,6 +5,29 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 M100/M500 COD_CRED DE TRÊS DÍGITOS, UM POR TIPO DE CRÉDITO (28/09, ELS
+  08/2026)** (Paulo, com o arquivo de 25/09 e o PVA: *"faltaram estes 2
+  ajustes"* — "Tamanho do campo inválido/incorreto — COD_CRED", M100 e M500,
+  sobre `01`). Guia 1.35: campo 02 C 003, Tabela 4.3.6 = grupo (1 tributada
+  MI · 2 não tributada · 3 exportação) + tipo (01 básica…); "um M100 por
+  tipo de crédito". Em `sped-contrib-blocos.js`: `grupoDoCreditoPeloCst`
+  (50→1, 51→2, 52→3, 53–56 comum, 60–66 presumido, 70+ null) e
+  `codCredDoGrupo(grupo, codTipoCont)`; a acumulação da entrada vira POR
+  GRUPO (nota inteira num grupo = números de antes; CST misturadas = item a
+  item por `receitaDoItem`); M100/M500 saem um por grupo com `${g}01`, e o
+  desconto (`Math.min(total, vlContrib)`) é repartido na ordem 1→2→3, então
+  M200 campo 03 = Σ M100 campo 14. Comum/presumido/sem-crédito ficam FORA do
+  M100 e do desconto, com aviso `[crédito]` nomeando quantidade, valor e o
+  caminho (0110 rateio → PVA "Gerar Apurações"; direta → M105 à mão) —
+  alerta, nunca contorno. Prevalidação: `conferirCodCredDoM100` +
+  `CODIGOS_TIPO_CREDITO` (1xx/2xx/3xx × 01–09/99). Travas
+  `spedContribCodCred.test.ts` (régua, ELS só-50 → 101, 50+51 → 101/201,
+  misturada item a item, comum/70 fora e ditos, cumulativo intacto,
+  prevalidação acusa `01`); a trava que lia o fonte
+  (m200FechaConsigoMesmo) passou a cobrar `Math.min(totalPisEntrada,
+  vlContribPis)`. PENDENTE: M105/M505 (detalhamento da base por
+  NAT_BC_CRED) não é gerado — o PVA da ELS não o cobrou; OC no Guia.
+
 - **🏁 SPED CONTRIBUIÇÕES — SITUAÇÃO ESPECIAL NO 0000 (28/09, GIRY 1365)**
   (*"vou gerar um EFD de encerramento… gerei, validei no PVA e continua
   como um arquivo normal"*). `build0000` escrevia IND_SIT_ESP vazio e o mês
@@ -20,8 +43,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   aviso `[situação especial]` e sufixo `_SITESP<n>` no nome do arquivo.
   Tela: select + date no bloco 2 da aba SPED Contribuições. Trava
   `spedContribSituacaoEspecial.test.ts` (régua, 0000 nos três casos, resto
-  do bloco igual). FORA: TIPO_ESCRIT retificadora + NUM_REC_ANTERIOR
-  (mesma tela do PVA) — pendente, ninguém pediu ainda.
+  do bloco igual). 2ª rodada (Paulo: *"pode criar escrituração retificadora,
+  não vamos deixar nada pra trás"*): `sped-contrib-escrituracao.js` (puro)
+  `conferirTipoEscrituracao({tipoEscrituracao, numRecAnterior})` — Guia
+  0000 campo 03 [0,1] e campo 05 C 041 só maiúsculas, só na retificadora;
+  recusas ditas (retificadora sem recibo, recibo em original, >41, tipo
+  fora). `build0000` lê `dados.escrituracao`; rota aceita
+  `tipoEscrituracao` + `numRecAnterior` (400 `TIPO_ESCRITURACAO_INVALIDO`),
+  aviso `[retificadora]`, sufixo `_RETIF`. Tela: select + input do recibo
+  (maiúsculas, maxLength 41). E a régua `conferirPeriodoDoArquivo`
+  (sped-c100-regras-comuns) lê o IND_SIT_ESP (posição 4, só na família
+  Contribuições): abertura libera o DT_INI, 1–4 liberam o DT_FIN — antes o
+  encerramento CERTO saía acusado ("DT_FIN não é o último dia"), alarme
+  falso = trava desligada. Travas `spedContribRetificadora.test.ts` e
+  casos novos em `validacoesDoGuiaContrib.test.ts`. Ponta a ponta local
+  (`montarBlocosContribuicoes` + contagem + perfil + prevalidação +
+  auditoria) verde nos três cenários; a produção não é alcançável do
+  container (403 do proxy), a prova em produção é o PVA da GIRY.
 
 - **📨 CIÊNCIA APÓS COMPLETA IMPORTADA À MÃO VIROU PARÂMETRO (28/09)**
   (colaborador, B & T: *"não tô mais recebendo a mensagem pra manifestar

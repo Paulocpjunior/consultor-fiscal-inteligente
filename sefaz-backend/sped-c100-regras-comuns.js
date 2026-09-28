@@ -219,6 +219,15 @@ export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
     };
     const ini = dia(f[posDtFinNo0000 - 1]);
     const fim = dia(f[posDtFinNo0000]);
+    // 🏁 SITUAÇÃO ESPECIAL (28/09, GIRY): o Guia diz "primeiro dia do mês,
+    // EXCETO no caso de abertura" e "último dia do mês, EXCETO nos casos de
+    // encerramento, fusão, cisão e incorporação". O 0000 do EFD-Contribuições
+    // (DT_FIN na posição 7) traz o IND_SIT_ESP na posição 4; o ICMS/IPI não
+    // tem o campo. Sem isto, o arquivo de encerramento certo saía acusado —
+    // e alarme falso é trava desligada.
+    const indSitEsp = posDtFinNo0000 === 7 ? String(f[4] ?? '').trim() : '';
+    const iniPodeSerDoEvento = indSitEsp === '0';
+    const fimPodeSerDoEvento = ['1', '2', '3', '4'].includes(indSitEsp);
     const erros = [];
     const acusar = (campo, valor, esperado, mensagem) => erros.push({
         regra: 'periodo-nao-e-mes-inteiro', registro: '0000', campo, valor, esperado,
@@ -249,12 +258,12 @@ export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
     const primeiro = `01${String(ini.m).padStart(2, '0')}${ini.a}`;
     const ultimoDia = new Date(Date.UTC(ini.a, ini.m, 0)).getUTCDate();
     const ultimo = `${String(ultimoDia).padStart(2, '0')}${String(fim.m).padStart(2, '0')}${fim.a}`;
-    if (ini.txt !== primeiro) {
+    if (ini.txt !== primeiro && !iniPodeSerDoEvento) {
         acusar(`${posDtFinNo0000 - 1} (DT_INI)`, ini.txt, primeiro,
             `O DT_INI é ${ini.txt} e o Guia exige o PRIMEIRO dia do mês (${primeiro}). Começar no meio do `
             + 'mês declara à Receita um período que não é o da escrituração.');
     }
-    if (fim.txt !== ultimo) {
+    if (fim.txt !== ultimo && !fimPodeSerDoEvento) {
         acusar(`${posDtFinNo0000} (DT_FIN)`, fim.txt, ultimo,
             `O DT_FIN é ${fim.txt} e o último dia deste mês é ${ultimo}. Fechando ANTES, o movimento dos `
             + 'dias que sobram fica fora da escrituração; DEPOIS, o arquivo declara um dia que o mês não '
