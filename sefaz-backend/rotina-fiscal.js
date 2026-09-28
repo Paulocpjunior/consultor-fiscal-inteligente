@@ -141,6 +141,53 @@ export function ehResumoSemCompleta(d) {
     return !Number.isFinite(valorDoDocumento(d));
 }
 
+// ── ⚙️ PARÂMETROS DA ROTINA (28/09) ──────────────────────────────────────
+// Paulo: "isso deve ser parametrizado — um ajuste não pode influenciar ou
+// parar outra produção". O ajuste de 24/09 (o fato vence o rótulo) fez a
+// nota completada à mão deixar de ser "resumo", e com isso a B & T parou de
+// ver "manifeste a ciência". A ciência é OUTRO fato (o registro do
+// destinatário na SEFAZ), e se a Rotina cobra ou não é decisão do
+// escritório, gravada, não efeito colateral de um conserto.
+//   'exigir'    → nota de entrada mod 55 completada à mão SEM evento de
+//                 manifestação segue como pendência da etapa 2 (nomeada).
+//   'dispensar' → não é pendência; a contagem sai DITA no resumo da etapa.
+export const OPCOES_CIENCIA_APOS_COMPLETA_MANUAL = Object.freeze(['exigir', 'dispensar']);
+export const PARAMETROS_ROTINA_PADRAO = Object.freeze({ cienciaAposCompletaManual: 'exigir' });
+
+/** Mescla fontes na ordem (padrão ← escritório ← empresa); valor ilegível não entra. */
+export function normalizarParametrosRotina(...fontes) {
+    const out = { ...PARAMETROS_ROTINA_PADRAO };
+    for (const f of fontes) {
+        if (!f || typeof f !== 'object') continue;
+        if (OPCOES_CIENCIA_APOS_COMPLETA_MANUAL.includes(f.cienciaAposCompletaManual)) {
+            out.cienciaAposCompletaManual = f.cienciaAposCompletaManual;
+        }
+    }
+    return out;
+}
+
+/** Já há manifestação do destinatário registrada no doc (evento 2102x0, qualquer tipo). */
+export function temManifestacaoDestinatario(d) {
+    const eventos = Array.isArray(d?.eventos) ? d.eventos : [];
+    return eventos.some((e) => /^manifestacao_/.test(String(e?.tipo || '')) || /^2102[0-4]0$/.test(String(e?.tpEvento || '')));
+}
+
+/**
+ * NF-e de ENTRADA (mod 55) que era resumo da SEFAZ e foi COMPLETADA À MÃO
+ * (`_completadoEm`, carimbo do upgrade manual), ainda sem manifestação do
+ * destinatário. A nota está inteira — a apuração não sai a menor — mas o
+ * registro fiscal do destinatário não foi feito. Resumo de verdade é o
+ * outro caso (`ehResumoSemCompleta`) e não entra aqui.
+ */
+export function ehCompletaSemCiencia(d) {
+    if (!d || cancelado(d)) return false;
+    if (direcaoEfetivaDoc(d) !== 'entrada') return false;
+    if (String(d.chave || '').slice(20, 22) !== '55') return false;
+    if (!d._completadoEm) return false;
+    if (ehResumoSemCompleta(d)) return false;
+    return !temManifestacaoDestinatario(d);
+}
+
 /** NFS-e não tem "resumo da SEFAZ": sem valor legível é outro defeito, com outra ação. */
 export function ehNfse(d) {
     return String(d?.tipo || '').toUpperCase() === 'NFSE' || /^nfse/i.test(String(d?.tipoDoc || ''));
@@ -237,8 +284,11 @@ export function montarRotinaFiscal({
     // (23/09, E7). Fecha as etapas 1 e 2 como 'na' enquanto não chegar
     // documento nenhum; chegando, ela cai — dito.
     declaracaoSemMovimento = null,
+    // ⚙️ Parâmetros do escritório (28/09): ver PARAMETROS_ROTINA_PADRAO.
+    parametros = null,
 }) {
     const docs = documentos || [];
+    const param = normalizarParametrosRotina(parametros);
     // 🚨 A DIREÇÃO SAI DA RÉGUA, NUNCA DO CAMPO GRAVADO. A nota PRÓPRIA de
     // entrada (art. 136 — compra de produtor rural, importação) fica gravada
     // como 'saida' até o backfill passar, e quem responde é `direcaoEfetivaDoc`
@@ -294,6 +344,11 @@ export function montarRotinaFiscal({
     // é XML/leiaute que o leitor não entendeu — a ação é outra.
     const resumos = semValor.filter((d) => !ehNfse(d)).length;
     const nfseSemValor = semValor.filter(ehNfse).length;
+    // 📨 Completa importada à mão sem ciência manifestada (28/09): fato
+    // separado do "sem valor". Se cobra ou não, é o PARÂMETRO que diz.
+    const semCiencia = docs.filter(ehCompletaSemCiencia);
+    const exigeCiencia = param.cienciaAposCompletaManual === 'exigir';
+    const cienciaPendentes = exigeCiencia ? semCiencia : [];
     const canceladas = docs.filter(cancelado).length;
     // CARTA DE CORREÇÃO é validação: ela pode ter mudado o CFOP/natureza, e o
     // livro é gerado do XML ORIGINAL. Estava sendo capturada e ninguém via.
@@ -308,20 +363,23 @@ export function montarRotinaFiscal({
     } else if (docs.length === 0) {
         eValidacao = etapa('validacao', 'pendente', 'Sem notas para validar.',
             'Conclua a captura primeiro — a validação vem depois.', { resumos: 0, canceladas: 0, cce });
-    } else if (resumos > 0 || nfseSemValor > 0) {
+    } else if (resumos > 0 || nfseSemValor > 0 || cienciaPendentes.length > 0) {
         const partes = [
             resumos > 0 ? `${resumos} nota(s) sem valor/itens (resumo da SEFAZ, aguardando a completa)` : null,
             nfseSemValor > 0 ? `${nfseSemValor} NFS-e sem valor legível` : null,
+            cienciaPendentes.length > 0 ? `${cienciaPendentes.length} nota(s) completa(s) importada(s) à mão sem ciência manifestada` : null,
         ].filter(Boolean);
         const acoes = [
             resumos > 0 ? 'Manifeste a ciência (libera o XML completo) ou importe o arquivo do cliente.' : null,
             nfseSemValor > 0 ? 'A NFS-e entrou sem <vServ>/valor que o leitor entenda — abra a nota na Central de XMLs e confira o valor; se estiver vazio, reimporte o XML completo (não é caso de manifestação).' : null,
+            cienciaPendentes.length > 0 ? 'A nota já está inteira; falta o registro do destinatário na SEFAZ — use 📨 Manifestar ciência na nota abaixo. Se o escritório dispensa a ciência nesse caso, mude em ⚙️ Parâmetros da Rotina.' : null,
         ].filter(Boolean);
         // 🔎 A NOTA VAI NOMEADA (24/09, B & T 08/2026: "não consegui achar a
         // nota que está pedindo ciência"). Contar sem dizer QUAL é mandar
         // procurar: número, emitente e CHAVE são o que a busca da Central
         // de XMLs aceita, e o selo "Resumo" é o que a pessoa vai ver lá.
-        const notas = semValor.slice(0, 20).map((d) => {
+        const travam = [...semValor, ...cienciaPendentes];
+        const notas = travam.slice(0, 20).map((d) => {
             const emit = d.emitente || d.prestador || {};
             return {
                 chave: d.chave || null,
@@ -330,17 +388,22 @@ export function montarRotinaFiscal({
                 emitente: emit.nome || emit.xNome || emit.razaoSocial || null,
                 emitenteCnpj: String(emit.cnpj || emit.cnpjCpf || emit.CNPJ || d.cnpjEmit || '').replace(/\D/g, '') || null,
                 dhEmi: d.dhEmi || d.dataEmissao || null,
-                motivo: ehNfse(d) ? 'nfse-sem-valor' : 'resumo',
+                motivo: cienciaPendentes.includes(d) ? 'sem-ciencia' : (ehNfse(d) ? 'nfse-sem-valor' : 'resumo'),
             };
         });
+        // Só a ciência pendente NÃO faz a apuração sair a menor — a frase diz isso.
+        const rodape = semValor.length > 0 ? ' Sem isso a apuração sai a menor.' : '';
         eValidacao = etapa('validacao', 'atencao',
             `${partes.join(' · ')}.`,
-            `${acoes.join(' ')} Sem isso a apuração sai a menor.`,
-            { resumos, nfseSemValor, canceladas, cce, notas, notasCortadas: Math.max(0, semValor.length - notas.length) });
+            `${acoes.join(' ')}${rodape}`,
+            { resumos, nfseSemValor, semCiencia: semCiencia.length, cienciaAposCompletaManual: param.cienciaAposCompletaManual,
+              canceladas, cce, notas, notasCortadas: Math.max(0, travam.length - notas.length) });
     } else {
+        // Ciência dispensada por parâmetro sai DITA — nunca some em silêncio.
+        const dispensadas = semCiencia.length > 0 ? ` · ${semCiencia.length} sem ciência manifestada (dispensada por parâmetro do escritório)` : '';
         eValidacao = etapa('validacao', 'concluida',
-            `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}.`,
-            null, { resumos, canceladas, cce });
+            `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}${dispensadas}.`,
+            null, { resumos, semCiencia: semCiencia.length, cienciaAposCompletaManual: param.cienciaAposCompletaManual, canceladas, cce });
     }
 
     // CC-e que pede conferência trava a validação: o livro sai do XML ORIGINAL,

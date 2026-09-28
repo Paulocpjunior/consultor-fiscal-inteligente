@@ -13,6 +13,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CredencialEmailFaixa from './CredencialEmailFaixa';
+import RotinaParametrosBloco from './RotinaParametrosBloco';
+import { manifestarUmaChave } from '../services/manifestoService';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
@@ -117,6 +119,18 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
     const [carregando, setCarregando] = useState(false);
     const [etapaFiltro, setEtapaFiltro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
+    // 📨 Manifestação de ciência disparada da própria Rotina (28/09): chave → estado.
+    const [manifestando, setManifestando] = useState<Record<string, 'enviando' | 'ok' | string>>({});
+
+    const manifestarCiencia = useCallback(async (chNFe: string, cnpjDestinatario: string, comp: string) => {
+        setManifestando((m) => ({ ...m, [chNFe]: 'enviando' }));
+        const r = await manifestarUmaChave({ chNFe, cnpjDestinatario, tipo: 'ciencia' });
+        if (r.erro) { setManifestando((m) => ({ ...m, [chNFe]: `erro: ${r.erro}` })); return; }
+        setManifestando((m) => ({ ...m, [chNFe]: 'ok' }));
+        // O painel recarrega para a etapa 2 refletir o evento gravado.
+        carregarRef.current?.(comp);
+    }, []);
+    const carregarRef = React.useRef<((comp: string) => Promise<void>) | null>(null);
 
     const carregar = useCallback(async (comp: string) => {
         setCarregando(true);
@@ -127,6 +141,7 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
         }
     }, []);
 
+    useEffect(() => { carregarRef.current = carregar; }, [carregar]);
     useEffect(() => { carregar(competencia); }, [carregar, competencia]);
 
     const rotinas = dados?.rotinas || [];
@@ -146,6 +161,8 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                 enquanto a Microsoft recusar — o alerta por e-mail não alcança
                 quem precisa quando é o e-mail que está morto. */}
             <CredencialEmailFaixa />
+            {/* ⚙️ Parâmetros do escritório (28/09): a régua que está valendo, dita a todos. */}
+            <RotinaParametrosBloco ehAdmin={ehAdmin} onMudou={() => carregar(competencia)} />
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
@@ -418,10 +435,25 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                     <ul className="mt-1 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
                                                         {(p).notas!.map((n, i) => (
                                                             <li key={n.chave || i} className="font-mono break-all">
-                                                                {n.motivo === 'resumo' ? '📄 Resumo' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
+                                                                {n.motivo === 'resumo' ? '📄 Resumo' : n.motivo === 'sem-ciencia' ? '📨 Sem ciência' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
                                                                 {n.emitente ? ` · ${n.emitente}` : ''}{n.dhEmi ? ` · ${String(n.dhEmi).slice(0, 10).split('-').reverse().join('/')}` : ''}
                                                                 {n.chave ? <span className="block text-[10px] text-slate-500 dark:text-slate-400">chave {n.chave}</span> : null}
-                                                            </li>
+                                                                                                                            {n.motivo === 'sem-ciencia' && n.chave && r.empresa?.cnpj && (
+                                                                    <span className="block mt-0.5">
+                                                                        {manifestando[n.chave] === 'ok' ? (
+                                                                            <span className="text-emerald-700 dark:text-emerald-400">✔ ciência manifestada</span>
+                                                                        ) : String(manifestando[n.chave] || '').startsWith('erro') ? (
+                                                                            <span className="text-red-600">{manifestando[n.chave]}</span>
+                                                                        ) : (
+                                                                            <button type="button" disabled={manifestando[n.chave] === 'enviando'}
+                                                                                onClick={() => manifestarCiencia(n.chave!, r.empresa!.cnpj, competencia)}
+                                                                                className="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white text-[10px] font-semibold disabled:opacity-40">
+                                                                                {manifestando[n.chave] === 'enviando' ? 'Manifestando…' : '📨 Manifestar ciência'}
+                                                                            </button>
+                                                                        )}
+                                                                    </span>
+                                                                )}
+</li>
                                                         ))}
                                                         {((p).notasCortadas || 0) > 0 && <li className="text-slate-500">e mais {(p).notasCortadas} — mostrando {(p).notas!.length}</li>}
                                                         <li className="text-[10px] text-slate-500 dark:text-slate-400">Na Central de XMLs, cole a chave (ou o nº) na busca — o selo "Resumo" marca a nota sem o XML completo.</li>

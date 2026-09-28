@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📨 CIÊNCIA APÓS COMPLETA IMPORTADA À MÃO VIROU PARÂMETRO (28/09)**
+  (colaborador, B & T: *"não tô mais recebendo a mensagem pra manifestar
+  ciência"*; Paulo: *"isso deve ser parametrizado, um ajuste não pode
+  influenciar ou parar outra produção"*). O ajuste de 24/09 (o fato vence o
+  rótulo) tirou a nota completada à mão de `ehResumoSemCompleta`, e com isso
+  a etapa 2 parou de pedir ciência — só que a ciência (evento 2102x0 do
+  destinatário) nunca tinha sido registrada. São DOIS fatos: "sem
+  valor/itens" (apuração a menor) e "sem manifestação". Nasce
+  `ehCompletaSemCiencia` (entrada mod 55 + `_completadoEm` + sem evento
+  `manifestacao_*`/tpEvento 2102x0), `PARAMETROS_ROTINA_PADRAO`
+  (`cienciaAposCompletaManual: 'exigir'`), `normalizarParametrosRotina`
+  (padrão ← escritório ← empresa). Store `parametros_rotina/escritorio`
+  (`rotina-parametros-store.js`), rotas GET/POST
+  `/api/admin/rotina-fiscal/parametros` (POST só admin), sobreposição por
+  empresa em `rotinaParametros` no cadastro (projetada em
+  `empresaDaRotina`). Etapa 2: motivo novo `'sem-ciencia'` (nomeada), ação
+  sem "a menor", botão **📨 Manifestar ciência** na própria Rotina
+  (`manifestarUmaChave` → `/manifest-one`, recarrega o painel); com
+  'dispensar' a contagem sai dita no resumo. `RotinaParametrosBloco` no topo
+  da Rotina (todos veem a régua valendo; só admin muda). Projeção da rota
+  carrega `_completadoEm`. Travas em `rotinaFiscal.test.ts` (régua, padrão,
+  dispensar dito, sobreposição, recusa da rota). REGRA: conserto que muda o
+  que uma tela pede vira PARÂMETRO com padrão = comportamento anterior, e o
+  que for dispensado sai dito.
+
 - **📤 COBERTURA DE SAÍDA GANHOU PORTA (28/09)** (Paulo, print da Novidade de
   25/09: *"esta tela não está ativa"*). O caminho "Captura → Cobertura de
   Saída → ✅ O cliente fez certo?" nunca existiu como aba: `AptidaoSaidaPanel`,

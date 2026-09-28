@@ -640,7 +640,7 @@ const Bloqueios: React.FC<{
                             <ul className="mt-1 space-y-0.5 text-[11px] text-slate-700 dark:text-slate-200">
                                 {(b).notas!.map((n, i) => (
                                     <li key={n.chave || i} className="font-mono break-all">
-                                        {n.motivo === 'resumo' ? '📄 Resumo' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
+                                        {n.motivo === 'resumo' ? '📄 Resumo' : n.motivo === 'sem-ciencia' ? '📨 Sem ciência' : '🧾 NFS-e sem valor'} · nº {n.numero ?? '?'} · {n.tipo || '—'}
                                         {n.emitente ? ` · ${n.emitente}` : ''}{n.dhEmi ? ` · ${String(n.dhEmi).slice(0, 10).split('-').reverse().join('/')}` : ''}
                                         {n.chave ? <span className="block text-[10px] text-slate-500 dark:text-slate-400">chave {n.chave}</span> : null}
                                     </li>

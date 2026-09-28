@@ -10,8 +10,15 @@
  *  - farol honesto: sem tarefa não é sucesso, envio pela metade não é sucesso,
  *    mês pela metade não é mês fechado.
  */
+import {
+    montarRotinaFiscal, resumirFunil, ehResumoSemCompleta, acharApuracaoDaCompetencia, ETAPAS_ROTINA,
+    ehCompletaSemCiencia, normalizarParametrosRotina, PARAMETROS_ROTINA_PADRAO,
 // @ts-expect-error — módulo .js puro
-import { montarRotinaFiscal, resumirFunil, ehResumoSemCompleta, acharApuracaoDaCompetencia, ETAPAS_ROTINA } from '../sefaz-backend/rotina-fiscal.js';
+} from '../sefaz-backend/rotina-fiscal.js';
+// @ts-expect-error — módulo .js puro
+import { conferirParametrosRotina } from '../sefaz-backend/rotina-parametros-store.js';
+// @ts-expect-error — módulo .js puro
+import { empresaDaRotina } from '../sefaz-backend/rotina-empresa-insumo.js';
 
 const CHAVE_55 = '3526' + '07'.padEnd(2, '0') + '1'.repeat(14) + '55' + '1'.repeat(22);
 const CHAVE_57 = '3526' + '07'.padEnd(2, '0') + '1'.repeat(14) + '57' + '1'.repeat(22);
@@ -747,5 +754,80 @@ describe('🚨 o FATO vence o rótulo: resumo completado à mão deixa de ser re
         expect(carimboDaCompleta({ tipo: 'CTe', itens: [] })).toEqual({ schema: 'procCTe', tipoDoc: 'CTe', temItens: false });
         expect(carimboDaCompleta({ tipo: 'NFSe', itens: [{}] }).schema).toBe('nfse');
         expect(carimboDaCompleta(null)).toEqual({ schema: null, tipoDoc: null, temItens: false });
+    });
+});
+
+describe('📨 ciência após a completa importada à mão é PARÂMETRO do escritório (28/09, B & T)', () => {
+    // Era resumo da SEFAZ, foi completada à mão (carimbo), nenhum evento de manifestação.
+    const completadaSemCiencia = (over: any = {}) => doc({ _completadoEm: '2026-09-24T10:00:00Z', origem: 'manual', eventos: [], ...over });
+    const saida = () => doc({ direcao: 'saida', chave: CHAVE_55.replace(/1$/, '2') });
+
+    it('padrão = exigir: é pendência NOMEADA da etapa 2, sem dizer "apuração a menor" (a nota está inteira)', () => {
+        const r = completo({ documentos: [completadaSemCiencia(), saida()] });
+        const e = etapaDe(r, 'validacao');
+        expect(e.status).toBe('atencao');
+        expect(e.resumos).toBe(0);
+        expect(e.semCiencia).toBe(1);
+        expect(e.cienciaAposCompletaManual).toBe('exigir');
+        expect(e.notas).toHaveLength(1);
+        expect(e.notas[0].motivo).toBe('sem-ciencia');
+        expect(e.acao).toMatch(/ciência/i);
+        expect(e.acao).not.toMatch(/a menor/i);
+        expect(r.proximoPasso.id).toBe('validacao');
+    });
+
+    it('dispensar: não é pendência, mas a contagem sai DITA no resumo da etapa', () => {
+        const r = completo({ documentos: [completadaSemCiencia(), saida()], parametros: { cienciaAposCompletaManual: 'dispensar' } });
+        const e = etapaDe(r, 'validacao');
+        expect(e.status).toBe('concluida');
+        expect(e.semCiencia).toBe(1);
+        expect(e.resumo).toMatch(/sem ciência/i);
+        expect(e.resumo).toMatch(/parâmetro/i);
+        expect(r.proximoPasso).toBeNull();
+    });
+
+    it('resumo de verdade continua sendo o caso antigo (motivo "resumo"), somado à ciência pendente', () => {
+        const r = completo({ documentos: [completadaSemCiencia(), doc({ schema: 'resNFe', temItens: false, valorTotal: null, chave: CHAVE_55.replace(/1$/, '3') }), saida()] });
+        const e = etapaDe(r, 'validacao');
+        expect(e.resumos).toBe(1);
+        expect(e.semCiencia).toBe(1);
+        expect(e.notas.map((n: any) => n.motivo).sort()).toEqual(['resumo', 'sem-ciencia']);
+        expect(e.acao).toMatch(/a menor/i);
+    });
+
+    it('a régua: só entrada mod 55, completada à mão, sem evento de manifestação de qualquer tipo', () => {
+        expect(ehCompletaSemCiencia(completadaSemCiencia())).toBe(true);
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ eventos: [{ tipo: 'manifestacao_ciencia' }] }))).toBe(false);
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ eventos: [{ tipo: 'manifestacao_confirmacao' }] }))).toBe(false);
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ eventos: [{ tpEvento: '210210', tipo: 'outro' }] }))).toBe(false);
+        // veio inteira da SEFAZ (sem carimbo) → não é este caso
+        expect(ehCompletaSemCiencia(doc({ eventos: [] }))).toBe(false);
+        // resumo de verdade → é o OUTRO caso
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ schema: 'resNFe', temItens: false, valorTotal: null }))).toBe(false);
+        // saída, CT-e (57) e cancelada → fora
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ direcao: 'saida' }))).toBe(false);
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ chave: CHAVE_57, schema: 'procCTe', temItens: false }))).toBe(false);
+        expect(ehCompletaSemCiencia(completadaSemCiencia({ status: 'cancelado' }))).toBe(false);
+    });
+
+    it('normalizarParametrosRotina: padrão, ilegível cai no padrão, empresa sobrepõe escritório', () => {
+        expect(normalizarParametrosRotina()).toEqual(PARAMETROS_ROTINA_PADRAO);
+        expect(normalizarParametrosRotina({ cienciaAposCompletaManual: 'talvez' })).toEqual(PARAMETROS_ROTINA_PADRAO);
+        expect(normalizarParametrosRotina({ cienciaAposCompletaManual: 'dispensar' }, null)).toEqual({ cienciaAposCompletaManual: 'dispensar' });
+        expect(normalizarParametrosRotina({ cienciaAposCompletaManual: 'dispensar' }, { cienciaAposCompletaManual: 'exigir' }))
+            .toEqual({ cienciaAposCompletaManual: 'exigir' });
+    });
+
+    it('a sobreposição por empresa chega pelo insumo da Rotina (rotinaParametros do cadastro)', () => {
+        const e = empresaDaRotina('x', 'simples_empresas', { cnpj: '11.111.111/0001-91', nome: 'A', rotinaParametros: { cienciaAposCompletaManual: 'dispensar' } });
+        expect(e?.rotinaParametros).toEqual({ cienciaAposCompletaManual: 'dispensar' });
+        expect(empresaDaRotina('y', 'simples_empresas', { cnpj: '11.111.111/0001-91', nome: 'B' })?.rotinaParametros).toBeNull();
+    });
+
+    it('a rota recusa valor fora da lista e corpo sem parâmetro reconhecido', () => {
+        expect(conferirParametrosRotina({ cienciaAposCompletaManual: 'dispensar' })).toEqual({ ok: true, valores: { cienciaAposCompletaManual: 'dispensar' } });
+        expect(conferirParametrosRotina({ cienciaAposCompletaManual: 'sim' }).ok).toBe(false);
+        expect(conferirParametrosRotina({}).ok).toBe(false);
+        expect(conferirParametrosRotina(null).ok).toBe(false);
     });
 });

@@ -79,6 +79,8 @@ export function empresaDaRotina(id, colecao, d) {
         regimeEspecificoIbsCbs: df.regimeEspecificoIbsCbs || dados.regimeEspecificoIbsCbs || '',
         cnae: dados.cnae || df.cnae || '',
         capturaAtiva: dados.capturarSefaz !== false,
+        // ⚙️ Sobreposição dos parâmetros da Rotina por empresa (28/09); ausente = escritório.
+        rotinaParametros: dados.rotinaParametros && typeof dados.rotinaParametros === 'object' ? dados.rotinaParametros : null,
         // ISS de SP capital: município, CCM e SUP decidem se há guia do
         // município no mês (e se a captura da NFS-e sequer roda).
         codMunIBGE: String(df.codMunIBGE || dados.codMunIBGE || '').trim(),
