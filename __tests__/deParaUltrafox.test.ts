@@ -81,10 +81,16 @@ describe('o que JÁ está coberto não pode aparecer como falta', () => {
         expect(linhaDoDePara('Avaliação do atendimento')).toContain('🆕');
     });
 
-    it('o importador do backup existe — e é ele que precisa rodar ANTES de cancelar a plataforma', () => {
-        expect(rotas).toContain("router.post('/importar-ultrafox'");
-        expect(linhaDoDePara('Restaurar o backup da Ultra Fox')).toContain('✅');
-        expect(doc).toContain('plataforma cancelada não devolve export');
+    // 28/09: a Ultra Fox foi CANCELADA (Paulo: "Ultrafox já caiu, está fora").
+    // O importador rodou em 21/08 e saiu do app no dia do cancelamento — o
+    // de-para tem que dizer as duas coisas: que o backup está DENTRO e que a
+    // porta de importar não existe mais (quem procurar a aba 📥 lê o motivo).
+    it('o importador do backup SAIU do app com a Ultra Fox cancelada — e o de-para diz isso', () => {
+        expect(rotas).not.toContain("router.post('/importar-ultrafox'");
+        const linha = linhaDoDePara('Restaurar o backup da Ultra Fox');
+        expect(linha).toContain('✅');
+        expect(linha).toMatch(/REMOVIDO/);
+        expect(doc).toMatch(/CANCELADA/);
     });
 });
 

@@ -637,35 +637,6 @@ export const listarAvaliacoes = () =>
         avaliacoes: AvaliacaoAtendimento[];
     }>('/api/admin/whatsapp/avaliacoes');
 
-// ─── 📥 Importar backup da Ultra Fox (admin; preview antes de gravar) ───────
-
-export interface ImportPreview {
-    preview?: boolean; tipo: string; total: number;
-    amostra?: unknown[]; autores?: string[]; avisos?: string[];
-    descartados?: { linha?: number; valor?: string; motivo: string }[];
-    descartadas?: { linha?: number; trecho?: string; motivo: string }[];
-    totalDescartados?: number; totalDescartadas?: number;
-    criados?: number; jaExistiam?: number; gravadas?: number; conversas?: number;
-}
-
-export const importarUltrafox = (p: {
-    tipo: 'contatos' | 'mensagens-txt' | 'mensagens-csv';
-    conteudo: string; confirmar: boolean;
-    numero?: string; autoresEscritorio?: string[];
-}) => post<ImportPreview>('/api/admin/whatsapp/importar-ultrafox', p);
-
-/**
- * Grava UM bloco do lote. As mensagens já vêm lidas (o parser roda no
- * navegador, na máquina de quem importa) — mas quem decide ENTRADA × SAÍDA e
- * quem calcula o id de cada mensagem é o servidor.
- */
-export const importarUltrafoxLote = (p: {
-    conversas: { numero: string; mensagens: { em: string; autor: string; texto: string }[] }[];
-    autoresEscritorio: string[];
-}) => post<{ gravadas?: number; conversas?: number; totalRecusadas?: number; recusadas?: { numero: string; motivo: string }[] }>(
-    '/api/admin/whatsapp/importar-ultrafox/lote', p,
-);
-
 /**
  * 🗄 Arquiva AGORA a mídia das conversas no SharePoint (o cron faz o mesmo
  * sozinho, de carona no ciclo do arquivo fiscal). Regra do manual: tudo que

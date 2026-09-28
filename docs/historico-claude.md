@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📥 ULTRA FOX CANCELADA — o importador SAIU do app** (28/09, Paulo: *"Pode
+  seguir na sua ordem! Ultrafox já caiu está fora"*). Removidos: aba ⚙️ → 📥 e
+  o botão 📥 em 📇 (`SpConnect/index.tsx`), rotas `/importar-ultrafox` e
+  `/lote`, `whatsapp-import-ultrafox.js`, `whatsapp-import-lote.js`,
+  `services/ultrafox-browser-parser.js` (e o COPY dele no Dockerfile), as
+  duas suítes de importação e `importarUltrafox*`/`ImportPreview` do service.
+  O que FICA: `origem: 'ultrafox-import'` nas mensagens/contatos (fato
+  histórico, o 📇 mostra "veio do backup"), o catálogo do banco, e os
+  comentários que contam a convivência. `deParaUltrafox.test.ts` passou a
+  cobrar o CONTRÁRIO (rota ausente + de-para dizendo REMOVIDO/CANCELADA).
+  ⚠️ Aberto ainda: as apps `Business Agent`/`f-bot` assinadas na WABA —
+  cancelar o contrato não desassina; só o fornecedor ou a Meta.
 - **📗 ELS 3ª RODADA DO PVA (28/09, após o plano de contas: 1315 → 19 erros +
   50 avisos)**: 1 COD_MUN 0150 (Ovidio, produtor PF) · 8 COD_CTA em A170
   tomado (cadastro: falta a conta do uso servicos-tomados) · 9 VL_PIS + 1

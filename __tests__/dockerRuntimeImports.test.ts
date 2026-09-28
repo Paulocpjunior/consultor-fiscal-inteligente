@@ -8,7 +8,6 @@ describe('imagem Docker inclui dependencias locais do backend', () => {
   test('imports ../services usados pelo sefaz-backend sao copiados para a imagem final', () => {
     const arquivosBackend = [
       'sefaz-backend/whatsapp-webhook.js',
-      'sefaz-backend/whatsapp-import-ultrafox.js',
     ];
 
     const dependencias = arquivosBackend.flatMap((arquivo) => {
