@@ -15,13 +15,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     procurarConversas,
-    importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes, sugestoesDeVinculo,
-    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, salvarRamalAtendente, importarUltrafox,
+    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, salvarRamalAtendente,
     chamarClientePeloSbc, statusLigacaoSaida, agenteSbcStatus, PedidoLigacaoResumo,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
     baterPresenca, presencaDaFila, PresencaDaFila, SugestoesDeVinculo,
@@ -59,8 +58,6 @@ import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
 import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario, podeVerEncerrados } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../services/sp-connect-message-origin.js';
-import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
-import { interpretarConversaTxt } from '../../services/ultrafox-browser-parser.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',
@@ -734,7 +731,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
     // A aba 🔔 lê o estado ao abrir — o efeito mora DEPOIS do `cfgAba`
     // (usá-lo antes da declaração estourava TS2448 no tsconfig normal).
     useEffect(() => { if (cfgAba === 'avisos') void carregarAvisos(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cfgAba]);
@@ -1437,109 +1434,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally { setSalvandoCanal(false); }
     };
 
-    // ── ⚙️ aba 📥 Importar backup da Ultra Fox (preview antes de gravar)
-    const [impTipo, setImpTipo] = useState<'contatos' | 'mensagens-txt' | 'mensagens-csv'>('contatos');
-    const [impConteudo, setImpConteudo] = useState('');
-    const [impNumero, setImpNumero] = useState('');
-    const [impAutores, setImpAutores] = useState<string[]>([]);
-    const [impPreview, setImpPreview] = useState<ImportPreview | null>(null);
-    const [impResultado, setImpResultado] = useState<ImportPreview | null>(null);
-    const [impErro, setImpErro] = useState<string | null>(null);
-    const [impRodando, setImpRodando] = useState(false);
-
-    // ── 📦 PASTA INTEIRA do backup (o export tem ~800 MB e centenas de pastas)
-    //
-    // O navegador LÊ e INTERPRETA aqui, na máquina de quem importa: o zip
-    // inteiro não passa numa requisição (teto de 20 MB) e a mídia não precisa
-    // sair do computador nesta etapa. Quem decide entrada × saída e quem
-    // calcula o id de cada mensagem é o SERVIDOR — ver a rota do lote.
-    const [loteVarredura, setLoteVarredura] = useState<ReturnType<typeof resumoDaVarredura> | null>(null);
-    const [loteLidas, setLoteLidas] = useState<{ numero: string; mensagens: any[]; descartadas?: any[] }[]>([]);
-    const [lotePrevia, setLotePrevia] = useState<ReturnType<typeof consolidarPrevia> | null>(null);
-    const [loteAutores, setLoteAutores] = useState<string[]>([]);
-    const [loteLendo, setLoteLendo] = useState<string | null>(null);
-    const [loteResultado, setLoteResultado] = useState<{ gravadas: number; conversas: number; recusadas: number } | null>(null);
-    const [loteErro, setLoteErro] = useState<string | null>(null);
-
-    const escolherPastaBackup = async (arquivos: FileList | null) => {
-        setLoteErro(null); setLoteResultado(null); setLotePrevia(null); setLoteLidas([]); setLoteAutores([]);
-        const lista = Array.from(arquivos || []);
-        if (!lista.length) return;
-        // O caminho relativo é o que diz de QUEM é cada arquivo — o nome
-        // sozinho ("_full-chat.txt") é igual em todas as pastas.
-        const porCaminho = new Map(lista.map((f) => [(f as any).webkitRelativePath || f.name, f]));
-        const mapa = mapearArquivosDoBackup([...porCaminho.keys()]);
-        const resumo = resumoDaVarredura(mapa);
-        setLoteVarredura(resumo);
-        if (!resumo.arquivosParaLer) return;
-
-        const lidas: { numero: string; mensagens: any[]; descartadas?: any[] }[] = [];
-        const aLer = [...mapa.conversas, ...mapa.semDono];
-        for (let i = 0; i < aLer.length; i += 1) {
-            const item = aLer[i];
-            setLoteLendo(`Lendo ${i + 1} de ${aLer.length}…`);
-            const f = porCaminho.get(item.caminho);
-            if (!f) continue;
-            try {
-                const r = interpretarConversaTxt(await f.text());
-                lidas.push({ numero: item.numero, mensagens: r.mensagens, descartadas: r.descartadas });
-            } catch {
-                // Arquivo ilegível não derruba a varredura inteira: ele some
-                // da conta e aparece no contador de "sem mensagem".
-                lidas.push({ numero: item.numero, mensagens: [], descartadas: [] });
-            }
-        }
-        setLoteLendo(null);
-        setLoteLidas(lidas);
-        setLotePrevia(consolidarPrevia(lidas));
-    };
-
-    const gravarLote = async () => {
-        if (!lotePrevia || !loteAutores.length) return;
-        setLoteErro(null); setLoteLendo('Gravando…');
-        let gravadas = 0; let conversas = 0; let recusadas = 0;
-        try {
-            const blocos = dividirEmBlocos(loteLidas as any);
-            for (let i = 0; i < blocos.length; i += 1) {
-                setLoteLendo(`Gravando bloco ${i + 1} de ${blocos.length}…`);
-                const r = await importarUltrafoxLote({ conversas: blocos[i] as any, autoresEscritorio: loteAutores });
-                if (!r.ok) {
-                    // PARA no primeiro erro e diz onde parou: seguir em frente
-                    // deixaria metade gravada sem ninguém saber qual metade.
-                    setLoteErro(`${r.error} (parou no bloco ${i + 1} de ${blocos.length}; o que já entrou está gravado e reimportar não duplica)`);
-                    break;
-                }
-                gravadas += r.gravadas || 0;
-                conversas += r.conversas || 0;
-                recusadas += r.totalRecusadas || 0;
-            }
-            setLoteResultado({ gravadas, conversas, recusadas });
-        } finally {
-            setLoteLendo(null);
-        }
-    };
-
-    const lerArquivoImport = (f: File | null) => {
-        if (!f) return;
-        const leitor = new FileReader();
-        leitor.onload = () => { setImpConteudo(String(leitor.result || '')); setImpPreview(null); setImpResultado(null); };
-        leitor.readAsText(f);
-    };
-    const rodarImport = async (confirmar: boolean) => {
-        if (!impConteudo.trim() || impRodando) return;
-        setImpRodando(true);
-        setImpErro(null);
-        try {
-            const r = await importarUltrafox({
-                tipo: impTipo, conteudo: impConteudo, confirmar,
-                ...(impTipo === 'mensagens-txt' ? { numero: impNumero, autoresEscritorio: impAutores } : {}),
-            });
-            if (!r.ok) { setImpErro(r.error || 'A importação falhou.'); return; }
-            if (confirmar) { setImpResultado(r); setImpPreview(null); }
-            else { setImpPreview(r); setImpResultado(null); setImpAutores([]); }
-        } finally { setImpRodando(false); }
-    };
-
     // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
     // DUAS fontes de template: o cadastro da ⚙️ (variáveis nomeadas) e os
     // APROVADOS direto da Meta (o corpo aparece e preenche-se {{1}},{{2}}…) —
@@ -2159,13 +2053,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ➕ Novo
                                 </button>
-                                {ehAdmin && (
-                                    <button onClick={() => { setContatosAberto(false); setCfgAba('importar'); setCfgAberta(true); }}
-                                        title="Importar o backup da Ultra Fox (contatos e mensagens)"
-                                        className="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
-                                        📥 Importar
-                                    </button>
-                                )}
                                 <button onClick={() => setContatosAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                             </div>
                         </div>
@@ -2604,7 +2491,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -2727,7 +2614,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </div>
                         )}
 
-                        {/* ── aba 📥 Importar backup da Ultra Fox ───────────── */}
                         {/* ── aba ☎️ Voz e vídeo (SONDA — não liga nada) ──── */}
                         {cfgAba === 'chamadas' && (
                             <div className="space-y-2">
@@ -3691,184 +3577,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 : <p>Rodada parcial — o ciclo continua sozinho.</p>}
                                     </div>
                                 )}
-                            </div>
-                        )}
-
-                        {cfgAba === 'importar' && (
-                            <div className="space-y-2">
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Restaura o backup da Ultra Fox. <strong>Nada é gravado sem o preview</strong>: primeiro
-                                    a leitura, depois a confirmação. Contato que já existe no SP Connect
-                                    <strong> não é sobrescrito</strong>, e reimportar o mesmo arquivo não duplica mensagem.
-                                </p>
-                                {/* 📦 PASTA INTEIRA — o caminho normal para o backup de verdade.
-                                    Os botões abaixo continuam para arquivo avulso. */}
-                                <div className="rounded-lg border border-[#0e3bfa]/30 dark:border-[#0e3bfa]/50 bg-[#0e3bfa]/5 p-2.5 space-y-1.5">
-                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">📦 Pasta inteira do backup</p>
-                                    <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
-                                        Escolha a pasta que contém <strong>uma pasta por número</strong> (dentro de
-                                        <code className="mx-1">whatsapp/</code>, a pasta do número do escritório). O navegador lê
-                                        tudo <strong>aqui na sua máquina</strong> — a mídia não sai do computador nesta etapa.
-                                    </p>
-                                    <input type="file" multiple
-                                        // @ts-expect-error atributo de diretório não está no tipo do React
-                                        webkitdirectory=""
-                                        onChange={(e) => escolherPastaBackup(e.target.files)}
-                                        className="text-[11px] text-slate-500" />
-                                    {loteLendo && <p className="text-[11px] text-slate-500">⏳ {loteLendo}</p>}
-                                    {loteVarredura && (
-                                        <div className="space-y-0.5">
-                                            <p className="text-[11px] text-slate-700 dark:text-slate-200">
-                                                {loteVarredura.contatos} contato(s) · {loteVarredura.arquivosParaLer} arquivo(s) de conversa
-                                            </p>
-                                            {loteVarredura.avisos.map((a, i) => (
-                                                <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>
-                                            ))}
-                                            {loteVarredura.foraDoPadrao > 0 && (
-                                                <p className="text-[10px] text-slate-500">{loteVarredura.foraDoPadrao} arquivo(s) fora do padrão do export (ignorados).</p>
-                                            )}
-                                        </div>
-                                    )}
-                                    {lotePrevia && (
-                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-2 space-y-1.5">
-                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                                {lotePrevia.mensagens} mensagens em {lotePrevia.conversas} conversa(s)
-                                                {lotePrevia.descartadas > 0 ? ` · ${lotePrevia.descartadas} linha(s) descartada(s)` : ''}
-                                            </p>
-                                            {(() => {
-                                                const av = avisoDeAnexos({ midias: loteVarredura?.midias || 0, comAnexo: lotePrevia.comAnexo });
-                                                if (!av) return null;
-                                                return (
-                                                    <p className={`text-[10px] ${av.grave ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-600 dark:text-slate-300'}`}>
-                                                        📎 {av.texto}
-                                                    </p>
-                                                );
-                                            })()}
-                                            {lotePrevia.arquivosSemMensagem > 0 && (
-                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                                    ⚠️ {lotePrevia.arquivosSemMensagem} arquivo(s) foram lidos e <strong>nenhuma mensagem foi reconhecida</strong> —
-                                                    sinal de que o formato daqueles é diferente. Me diga se este número for grande.
-                                                </p>
-                                            )}
-                                            {lotePrevia.mensagens === 0 ? (
-                                                <p className="text-[11px] text-red-600 dark:text-red-400">
-                                                    Nenhuma mensagem reconhecida. Não grave — o formato do export não é o que o leitor espera.
-                                                </p>
-                                            ) : (
-                                                <>
-                                                    {/* A DIREÇÃO É ESCOLHA HUMANA e continua sendo: sem saber
-                                                        quem é do escritório, "enviada" e "recebida" seriam chute. */}
-                                                    <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                                                        Quais autores são do ESCRITÓRIO? (viram mensagens ENVIADAS)
-                                                    </p>
-                                                    <div className="flex gap-1.5 flex-wrap max-h-32 overflow-y-auto">
-                                                        {lotePrevia.autores.slice(0, 60).map((a) => (
-                                                            <button key={a.autor}
-                                                                onClick={() => setLoteAutores((l) => (l.includes(a.autor) ? l.filter((x) => x !== a.autor) : [...l, a.autor]))}
-                                                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${loteAutores.includes(a.autor)
-                                                                    ? 'bg-emerald-600 text-white'
-                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                                                {loteAutores.includes(a.autor) ? '🏢 ' : ''}{a.autor} · {a.total}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    {lotePrevia.autores.length > 60 && (
-                                                        <p className="text-[10px] text-slate-500">
-                                                            mostrando 60 de {lotePrevia.autores.length} autores (os de maior volume) — os demais entram como CLIENTE.
-                                                        </p>
-                                                    )}
-                                                    {!loteAutores.length && (
-                                                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                                            Marque ao menos um: sem isso a direção das mensagens seria chute, e o servidor recusa.
-                                                        </p>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                    {loteErro && <p className="text-[11px] text-red-600 dark:text-red-400">{loteErro}</p>}
-                                    {loteResultado && (
-                                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                                            ✓ {loteResultado.gravadas} mensagens gravadas em {loteResultado.conversas} conversa(s)
-                                            {loteResultado.recusadas > 0 ? ` · ${loteResultado.recusadas} recusada(s) por data ou texto ilegível` : ''}
-                                        </p>
-                                    )}
-                                    <div className="flex justify-end">
-                                        <button onClick={gravarLote}
-                                            disabled={Boolean(loteLendo) || !lotePrevia || !lotePrevia.mensagens || !loteAutores.length}
-                                            className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                            Confirmar e gravar o lote
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">Ou um arquivo avulso:</p>
-                                <div className="flex gap-1.5 flex-wrap">
-                                    {([['contatos', '👥 Contatos (CSV)'], ['mensagens-csv', '💬 Mensagens (CSV)'], ['mensagens-txt', '📄 Conversa (.txt do WhatsApp)']] as const).map(([id, rotulo]) => (
-                                        <button key={id} onClick={() => { setImpTipo(id); setImpPreview(null); setImpResultado(null); }}
-                                            className={`text-[10px] font-bold px-2 py-1 rounded-full ${impTipo === id
-                                                ? 'bg-[#0e3bfa] text-white'
-                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                            {rotulo}
-                                        </button>
-                                    ))}
-                                </div>
-                                <input type="file" accept=".csv,.txt,.tsv" onChange={(e) => lerArquivoImport(e.target.files?.[0] || null)}
-                                    className="text-[11px] text-slate-500" />
-                                <textarea value={impConteudo} onChange={(e) => { setImpConteudo(e.target.value); setImpPreview(null); setImpResultado(null); }}
-                                    rows={5} placeholder="…ou cole aqui o conteúdo do arquivo exportado da Ultra Fox"
-                                    className={`${CAMPO} font-mono !text-[10px]`} />
-                                {impTipo === 'mensagens-txt' && (
-                                    <label className="block text-[11px] text-slate-500">
-                                        Número do WhatsApp do CONTATO desta conversa
-                                        <input value={impNumero} onChange={(e) => setImpNumero(e.target.value)} placeholder="(11) 96444-0000" className={CAMPO} />
-                                    </label>
-                                )}
-                                {impErro && <p className="text-[11px] text-red-600 dark:text-red-400">{impErro}</p>}
-                                {impPreview && (
-                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2.5 space-y-1.5">
-                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                            Preview: {impPreview.total} {impTipo === 'contatos' ? 'contatos' : 'mensagens'} legíveis
-                                            {(impPreview.totalDescartados || impPreview.totalDescartadas) ? ` · ${impPreview.totalDescartados || impPreview.totalDescartadas} descartadas (motivo abaixo)` : ''}
-                                        </p>
-                                        {(impPreview.avisos || []).map((a, i) => <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>)}
-                                        {[...(impPreview.descartados || []), ...(impPreview.descartadas || [])].slice(0, 8).map((d, i) => (
-                                            <p key={i} className="text-[10px] text-slate-500">• {d.motivo}{'linha' in d && d.linha ? ` (linha ${d.linha})` : ''}</p>
-                                        ))}
-                                        {impTipo === 'mensagens-txt' && (impPreview.autores || []).length > 0 && (
-                                            <div>
-                                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Quais autores são do ESCRITÓRIO? (viram mensagens enviadas)</p>
-                                                <div className="flex gap-1.5 flex-wrap mt-1">
-                                                    {(impPreview.autores || []).map((a) => (
-                                                        <button key={a} onClick={() => setImpAutores((l) => (l.includes(a) ? l.filter((x) => x !== a) : [...l, a]))}
-                                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${impAutores.includes(a)
-                                                                ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                                            {impAutores.includes(a) ? '🏢 ' : ''}{a}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <pre className="text-[9px] text-slate-500 overflow-x-auto max-h-32 overflow-y-auto">{JSON.stringify(impPreview.amostra, null, 1)}</pre>
-                                    </div>
-                                )}
-                                {impResultado && (
-                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                                        ✓ Importado: {impResultado.criados != null
-                                            ? `${impResultado.criados} contatos novos · ${impResultado.jaExistiam} já existiam (não sobrescritos)`
-                                            : `${impResultado.gravadas} mensagens em ${impResultado.conversas} conversa(s)`}
-                                    </p>
-                                )}
-                                <div className="flex items-center justify-end gap-2">
-                                    <button onClick={() => rodarImport(false)} disabled={impRodando || !impConteudo.trim()}
-                                        className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40">
-                                        {impRodando ? '…' : '🔎 Ler (preview)'}
-                                    </button>
-                                    <button onClick={() => rodarImport(true)} disabled={impRodando || !impPreview || impPreview.total === 0}
-                                        className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        Confirmar e gravar
-                                    </button>
-                                </div>
                             </div>
                         )}
 

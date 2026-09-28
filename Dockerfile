@@ -90,7 +90,6 @@ COPY sefaz-backend ./sefaz-backend
 # Copia-los explicitamente evita levar toda a arvore TypeScript do frontend
 # para a imagem final e mantem o contrato de runtime visivel no Dockerfile.
 COPY services/sp-connect-message-origin.js ./services/sp-connect-message-origin.js
-COPY services/ultrafox-browser-parser.js ./services/ultrafox-browser-parser.js
 
 # Roda como root porque Playwright precisa de acesso a libs nativas.
 # Cloud Run isola via gVisor então isso é OK.

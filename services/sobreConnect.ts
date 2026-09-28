@@ -216,7 +216,7 @@ export const MANUAL: PassoManual[] = [
             'O 📇 abre a agenda inteira: quem já escreveu, quem veio do backup da Ultra Fox e quem você cadastrou à mão.',
             'Clique no contato e marque as etiquetas dele: Lead, Cliente, Marketing, Colaborador, Candidato…',
             'Os chips do topo filtram por etiqueta e mostram quantos há em cada uma. "Sem etiqueta" é a sua fila de trabalho.',
-            '➕ Novo cadastra um número à mão; 📥 Importar (admin) traz o backup da Ultra Fox.',
+            '➕ Novo cadastra um número à mão.',
         ],
         atencao: 'Etiqueta classifica uma PESSOA, então fica gravado quem etiquetou e quando. "Marketing" pede consentimento do titular: enquanto ele não estiver registrado, o contato aparece com aviso âmbar — e não se manda campanha para esse número.',
     },
@@ -283,6 +283,7 @@ export const REVISOES: Revisao[] = [
         itens: [
             '☎️ LIGAR PARA O CLIENTE pelo WhatsApp, de dentro da conversa: com a permissão aceita, o botão "☎️ Ligar para … pelo WhatsApp" toca o SEU ramal primeiro e, quando você atende, disca o cliente. O status (tocando o ramal, atendida, não atendida, ocupado, falhou) aparece abaixo do botão e entra como linha na conversa. Precisa de ramal cadastrado (⚙️ → 👥, admin) e do agente do SBC no ar (⚙️ → ☎️ mostra).',
             '👥 Cadastro de RAMAL por atendente em ⚙️ → Atendentes e filas — é onde a ligação de saída toca.',
+            '📥 A aba "Importar Ultra Fox" saiu da ⚙️: a plataforma foi cancelada e o backup dela já está dentro do SP Connect desde 21/08 (os contatos e mensagens importados continuam, marcados "veio do backup").',
         ],
     },
     {
