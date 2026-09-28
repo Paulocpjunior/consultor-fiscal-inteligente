@@ -190,9 +190,56 @@ SBC liga a outra perna à Meta → toca no WhatsApp do cliente
 Sem prefixo, sem teclado, sem redigitar. O colaborador atende o próprio
 telefone e a ligação já está a caminho.
 
-🚧 **Ainda não dá para construir a discagem:** ela precisa do
-`META_SIP_DESTINO`, que só se lê no INVITE da **primeira ligação recebida**.
-**A entrada destrava a saída** — não há como inverter.
+✅ **CONSTRUÍDO EM 28/09** (Paulo: *"quanto ao cliente autorizar já estamos
+cientes e funcionamos; precisamos ativar o resto das funções"*). As peças:
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Botão **☎️ Ligar** | conversa com "Ligações AUTORIZADAS" | confirma, grava um **pedido** (`whatsapp_ligacoes_saida`) e acompanha o estado a cada 3 s |
+| Ramal do colaborador | ⚙️ → 👥 Atendentes (admin) | é onde a ligação toca primeiro; sem ramal, o botão recusa dizendo onde cadastrar |
+| Agente `sbc-agente-saida.py` | **dentro da VM**, serviço systemd, usuário `asterisk` | a cada 2 s pergunta ao app (`GET /sbc/pedidos`, header `x-sbc-secret`), escreve o **call file** em `/var/spool/asterisk/outgoing/` e lê o **CDR** (`Master.csv`, `accountcode` = id do pedido) para devolver *atendida / não atendida / ocupado / falhou* |
+| Contexto `[saida-whatsapp]` | `extensions.conf` (setup) | quando o ramal atende, `Dial(PJSIP/<cliente>@meta-saida,60)`; sem `META_SIP_DESTINO`, recusa com motivo no log |
+| `SBC_SHARED_SECRET` | Secret Manager `sbc-shared-secret` → env do Cloud Run **e** `/etc/sbc-agente.env` na VM | o mesmo valor nos dois lados; sem ele o botão recusa (503 nomeado) e o agente fica parado dizendo o que falta |
+| Linha na aba ☎️ | ⚙️ → ☎️ Voz e vídeo | "Agente de SAÍDA: no ar há N s / parado / nunca" — farol honesto, lido do último GET do agente |
+
+Por que o SBC **pergunta** ao app e não o contrário: a VM não abre porta
+nova (só a 5061 da Meta), o Cloud Run não tem IP fixo, e ARI/AMI exposto
+seria uma superfície a mais. O agente fala para fora, por HTTPS, com segredo.
+
+**Como ligar a saída, na ordem:**
+
+1. Descobrir `META_SIP_DESTINO` (seção 7b do `scripts/sbc-diagnostico.sh`,
+   dentro da VM — desde 28/09 ela lê também os logs rotacionados).
+   **A entrada destrava a saída**: o endereço só existe no INVITE que a
+   Meta mandou numa ligação recebida — não há como inverter.
+2. Criar o segredo e passar ao Cloud Run (nunca `--set-*`):
+   ```bash
+   gcloud config set project consultorfiscalapp
+   read -s S && printf '%s' "$S" | wc -c      # o tamanho vale como conferência
+   printf '%s' "$S" | gcloud secrets create sbc-shared-secret --data-file=- --replication-policy=automatic
+   gcloud run services update consultor-fiscal-inteligente --region us-west1 --update-secrets=SBC_SHARED_SECRET=sbc-shared-secret:latest
+   ```
+   (a conta de serviço do Cloud Run precisa de `secretmanager.secretAccessor` no segredo, como nos outros).
+3. Reaplicar o setup com o destino e o segredo (a VM já existe: o script só reaplica a config e grava o env por ssh):
+   ```bash
+   cd ~/consultor-fiscal-inteligente && git pull
+   SBC_SHARED_SECRET="$S" META_SIP_DESTINO='<valor da 7b>' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
+   ```
+4. ⚙️ → ☎️: a linha do agente tem de dizer **no ar**. ⚙️ → 👥: cadastrar o
+   ramal de quem vai testar.
+5. Conversa com "Ligações AUTORIZADAS", **dentro da grade** da Meta: ☎️ Ligar
+   → o ramal toca → atender → o WhatsApp do cliente toca.
+
+⚠️ **O QUE NÃO ESTÁ PROVADO, e é dito antes do teste**: (a) a permissão do
+cliente foi pedida pela conversa, que vive no número **3337** (principal);
+o tronco SIP está no **3155** (☎️ tab). Se a Meta amarrar a permissão ao
+número que disca, a primeira tentativa volta recusada — e a correção é
+pedir a permissão pelo 3155 ou ligar SIP no 3337, decidido pelo erro, não
+por dedução. (b) O `From` da chamada de saída: se a Meta exigir o número
+do WhatsApp no user do From, o parâmetro `SBC_NUMERO_WHATSAPP` do setup
+grava `from_user` no endpoint `meta-saida` — só se define depois que o log
+disser que falta. (c) Leiaute do INVITE de saída contra a Meta — igual à
+entrada em agosto: **o log do Asterisk é a régua**.
 
 ### ENTRADA — pela URA, não por um ramal
 

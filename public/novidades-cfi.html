@@ -186,6 +186,18 @@
     ficou só com o que importa (manual, digitada, ZIP, cofre de e-mail) e deixa um ponteiro para a aba nova.</p>
     <p><strong>Onde:</strong> Central de XMLs → 🛰️ Captura → 📤 Cobertura de Saída → primeiro bloco, "✅ O cliente fez certo?" → 🔎 Apurar aptidão. No topo da aba há três atalhos, um por bloco.</p>
 
+    <h3>☎️ <strong>SP Connect: ligar para o cliente pelo WhatsApp de dentro da conversa (o seu ramal toca primeiro)</strong></h3>
+    <p>Com a permissão do cliente aceita ("✅ Ligações AUTORIZADAS" no painel da direita), o botão
+    "☎️ Ligar para … pelo WhatsApp" pede ao servidor de voz que ligue. O SEU ramal toca primeiro; quando você atende,
+    a ligação sai para o WhatsApp do cliente. Abaixo do botão aparece o andamento (aguardando, tocando o ramal,
+    atendida, não atendida, ocupado ou falhou com o motivo) e a ligação entra como linha na conversa. Não sai pela
+    API da Meta, que recusa chamada por API em número SIP; sai pelo tronco.</p>
+    <p><strong>O que precisa:</strong> ramal cadastrado no seu usuário (⚙️ → 👥 Atendentes e filas, um admin
+    faz) e o agente de saída no ar na VM do SBC (⚙️ → ☎️ mostra "no ar há N s"). Sem um dos dois, o botão recusa e diz
+    o que falta. A Meta só aceita ligação dentro do horário de atendimento.</p>
+    <p><strong>Onde:</strong> SP Connect → conversa com "Ligações AUTORIZADAS" → painel da direita; ⚙️ → 👥 (ramal);
+    ⚙️ → ☎️ (agente); ⓘ Sobre → item 14.</p>
+
     <h2>Antes disso (27/09)</h2>
 
     <h3>🏦 <strong>DeRE: o plano de contas e o balancete da contabilidade viram D-1011 e D-1101</strong>, conferidos contra o XSD</h3>

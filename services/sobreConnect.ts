@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-09-27';
+export const SOBRE_VERSAO = '2026-09-28';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -264,10 +264,27 @@ export const MANUAL: PassoManual[] = [
         ],
         atencao: 'O Instagram é atendido por uma LISTA de usuários (⚙️ → 📷) — não está vendo as conversas 📷? Peça a um admin pra te incluir. E o recebimento é ligado UMA vez pelo admin (botão 📡): DM não chegando se confere lá.',
     },
+    {
+        titulo: '14. Ligar para o cliente pelo WhatsApp (☎️)',
+        passos: [
+            'Só depois que o cliente tocou em "Permitir" (☎️ Pedir permissão de ligação → o cartão chega no WhatsApp dele). O painel da direita mostra "✅ Ligações AUTORIZADAS".',
+            'Clique em "☎️ Ligar para … pelo WhatsApp". O SEU ramal toca primeiro — atenda. Quando você atende, a ligação sai para o WhatsApp do cliente.',
+            'A linha abaixo do botão acompanha: "aguardando o SBC" → "tocando o seu ramal" → atendida / não atendida / ocupado / falhou (com o motivo).',
+            'Sem ramal cadastrado, o botão recusa e diz onde cadastrar (⚙️ → 👥 Atendentes, um admin faz).',
+        ],
+        atencao: 'A Meta só aceita ligação de WhatsApp dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele, a chamada é recusada — fale por mensagem. E ligue de onde o seu ramal está: é ele que toca.',
+    },
 ];
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-09-28',
+        itens: [
+            '☎️ LIGAR PARA O CLIENTE pelo WhatsApp, de dentro da conversa: com a permissão aceita, o botão "☎️ Ligar para … pelo WhatsApp" toca o SEU ramal primeiro e, quando você atende, disca o cliente. O status (tocando o ramal, atendida, não atendida, ocupado, falhou) aparece abaixo do botão e entra como linha na conversa. Precisa de ramal cadastrado (⚙️ → 👥, admin) e do agente do SBC no ar (⚙️ → ☎️ mostra).',
+            '👥 Cadastro de RAMAL por atendente em ⚙️ → Atendentes e filas — é onde a ligação de saída toca.',
+        ],
+    },
     {
         data: '2026-09-27',
         itens: [

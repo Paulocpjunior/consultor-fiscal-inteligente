@@ -82,6 +82,8 @@ export interface ConversaResumo {
     janela24hAte: string | null;
     // ☎️ status do cartão "Permitir" (fase 2 da chamada): null = nunca pedido
     permissaoLigacao?: { status: 'pendente' | 'aceita' | 'recusada'; pedidoEm?: string | null; em?: string | null; expiraEm?: string | null } | null;
+    /** ☎️ O último click-to-call desta conversa (pedido ao SBC): estado + ramal + quem pediu. */
+    ultimaLigacaoSaida?: { id: string; status: string; ramal: string; em: string | null; detalhe?: string | null; por?: string | null } | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
     naoLidas: number;
     atualizadoEm: string | null;
