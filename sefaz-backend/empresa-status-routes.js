@@ -22,6 +22,8 @@ import express from 'express';
 import admin from 'firebase-admin';
 import forge from 'node-forge';
 import { requireAuth } from './require-admin.js';
+// 📗 Plano de contas do SPED (0500): a forma é conferida pelo dono antes de gravar.
+import { conferirPlanoContasSped } from './plano-contas-sped.js';
 import { getCnpjsDaCarteira } from './carteira-auth.js';
 import { loadCertificate } from './secret-loader.js';
 import { lookupCnpj } from './brasilapi-cache.js';
@@ -858,6 +860,11 @@ const CAMPOS_DADOS_FISCAIS = new Set([
     // O 0500 exige a conta INTEIRA — nome e nível vêm do plano de contas da
     // empresa. Sem eles o COD_CTA do F100 ficaria órfão (recusa do CF BANK).
     'contaContabilReceitaFinanceiraNome', 'contaContabilReceitaFinanceiraNivel',
+    // 📗 Plano de contas mínimo do SPED (0500) — uma conta por USO (28/09, ELS:
+    // 1259 recusas de COD_CTA). Lista de {codigo, nome, nivel, natureza, uso};
+    // a forma é conferida em plano-contas-sped.js antes de gravar. Whitelist E
+    // modal no MESMO PR (regra do #382).
+    'planoContasSped',
     // Natureza da PJ (IND_NAT_PJ, campo 13 do 0000 do EFD-Contribuições). O
     // gerador LIA este campo desde sempre e ele não estava aqui nem na tela:
     // caía no '00' — "sociedade empresária em geral" — em toda empresa,
@@ -954,6 +961,15 @@ router.post('/empresa-dados-fiscais', requireAuth, express.json(), async (req, r
                     }
                 }
             }
+        }
+
+        // 📗 Plano de contas do SPED: a forma é conferida ANTES de gravar — conta
+        // sem código/nome/nível, uso repetido ou natureza fora do leiaute é
+        // recusa DITA, não lista gravada pela metade (28/09, ELS).
+        if ('planoContasSped' in dadosFiscais && dadosFiscais.planoContasSped != null) {
+            const pc = conferirPlanoContasSped(dadosFiscais.planoContasSped);
+            if (!pc.ok) return res.status(400).json({ error: 'PLANO_CONTAS_INVALIDO', message: pc.erros.join(' ') });
+            dadosFiscais.planoContasSped = pc.contas;
         }
 
         // Monta o update dot-notation só com campos permitidos e definidos.
