@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
+import { conferirSituacaoEspecial } from './sped-contrib-situacao-especial.js';
 import {
     conferirContagemDeCampos, conferirPerfilConsolidado, avisosDaPrevalidacaoContrib,
 } from './sped-contrib-campos.js';
@@ -62,13 +63,19 @@ router.get('/preview', requireAdmin, async (req, res) => {
  */
 router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
     try {
-        const { empresaId } = req.body || {};
+        const { empresaId, situacaoEspecial, dataEvento } = req.body || {};
         const comp = competenciaParaGerarArquivo((req.body || {}).competencia);
         if (!comp.ok) return res.status(400).json({ error: comp.erro });
         const competencia = comp.competencia;
         if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        // 🏁 Situação especial do 0000 (GIRY 1365, 28/09): conferida ANTES de
+        // coletar — recusa dita, nunca arquivo normal em silêncio.
+        const sit = conferirSituacaoEspecial({ situacaoEspecial, dataEvento, competencia });
+        if (!sit.ok) return res.status(400).json({ error: 'SITUACAO_ESPECIAL_INVALIDA', message: sit.erro });
 
         const dados = await coletarDadosContribuicoes({ empresaId, competencia });
+        dados.situacaoEspecial = sit.valor;
+        if (sit.valor) dados.warnings.push(`[situação especial] ${sit.valor.aviso}`);
 
         const txt = await montarBlocosContribuicoes({ dados });
 
@@ -114,7 +121,9 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // arquivo errado porque todas as gerações tinham o mesmo nome).
         // SPED_CONTRIB_<cnpj>_<periodo>_<AAAAMMDD-HHMM>.txt
         const cnpj = (dados.empresa.cnpj || '').replace(/\D/g, '');
-        const periodo = competencia.replace('-', '');
+        // O nome diz que é situação especial (SITESP<código>): o arquivo de
+        // encerramento não pode ser confundido com o mensal do mesmo mês.
+        const periodo = competencia.replace('-', '') + (sit.valor ? `_SITESP${sit.valor.indSitEsp}` : '');
         const filename = nomeDoArquivoSped({ familia: 'SPED_CONTRIB', cnpj, periodo });
 
         // 🚨 E A TELA PASSA A DIZER QUAL ARQUIVO ELA ESTÁ DESCREVENDO. O número

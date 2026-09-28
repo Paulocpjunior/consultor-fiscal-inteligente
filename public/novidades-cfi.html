@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (28/09) — leia esta parte primeiro</h2>
 
+    <h3>🏁 <strong>SPED Contribuições: situação especial (encerramento, cisão, fusão, incorporação, abertura) sai do próprio Consultor</strong></h3>
+    <p>GIRY (1365): "vou gerar um EFD de encerramento — essa opção será habilitada no Consultor? Gerei, validei no PVA e
+    continua como um arquivo normal." Não havia campo: o registro 0000 saía sempre como mensal comum. Agora a aba SPED
+    Contribuições tem <strong>Situação especial</strong> (os cinco códigos do leiaute) e <strong>Data do evento</strong>.
+    O 0000 recebe o código no IND_SIT_ESP e a data do evento no DT_FIN (encerramento, cisão, fusão, incorporação) ou no
+    DT_INI (abertura); o outro extremo segue o mês. Situação sem data, ou data fora da competência, é recusa dita, nunca
+    arquivo normal em silêncio. O nome do arquivo ganha <code>_SITESP4</code> (encerramento) para não se confundir com o
+    mensal, e o aviso da geração diz o que foi escrito no 0000. Confira no PVA antes de assinar.</p>
+    <p><strong>Onde:</strong> Central de XMLs → SPED Fiscal → aba SPED Contribuições → bloco 2 (Competência) → Situação especial + Data do evento.</p>
+
     <h3>📨 <strong>"Manifeste a ciência" na nota completada à mão voltou — e agora é parâmetro do escritório</strong></h3>
     <p>Um colaborador avisou: <em>"não tô mais recebendo a mensagem pra manifestar ciência"</em> (B &amp; T). O ajuste
     de 24/09 fez a nota que era resumo da SEFAZ e foi completada pela importação manual deixar de ser tratada como
