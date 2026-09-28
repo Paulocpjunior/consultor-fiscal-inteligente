@@ -19,6 +19,7 @@ import {
     mudarSituacao, criarNota, vincularCliente, buscarClientes, sugestoesDeVinculo,
     listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, salvarRamalAtendente,
     chamarClientePeloSbc, statusLigacaoSaida, agenteSbcStatus, PedidoLigacaoResumo,
+    painelTriagemIa, PainelTriagemIa,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
@@ -794,6 +795,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
     useEffect(() => {
         if (cfgAberta && cfgAba === 'chamadas') void lerAgenteSbc();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfgAberta, cfgAba]);
+    // 📊 O painel da IA de triagem (aba 🤖): "a IA está pegando?" com número.
+    // Lido ao abrir a aba; o botão 🔄 relê. Zero com a IA ligada não é
+    // "tudo certo" — a tela diz o que zero significa.
+    const [painelIa, setPainelIa] = useState<PainelTriagemIa | null>(null);
+    const [painelIaErro, setPainelIaErro] = useState<string | null>(null);
+    const lerPainelIa = async (dias = 7) => {
+        const r = await painelTriagemIa(dias);
+        if (r.ok) { setPainelIa(r); setPainelIaErro(null); }
+        else setPainelIaErro(r.error || 'Não consegui ler o painel da IA.');
+    };
+    useEffect(() => {
+        if (cfgAberta && cfgAba === 'bot' && ehAdmin) void lerPainelIa();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cfgAberta, cfgAba]);
     // ☎️ DE QUAL NÚMERO ESTAMOS FALANDO (Paulo, 26/08): *"já que nosso tronco
@@ -3978,6 +3993,70 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </span>
                                         </span>
                                     </label>
+                                    {/* 📊 PAINEL DA IA (28/09). Paulo (27/09): "a IA está ativa?" — ligada
+                                        não é trabalhando. Cada decisão vira registro, e aqui está a soma
+                                        dos últimos 7 dias, com o que NÃO classificou nomeado. */}
+                                    {ehAdmin && (
+                                        <div className="mt-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2 space-y-1">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📊 A IA nos últimos {painelIa?.dias ?? 7} dias</p>
+                                                <button onClick={() => void lerPainelIa()} className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🔄</button>
+                                            </div>
+                                            {painelIaErro && <p className="text-[10px] text-red-600 dark:text-red-400">{painelIaErro}</p>}
+                                            {!painelIa && !painelIaErro && <p className="text-[10px] text-slate-400">Lendo…</p>}
+                                            {painelIa && painelIa.total === 0 && (
+                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                    Nenhuma decisão registrada no período. Isso significa que <strong>nenhum cliente escreveu frase
+                                                    na triagem</strong> desde que o registro começou (28/09) — ou que a IA está desligada acima. Não
+                                                    significa que ela acertou tudo.
+                                                </p>
+                                            )}
+                                            {painelIa && painelIa.total > 0 && (
+                                                <>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {([
+                                                            ['classificada', '✅ encaminhou', 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'],
+                                                            ['sem-certeza', '🤔 sem certeza → menu', 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'],
+                                                            ['nao-entendi', '❔ não entendeu → menu', 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'],
+                                                            ['fila-inexistente', '⚠️ fila inventada (descartada)', 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'],
+                                                            ['ia-indisponivel', '⛔ IA fora do ar → menu', 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'],
+                                                        ] as const).map(([k, rotulo, cls]) => (
+                                                            <span key={k} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cls}`}>
+                                                                {rotulo} · {painelIa.contadores[k] ?? 0}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-600 dark:text-slate-300">
+                                                        {painelIa.total} decisão(ões){painelIa.truncado ? ' (mostrando as 500 mais recentes)' : ''} ·
+                                                        encaminhou <strong>{painelIa.taxaClassificada}%</strong>
+                                                        {painelIa.ultimaEm ? ` · última ${new Date(painelIa.ultimaEm).toLocaleString('pt-BR')}` : ''}
+                                                        {painelIa.filas.length > 0 && <> · filas: {painelIa.filas.map((f) => `${rotuloCurtoFila(f.fila)} ${f.quantidade}`).join(', ')}</>}
+                                                    </p>
+                                                    {painelIa.motivosIndisponivel.length > 0 && (
+                                                        <p className="text-[10px] text-red-700 dark:text-red-400">
+                                                            ⛔ Fora do ar por: {painelIa.motivosIndisponivel.map((m) => `${m.motivo} (${m.quantidade})`).join(' · ')}
+                                                        </p>
+                                                    )}
+                                                    <details className="text-[10px]">
+                                                        <summary className="cursor-pointer text-slate-500 dark:text-slate-400">Últimas {painelIa.ultimas.length} decisões</summary>
+                                                        <ul className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                                                            {painelIa.ultimas.map((u, i) => (
+                                                                <li key={i} className="text-slate-600 dark:text-slate-300">
+                                                                    {new Date(u.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {u.numero} ·{' '}
+                                                                    <strong>{u.situacao}</strong>
+                                                                    {u.fila ? ` → ${rotuloCurtoFila(u.fila)}` : ''}
+                                                                    {u.confianca != null ? ` (${Math.round(u.confianca * 100)}%)` : ''}
+                                                                    {u.motivo ? ` — ${u.motivo}` : ''}
+                                                                    {u.detalhe ? ` — ${u.detalhe}` : ''}
+                                                                    <span className="block text-slate-400 italic">“{u.textoResumo}”</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </details>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                         <input type="checkbox" checked={cfg.avisarClienteTransferencia}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />

@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📊 PAINEL DA IA DE TRIAGEM — "a IA está pegando?" com número** (28/09,
+  item 5 da fila; Paulo, 27/09: *"a IA está ativa?"*, e a resposta honesta
+  era "ligada, mas não sei se trabalha": só o console.log sabia). Cada
+  decisão de `triarComIa` vira UM doc em `whatsapp_triagem_ia_log`
+  (`registroDeTriagem`: situação classificada / sem-certeza / nao-entendi /
+  fila-inexistente / ia-indisponivel, fila, confiança, motivo, detalhe,
+  texto do cliente CORTADO em 80, modelo) — inclusive "sem cliente Gemini" e o
+  catch (tempo esgotado etc.), best-effort (falha do registro nunca cala o
+  bot). `GET /triagem-ia/painel?dias=` (admin; janela ≤30 d, 500 mais novos,
+  `truncado`) soma pelo puro `resumirTriagemIa` (contadores, taxa NULL sem
+  chamada — nunca 0%, filas, motivos de indisponibilidade, últimas 10). Aba
+  🤖 mostra os cinco chips, a taxa e as últimas decisões; ZERO vem com a
+  frase "não significa que ela acertou tudo". 🐛 A trava pegou na 1ª rodada:
+  `em >= desde` em string deixava "lixo" passar (l > 2) — filtro exige
+  `Date.parse` finito. Catálogo: coleção candidata a TTL.
 - **☎️ LIGAÇÃO RECEBIDA VIRA LINHA NA CONVERSA (CDR) + 📞 PEDIDO DE RETORNO
   VIRA PENDÊNCIA** (28/09, itens 3 e 4 da fila que o Paulo aprovou: *"Pode
   seguir na sua ordem!"*). A Meta não manda evento de chamada em modo SIP

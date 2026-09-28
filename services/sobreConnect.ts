@@ -287,6 +287,7 @@ export const REVISOES: Revisao[] = [
             '📥 A aba "Importar Ultra Fox" saiu da ⚙️: a plataforma foi cancelada e o backup dela já está dentro do SP Connect desde 21/08 (os contatos e mensagens importados continuam, marcados "veio do backup").',
             '☎️ A ligação que o CLIENTE faz pelo WhatsApp passa a aparecer na conversa: "atendida" com a duração, ou "perdida" (conta como não lida e reabre a conversa encerrada). Só a partir de agora; as antigas não entram.',
             '📞 "Pedir retorno de ligação" (o que o cliente vê fora do horário) vira pendência: linha na conversa, não lida, e o chip vermelho "📞 pediu retorno" na lista até alguém ligar de volta pelo ☎️ ou encerrar.',
+            '📊 Painel da IA de triagem (⚙️ → 🤖, admin): quantas frases a IA encaminhou, quantas ficaram sem certeza, não entendeu ou pegaram a IA fora do ar nos últimos 7 dias — com as últimas dez decisões e o começo da frase do cliente. "A IA está pegando?" deixou de ser palpite.',
         ],
     },
     {
