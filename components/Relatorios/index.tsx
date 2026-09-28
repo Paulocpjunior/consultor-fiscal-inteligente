@@ -1390,7 +1390,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             {!linhas.length ? (
                 <p className="mt-3 text-sm text-slate-500">
                     Nenhuma NF-e/NFC-e/CT-e no recorte. Se a empresa emite ou recebe nota, isto é buraco de captura —
-                    veja Prova de captura e Cobertura de Saída.
+                    veja Captura → Prova de captura e Captura → 📤 Cobertura de Saída.
                 </p>
             ) : (
                 <div className="mt-3 overflow-x-auto">
@@ -1908,7 +1908,7 @@ const RESSALVAS_NUMERACAO = [
     // impede alguém de esperar do "Reconferir" uma resposta que ele não pode dar.
     'Nota CANCELADA que nunca chegou ao app aparece aqui como FALTANTE, não na coluna Canceladas — e o botão "Reconferir na SEFAZ" NÃO a alcança: ele pergunta pela chave de acesso, e nota que não chegou não tem chave aqui (o código numérico dela é aleatório). Quem responde por esses números é o portal da SEFAZ ou o ERP do cliente.',
     'A sequência atravessa o mês: buraco entre o fim do mês anterior e a 1ª nota do mês não aparece neste recorte.',
-    'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Cobertura de Saída.',
+    'A SEFAZ não entrega saída ao emitente (Rej. 641): se o cofre/autXML da empresa está incompleto, faltante pode ser nota emitida e não capturada — ver Captura → 📤 Cobertura de Saída.',
 ];
 
 const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
@@ -2256,7 +2256,7 @@ const AbaCanceladas: React.FC<AbaDocsProps & { onRebuscar?: () => void }> = ({
                         <strong> cego</strong>, não vazio.
                     </p>
                     <p className="mt-1">
-                        Confira em <strong>Captura → Cobertura de Saída</strong> se esta empresa já envia os XMLs de
+                        Confira em <strong>Central de XMLs → Captura → 📤 Cobertura de Saída</strong> se esta empresa já envia os XMLs de
                         saída. Enquanto não enviar, o E-Fiscal (que recebe do ERP do cliente) vai listar faltantes que
                         o CFI não tem como ver.
                     </p>

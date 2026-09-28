@@ -399,7 +399,7 @@ const CardCaptura: React.FC<{
                             A saída entra por DOIS trilhos automáticos: cliente aponta o emissor pro cofre
                             (<span className="font-mono">xml@spassessoriacontabil.com.br</span>) OU põe o CNPJ
                             44.388.152/0001-89 no autXML da nota. Prova por empresa e lista de quem falta:
-                            {' '}<strong>Cobertura de Saída</strong>.
+                            {' '}<strong>Captura → 📤 Cobertura de Saída</strong>.
                         </div>
                     </div>
                     );
