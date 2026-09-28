@@ -57,6 +57,13 @@ describe('📤 Cobertura de Saída é uma sub-aba de Captura', () => {
         }
     });
 
+    it('o bloco anunciado ("o cliente fez certo?") é o PRIMEIRO painel montado na aba', () => {
+        const corpo = blocosPorTab(central)['cobertura-saida']!;
+        const posicoes = PAINEIS.map((p) => ({ p, i: corpo.indexOf(p) }));
+        const primeiro = posicoes.reduce((m, x) => (x.i < m.i ? x : m));
+        expect(primeiro.p).toBe('<AptidaoSaidaPanel');
+    });
+
     it('a Novidade que ensina o caminho nomeia um rótulo de sub-aba que existe em Captura', () => {
         const html = readFileSync(join(RAIZ, 'public/novidades-cfi.html'), 'utf8');
         const linhasOnde = html.split('\n').filter((l) => l.includes('<strong>Onde:</strong>') && l.includes('Cobertura de Saída'));

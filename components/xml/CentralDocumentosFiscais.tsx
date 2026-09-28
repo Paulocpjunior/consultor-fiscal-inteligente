@@ -390,23 +390,46 @@ const CentralDocumentosFiscais: React.FC<Props> = ({ currentUser, onShowToast })
                 )}
                 {tab === 'cobertura-saida' && (
                     <div className="space-y-4">
-                        {/* autXML: saída mod 55 automática via DistDFe (cert do
-                            escritório) + "quem ainda não está ligado". */}
-                        <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando cobertura de saída…</p>}>
-                            <AutXmlHarvest />
-                        </Suspense>
-                        {/* Checklist de migração: quem tem saída 55 e ainda não
-                            recebe via cofre → configurar e-mail no emissor. */}
-                        <Suspense fallback={null}>
-                            <CofreChecklistPanel />
-                        </Suspense>
+                        {/* Índice da aba (28/09, Paulo: "ainda não vejo o cliente
+                            fez certo" — era o 3º bloco, embaixo de uma tabela de
+                            58 linhas). O bloco anunciado vem PRIMEIRO e os três
+                            têm âncora. */}
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            {[
+                                { id: 'bloco-aptidao', rot: '✅ O cliente fez certo?' },
+                                { id: 'bloco-checklist', rot: '✅ Checklist de migração (cofre + autXML)' },
+                                { id: 'bloco-colheita', rot: '📦 Colheita autXML · quem ainda não está ligado · prova por numeração' },
+                            ].map(b => (
+                                <a key={b.id} href={`#${b.id}`}
+                                    onClick={(e) => { e.preventDefault(); document.getElementById(b.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                                    className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                    {b.rot}
+                                </a>
+                            ))}
+                        </div>
                         {/* "O cliente fez certo?" — aptidão se prova com UMA
-                            nota de qualquer data; o checklist acima olha a
+                            nota de qualquer data; o checklist abaixo olha a
                             janela recente. Os dois juntos separam "não
                             configurou" de "configurou e não vendeu". */}
-                        <Suspense fallback={null}>
-                            <AptidaoSaidaPanel />
-                        </Suspense>
+                        <div id="bloco-aptidao" className="scroll-mt-4">
+                            <Suspense fallback={<p className="text-xs text-slate-400 py-4">Carregando "o cliente fez certo?"…</p>}>
+                                <AptidaoSaidaPanel />
+                            </Suspense>
+                        </div>
+                        {/* Checklist de migração: quem tem saída 55 e ainda não
+                            recebe via cofre → configurar e-mail no emissor. */}
+                        <div id="bloco-checklist" className="scroll-mt-4">
+                            <Suspense fallback={null}>
+                                <CofreChecklistPanel />
+                            </Suspense>
+                        </div>
+                        {/* autXML: saída mod 55 automática via DistDFe (cert do
+                            escritório) + "quem ainda não está ligado". */}
+                        <div id="bloco-colheita" className="scroll-mt-4">
+                            <Suspense fallback={null}>
+                                <AutXmlHarvest />
+                            </Suspense>
+                        </div>
                     </div>
                 )}
                 {tab === 'empresas' && (
