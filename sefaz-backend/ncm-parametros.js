@@ -24,6 +24,10 @@
 //    (mesma regra do código de receita e do COD_AJ).
 // ============================================================================
 
+// 📗 PIS/COFINS na ENTRADA (28/09, ELS): CST de aquisição (Tabela 4.3.4) e
+// natureza da base do crédito (Tabela 4.3.7) passam a ser parâmetro por NCM.
+import { CST_ENTRADA_VALIDOS, CODIGOS_NAT_BC_CRED } from './tabelas-cst-entrada.js';
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const so = (v) => String(v ?? '').replace(/\D/g, '');
 
@@ -90,7 +94,21 @@ export function validarParametroNcm(p) {
     if (fim && !ehData(fim)) erros.push('Vigência final deve ser AAAA-MM-DD.');
     if (ini && fim && fim < ini) erros.push('Vigência final anterior à inicial.');
 
-    return { ok: erros.length === 0, erros, ncm, uf };
+    // 📗 PIS/COFINS na entrada: só código da Tabela 4.3.4; natureza só da 4.3.7.
+    // Natureza sem CST com crédito é órfã — o M105 não existe para 70–75.
+    const cstEnt = String(p?.cstPisCofinsEntrada || '').trim();
+    if (cstEnt && !CST_ENTRADA_VALIDOS.includes(cstEnt)) {
+        erros.push(`CST PIS/COFINS na entrada "${cstEnt}" não existe na Tabela 4.3.4 (50–56, 60–66, 70–75, 98, 99).`);
+    }
+    const nat = String(p?.natBcCred || '').trim();
+    if (nat && !CODIGOS_NAT_BC_CRED.includes(nat)) {
+        erros.push(`Natureza da base do crédito "${nat}" não existe na Tabela 4.3.7 (01 a 18).`);
+    }
+    if (nat && cstEnt && !(Number(cstEnt) >= 50 && Number(cstEnt) <= 66)) {
+        erros.push(`Natureza da base do crédito só faz sentido com CST de crédito (50–66); com CST ${cstEnt} deixe em branco.`);
+    }
+
+    return { ok: erros.length === 0, erros, ncm, uf, cstPisCofinsEntrada: cstEnt || null, natBcCred: nat || null };
 }
 
 /** A data de referência cai dentro da vigência do parâmetro? */
@@ -122,6 +140,7 @@ export function resolverParametrosNcm(ncm, catalogo, { uf = '', dataRef = '' } =
         achou: false, ncmCadastrado: null, aliqInterna: null, ivaSt: null,
         ivaJaAjustado: false, portariaIvaSt: null, cest: null, temSt: null,
         reducaoBase: null, descricao: null, motivo: null,
+        cstPisCofinsEntrada: null, natBcCred: null,
     };
     const alvo = so(ncm);
     if (!alvo) return { ...vazio, motivo: 'Item sem NCM — não dá pra consultar o cadastro.' };
@@ -170,6 +189,9 @@ export function resolverParametrosNcm(ncm, catalogo, { uf = '', dataRef = '' } =
         reducaoBase: temValor(c.reducaoBase) ? num(c.reducaoBase) : null,
         descricao: c.descricao || null,
         motivo: null,
+        // 📗 PIS/COFINS na entrada (28/09): a CST de aquisição e a natureza do crédito do NCM.
+        cstPisCofinsEntrada: String(c.cstPisCofinsEntrada || '').trim() || null,
+        natBcCred: String(c.natBcCred || '').trim() || null,
     };
 }
 

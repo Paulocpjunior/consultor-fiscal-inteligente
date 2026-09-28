@@ -107,6 +107,9 @@ router.put('/', requireAuth, express.json(), async (req, res) => {
             reducaoBase: p.reducaoBase === '' || p.reducaoBase == null ? null : Number(p.reducaoBase),
             vigenciaInicio: String(p.vigenciaInicio || '').slice(0, 10) || null,
             vigenciaFim: String(p.vigenciaFim || '').slice(0, 10) || null,
+            // 📗 PIS/COFINS na entrada (28/09): já conferidos por validarParametroNcm.
+            cstPisCofinsEntrada: v.cstPisCofinsEntrada || null,
+            natBcCred: v.natBcCred || null,
             atualizadoPor: req.user?.email || req.user?.uid || null,
             atualizadoEm: new Date().toISOString(),
         };

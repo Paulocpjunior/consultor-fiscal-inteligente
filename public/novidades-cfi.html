@@ -87,6 +87,24 @@
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
 
+    <h3>📗 <strong>SPED Contribuições: a CST de PIS/COFINS da COMPRA passou a ter régua — pessoa física sem crédito, cadastro por NCM, M105/M505 e o C100 pela soma dos itens</strong></h3>
+    <p>ELS 08/2026, PVA de 28/09, segunda rodada: 30 recusas "CST com direito a crédito (50 a 56) para participante pessoa
+    física", 80 avisos "CST 50–56 em produto a alíquota zero", 4 "deverá existir M105/M505", 6 "natureza da base do crédito
+    inválida" e 15 "VL_PIS/VL_COFINS do C100 menor que a soma dos itens". A causa comum: o gerador carimbava CST 50 (com
+    crédito) em toda compra do não-cumulativo, banana de produtor rural, fertilizante e diesel incluídos, e o crédito do
+    M100 saía inventado.</p>
+    <p>Agora a CST da compra segue uma régua em degraus. <strong>Fornecedor pessoa física</strong> sai 70 (sem crédito)
+    automaticamente, porque é lei (art. 3º, § 3º, I das Leis 10.637 e 10.833). O <strong>Cadastro NCM</strong> ganhou dois
+    campos, "CST PIS/COFINS na entrada" (Tabela 4.3.4: 73 alíquota zero, 75 ST, 70 sem crédito…) e "Natureza da base do
+    crédito" (Tabela 4.3.7: 01 revenda, 02 insumo, 04 energia…), por NCM ou prefixo, com vigência. Sem cadastro, a compra de
+    PJ continua no 50 como antes, mas o aviso da geração lista <strong>NCM a NCM, com valor</strong>, o que caiu no padrão:
+    é essa lista que vira cadastro. Serviço tomado sai com natureza 03. O <strong>M105/M505</strong> passa a existir, um por
+    natureza e CST, fechando com o M100/M500. O <strong>C100</strong> declara PIS/COFINS pela soma dos C170. E a conferência
+    interna acusa as duas recusas antes do PVA.</p>
+    <p><strong>Para a ELS:</strong> cadastre 0803 (banana) e 3102 (fertilizante) como 73, e 2710.19.21 (diesel) como 70,
+    salvo decisão da contabilidade de tratar o diesel da frota como insumo (50 com natureza 02). Depois regere.</p>
+    <p><strong>Onde:</strong> Central de XMLs → XMLs → 🏷️ Cadastro NCM → "CST PIS/COFINS na entrada" e "Natureza da base do crédito" · aviso da geração na aba SPED Contribuições.</p>
+
     <h3>📗 <strong>SPED Contribuições: o M100/M500 sai com o código de crédito de três dígitos da Tabela 4.3.6, um registro por tipo de crédito</strong></h3>
     <p>ELS (Distribuidora de Bananas) 08/2026, PVA de 25/09: duas recusas "Tamanho do campo inválido/incorreto — COD_CRED",
     no M100 e no M500. O gerador escrevia "01" (dois dígitos) e somava todo o crédito de entrada num registro só. O

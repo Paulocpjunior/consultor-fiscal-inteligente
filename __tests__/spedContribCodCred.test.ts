@@ -16,18 +16,23 @@ import { conferirCodCredDoM100, conferirContagemDeCampos, avisosDaPrevalidacaoCo
 const campos = (l: string) => l.trim().split('|');
 const num = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.'));
 
-const nfe = (numero: number, direcao: 'saida' | 'entrada', itens: Array<{ vProd: number; cst: string }>) => ({
+// ⚠️ NA ENTRADA O CST DO XML É O DO FORNECEDOR e a régua o ignora (20/08);
+// quem muda a CST da compra é o CADASTRO NCM (28/09). O fixture põe um NCM
+// por item e o catálogo decide: sem cadastro → 50 (padrão).
+const nfe = (numero: number, direcao: 'saida' | 'entrada', itens: Array<{ vProd: number; cst: string; ncm?: string }>) => ({
     tipo: 'NFe', direcao, numero: String(numero),
     chave: `3526080000543000010455001000${String(numero).padStart(6, '0')}1000000001`,
     dataEmissao: '2026-08-10', cnpjEmit: '00005430000104', cnpjDest: '11222333000181',
     itens: itens.map((i, k) => ({
-        nItem: k + 1, codigo: `P${k}`, descricao: 'Banana', cfop: direcao === 'saida' ? '5102' : '1102', ncm: '08039000',
+        nItem: k + 1, codigo: `P${k}`, descricao: 'Banana', cfop: direcao === 'saida' ? '5102' : '1102', ncm: i.ncm || '08039000',
         unidade: 'KG', quantidade: 1, vUnCom: i.vProd, vProd: i.vProd, vDesc: 0,
         cstPis: i.cst, cstCofins: i.cst, vPIS: 0, vCOFINS: 0, vICMS: 0,
     })),
 });
 const venda = () => nfe(1, 'saida', [{ vProd: 100000, cst: '01' }]); // contribuição alta: o crédito é descontado por inteiro
-const bloco = (notas: any[], warnings: string[] = []) => buildBlocoM({ notas, regimeApuracao: '1', warnings, naturezaReceita: {} }) as string[];
+const cad = (ncm: string, cst: string) => ({ ncm, cstPisCofinsEntrada: cst });
+const bloco = (notas: any[], warnings: string[] = [], cadastroNcm: any[] = []) =>
+    buildBlocoM({ notas, regimeApuracao: '1', warnings, naturezaReceita: {}, cadastroNcm }) as string[];
 const reg = (linhas: string[], r: string) => linhas.filter((l) => l.startsWith(`|${r}|`));
 
 describe('a régua: grupo pela CST, código de três dígitos', () => {
@@ -60,8 +65,11 @@ describe('o M100/M500 sai com COD_CRED de três dígitos, um por tipo de crédit
         expect(avisosDaPrevalidacaoContrib(linhas).filter((a: string) => /COD_CRED/.test(a))).toEqual([]);
     });
 
-    it('CST 50 e 51 no mês: dois M100 (101 e 201), e o desconto do M200 é a soma dos M100', () => {
-        const linhas = bloco([venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }]), nfe(3, 'entrada', [{ vProd: 2000, cst: '51' }])]);
+    it('CST 50 e 51 no mês (51 pelo cadastro NCM): dois M100 (101 e 201), e o desconto do M200 é a soma dos M100', () => {
+        const linhas = bloco(
+            [venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }]), nfe(3, 'entrada', [{ vProd: 2000, cst: '50', ncm: '31021010' }])],
+            [], [cad('31021010', '51')],
+        );
         const m100 = reg(linhas, 'M100');
         expect(m100.map((l) => campos(l)[2])).toEqual(['101', '201']);
         expect(num(campos(m100[1])[8])).toBeCloseTo(33, 2);
@@ -70,15 +78,21 @@ describe('o M100/M500 sai com COD_CRED de três dígitos, um por tipo de crédit
         expect(num(m200[3])).toBeCloseTo(somaDesc, 2); // 03 VL_TOT_CRED_DESC
     });
 
-    it('nota com CST misturadas vai item a item: 50 e 52 na mesma nota viram 101 e 301', () => {
-        const linhas = bloco([venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }, { vProd: 500, cst: '52' }])]);
+    it('nota com CST misturadas vai item a item: 50 (padrão) e 52 (cadastro) na mesma nota viram 101 e 301', () => {
+        const linhas = bloco(
+            [venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }, { vProd: 500, cst: '50', ncm: '84212300' }])],
+            [], [cad('84212300', '52')],
+        );
         expect(reg(linhas, 'M100').map((l) => campos(l)[2])).toEqual(['101', '301']);
         expect(num(campos(reg(linhas, 'M100')[1])[4])).toBeCloseTo(500, 2);
     });
 
-    it('crédito comum (53) e sem direito (70) ficam FORA do M100 e do desconto — e o aviso diz quanto e o que fazer', () => {
+    it('crédito comum (53) e sem direito (70), ambos pelo cadastro NCM, ficam FORA do M100 e do desconto — e o aviso diz quanto e o que fazer', () => {
         const warnings: string[] = [];
-        const linhas = bloco([venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }]), nfe(3, 'entrada', [{ vProd: 4000, cst: '53' }]), nfe(4, 'entrada', [{ vProd: 700, cst: '70' }])], warnings);
+        const linhas = bloco(
+            [venda(), nfe(2, 'entrada', [{ vProd: 1000, cst: '50' }]), nfe(3, 'entrada', [{ vProd: 4000, cst: '50', ncm: '27101921' }]), nfe(4, 'entrada', [{ vProd: 700, cst: '50', ncm: '31021010' }])],
+            warnings, [cad('27101921', '53'), cad('31021010', '70')],
+        );
         const m100 = reg(linhas, 'M100');
         expect(m100).toHaveLength(1);
         expect(num(campos(m100[0])[8])).toBeCloseTo(16.5, 2);
@@ -86,7 +100,19 @@ describe('o M100/M500 sai com COD_CRED de três dígitos, um por tipo de crédit
         const comum = warnings.find((w) => /CST 53–56/.test(w));
         expect(comum).toMatch(/4000\.00/);
         expect(comum).toMatch(/0110/);
-        expect(warnings.find((w) => /sem direito a crédito/.test(w))).toMatch(/700\.00/);
+        // O 70 do cadastro sai nomeado no aviso do cadastro aplicado, com o valor.
+        expect(warnings.find((w) => /cadastro NCM aplicado/.test(w))).toMatch(/31021010→70 \(1 item\(ns\), 700\.00\)/);
+        // E o NCM que caiu no PADRÃO 50 (banana 08039000) vai listado com o valor — é a lista que vira cadastro.
+        expect(warnings.find((w) => /saíram no PADRÃO 50/.test(w))).toMatch(/08039000/);
+    });
+
+    it('fornecedor PESSOA FÍSICA nunca gera crédito (lei), mesmo sem cadastro: CST 70, sem M100, aviso nomeado', () => {
+        const warnings: string[] = [];
+        const pf = { ...nfe(2, 'entrada', [{ vProd: 5000, cst: '50' }]), cnpjEmit: '12345678909', cnpjDest: '11222333000181' };
+        const linhas = bloco([venda(), pf], warnings);
+        expect(reg(linhas, 'M100')).toEqual([]);
+        expect(num(campos(reg(linhas, 'M200')[0])[3])).toBe(0);
+        expect(warnings.find((w) => /PESSOA FÍSICA/.test(w))).toMatch(/5000\.00/);
     });
 
     it('sem crédito de entrada não sai M100 — nada muda no cumulativo', () => {
