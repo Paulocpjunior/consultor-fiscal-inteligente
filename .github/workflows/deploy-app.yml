@@ -181,7 +181,19 @@ jobs:
             .
 
       - name: Push image
-        run: docker push ${{ env.IMAGE }}:${{ github.sha }}
+        # O Artifact Registry devolve 502 transitório de vez em quando (deploy
+        # 1057, 28/09: todas as camadas enviadas e o manifesto caiu em "502 Bad
+        # Gateway"). O push é idempotente — camada já enviada vira "Layer
+        # already exists" — então tentar de novo é seguro; a falha só é real
+        # depois de três tentativas.
+        run: |
+          for tentativa in 1 2 3; do
+            if docker push ${{ env.IMAGE }}:${{ github.sha }}; then exit 0; fi
+            echo "::warning::docker push falhou (tentativa $tentativa de 3); aguardando $((tentativa * 15))s"
+            sleep $((tentativa * 15))
+          done
+          echo "::error::docker push falhou 3 vezes"
+          exit 1
 
       - name: Deploy to Cloud Run (sem tráfego, revisão candidata)
         # --no-traffic + --tag candidate: cria a revisão nova SEM mandar tráfego
