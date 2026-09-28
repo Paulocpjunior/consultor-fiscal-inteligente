@@ -5,6 +5,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🐳 DEPLOY 1057 CAIU NO `docker push` COM 502 DO ARTIFACT REGISTRY (28/09)**:
+  build, testes e todas as camadas ok; o manifesto final levou "502 Bad
+  Gateway". O app do GitHub não pode reexecutar job nem disparar
+  `workflow_dispatch` (403 "Resource not accessible by integration") — quem
+  reexecuta pelo botão é o Paulo. Correção real: o passo "Push image" tenta
+  3 vezes com espera crescente (push é idempotente: camada enviada vira
+  "Layer already exists"). O merge deste ajuste reexecuta o deploy do #1304.
+
 - **📗 PLANO DE CONTAS DO 0500 COM USO + COD_CTA NO C170/A170 (28/09, ELS
   08/2026, item 3 da 2ª rodada do PVA: 1259 recusas "cadastre e/ou selecione
   previamente a conta contábil analítica no registro 0500")** (Paulo: *"acho
