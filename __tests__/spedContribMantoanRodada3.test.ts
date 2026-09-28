@@ -109,7 +109,10 @@ describe('🚨 A170 — IND_ORIG_CRED é da DIREÇÃO, não do CST', () => {
         const linhas: string[] = buildBlocoA(dados);
         const a170 = camposDaLinha(linhas.find(l => l.startsWith('|A170|'))!);
         expect(a170[8]).toBe('50');  // CST_PIS — vem do regime, não do XML
-        expect(a170[6]).toBe('01');  // NAT_BC_CRED
+        // 28/09 (ELS): '01' (bens para revenda) num SERVIÇO tomado é "natureza
+        // inválida" no PVA — serviço é 03 (Tabela 4.3.7). O fato cobrado aqui
+        // continua o mesmo: com crédito, o campo vem PREENCHIDO.
+        expect(a170[6]).toBe('03');  // NAT_BC_CRED
         expect(a170[7]).toBe('0');   // IND_ORIG_CRED
     });
 

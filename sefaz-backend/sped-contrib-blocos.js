@@ -12,6 +12,9 @@ import * as fmt from './sped-fiscal-format.js';
 import { indicadorFrete } from './nfe-frete.js';
 // A régua das DUAS FORMAS do documento mora num lugar só (11/08).
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
+// 📗 A CST DE PIS/COFINS DA AQUISIÇÃO TEM DONO (28/09, ELS): regime → pessoa
+// física → cadastro NCM → padrão. C170, A170 e o bloco M leem a MESMA régua.
+import { cstDaAquisicao, cstGeraCredito, criarResumoDaCstDeEntrada, NAT_BC_CRED } from './cst-pis-cofins-entrada.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
@@ -192,7 +195,7 @@ function valorTotalDoDocumento(nota, totais) {
     return (nota.itens || []).reduce((s, i) => s + valorOperacaoDoItem(i), 0);
 }
 
-function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem, freteDoItem) {
+function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem, freteDoItem, ctx = null) {
     const vlItem = Number.isFinite(liquidoDoItem)
         ? liquidoDoItem
         : parseFloat(item.vProd || item.valor || 0) || 0;
@@ -241,7 +244,7 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem,
             vlCofins: incideCofins ? base * (aliqCofins / 100) : 0,
         };
     }
-    return pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq);
+    return pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq, ctx);
 }
 
 /**
@@ -262,17 +265,31 @@ function pisCofinsDoItemC170(item, direcao, regimeApuracao, aliq, liquidoDoItem,
  * de quem não achou o dado (a régua de 06/08) — e ele só alcança o regime
  * CUMULATIVO, em que crédito não existe por lei. No não-cumulativo nada muda.
  */
-function pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq) {
-    const naoCumulativo = regimeApuracao === '1' || regimeApuracao === '3';
-    const cst = naoCumulativo ? '50' : '70';
-    if (!naoCumulativo) {
+function pisCofinsDaAquisicao(vlItem, regimeApuracao, aliq, ctx = null) {
+    // 📗 28/09 (ELS): a CST vem da RÉGUA (regime → pessoa física → cadastro
+    // NCM → padrão), não mais do regime sozinho. Sem `ctx` (chamador antigo)
+    // a régua recebe só o regime e responde como antes: 50 no NC, 70 no cumulativo.
+    const decisao = cstDaAquisicao({
+        regimeApuracao,
+        codPart: ctx?.codPart || '',
+        ncm: ctx?.ncm || '',
+        catalogo: ctx?.catalogo || null,
+        dataRef: ctx?.dataRef || '',
+        uf: ctx?.uf || '',
+        ehServico: !!ctx?.ehServico,
+    });
+    if (typeof ctx?.registrar === 'function') ctx.registrar(decisao);
+    const cst = decisao.cst;
+    // ⚠️ Zero aqui É A RESPOSTA ("não há crédito a apropriar") — CST sem
+    // crédito sai com base, alíquota e valor zerados, nunca "70 com 6,50 ao lado".
+    if (!cstGeraCredito(cst)) {
         return {
-            cstPis: cst, cstCofins: cst,
+            cstPis: cst, cstCofins: cst, natBcCred: null, decisao,
             basePis: 0, baseCofins: 0, aliqPis: 0, aliqCofins: 0, vlPis: 0, vlCofins: 0,
         };
     }
     return {
-        cstPis: cst, cstCofins: cst,
+        cstPis: cst, cstCofins: cst, natBcCred: decisao.natBcCred, decisao,
         basePis: vlItem, baseCofins: vlItem,
         aliqPis: aliq.pis * 100, aliqCofins: aliq.cofins * 100,
         vlPis: vlItem * aliq.pis, vlCofins: vlItem * aliq.cofins,
@@ -353,6 +370,37 @@ export function codCredDoGrupo(grupo, codTipoCont = '1') {
     return `${grupo}${String(codTipoCont) === '2' ? '02' : '01'}`;
 }
 const ROTULO_DO_GRUPO = { comum: 'CST 53–56 (crédito comum a mais de um tipo de receita)', presumido: 'CST 60–66 (crédito presumido)', semCredito: 'CST sem direito a crédito (70 em diante)' };
+
+/**
+ * 📗 M105/M505 — detalhamento da base do crédito do M100/M500 pai, um registro
+ * por (natureza da base 4.3.7, CST). Guia 1.35, 10 campos:
+ *   02 NAT_BC_CRED · 03 CST_PIS · 04 VL_BC_PIS_TOT · 05 VL_BC_PIS_CUM ·
+ *   06 VL_BC_PIS_NC (04 − 05) · 07 VL_BC_PIS (= 06 para CST 50/51/52) ·
+ *   08 QUANT_BC_PIS_TOT · 09 QUANT_BC_PIS · 10 DESC_CRED
+ * Exclusivamente não-cumulativo: campo 05 "0,00 ou em branco" (Guia, campo
+ * 05) — sai 0,00. Crédito por valor, não por quantidade: 08/09 vazios.
+ * PURO; exportado para a trava.
+ */
+export function montarM105({ registro = 'M105', porNatCst = {} } = {}) {
+    const chaves = Object.keys(porNatCst || {}).sort();
+    const linhas = [];
+    for (const k of chaves) {
+        const d = porNatCst[k];
+        if (!d || !(d.bc > 0)) continue;
+        linhas.push(fmt.buildLine([
+            registro,
+            d.natBcCred,                 // 02 NAT_BC_CRED (Tabela 4.3.7)
+            d.cst,                       // 03 CST (Tabela 4.3.3)
+            fmt.formatValue(d.bc),       // 04 VL_BC_*_TOT
+            fmt.formatValue(0),          // 05 VL_BC_*_CUM — só regime 3 (ambos)
+            fmt.formatValue(d.bc),       // 06 VL_BC_*_NC = 04 − 05
+            fmt.formatValue(d.bc),       // 07 VL_BC_* = 06 (CST 50/51/52)
+            '', '',                      // 08/09 quantidade — crédito por valor
+            '',                          // 10 DESC_CRED
+        ]));
+    }
+    return linhas;
+}
 
 /** Descrição do item quando o documento não traz itens capturados. */
 function descricaoDoServico(nota) {
@@ -554,7 +602,12 @@ export function buildBlocoA(dados) {
             // fariam o C170 e o A170 do MESMO arquivo discordarem sobre a
             // mesma aquisição.
             const aq = direcao !== 'saida'
-                ? pisCofinsDaAquisicao(it.valor, regimeApuracao, aliq)
+                ? pisCofinsDaAquisicao(it.valor, regimeApuracao, aliq, {
+                    // 📗 Serviço tomado: sem NCM; a régua aplica regime e pessoa
+                    // física, e o padrão do serviço é natureza 03 (28/09, ELS:
+                    // o A170 saía com 01 "bens para revenda" e o PVA recusou).
+                    codPart: codPartDoDocumento(nota, dados.empresa?.cnpj), ehServico: true,
+                })
                 : null;
             const cstPis = aq ? aq.cstPis : getCstPis(it.item, regimeApuracao, direcao);
             const cstCofins = aq ? aq.cstCofins : getCstCofins(it.item, regimeApuracao, direcao);
@@ -577,7 +630,7 @@ export function buildBlocoA(dados) {
                 fmt.sanitizeString(it.descr, 255),
                 fmt.formatValue(it.valor),
                 '',                                   // VL_DESC
-                comCredito ? '01' : '',               // NAT_BC_CRED
+                comCredito ? (aq?.natBcCred || '03') : '',   // NAT_BC_CRED — 03 serviços como insumo (Tabela 4.3.7)
                 indOrigemCredito,                     // IND_ORIG_CRED
                 cstPis,
                 fmt.formatValue(aq ? aq.basePis : it.valor),
@@ -728,15 +781,36 @@ export function buildBlocoC_Contrib(dados) {
         // plausível de sempre. Só a BASE o recebe; o VL_ITEM continua sendo
         // *"somente o valor das mercadorias"*.
         const fretesPorItem = fretesDosItens(nota);
-        let vProd = 0, vDesc = 0, vPis = 0, vCofins = 0;
+        // 📗 O PIS/COFINS de cada item é decidido AQUI, antes do C100 (28/09,
+        // ELS: 15 recusas "VL_PIS do C100 menor que a soma dos C170"). O
+        // cabeçalho copiava o vPIS do XML enquanto os itens saíam calculados
+        // pela régua — o mesmo documento com dois números. Agora o C100 é a
+        // SOMA dos C170, que é a validação do Guia. A régua da ENTRADA recebe
+        // o participante (pessoa física), o NCM e o cadastro (`ctx`).
+        const codPartDoDoc = codPartDoDocumento(nota, dados.empresa?.cnpj);
+        const dataRefDoc = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
+        const pisCofinsDosItens = (nota.itens || []).map((item, k) => pisCofinsDoItemC170(
+            item, direcao, regimeApuracao, aliq, liquidosDosItens[k] || 0, fretesPorItem[k] || 0,
+            direcao !== 'saida' ? {
+                codPart: codPartDoDoc, ncm: item.ncm || item.NCM || '', catalogo: dados.cadastroNcm || null,
+                dataRef: dataRefDoc, uf: nota.destinatario?.uf || nota.ufDest || '',
+            } : null,
+        ));
+        // O C100 declara o MAIOR entre o destacado no documento (o arquivo ACEITO
+        // da PWR 03/2026 traz 127,27 no C100 com 104,36 nos C170) e a soma dos
+        // C170 — o PVA valida "VL_PIS ≥ soma dos itens", e na ELS o XML da compra
+        // trazia 0/1 com os itens em 16,50 (a recusa). Nunca menos que os itens.
+        let vProd = 0, vDesc = 0, vPisXml = 0, vCofinsXml = 0, vPisItens = 0, vCofinsItens = 0;
         (nota.itens || []).forEach((item, k) => {
             vProd += parseFloat(item.vProd || item.valor || 0) || 0;
             vDesc += descontosPorItem[k] || 0;
-            vPis += parseFloat(item.vPIS || 0);
-            vCofins += parseFloat(item.vCOFINS || 0);
+            vPisXml += parseFloat(item.vPIS || 0) || 0;
+            vCofinsXml += parseFloat(item.vCOFINS || 0) || 0;
+            vPisItens += pisCofinsDosItens[k]?.vlPis || 0;
+            vCofinsItens += pisCofinsDosItens[k]?.vlCofins || 0;
         });
-        if (vPis === 0) vPis = vProd * aliq.pis;
-        if (vCofins === 0) vCofins = vProd * aliq.cofins;
+        const vPis = Math.max(vPisXml, vPisItens);
+        const vCofins = Math.max(vCofinsXml, vCofinsItens);
 
         const chave = nota.chaveAcesso || nota.chave || '';
         const t = nota.totais || {};
@@ -883,9 +957,8 @@ export function buildBlocoC_Contrib(dados) {
             // ⚠️ A BASE lê o MESMO líquido: com o desconto lançado só no total
             // do documento, `baseDoItem(item)` não o enxergaria e a base sairia
             // cheia — o registro se desmentiria dentro da própria linha.
-            const p = pisCofinsDoItemC170(
-                item, direcao, regimeApuracao, aliq, liquidoDoItem, fretesPorItem[k] || 0,
-            );
+            // Decidido acima, antes do C100 — o cabeçalho é a soma destes.
+            const p = pisCofinsDosItens[k];
 
             linhas.push(fmt.buildLine([
                 'C170',
@@ -1461,11 +1534,20 @@ export function buildBlocoM(dados) {
     let totalPisEntrada = 0, totalCofinsEntrada = 0, totalBcEntrada = 0;
     /** Crédito de entrada POR GRUPO da Tabela 4.3.6 (ver grupoDoCreditoPeloCst). */
     const creditos = {};
-    const acumularCredito = (grupo, bc, pis, cofins, itens) => {
+    // 📗 Dentro de cada grupo, a base por (natureza 4.3.7, CST): é o M105/M505.
+    const acumularCredito = (grupo, bc, pis, cofins, itens, natBcCred = null, cst = null) => {
         const g = grupo || 'semCredito';
-        const c = creditos[g] || (creditos[g] = { bc: 0, pis: 0, cofins: 0, itens: 0 });
+        const c = creditos[g] || (creditos[g] = { bc: 0, pis: 0, cofins: 0, itens: 0, porNatCst: {} });
         c.bc += bc; c.pis += pis; c.cofins += cofins; c.itens += itens;
+        if (natBcCred && cst) {
+            const k = `${natBcCred}|${cst}`;
+            const d = c.porNatCst[k] || (c.porNatCst[k] = { natBcCred, cst, bc: 0, pis: 0, cofins: 0, itens: 0 });
+            d.bc += bc; d.pis += pis; d.cofins += cofins; d.itens += itens;
+        }
     };
+    // O aviso da geração diz de onde veio cada CST de entrada (pessoa física,
+    // cadastro NCM, padrão) — NCM a NCM, com valor. É a lista que vira cadastro.
+    const resumoCst = criarResumoDaCstDeEntrada();
     /** Quanto de ICMS saiu da base — vai no aviso, para o número ser conferível. */
     let icmsExcluido = 0;
     /** Desconto incondicional tirado da receita — vai no aviso, com a contagem. */
@@ -1577,26 +1659,46 @@ export function buildBlocoM(dados) {
             // 📖 O crédito segue a CST de cada item (Tabela 4.3.7 → 4.3.6) —
             // ver grupoDoCreditoPeloCst. Nota inteira num grupo só (o caso de
             // sempre) acumula como antes; nota com CST misturadas vai item a item.
+            // 📗 A MESMA régua do C170/A170 (`cstDaAquisicao`): regime → pessoa
+            // física → cadastro NCM → padrão. Decidir aqui de outro jeito faria
+            // o bloco M discordar dos próprios documentos do arquivo.
             const itensNota = nota.itens || [];
-            const grupos = new Set(itensNota.map((i) => grupoDoCreditoPeloCst(getCstPis(i, regimeApuracao, 'entrada'))));
+            const codPartNota = codPartDoDocumento(nota, dados.empresa?.cnpj);
+            const dataRefNota = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
+            const ehServicoDoc = semItens || String(nota.tipo || '').toUpperCase() === 'NFSE';
+            const decidir = (item) => cstDaAquisicao({
+                regimeApuracao, codPart: codPartNota, ncm: item?.ncm || item?.NCM || '',
+                catalogo: dados.cadastroNcm || null, dataRef: dataRefNota,
+                uf: nota.destinatario?.uf || nota.ufDest || '', ehServico: ehServicoDoc,
+            });
+            const decisoes = (itensNota.length ? itensNota : [{}]).map(decidir);
+            const grupos = new Set(decisoes.map((d) => grupoDoCreditoPeloCst(d.cst)));
             if (grupos.size <= 1) {
-                const g = grupos.size ? [...grupos][0] : grupoDoCreditoPeloCst(getCstPis({}, regimeApuracao, 'entrada'));
+                // Nota inteira numa decisão só (o caso de sempre): números como antes.
+                const d = decisoes[0];
+                const g = grupoDoCreditoPeloCst(d.cst);
                 let pis = 0, cofins = 0;
-                for (const item of itensNota) {
-                    pis += parseFloat(item.vPIS || 0);
-                    cofins += parseFloat(item.vCOFINS || 0);
+                if (g) {
+                    for (const item of itensNota) {
+                        pis += parseFloat(item.vPIS || 0);
+                        cofins += parseFloat(item.vCOFINS || 0);
+                    }
+                    if (pis === 0) pis = vlEntrada * aliq.pis;
+                    if (cofins === 0) cofins = vlEntrada * aliq.cofins;
                 }
-                if (pis === 0) pis = vlEntrada * aliq.pis;
-                if (cofins === 0) cofins = vlEntrada * aliq.cofins;
-                acumularCredito(g, vlEntrada, pis, cofins, itensNota.length || 1);
+                acumularCredito(g, vlEntrada, pis, cofins, itensNota.length || 1, d.natBcCred, d.cst);
+                resumoCst.registrar({ decisao: d, valor: vlEntrada, ncm: itensNota[0]?.ncm || itensNota[0]?.NCM || '', descricao: itensNota[0]?.xProd || itensNota[0]?.descricao || '' });
             } else {
-                for (const item of itensNota) {
-                    const g = grupoDoCreditoPeloCst(getCstPis(item, regimeApuracao, 'entrada'));
+                // Nota com decisões misturadas: item a item.
+                itensNota.forEach((item, k) => {
+                    const d = decisoes[k];
+                    const g = grupoDoCreditoPeloCst(d.cst);
                     const base = receitaDoItem(item);
-                    const pis = parseFloat(item.vPIS || 0) || base * aliq.pis;
-                    const cofins = parseFloat(item.vCOFINS || 0) || base * aliq.cofins;
-                    acumularCredito(g, base, pis, cofins, 1);
-                }
+                    const pis = g ? (parseFloat(item.vPIS || 0) || base * aliq.pis) : 0;
+                    const cofins = g ? (parseFloat(item.vCOFINS || 0) || base * aliq.cofins) : 0;
+                    acumularCredito(g, base, pis, cofins, 1, d.natBcCred, d.cst);
+                    resumoCst.registrar({ decisao: d, valor: base, ncm: item.ncm || item.NCM || '', descricao: item.xProd || item.descricao || '' });
+                });
             }
         }
     }
@@ -1622,7 +1724,10 @@ export function buildBlocoM(dados) {
     }
     // (`isNaoCumulativo` nasce mais abaixo; aqui a mesma régua, sem adiantar a const.)
     if ((regimeApuracao === '1' || regimeApuracao === '3') && Array.isArray(dados.warnings)) {
-        for (const g of ['comum', 'presumido', 'semCredito']) {
+        // De onde veio cada CST de entrada (pessoa física, cadastro NCM, padrão) — dito NCM a NCM.
+        for (const a of resumoCst.avisos()) dados.warnings.push(a);
+        // ('semCredito' já sai nomeado acima, por pessoa física e por NCM cadastrado.)
+        for (const g of ['comum', 'presumido']) {
             const c = creditos[g];
             if (!c || c.itens === 0) continue;
             const semCred = g === 'semCredito';
@@ -1882,6 +1987,13 @@ export function buildBlocoM(dados) {
                 fmt.formatValue(descPis),           // 14 VL_CRED_DESC
                 fmt.formatValue(dispPis - descPis), // 15 SLD_CRED = 12 - 14
             ]));
+            // 📗 M105 — um por (natureza 4.3.7, CST) do grupo (Guia 1.35: "um
+            // registro M105 para cada CST recuperado… vinculado ao tipo de
+            // crédito informado no M100"; ELS 08/2026: 4 recusas "deverá existir
+            // um registro M105/M505"). Exclusivamente não-cumulativo: campo 05
+            // (parcela cumulativa) 0,00 e campo 06 = 04; CST 50/51/52: campo 07 =
+            // campo 06. Sem quantidade (crédito por valor) e sem descrição.
+            linhas.push(...montarM105({ registro: 'M105', porNatCst: c.porNatCst }));
         }
     }
 
@@ -2116,6 +2228,8 @@ export function buildBlocoM(dados) {
             fmt.formatValue(descCof),             // 14 VL_CRED_DESC
             fmt.formatValue(dispCof - descCof),   // 15 SLD_CRED = 12 - 14
         ]));
+        // 📗 M505 — mesma régua do M105 (ver o M100).
+        linhas.push(...montarM105({ registro: 'M505', porNatCst: c.porNatCst }));
         }
     }
 

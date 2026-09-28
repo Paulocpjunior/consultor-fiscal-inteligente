@@ -1532,6 +1532,89 @@ export const CODIGOS_TIPO_CREDITO = new Set(
     ['1', '2', '3'].flatMap((g) => ['01', '02', '03', '04', '05', '06', '07', '08', '09', '99'].map((t) => `${g}${t}`)),
 );
 
+/**
+ * 📗 CST COM CRÉDITO (50–56) EM COMPRA DE PESSOA FÍSICA — recusa do PVA
+ * (ELS 08/2026, 28/09: 30 documentos). Lei 10.637/02 e 10.833/03, art. 3º,
+ * § 3º, I: o crédito só alcança aquisição de pessoa jurídica. Lê o 0150
+ * (CPF no campo 06), o C100 de entrada (IND_OPER 0, COD_PART campo 05) e o
+ * CST_PIS/CST_COFINS dos C170 (campos 25 e 31).
+ */
+export function conferirCstDeEntradaPessoaFisica(linhas) {
+    const erros = [];
+    const pf = new Set();
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        if (c[0] === '0150' && String(c[5] || '').replace(/\D/g, '').length === 11) pf.add(String(c[1] || '').trim());
+    }
+    if (!pf.size) return { erros };
+    let docPf = null;
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg === 'C100') {
+            docPf = (String(c[1]) === '0' && pf.has(String(c[3] || '').trim())) ? String(c[7] || '').trim() : null;
+            continue;
+        }
+        if (reg !== 'C170' || !docPf) continue;
+        for (const [pos, campo] of [[24, '25 - CST_PIS'], [30, '31 - CST_COFINS']]) {
+            const cst = String(c[pos] || '').trim();
+            if (!/^5[0-6]$/.test(cst)) continue;
+            erros.push({
+                regra: 'c170-credito-pessoa-fisica', registro: 'C170', campo, linha: l, valor: cst, esperado: '70 (sem direito a crédito)',
+                mensagem: `C170 da NF ${docPf} (fornecedor pessoa física) com CST ${cst}: o PVA recusa — "não deve ser informado CST `
+                    + 'referente a operações com direito a crédito (50 a 56) para operações cujo participante é pessoa física".',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. A régua da entrada (cst-pis-cofins-entrada) trata pessoa física como 70.',
+                fonte: 'Lei 10.637/2002 e 10.833/2003, art. 3º, § 3º, I; mensagem literal do PVA (ELS 08/2026).',
+            });
+        }
+    }
+    return { erros };
+}
+
+/**
+ * 📗 VL_PIS/VL_COFINS DO C100 ≥ SOMA DOS C170 — validação do PVA (ELS
+ * 08/2026, 28/09: 11 + 4 recusas "Valor inválido. O valor deve ser maior ou
+ * igual à soma dos valores … dos itens (C170) onde CST diferente de 05 e 75").
+ * O cabeçalho copiava o vPIS do XML e os itens saíam pela régua.
+ */
+export function conferirPisCofinsDoC100ContraItens(linhas) {
+    const erros = [];
+    const cent = (x) => Math.round(x * 100);
+    let cab = null;
+    const fechar = () => {
+        if (!cab) return;
+        for (const t of [{ nome: 'PIS', hdr: cab.pis, soma: cab.somaPis, campo: '26 - VL_PIS' }, { nome: 'COFINS', hdr: cab.cofins, soma: cab.somaCofins, campo: '27 - VL_COFINS' }]) {
+            if (cent(t.hdr) + 1 >= cent(t.soma)) continue;
+            erros.push({
+                regra: 'c100-pis-cofins-menor-que-itens', registro: 'C100', campo: t.campo, linha: cab.linha,
+                valor: t.hdr.toFixed(2), esperado: `≥ ${t.soma.toFixed(2)} (soma dos C170)`,
+                mensagem: `C100 da NF ${cab.numDoc} declara ${t.nome} ${t.hdr.toFixed(2)} e os C170 somam ${t.soma.toFixed(2)}: o PVA recusa `
+                    + '("o valor deve ser maior ou igual à soma dos valores dos itens").',
+                acao: 'Defeito de GERAÇÃO — reporte com o print. O cabeçalho é a soma dos itens, calculada no mesmo lugar.',
+                fonte: 'Mensagem literal do PVA (ELS 08/2026); Guia 1.35, C100 campos 26/27.',
+            });
+        }
+    };
+    for (const l of (linhas || [])) {
+        const c = camposDaLinha(l);
+        const reg = String(c[0] || '').trim();
+        if (reg === 'C100') {
+            fechar();
+            cab = { linha: l, numDoc: String(c[7] || '').trim(), pis: num(c[25]), cofins: num(c[26]), somaPis: 0, somaCofins: 0 };
+            continue;
+        }
+        if (reg === 'C170' && cab) {
+            // CST 05 e 75 ficam fora da soma, como diz a própria mensagem do PVA.
+            if (!['05', '75'].includes(String(c[24] || '').trim())) cab.somaPis += num(c[29]);
+            if (!['05', '75'].includes(String(c[30] || '').trim())) cab.somaCofins += num(c[35]);
+            continue;
+        }
+        if (reg !== 'C170' && reg !== 'C100' && !/^C1[0-9]{2}$/.test(reg)) { fechar(); cab = null; }
+    }
+    fechar();
+    return { erros };
+}
+
 export function conferirCodCredDoM100(linhas) {
     const erros = [];
     for (const l of (linhas || [])) {
@@ -1674,6 +1757,10 @@ export function avisosDaPrevalidacaoContrib(linhas) {
         ...conferirCreditoDoM100(linhas).erros,
         // 📖 COD_CRED de três dígitos (ELS 08/2026): a recusa do PVA que faltava.
         ...conferirCodCredDoM100(linhas).erros,
+        // 📗 As duas recusas restantes da ELS (28/09): crédito em compra de
+        // pessoa física e cabeçalho do C100 menor que a soma dos itens.
+        ...conferirCstDeEntradaPessoaFisica(linhas).erros,
+        ...conferirPisCofinsDoC100ContraItens(linhas).erros,
     ];
     // Um item sem código costuma acontecer aos montes (36 na MANTOAN): a lista
     // mostra os primeiros e DIZ quantos são — muro de aviso ninguém lê.

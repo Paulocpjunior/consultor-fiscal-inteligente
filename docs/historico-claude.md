@@ -5,6 +5,35 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 CST DE PIS/COFINS DA COMPRA TEM RÉGUA + M105/M505 + C100 = Σ C170 (28/09,
+  ELS 08/2026, 2ª rodada do PVA: 1315 erros — 1259 COD_CTA, 30 PF com crédito,
+  80 alíquota zero, 4 sem M105, 6 natureza inválida, 15 C100 < itens, 1
+  COD_MUN)** (Paulo: *"qual a melhor opção para eliminar estes erros"* →
+  diagnóstico → *"pode seguir"*). Item 1 entregue: `cst-pis-cofins-entrada.js`
+  (puro) `cstDaAquisicao({regimeApuracao, codPart, ncm, catalogo, dataRef,
+  uf, ehServico})` — cumulativo → 70; PESSOA FÍSICA (CPF no COD_PART) → 70
+  (Lei 10.637/10.833 art. 3º §3º I, antes do cadastro); cadastro NCM
+  (`cstPisCofinsEntrada` Tabela 4.3.4 + `natBcCred` 4.3.7, prefixo e
+  vigência via `resolverParametrosNcm`) → o cadastrado; padrão → 50/01
+  mercadoria e 50/03 serviço (DECISÃO: manter o 50 de antes, dito NCM a NCM
+  com valor por `criarResumoDaCstDeEntrada`; o conservador 70 fica para
+  parâmetro se o Paulo pedir). Listas em `tabelas-cst-entrada.js` (sem
+  import, evita ciclo ncm-parametros ↔ cst). `pisCofinsDaAquisicao` (dono do
+  C170/A170) recebe `ctx` e zera base/valor quando a CST não gera crédito;
+  bloco M decide pela MESMA régua e acumula `porNatCst` → `montarM105`
+  (10 campos: 05 = 0,00, 06 = 04, 07 = 06) logo após cada M100/M500. A170
+  natureza = da decisão (03 serviços). C100 VL_PIS/VL_COFINS = Σ C170
+  (decididos ANTES do cabeçalho, `pisCofinsDosItens`). Orquestrador carrega
+  `cadastroNcm` (`ncm-catalogo-store.js`, falha dita). Cadastro NCM:
+  validação (4.3.4/4.3.7, natureza só com 50–66), rota persiste, tela com
+  dois selects + coluna. Prevalidação nova: `conferirCstDeEntradaPessoaFisica`
+  e `conferirPisCofinsDoC100ContraItens`. Travas: `cstPisCofinsEntrada`,
+  `spedContribM105`, `prevalidacaoEntradaContrib`, `spedContribCodCred`
+  ajustada (CST da entrada vem do CADASTRO, nunca do XML). Ponta a ponta
+  local: PJ 50 · PF 70 · banana 73 · A170 nat 03 · C100 = Σ · M105 = M100
+  campo 04. FICAM: item 3 (plano de contas 0500 com uso + COD_CTA, 1259
+  erros) e o COD_MUN do 0150 (♻️ reler o XML; aviso já existia).
+
 - **📨 MANIFESTAÇÃO: SUCESSO É FATO GRAVADO, NUNCA HTTP 200 (28/09)** (Paulo,
   validando a etapa 2: *"consigo marcar como ciente, porém quando atualizo
   ele volta a aparecer como sem ciência"*). `/manifest-one` devolvia 200 com

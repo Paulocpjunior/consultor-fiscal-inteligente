@@ -33,12 +33,52 @@ interface LinhaNcm {
     vigenciaInicio?: string | null;
     vigenciaFim?: string | null;
     atualizadoPor?: string | null;
+    /** 📗 PIS/COFINS na ENTRADA (28/09, ELS): CST de aquisição (Tabela 4.3.4) e natureza do crédito (4.3.7). */
+    cstPisCofinsEntrada?: string | null;
+    natBcCred?: string | null;
 }
 
 const VAZIO: Partial<LinhaNcm> = {
     ncm: '', uf: 'SP', descricao: '', cest: '',
     aliqInterna: null, ivaSt: null, portariaIvaSt: '', vigenciaInicio: '',
+    cstPisCofinsEntrada: '', natBcCred: '',
 };
+
+// Tabela 4.3.4 (aquisição) — os que a compra de um cliente costuma cair.
+const CST_ENTRADA: Array<[string, string]> = [
+    ['', '— sem cadastro (padrão: 50 com crédito)'],
+    ['50', '50 · Com direito a crédito — receita tributada no MI'],
+    ['51', '51 · Com direito a crédito — receita não tributada no MI'],
+    ['52', '52 · Com direito a crédito — exportação'],
+    ['53', '53 · Crédito comum a receitas tributadas e não tributadas'],
+    ['60', '60 · Crédito presumido — receita tributada no MI'],
+    ['70', '70 · Aquisição SEM direito a crédito'],
+    ['71', '71 · Aquisição com isenção'],
+    ['72', '72 · Aquisição com suspensão'],
+    ['73', '73 · Aquisição a ALÍQUOTA ZERO'],
+    ['74', '74 · Aquisição sem incidência'],
+    ['75', '75 · Aquisição por substituição tributária'],
+    ['98', '98 · Outras operações de entrada'],
+];
+// Tabela 4.3.7 — natureza da base do crédito (só com CST 50–66).
+const NAT_BC: Array<[string, string]> = [
+    ['', '— (01 por padrão quando há crédito)'],
+    ['01', '01 · Bens para revenda'],
+    ['02', '02 · Bens utilizados como insumo'],
+    ['03', '03 · Serviços utilizados como insumo'],
+    ['04', '04 · Energia elétrica e térmica'],
+    ['05', '05 · Aluguéis de prédios'],
+    ['06', '06 · Aluguéis de máquinas e equipamentos'],
+    ['07', '07 · Armazenagem e frete na venda'],
+    ['08', '08 · Arrendamento mercantil'],
+    ['09', '09 · Ativo imobilizado (depreciação)'],
+    ['10', '10 · Ativo imobilizado (valor de aquisição)'],
+    ['11', '11 · Edificações e benfeitorias'],
+    ['12', '12 · Devolução de vendas (não cumulativa)'],
+    ['13', '13 · Outras operações com direito a crédito'],
+    ['14', '14 · Transporte de cargas — subcontratação'],
+    ['18', '18 · Estoque de abertura'],
+];
 
 const fmtNcm = (v: string) => {
     const d = String(v || '').replace(/\D/g, '');
@@ -190,6 +230,24 @@ const NcmCadastroPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             <input className={inputCls} type="date" value={form.vigenciaFim || ''}
                                 onChange={e => campo('vigenciaFim', e.target.value)} />
                         </div>
+                        {/* 📗 PIS/COFINS na ENTRADA (28/09, ELS): a CST da compra e a natureza do
+                            crédito por NCM. Sem cadastro o gerador segue no 50 (com crédito) e
+                            DIZ no aviso quais NCM caíram no padrão. */}
+                        <div className="col-span-2">
+                            <label className={rotCls}>CST PIS/COFINS na entrada (EFD-Contribuições, Tabela 4.3.4)</label>
+                            <select className={inputCls} value={form.cstPisCofinsEntrada || ''}
+                                onChange={e => campo('cstPisCofinsEntrada', e.target.value)}>
+                                {CST_ENTRADA.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+                            </select>
+                        </div>
+                        <div className="col-span-2">
+                            <label className={rotCls}>Natureza da base do crédito (M105/M505, Tabela 4.3.7)</label>
+                            <select className={inputCls} value={form.natBcCred || ''}
+                                disabled={!!form.cstPisCofinsEntrada && !(Number(form.cstPisCofinsEntrada) >= 50 && Number(form.cstPisCofinsEntrada) <= 66)}
+                                onChange={e => campo('natBcCred', e.target.value)}>
+                                {NAT_BC.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+                            </select>
+                        </div>
                     </div>
                     <div className="flex items-center gap-4 flex-wrap">
                         <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
@@ -245,6 +303,7 @@ const NcmCadastroPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                     <th className="text-right">Interna</th>
                                     <th className="text-right">IVA-ST</th>
                                     <th className="text-left pl-2">Portaria</th>
+                                    <th className="text-center">CST entrada · nat.</th>
                                     <th className="text-left">Vigência</th>
                                     {ehAdmin && <th></th>}
                                 </tr>
@@ -264,6 +323,9 @@ const NcmCadastroPanel: React.FC<Props> = ({ currentUser, onShowToast }) => {
                                             {l.ivaJaAjustado && <span className="block text-[9px] text-slate-400">já ajustado</span>}
                                         </td>
                                         <td className="pl-2 text-slate-500">{l.portariaIvaSt || '—'}</td>
+                                        <td className="text-center font-mono">
+                                            {l.cstPisCofinsEntrada || '—'}{l.natBcCred ? ` · ${l.natBcCred}` : ''}
+                                        </td>
                                         <td className="text-slate-500 font-mono text-[10px]">
                                             {l.vigenciaInicio || '—'}{l.vigenciaFim ? ` → ${l.vigenciaFim}` : ''}
                                         </td>

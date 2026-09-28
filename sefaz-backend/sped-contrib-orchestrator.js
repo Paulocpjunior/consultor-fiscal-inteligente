@@ -60,6 +60,9 @@ import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 // 🧠 O cérebro do CFOP entra no ARQUIVO (07/09) — o C170 deste arquivo lê a
 // MESMA `convertCfopParaEntrada` do EFD ICMS/IPI, e ela precisa do contexto.
 import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametros-store.js';
+// 📗 A CST de PIS/COFINS da ENTRADA lê o cadastro de NCM (28/09, ELS): o
+// catálogo inteiro viaja em `dados.cadastroNcm` e a régua (pura) decide por item.
+import { carregarCatalogoNcm } from './ncm-catalogo-store.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -510,8 +513,14 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     const conf = conferirContador(contadorDoArquivo);
     if (conf.aviso) warnings.push(conf.aviso);
 
+    // 📗 Cadastro de NCM — a CST de PIS/COFINS da ENTRADA (28/09, ELS). Uma
+    // leitura por geração; falha em ler vai DITA e a compra cai no padrão.
+    const ncmCat = await carregarCatalogoNcm(db);
+    if (ncmCat.erro) warnings.push(`[crédito] ${ncmCat.erro}`);
+
     return {
         empresa,
+        cadastroNcm: ncmCat.catalogo,
         // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
         // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
         // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —
