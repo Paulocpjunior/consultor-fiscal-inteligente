@@ -87,6 +87,20 @@
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
 
+    <h3>📗 <strong>SPED Contribuições: o C100 soma os itens como saem impressos, e o município do produtor rural (0150) é relido do XML guardado</strong></h3>
+    <p>ELS 08/2026, terceira rodada do PVA (28/09), depois do plano de contas: de 1315 para 19 erros. Dois eram do
+    gerador. <strong>Dez recusas "VL_PIS/VL_COFINS do C100 menor que a soma dos itens" por um centavo</strong> (1205,65
+    contra 1205,66): o C100 somava os valores crus dos itens e arredondava no fim, enquanto o PVA soma o que está
+    impresso em cada C170, com duas casas. Agora o C100 soma exatamente o que os C170 mostram. <strong>E o 0150 do
+    produtor rural pessoa física saía sem COD_MUN</strong>: o documento foi gravado sem o município do emitente, mas o
+    XML guardado traz o campo. A geração passou a reler o XML do Storage para todo participante sem município, só na
+    memória do arquivo (o cadastro não muda), e o aviso diz quem foi relido, quem não tem XML guardado e em quem o XML
+    realmente não traz o dado. O app nunca preenche 9999999 (que significa "não domiciliado no Brasil").</p>
+    <p><strong>O que sobrou é cadastro:</strong> 8 recusas de COD_CTA em A170 de serviço tomado (falta a conta do uso
+    "Serviços tomados" no plano de contas) e 50 avisos de CST 50 em banana (falta cadastrar o NCM 0803 como 73 no
+    Cadastro NCM).</p>
+    <p><strong>Onde:</strong> aba SPED Contribuições → gerar → avisos da geração · Empresas → ⚙️ Dados Fiscais → "Plano de contas do SPED (0500)" · Central de XMLs → XMLs → 🏷️ Cadastro NCM.</p>
+
     <h3>📗 <strong>SPED Contribuições: o plano de contas do 0500 virou uma lista com USO, e o COD_CTA do C170/A170 passou a sair preenchido</strong></h3>
     <p>ELS 08/2026, PVA de 28/09: 1259 recusas "cadastre e/ou selecione previamente a conta contábil analítica
     representativa da operação, no registro 0500", uma por item (1249 C170 e 6 A170). Desde 11/2017 o COD_CTA é

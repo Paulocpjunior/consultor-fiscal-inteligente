@@ -10,6 +10,7 @@
 
 import admin from 'firebase-admin';
 import { completarFreteDasNotas } from './nfe-frete-xml.js';
+import { completarMunicipioDosParticipantes } from './participantes-municipio-xml.js';
 import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
 import { buildBloco0Contrib } from './sped-contrib-bloco0.js';
 // 🚨 O CONTABILISTA DO 0100 TEM DONO. Este arquivo tinha a SEGUNDA CÓPIA da
@@ -582,6 +583,12 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
  */
 export async function montarBlocosContribuicoes({ dados }) {
     await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+    // ♻️ COD_MUN do 0150 relido do XML guardado quando o documento veio sem
+    // (28/09, ELS: produtor rural PF). Só na memória; o que faltar segue dito.
+    const relMun = await completarMunicipioDosParticipantes({
+        participantes: dados.participantes, notas: dados.notas, empresaCnpj: dados.empresa?.cnpj,
+    });
+    if (relMun.aviso && Array.isArray(dados.warnings)) dados.warnings.push(relMun.aviso);
     const linhasBloco0 = buildBloco0Contrib(dados);
     const linhasBlocoA = buildBlocoA(dados);
     const linhasBlocoC = buildBlocoC_Contrib(dados);

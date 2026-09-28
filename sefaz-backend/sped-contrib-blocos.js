@@ -812,14 +812,22 @@ export function buildBlocoC_Contrib(dados) {
         // da PWR 03/2026 traz 127,27 no C100 com 104,36 nos C170) e a soma dos
         // C170 — o PVA valida "VL_PIS ≥ soma dos itens", e na ELS o XML da compra
         // trazia 0/1 com os itens em 16,50 (a recusa). Nunca menos que os itens.
+        // 🚨 A SOMA É DOS VALORES COMO SAEM IMPRESSOS NO C170, não dos crus
+        // (28/09, ELS, 3ª rodada do PVA: 10 recusas "VL_PIS deve ser maior ou
+        // igual à soma dos itens" por UM centavo — 1205,65 contra 1205,66). O
+        // PVA soma o que está no arquivo, com 2 casas por item; somar os crus
+        // e arredondar no fim fica abaixo sempre que os terceiros decimais
+        // dos itens se acumulam. Mesma classe do `pisCofinsDosItens`: uma
+        // decisão, lida nos dois lugares.
+        const impresso = (v) => Number(String(fmt.formatValue(v || 0) || '0').replace(',', '.'));
         let vProd = 0, vDesc = 0, vPisXml = 0, vCofinsXml = 0, vPisItens = 0, vCofinsItens = 0;
         (nota.itens || []).forEach((item, k) => {
             vProd += parseFloat(item.vProd || item.valor || 0) || 0;
             vDesc += descontosPorItem[k] || 0;
             vPisXml += parseFloat(item.vPIS || 0) || 0;
             vCofinsXml += parseFloat(item.vCOFINS || 0) || 0;
-            vPisItens += pisCofinsDosItens[k]?.vlPis || 0;
-            vCofinsItens += pisCofinsDosItens[k]?.vlCofins || 0;
+            vPisItens += impresso(pisCofinsDosItens[k]?.vlPis);
+            vCofinsItens += impresso(pisCofinsDosItens[k]?.vlCofins);
         });
         const vPis = Math.max(vPisXml, vPisItens);
         const vCofins = Math.max(vCofinsXml, vCofinsItens);
