@@ -243,6 +243,9 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
             'HIT_HOST=9.9.9.9', 'HIT_PORT=21694', 'SBC_DESTINO=221',
             "META_SIP_DESTINO=''", "SBC_PREFIXO_WHATSAPP='*55'",
             "BLOCO_META_SAIDA='; saida desligada'",
+            // ☎️ 28/09: o agente do click-to-call viaja no startup em base64 —
+            // o mesmo comando que o script real usa, sobre o arquivo real.
+            `AGENTE_B64=$(base64 < ${JSON.stringify(join(process.cwd(), 'scripts/sbc-agente-saida.py'))} | tr -d '\\n')`,
             `export TMPDIR=${dir}`,
             script.slice(i, j),
         ].join('\n'));
@@ -270,6 +273,24 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
     it('os heredocs do lado da VM são CITADOS — é o que as protege', () => {
         expect(gerado).toContain("cat > /etc/asterisk/extensions.conf <<'CONF'");
         expect(gerado).toContain("cat > /etc/asterisk/pjsip.conf <<'CONF'");
+    });
+
+    // ☎️ 28/09 — o agente do click-to-call chega à VM INTEIRO e intacto. Vai
+    // em base64 justamente porque o startup é heredoc SEM aspas: um `$` ou
+    // uma crase no python seriam expandidos no Mac. O teste decodifica o que
+    // foi gerado e compara byte a byte com o arquivo do repositório.
+    it('o agente python viaja em base64 e chega igual ao arquivo do repositório', () => {
+        const m = gerado.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/bin\/sbc-agente-saida\.py/);
+        expect(m).toBeTruthy();
+        const decodificado = Buffer.from(m![1]!, 'base64').toString('utf8');
+        expect(decodificado).toBe(fs.readFileSync(join(process.cwd(), 'scripts/sbc-agente-saida.py'), 'utf8'));
+        // E o serviço sobe como asterisk (spool e CDR são dele), com restart.
+        expect(gerado).toContain('User=asterisk');
+        expect(gerado).toContain('systemctl enable sbc-agente-saida');
+        // O contexto do call file existe e as variáveis do Asterisk chegam intactas nele.
+        expect(gerado).toContain('[saida-whatsapp]');
+        expect(gerado).toContain('Dial(PJSIP/${EXTEN}@meta-saida,60)');
+        expect(gerado).toContain('${CDR(accountcode)}');
     });
 
     it('e as variáveis de SHELL já vieram resolvidas (nada sobra para a VM)', () => {

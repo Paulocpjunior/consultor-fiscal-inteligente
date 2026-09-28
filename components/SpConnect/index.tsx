@@ -18,7 +18,8 @@ import {
     importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes, sugestoesDeVinculo,
-    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
+    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, salvarRamalAtendente, importarUltrafox,
+    chamarClientePeloSbc, statusLigacaoSaida, agenteSbcStatus, PedidoLigacaoResumo,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
     listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
@@ -481,15 +482,64 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
     };
 
-    // ☎️ NÃO EXISTE AÇÃO DE LIGAR AQUI, e o motivo é a resposta da própria Meta
-    // (24/08, código 131055): "Graph API calls are not allowed for SIP enabled
-    // numbers". Em modo SIP a saída não sai por API — quem disca é o tronco.
-    // A ação existia e ficou ÓRFÃ quando o botão saiu: código morto com cara de
-    // entrega é a isca para alguém religar um caminho que a Meta recusa por
-    // desenho, então ela foi DELETADA em 25/08 junto com a porta de fetch.
-    // A rota do backend (`/conversas/:numero/ligar`) fica de pé com as travas
-    // dela (permissão do cliente, validade, condução) — ela é a régua do dia em
-    // que este número sair do modo SIP, e não é ela que promete botão.
+    // ☎️ LIGAR PELO SBC (28/09) — click-to-call. NÃO é a API da Meta (131055:
+    // "Graph API calls are not allowed for SIP enabled numbers", 24/08): a
+    // rota grava um PEDIDO, o agente na VM do SBC toca o MEU ramal e, quando
+    // eu atendo, disca o cliente. Aqui: confirmação antes (o meu telefone vai
+    // tocar e o cliente vai receber uma ligação), o pedido, e o acompanhamento
+    // a cada 3 s até o estado final — que vem do CDR do Asterisk, não de mim.
+    const [ligacaoPedido, setLigacaoPedido] = useState<PedidoLigacaoResumo | null>(null);
+    const [ligacaoErro, setLigacaoErro] = useState<string | null>(null);
+    const [ligacaoConducao, setLigacaoConducao] = useState(false);
+    const ligacaoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pararAcompanharLigacao = () => {
+        if (ligacaoPollRef.current) { clearInterval(ligacaoPollRef.current); ligacaoPollRef.current = null; }
+    };
+    const acompanharLigacao = (numero: string, pedidoId: string) => {
+        pararAcompanharLigacao();
+        const inicio = Date.now();
+        ligacaoPollRef.current = setInterval(async () => {
+            const r = await statusLigacaoSaida(numero, pedidoId);
+            if (selRef.current?.numero !== numero) { pararAcompanharLigacao(); return; }
+            if (!r.ok) { setLigacaoErro(r.error || 'Perdi o acompanhamento da ligação.'); pararAcompanharLigacao(); return; }
+            setLigacaoPedido(r.pedido);
+            if (r.pedido.final) {
+                pararAcompanharLigacao();
+                patchSel({ ultimaLigacaoSaida: { id: pedidoId, status: r.pedido.estado, ramal: r.pedido.ramal || '', em: new Date().toISOString(), por: null } });
+                return;
+            }
+            // Cinco minutos é mais que ramal (40 s) + cliente (60 s) + CDR: passou
+            // disso, o agente não devolveu — e a tela diz isso, não "discando…".
+            if (Date.now() - inicio > 5 * 60 * 1000) {
+                setLigacaoErro('O SBC não devolveu o resultado em 5 min — confira o agente em ⚙️ → ☎️.');
+                pararAcompanharLigacao();
+            }
+        }, 3000);
+    };
+    useEffect(() => () => pararAcompanharLigacao(), []);
+    // Trocar de conversa limpa o status da ligação anterior — status de um
+    // cliente ao lado do nome de outro é a leitura dupla de sempre.
+    useEffect(() => { setLigacaoPedido(null); setLigacaoErro(null); setLigacaoConducao(false); pararAcompanharLigacao(); }, [sel?.numero]);
+    const acaoChamarCliente = async () => {
+        if (!sel) return;
+        setLigacaoErro(null); setLigacaoConducao(false);
+        const ok = await pedirConfirmacao(
+            `O SEU ramal vai tocar agora. Quando você atender, o SBC liga para ${sel.nome || sel.numero} no WhatsApp `
+            + '(o cliente vê uma ligação da SP). Fora do horário da Meta a chamada é recusada por ela.',
+            'Ligar',
+        );
+        if (!ok) return;
+        setLigacaoPedido({ id: '', estado: 'enviando', texto: '⏳ Pedindo ao SBC…', final: false });
+        const r = await chamarClientePeloSbc(sel.numero);
+        if (!r.ok) {
+            setLigacaoPedido(null);
+            setLigacaoErro(`${r.error}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
+            setLigacaoConducao(Boolean((r as any).emConducaoPor));
+            return;
+        }
+        setLigacaoPedido(r.pedido);
+        acompanharLigacao(sel.numero, r.pedido.id);
+    };
 
     const acaoSituacao = async () => {
         if (!sel) return;
@@ -732,6 +782,20 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
+    // ☎️ O agente do click-to-call na VM do SBC está vivo? Lido ao abrir a
+    // aba: "no ar há N s" ou "parado/nunca" — farol honesto, nunca deduzido
+    // do segredo existir.
+    const [agenteSbc, setAgenteSbc] = useState<{ segredoConfigurado: boolean; agente: { vivo: boolean; texto: string }; pendentes: number } | null>(null);
+    const [agenteSbcErro, setAgenteSbcErro] = useState<string | null>(null);
+    const lerAgenteSbc = async () => {
+        const r = await agenteSbcStatus();
+        if (r.ok) { setAgenteSbc({ segredoConfigurado: r.segredoConfigurado, agente: r.agente, pendentes: r.pendentes }); setAgenteSbcErro(null); }
+        else setAgenteSbcErro(r.error || 'Não consegui ler o estado do agente.');
+    };
+    useEffect(() => {
+        if (cfgAberta && cfgAba === 'chamadas') void lerAgenteSbc();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfgAberta, cfgAba]);
     // ☎️ DE QUAL NÚMERO ESTAMOS FALANDO (Paulo, 26/08): *"já que nosso tronco
     // chave na URA é o 3155-1554, as ligações por WhatsApp saem por ele; o
     // 3337 continua sendo o WhatsApp principal"*. A chamada é POR NÚMERO —
@@ -2636,6 +2700,27 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             {a.filasAtendimento.length === 0 && a.departamentos.length > 0 && (
                                                 <p className="text-[9px] text-slate-400 mt-1">sem atribuição — hoje vale o departamento: {a.departamentos.join(', ')}</p>
                                             )}
+                                            {/* ☎️ RAMAL — é onde o click-to-call toca ANTES de discar o cliente.
+                                                Salva ao sair do campo; vazio limpa (a pessoa deixa de poder ligar,
+                                                e a recusa do botão diz isso). Ramal torto é recusado pela rota. */}
+                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400">☎️ Ramal no HitPhone</span>
+                                                <input
+                                                    defaultValue={a.ramal || ''}
+                                                    placeholder="ex.: 221"
+                                                    inputMode="numeric"
+                                                    title="Ramal do colaborador: o botão ☎️ Ligar na conversa toca aqui primeiro e, quando ele atende, disca o cliente no WhatsApp."
+                                                    onBlur={async (e) => {
+                                                        const novo = e.target.value.trim();
+                                                        if (novo === (a.ramal || '')) return;
+                                                        const r = await salvarRamalAtendente(a.uid, novo);
+                                                        if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar o ramal.'); e.target.value = a.ramal || ''; return; }
+                                                        setAtdErro(null);
+                                                        setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, ramal: r.ramal } : x)));
+                                                    }}
+                                                    className="w-20 text-[11px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono" />
+                                                {!a.ramal && <span className="text-[9px] text-amber-600 dark:text-amber-400">sem ramal: não consegue ligar pelo ☎️</span>}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -2654,6 +2739,40 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     clientes</strong>: é decisão sua, com o destino de atendimento definido antes,
                                     não efeito de um clique de diagnóstico.
                                 </p>
+
+                                {/* ☎️ CLICK-TO-CALL (28/09): a SAÍDA sai pelo SBC, e quem a executa é um
+                                    agente na VM. Esta linha diz se ele está VIVO — sem ela, "o botão não
+                                    liga" viraria chamado no lugar errado. */}
+                                <div className={`rounded-lg border p-2 space-y-1 ${agenteSbc?.agente.vivo
+                                    ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+                                    : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🤖 Agente de SAÍDA (click-to-call) na VM do SBC</p>
+                                        <button onClick={() => void lerAgenteSbc()} className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🔄</button>
+                                    </div>
+                                    {agenteSbcErro && <p className="text-[10px] text-red-600 dark:text-red-400">{agenteSbcErro}</p>}
+                                    {!agenteSbc && !agenteSbcErro && <p className="text-[10px] text-slate-400">Lendo…</p>}
+                                    {agenteSbc && (
+                                        <>
+                                            <p className={`text-[10px] ${agenteSbc.agente.vivo ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300'}`}>
+                                                {agenteSbc.agente.vivo ? '✅' : '❌'} Agente {agenteSbc.agente.texto}
+                                                {agenteSbc.pendentes > 0 && <> · <strong>{agenteSbc.pendentes}</strong> pedido(s) esperando</>}
+                                            </p>
+                                            {!agenteSbc.segredoConfigurado && (
+                                                <p className="text-[10px] text-red-700 dark:text-red-400">
+                                                    🔑 <strong>SBC_SHARED_SECRET não está no Cloud Run</strong> — sem ele o agente não consegue pegar
+                                                    pedido nenhum e o botão ☎️ Ligar recusa. Secret Manager <code>sbc-shared-secret</code> → env do
+                                                    serviço, e o MESMO valor no setup da VM.
+                                                </p>
+                                            )}
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                Como funciona: ☎️ Ligar na conversa → o agente toca o <strong>ramal do colaborador</strong> (cadastro
+                                                em 👥 Atendentes) → ele atende → o SBC disca o cliente no WhatsApp. Sem <code>META_SIP_DESTINO</code>
+                                                no SBC, o ramal toca e a perna do cliente é recusada com motivo no log.
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
 
                                 {/* ☎️ DE QUAL NÚMERO — Paulo, 26/08: o tronco da URA é o 3155-1554,
                                     então é NELE que a ligação de WhatsApp deve entrar; o 3337 segue
@@ -5083,15 +5202,43 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         recurso que funcionava é o custo de texto fixo com data:
                                                         por isso esta linha agora diz O QUE funciona, QUANDO, e o
                                                         que NÃO sai por aqui (saída por API, 131055). */}
+                                                    {/* ☎️ CLICK-TO-CALL (28/09): o botão pede ao SBC que ligue. O SBC toca o
+                                                        RAMAL de quem clicou e, quando atende, disca o cliente. Não é a API da
+                                                        Meta (131055) — é o tronco. O status abaixo vem do CDR do Asterisk. */}
+                                                    <button onClick={acaoChamarCliente} disabled={Boolean(ligacaoPedido && !ligacaoPedido.final)}
+                                                        className="w-full text-left text-[11px] font-bold px-2 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50">
+                                                        ☎️ Ligar para {sel.nome || 'o cliente'} pelo WhatsApp (toca no meu ramal primeiro)
+                                                    </button>
+                                                    {ligacaoPedido && (
+                                                        <p className={`text-[10px] ${ligacaoPedido.final && ligacaoPedido.estado !== 'atendida' ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                                            {ligacaoPedido.texto}
+                                                        </p>
+                                                    )}
+                                                    {ligacaoErro && (
+                                                        <div className="text-[11px] font-semibold rounded px-2 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700 space-y-1.5">
+                                                            <p>⛔ {ligacaoErro}</p>
+                                                            {ligacaoConducao && (
+                                                                <button onClick={() => { acaoAssumir(); setLigacaoErro(null); setLigacaoConducao(false); }}
+                                                                    className="w-full px-2 py-1 rounded bg-[#0e3bfa] text-white btn-press">
+                                                                    🙋 Assumir a conversa e tentar de novo
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {!ligacaoPedido && sel.ultimaLigacaoSaida && (
+                                                        <p className="text-[9px] text-slate-400">
+                                                            última ligação: {sel.ultimaLigacaoSaida.status}{sel.ultimaLigacaoSaida.por ? ` · ${sel.ultimaLigacaoSaida.por}` : ''}{sel.ultimaLigacaoSaida.em ? ` · ${new Date(sel.ultimaLigacaoSaida.em).toLocaleString('pt-BR')}` : ''}
+                                                        </p>
+                                                    )}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                                         <span className="block text-emerald-600 dark:text-emerald-400">
                                                             ☎️ Ligação do cliente para a SP <strong>funciona</strong> (provada em 23/09): toca na URA do
                                                             HitPhone, dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele
                                                             o botão ☎️ do cliente fica indisponível — isso é regra da Meta, não defeito.
                                                         </span>
-                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone), da SP para o
-                                                        cliente, não por aqui — a Meta recusa chamada por API em número SIP. Precisa falar por voz agora?
-                                                        Ligue do ramal ou combine por mensagem.
+                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> do HitPhone, nunca pela API — a Meta recusa
+                                                        chamada por API em número SIP. O botão acima toca o SEU ramal e depois o cliente. Sem ramal
+                                                        cadastrado (⚙️ → 👥), ligue do ramal ou combine por mensagem.
                                                     </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (

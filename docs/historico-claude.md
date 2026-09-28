@@ -273,6 +273,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📗 **Guia do teste** (`/guia-dere-planilha.html`, par duplo com `docs/guia-colaborador-dere-planilha.md`, 27/09):
   roteiro dos três testes com critério de aceite e o pedido ao contador — botão no bloco 📥.
 
+- **☎️ CLICK-TO-CALL PELO SBC — a SAÍDA da ligação de WhatsApp, construída**
+  (28/09, Paulo: *"quanto ao cliente autorizar já estamos cientes e
+  funcionamos; precisamos ativar o resto das funções"*). Desenho de 25/08
+  executado: botão ☎️ Ligar na conversa (permissão aceita) → pedido em
+  `whatsapp_ligacoes_saida` → agente `scripts/sbc-agente-saida.py` na VM
+  (systemd, usuário asterisk, só stdlib) pega por `GET /sbc/pedidos` com
+  `x-sbc-secret` (claim em transação; pedido >2 min vira `expirado`) → call
+  file `/var/spool/asterisk/outgoing` toca `PJSIP/<ramal>@hit` → ao atender,
+  `[saida-whatsapp]` disca `PJSIP/<cliente>@meta-saida` → o agente lê o CDR
+  (`accountcode` = id do pedido) e devolve atendida/não atendida/ocupado/
+  falhou; a tela acompanha a cada 3 s e a conversa ganha a linha. Núcleo
+  puro `whatsapp-click-to-call.js` (travas da Meta na ordem da rota velha:
+  Permitir aceito, não vencido, condução, ramal, agente). Ramal por
+  atendente (`users.ramal`, ⚙️ → 👥, só admin). Aba ☎️ mostra o agente ("no
+  ar há N s / parado / nunca"). 🚨 **Por que a VM pergunta ao app** e não o
+  contrário: nenhuma porta nova na VM, Cloud Run sem IP fixo, ARI/AMI exposto
+  é superfície — e o segredo NÃO vai ao metadata da VM (legível): entra por
+  ssh em `/etc/sbc-agente.env`. A rota antiga que chamava a API (`/calls`,
+  131055) foi substituída; `iniciarChamadaParaCliente` fica em
+  `whatsapp-cloud.js` só como prova. 🐍 A trava executa o python de verdade
+  (call file e tradução do CDR iguais ao JS), `bash -n` e `py_compile`.
+  📜 Diagnóstico 7b passou a ler `full.1`/`full.*.gz` (gzip -dcf): a ligação
+  de 23/09 é a única fonte do `META_SIP_DESTINO` e o logrotate gira por
+  semana. ⚠️ **NÃO PROVADO, dito antes do teste**: permissão pedida pelo
+  3337 × tronco SIP no 3155; `From` da saída (param `SBC_NUMERO_WHATSAPP`);
+  leiaute do INVITE de saída — o log do Asterisk é a régua. Pendente do
+  Paulo: 7b na VM → `sbc-shared-secret` no Secret Manager + `--update-secrets`
+  → setup com `META_SIP_DESTINO` e `SBC_SHARED_SECRET` → ramal em 👥 → teste
+  dentro da grade. 📌 **E a regra do domingo**: "a IA não entrou" porque a
+  conversa do Paulo tinha fila/dono (IA só na triagem) e "Teste" é texto sem
+  destino; "o 3337 não mandou aviso" porque a conversa é POR CLIENTE, não
+  por número da SP, e o aviso de ausência é um por dia por conversa — os
+  dois são desenho, não defeito, e ele aceitou (*"Vc setou por cliente! Ok"*).
 - **☎️ TEXTO FIXO COM DATA ENVELHECE SOZINHO, E A TRAVA QUE O PRENDE PRENDE O
   ERRO** (27/09, Paulo: *"sobre as ligações, temos que testar"*). O painel
   lateral da conversa dizia desde 25/08 *"Ligação ainda NÃO funciona nos dois

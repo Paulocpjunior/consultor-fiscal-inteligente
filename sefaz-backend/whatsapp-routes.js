@@ -30,9 +30,14 @@ import {
 import {
     enviarTemplateWhatsapp, configWhatsapp, listarTemplatesAprovados, criarTemplateNaMeta, numeroCanonicoWhatsapp,
     listarAppsAssinadosNaWaba, assinarWaba, enviarTextoLivre, enviarPedidoPermissaoLigacao, normalizarNumeroBr,
-    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp, iniciarChamadaParaCliente,
+    subirMidiaWhatsapp, enviarMidiaWhatsapp, GRAPH_BASE, enviarContatoWhatsapp,
     registrarNumeroNaCloudApi, statusDoNumeroNaMeta, renderizarCorpoTemplate,
 } from './whatsapp-cloud.js';
+import {
+    COLECAO_PEDIDOS_LIGACAO, DOC_AGENTE_SBC, avaliarPedidoDeLigacao, idDoPedido, montarPedido,
+    estadoDoPedido, resumoDoPedido, situacaoDoAgente, validarRamal,
+} from './whatsapp-click-to-call.js';
+import { secretsMatch } from './cron-secret.js';
 import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
@@ -491,6 +496,7 @@ async function montarResumosDeConversas(db, docsConversas) {
             situacao: x.status || 'aberta',
             janela24hAte: x.janela24hAte || null,
             permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
+            ultimaLigacaoSaida: x.ultimaLigacaoSaida || null, // ☎️ o último click-to-call desta conversa (estado + ramal)
             ultimaMensagem: x.ultimaMensagem || null,
             naoLidas: x.naoLidas || 0,
             atualizadoEm: x.atualizadoEm || null,
@@ -1188,83 +1194,210 @@ router.post('/conversas/:numero/pedir-permissao-ligacao', requireAuth, async (re
     }
 });
 
-// ☎️ LIGAR para o cliente (fase 2 — a saída). Só com o "Permitir" dele: a
-// regra é da Meta, e a nossa trava vem ANTES da rede porque ligar sem
-// autorização queima o número da empresa.
-// 📌 No modo SIP quem toca o ramal 221 é a PRÓPRIA Meta, entregando a voz no
-// tronco que a ENTRADA já provou — não há segundo caminho a configurar.
+// ═══ ☎️ LIGAR PARA O CLIENTE — click-to-call PELO SBC (28/09) ═══════════════
+// Paulo: "quanto ao cliente autorizar já estamos cientes e funcionamos;
+// precisamos ativar o resto das funções". O resto é isto.
+//
+// 🚨 NÃO É A API DA META: o número está em modo SIP e ela recusa chamada por
+// API (131055, 24/08). A rota grava um PEDIDO; o agente da VM do SBC pega o
+// pedido (GET /sbc/pedidos, com segredo), o Asterisk toca o RAMAL do
+// colaborador e, quando ele atende, disca o cliente pela perna Meta. As travas
+// da Meta (Permitir aceito e não vencido, condução, IG fora) são do BACKEND e
+// vêm ANTES de gravar — ligar sem autorização queima o número da empresa.
+// O núcleo (whatsapp-click-to-call.js) é puro; aqui só se lê e grava.
+
+/** Segredo do agente da VM. Sem ele configurado, o click-to-call não existe. */
+function agenteSbcConfigurado() {
+    return Boolean(String(process.env.SBC_SHARED_SECRET || '').trim());
+}
+
+/** Auth do agente da VM: header `x-sbc-secret` = SBC_SHARED_SECRET (tempo constante). */
+function requireSbcSecret(req, res, next) {
+    const esperado = process.env.SBC_SHARED_SECRET;
+    if (!esperado) return res.status(503).json({ ok: false, error: 'SBC_SHARED_SECRET não configurado no Cloud Run.' });
+    if (!secretsMatch(req.headers['x-sbc-secret'], esperado)) return res.status(401).json({ ok: false, error: 'segredo do SBC inválido' });
+    return next();
+}
+
+/** O estado do pedido vai também na CONVERSA — é o que a lista/tela leem sem abrir o pedido. */
+async function gravarEstadoNaConversa(db, pedido, detalhe = null) {
+    await db.collection('whatsapp_conversas').doc(pedido.conversaId).set({
+        ultimaLigacaoSaida: {
+            id: pedido.id, status: pedido.status, ramal: pedido.ramal,
+            em: pedido.terminouEm || pedido.pegouEm || pedido.solicitadoEm,
+            detalhe: detalhe ?? pedido.resultado?.detalhe ?? null,
+            por: pedido.solicitadoPor || null,
+        },
+    }, { merge: true });
+}
+
 router.post('/conversas/:numero/ligar', requireAuth, async (req, res) => {
     try {
         const numero = idConversaDoParam(req.params.numero);
         if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
         const db = getDb();
-        const conv = await db.collection('whatsapp_conversas').doc(numero).get();
-        if (ehConversaInstagram(numero) || conv.data()?.canal === 'instagram') {
-            return res.status(422).json({ ok: false, error: 'Ligação é do WhatsApp — DM do Instagram não tem chamada.' });
-        }
-        const perm = conv.data()?.permissaoLigacao || null;
-        if (perm?.status !== 'aceita') {
-            return res.status(422).json({
-                ok: false,
-                error: perm?.status === 'pendente'
-                    ? 'O cliente ainda não respondeu ao pedido de permissão.'
-                    : perm?.status === 'recusada'
-                        ? 'O cliente RECUSOU ligações — respeite a recusa.'
-                        : 'Este cliente ainda não autorizou ligações da SP.',
-                acao: perm?.status === 'recusada'
-                    ? 'Fale por mensagem; insistir na ligação é o que faz o cliente bloquear o número.'
-                    : 'Use ☎️ Pedir permissão de ligação e aguarde ele tocar em "Permitir".',
-                permissao: perm?.status || 'sem-pedido',
-            });
-        }
-        // A autorização VENCE (a Meta diz até quando). Ligar depois disso é
-        // recusa dela — e a tela tem que dizer isso ANTES do telefone tocar.
-        const expira = Date.parse(perm?.expiraEm || '');
-        if (Number.isFinite(expira) && expira <= Date.now()) {
-            return res.status(422).json({
-                ok: false,
-                error: 'A autorização de ligação deste cliente EXPIROU.',
-                acao: 'Peça a permissão de novo (☎️) e aguarde o "Permitir".',
-                permissao: 'expirada',
-            });
-        }
-        const dono = conv.data()?.atribuidoA || null;
+        const conv = (await db.collection('whatsapp_conversas').doc(numero).get()).data() || {};
+        if (ehConversaInstagram(numero)) conv.canal = 'instagram';
         const eu = req.user?.email || null;
-        if (dono && dono !== eu) {
-            return res.status(409).json({
-                ok: false, error: `Esta conversa está em condução por ${dono}.`,
-                acao: 'Assuma a conversa (🙋) antes de ligar.', emConducaoPor: dono,
-            });
+        // O RAMAL é do colaborador logado — cadastro em ⚙️ → 👥. Nunca o 221
+        // por padrão: ligação tocando na mesa errada é pior que recusa.
+        const usuario = req.user?.uid ? (await db.collection('users').doc(req.user.uid).get()).data() || {} : {};
+        const veredito = avaliarPedidoDeLigacao({
+            conversa: conv, numero, eu, ramal: usuario.ramal, agenteConfigurado: agenteSbcConfigurado(),
+        });
+        if (!veredito.ok) {
+            const { status, ...corpo } = veredito;
+            return res.status(status).json(corpo);
         }
-        let depsEnvio = {};
-        const canal = await cfgDeEnvioDaConversa(db, conv.data());
-        if (canal.erro) return res.status(503).json({ ok: false, error: canal.erro });
-        if (canal.cfg) depsEnvio = { cfg: canal.cfg };
-        const chamada = await iniciarChamadaParaCliente({ para: numero }, depsEnvio);
-        if (!chamada.ok) {
-            console.warn('[whatsapp/ligar] recusa da Meta:', JSON.stringify(chamada.bruto || chamada.erro));
-            const status = chamada.configuracaoIncompleta ? 503 : chamada.indeterminado ? 502 : 422;
-            return res.status(status).json({
-                ok: false, error: chamada.erro, acao: chamada.acao,
-                code: chamada.code ?? null, indeterminado: Boolean(chamada.indeterminado),
-            });
+        // Um pedido VIVO por conversa: clicar duas vezes não disca duas vezes.
+        const vivo = conv.ultimaLigacaoSaida;
+        if (vivo && (vivo.status === 'pendente' || vivo.status === 'pegou')) {
+            const doc = (await db.collection(COLECAO_PEDIDOS_LIGACAO).doc(vivo.id).get()).data();
+            const estado = estadoDoPedido(doc, new Date());
+            if (estado === 'pendente' || estado === 'pegou') {
+                return res.status(409).json({ ok: false, error: 'Já existe uma ligação em andamento para este cliente.', acao: 'Aguarde ela terminar (o status aparece abaixo do botão).', pedido: { id: vivo.id, ...resumoDoPedido(doc) } });
+            }
         }
-        const agora = new Date().toISOString();
-        const msg = {
-            conversaId: numero, direcao: 'saida', tipo: 'chamada',
-            texto: '☎️ Ligação para o cliente iniciada pela SP — o ramal 221 toca quando a Meta conectar',
-            midia: null, timestamp: agora, statusEntrega: null, enviadoPor: eu,
-            ...(chamada.callId ? { callId: chamada.callId } : {}),
-        };
-        const docId = chamada.callId ? `call_${chamada.callId}_saida` : `call_saida_${numero}_${Date.parse(agora)}`;
-        await db.collection('whatsapp_mensagens').doc(docId).set(msg, { merge: true });
-        await db.collection('whatsapp_conversas').doc(numero).set({
-            ultimaMensagem: { resumo: '☎️ ligação para o cliente', direcao: 'saida', em: agora },
-            atualizadoEm: agora,
-        }, { merge: true });
-        return res.json({ ok: true, mensagem: { id: docId, ...msg, erroEntrega: null } });
+        const agora = new Date();
+        const id = idDoPedido({ numero, agora });
+        const pedido = montarPedido({
+            id, numero, ramal: veredito.ramal, eu, nomeContato: conv.nome || null, canalId: conv.canalId || null, agora,
+        });
+        await db.collection(COLECAO_PEDIDOS_LIGACAO).doc(id).set(pedido);
+        await gravarEstadoNaConversa(db, pedido);
+        console.log(`[whatsapp/ligar] pedido ${id}: ${eu} → ramal ${veredito.ramal} → ${numero}`);
+        return res.json({ ok: true, pedido: { id, ...resumoDoPedido(pedido, agora), ramal: veredito.ramal } });
     } catch (e) {
         console.error('[whatsapp/ligar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/** A tela acompanha o pedido (a cada poucos segundos) até o estado final. */
+router.get('/conversas/:numero/ligacoes/:id', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        const id = String(req.params.id || '').trim();
+        if (!numero || !/^lig_\d{10,15}_\d{17}$/.test(id) || !id.includes(`_${numero}_`)) {
+            return res.status(400).json({ ok: false, error: 'pedido inválido' });
+        }
+        const db = getDb();
+        const doc = (await db.collection(COLECAO_PEDIDOS_LIGACAO).doc(id).get()).data();
+        if (!doc) return res.status(404).json({ ok: false, error: 'Pedido não encontrado.' });
+        const agora = new Date();
+        const estado = estadoDoPedido(doc, agora);
+        // Expirou enquanto a tela olhava: grava o fato, para a conversa não
+        // ficar com "pendente" eterno na lista.
+        if (estado === 'expirado' && doc.status !== 'expirado') {
+            doc.status = 'expirado'; doc.terminouEm = agora.toISOString();
+            await db.collection(COLECAO_PEDIDOS_LIGACAO).doc(id).set({ status: 'expirado', terminouEm: doc.terminouEm }, { merge: true });
+            await gravarEstadoNaConversa(db, doc, 'o agente da VM não pegou o pedido em 2 min');
+        }
+        const agente = situacaoDoAgente((await db.collection('whatsapp_config').doc(DOC_AGENTE_SBC).get()).data(), agora);
+        return res.json({ ok: true, pedido: { id, ramal: doc.ramal, ...resumoDoPedido(doc, agora) }, agente });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 🤖 O AGENTE DA VM PEGA OS PEDIDOS. Cada GET é também o "estou vivo" dele
+ * (whatsapp_config/sbc_agente) — é isso que a aba ☎️ mostra. Pegar é
+ * atômico por pedido (transação): dois agentes, ou um reiniciando, não
+ * discam a mesma ligação duas vezes. Pedido vencido é carimbado `expirado`
+ * aqui e NÃO é entregue — agente que ficou parado não disca o passado.
+ */
+router.get('/sbc/pedidos', requireSbcSecret, async (req, res) => {
+    try {
+        const db = getDb();
+        const agora = new Date();
+        await db.collection('whatsapp_config').doc(DOC_AGENTE_SBC).set({
+            ultimoContatoEm: agora.toISOString(),
+            versao: String(req.headers['x-sbc-agente-versao'] || '').slice(0, 40) || null,
+            host: String(req.headers['x-sbc-agente-host'] || '').slice(0, 80) || null,
+        }, { merge: true });
+        const snap = await db.collection(COLECAO_PEDIDOS_LIGACAO).where('status', '==', 'pendente').limit(10).get();
+        const entregues = [];
+        for (const d of snap.docs) {
+            const ref = d.ref;
+            const pego = await db.runTransaction(async (tx) => {
+                const atual = (await tx.get(ref)).data();
+                if (!atual || atual.status !== 'pendente') return null;
+                if (estadoDoPedido(atual, agora) === 'expirado') {
+                    tx.set(ref, { status: 'expirado', terminouEm: agora.toISOString() }, { merge: true });
+                    return { ...atual, status: 'expirado', terminouEm: agora.toISOString(), _expirado: true };
+                }
+                tx.set(ref, { status: 'pegou', pegouEm: agora.toISOString() }, { merge: true });
+                return { ...atual, status: 'pegou', pegouEm: agora.toISOString() };
+            });
+            if (!pego) continue;
+            await gravarEstadoNaConversa(db, pego, pego._expirado ? 'o agente da VM não pegou o pedido em 2 min' : null);
+            if (!pego._expirado) {
+                entregues.push({ id: pego.id, numero: pego.numero, ramal: pego.ramal, nomeContato: pego.nomeContato || null, solicitadoPor: pego.solicitadoPor || null });
+            }
+        }
+        return res.json({ ok: true, pedidos: entregues, agora: agora.toISOString() });
+    } catch (e) {
+        console.error('[whatsapp/sbc/pedidos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/** O agente devolve o que o CDR do Asterisk disse. Status fora da lista é recusado. */
+router.post('/sbc/pedidos/:id/resultado', requireSbcSecret, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim();
+        if (!/^lig_\d{10,15}_\d{17}$/.test(id)) return res.status(400).json({ ok: false, error: 'pedido inválido' });
+        const status = String(req.body?.status || '').trim();
+        const FINAIS = ['atendida', 'nao-atendida', 'ocupado', 'falhou'];
+        if (!FINAIS.includes(status)) return res.status(400).json({ ok: false, error: `status deve ser um de: ${FINAIS.join(', ')}` });
+        const db = getDb();
+        const ref = db.collection(COLECAO_PEDIDOS_LIGACAO).doc(id);
+        const doc = (await ref.get()).data();
+        if (!doc) return res.status(404).json({ ok: false, error: 'Pedido não encontrado.' });
+        const agora = new Date().toISOString();
+        const resultado = {
+            disposicao: String(req.body?.disposicao || '').slice(0, 40) || null,
+            billsec: Number.isFinite(Number(req.body?.billsec)) ? Number(req.body.billsec) : null,
+            detalhe: String(req.body?.detalhe || '').slice(0, 300) || null,
+        };
+        const final = { ...doc, status, terminouEm: agora, resultado };
+        await ref.set({ status, terminouEm: agora, resultado }, { merge: true });
+        await gravarEstadoNaConversa(db, final);
+        // Uma linha na conversa: a ligação é fato do atendimento, e quem abrir
+        // a thread amanhã precisa ver que houve (e como terminou).
+        const ROTULO = { atendida: '✅ atendida', 'nao-atendida': '📵 não atendida', ocupado: '🔴 ocupado', falhou: '⛔ falhou' };
+        await db.collection('whatsapp_mensagens').doc(`${id}_resultado`).set({
+            conversaId: doc.conversaId, direcao: 'saida', tipo: 'chamada',
+            texto: `☎️ Ligação para o cliente pelo ramal ${doc.ramal} (${doc.solicitadoPor || 'SP'}) — ${ROTULO[status]}${resultado.detalhe ? `: ${resultado.detalhe}` : ''}`,
+            midia: null, timestamp: agora, statusEntrega: null, enviadoPor: doc.solicitadoPor || 'sbc',
+        }, { merge: true });
+        await db.collection('whatsapp_conversas').doc(doc.conversaId).set({
+            ultimaMensagem: { resumo: `☎️ ligação para o cliente — ${ROTULO[status]}`, direcao: 'saida', em: agora },
+            atualizadoEm: agora,
+        }, { merge: true });
+        return res.json({ ok: true });
+    } catch (e) {
+        console.error('[whatsapp/sbc/resultado]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/** A aba ☎️ pergunta: o agente da VM está vivo? O segredo está configurado? */
+router.get('/sbc/agente', requireAuth, async (_req, res) => {
+    try {
+        const db = getDb();
+        const agora = new Date();
+        const doc = (await db.collection('whatsapp_config').doc(DOC_AGENTE_SBC).get()).data() || null;
+        const pendentes = (await db.collection(COLECAO_PEDIDOS_LIGACAO).where('status', '==', 'pendente').limit(20).get()).size;
+        return res.json({
+            ok: true,
+            segredoConfigurado: agenteSbcConfigurado(),
+            agente: situacaoDoAgente(doc, agora),
+            ultimoContatoEm: doc?.ultimoContatoEm || null,
+            pendentes,
+        });
+    } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -2836,6 +2969,8 @@ router.get('/atendentes', requireAdmin, async (_req, res) => {
                 papelAtendimento: x.papelAtendimento || 'colaborador',
                 departamentos: Array.isArray(x.departamentos) ? x.departamentos : [],
                 filasAtendimento: Array.isArray(x.filasAtendimento) ? x.filasAtendimento : [],
+                // ☎️ Ramal no HitPhone — é onde o click-to-call toca primeiro.
+                ramal: x.ramal ? String(x.ramal) : null,
                 // 👑 Quem é DONO vem do SERVIDOR, que é quem tem a env — a tela
                 // não recalcula. Segunda leitura do mesmo fato daria selo
                 // divergente no dia em que a lista for restringida por env.
@@ -2902,6 +3037,29 @@ router.post('/atendentes/:uid/papel', requireAdmin, async (req, res) => {
         });
         console.log(`[whatsapp/atendentes] papel de ${uid} → ${papel} por ${req.user?.email}`);
         return res.json({ ok: true, uid, papel });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ☎️ Ramal do atendente no HitPhone (SÓ admin) — é onde o click-to-call toca
+// antes de discar o cliente. Vazio LIMPA (a pessoa deixa de poder ligar, e a
+// recusa da rota diz isso). Ramal inválido é RECUSADO, nunca gravado torto.
+router.post('/atendentes/:uid/ramal', requireAdmin, async (req, res) => {
+    try {
+        const uid = String(req.params.uid || '').trim();
+        if (!uid) return res.status(400).json({ ok: false, error: 'Informe o uid do usuário.' });
+        const bruto = String(req.body?.ramal ?? '').trim();
+        let ramal = null;
+        if (bruto) {
+            const v = validarRamal(bruto);
+            if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+            ramal = v.ramal;
+        }
+        const ref = getDb().collection('users').doc(uid);
+        const snap = await ref.get();
+        if (!snap.exists) return res.status(404).json({ ok: false, error: `Usuário ${uid} não existe no cadastro.` });
+        await ref.set({ ramal }, { merge: true });
+        console.log(`[whatsapp/atendentes] ramal de ${uid} → ${ramal || '(vazio)'} por ${req.user?.email}`);
+        return res.json({ ok: true, uid, ramal });
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 });
 

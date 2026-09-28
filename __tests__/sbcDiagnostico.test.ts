@@ -423,6 +423,21 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             expect(saida).not.toMatch(/UM candidato/);
         });
 
+        it('📜 o Contact que já saiu do `full` corrente é lido nos ROTACIONADOS (full.1, .2.gz)', () => {
+            // 28/09: a ligação de 23/09 é a única fonte do META_SIP_DESTINO e o
+            // logrotate gira por semana — ler só o `full` de hoje diria
+            // "nenhum" sobre um dado que está a um arquivo de distância.
+            const log = join(dirD, `full-rot-${Math.random().toString(36).slice(2)}`);
+            writeFileSync(log, 'nada aqui\n');
+            writeFileSync(`${log}.1`, 'Contact: <sip:rot.whatsapp.net:5061;transport=tls>\n');
+            writeFileSync(`${log}.2.gz`, execFileSync('gzip', ['-c'], { input: 'Contact: <sip:rot.whatsapp.net:5061>\n' }));
+            const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
+                input: script, env: { ...envD, LOG_FULL: log }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/UM candidato/);
+            expect(saida).toMatch(/sip:rot\.whatsapp\.net:5061/);
+        });
+
         it('⚠️ e a contagem de falhas de mídia SEMPRE vem com a data ao lado', () => {
             // Número sem data foi o que fez este script apontar para a Meta:
             // falhas de 22/09 (fora da grade) lidas como defeito de agora.

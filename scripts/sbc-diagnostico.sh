@@ -361,8 +361,11 @@ echo "── 7b. O endereço SIP da Meta (para habilitar a SAÍDA)"
 if [ -f "$LOG_FULL" ]; then
     # O Contact do INVITE recebido é para onde se disca de volta. Pego só os
     # sip:/sips: das linhas de Contact, tiro <>, ; e aspas, e deduplico.
-    CANDIDATOS=$(grep -ih "^Contact:" "$LOG_FULL" 2>/dev/null \
-        | grep -o "sips\?:[^>;\"]*" | sort -u)
+    # 📜 E OLHO OS LOGS ROTACIONADOS TAMBÉM (full.1, full.2.gz…): a ligação
+    #    de 23/09 pode já ter saído do `full` corrente quando alguém vier ler
+    #    — o logrotate gira por semana. `gzip -dcf` lê comprimido e texto puro.
+    CANDIDATOS=$(gzip -dcf "$LOG_FULL" "$LOG_FULL".[0-9]* 2>/dev/null \
+        | grep -ih "^Contact:" | grep -o "sips\?:[^>;\"]*" | sort -u)
     # 🐛 ARMADILHA DA CASA, e eu caí nela aqui: `grep -c` SAI COM 1 quando a
     # conta dá zero, então `$(... || echo 0)` imprimia "0" duas vezes e o
     # `[ "$QUANTOS" = "0" ]` dava falso — o desfecho "nenhum candidato" caía
@@ -374,7 +377,7 @@ if [ -f "$LOG_FULL" ]; then
         QUANTOS=$(printf '%s\n' "$CANDIDATOS" | grep -c .)
     fi
     if [ "$QUANTOS" = "0" ]; then
-        echo "   ⚪ NENHUM Contact no log — e isso é sobre o GRAVADOR, não sobre"
+        echo "   ⚪ NENHUM Contact no log (nem nos rotacionados) — e isso é sobre o GRAVADOR, não sobre"
         echo "      a Meta: o cabeçalho só aparece com o trace SIP LIGADO."
         echo "      Rode com --ao-vivo, peça uma ligação DENTRO da grade e volte."
     elif [ "$QUANTOS" = "1" ]; then
