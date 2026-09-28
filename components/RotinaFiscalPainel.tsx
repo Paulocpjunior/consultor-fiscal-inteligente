@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CredencialEmailFaixa from './CredencialEmailFaixa';
 import RotinaParametrosBloco from './RotinaParametrosBloco';
-import { manifestarUmaChave } from '../services/manifestoService';
+import { manifestarUmaChave, manifestacaoGravada, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
@@ -122,11 +122,17 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
     // 📨 Manifestação de ciência disparada da própria Rotina (28/09): chave → estado.
     const [manifestando, setManifestando] = useState<Record<string, 'enviando' | 'ok' | string>>({});
 
-    const manifestarCiencia = useCallback(async (chNFe: string, cnpjDestinatario: string, comp: string) => {
+    const manifestarCiencia = useCallback(async (chNFe: string, cnpjDestinatario: string, comp: string, empresaId?: string | null) => {
         setManifestando((m) => ({ ...m, [chNFe]: 'enviando' }));
-        const r = await manifestarUmaChave({ chNFe, cnpjDestinatario, tipo: 'ciencia' });
-        if (r.erro) { setManifestando((m) => ({ ...m, [chNFe]: `erro: ${r.erro}` })); return; }
-        setManifestando((m) => ({ ...m, [chNFe]: 'ok' }));
+        const r = await manifestarUmaChave({ chNFe, cnpjDestinatario, tipo: 'ciencia', empresaId });
+        // 🚨 SUCESSO É FATO GRAVADO (28/09, Paulo: "marco como ciente e, quando
+        // atualizo, volta sem ciência"). HTTP 200 com recusa da SEFAZ não é ✔ —
+        // o desfecho diz se o evento entrou (aceita ou já existia) ou por que não.
+        if (!manifestacaoGravada(r)) {
+            setManifestando((m) => ({ ...m, [chNFe]: `erro: ${motivoDaManifestacaoNaoGravada(r)}` }));
+            return;
+        }
+        setManifestando((m) => ({ ...m, [chNFe]: r.desfecho?.situacao === 'ja-existia' ? 'ja-existia' : 'ok' }));
         // O painel recarrega para a etapa 2 refletir o evento gravado.
         carregarRef.current?.(comp);
     }, []);
@@ -441,12 +447,14 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                                                                                             {n.motivo === 'sem-ciencia' && n.chave && r.empresa?.cnpj && (
                                                                     <span className="block mt-0.5">
                                                                         {manifestando[n.chave] === 'ok' ? (
-                                                                            <span className="text-emerald-700 dark:text-emerald-400">✔ ciência manifestada</span>
+                                                                            <span className="text-emerald-700 dark:text-emerald-400">✔ ciência manifestada (SEFAZ aceitou)</span>
+                                                                        ) : manifestando[n.chave] === 'ja-existia' ? (
+                                                                            <span className="text-emerald-700 dark:text-emerald-400">✔ a ciência já estava registrada na SEFAZ — evento gravado</span>
                                                                         ) : String(manifestando[n.chave] || '').startsWith('erro') ? (
-                                                                            <span className="text-red-600">{manifestando[n.chave]}</span>
+                                                                            <span className="text-red-600">✖ não gravou — {String(manifestando[n.chave]).replace(/^erro: /, '')}</span>
                                                                         ) : (
                                                                             <button type="button" disabled={manifestando[n.chave] === 'enviando'}
-                                                                                onClick={() => manifestarCiencia(n.chave!, r.empresa!.cnpj, competencia)}
+                                                                                onClick={() => manifestarCiencia(n.chave!, r.empresa!.cnpj, competencia, r.empresa?.id)}
                                                                                 className="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white text-[10px] font-semibold disabled:opacity-40">
                                                                                 {manifestando[n.chave] === 'enviando' ? 'Manifestando…' : '📨 Manifestar ciência'}
                                                                             </button>

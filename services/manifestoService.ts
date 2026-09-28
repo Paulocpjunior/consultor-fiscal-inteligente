@@ -183,13 +183,36 @@ export async function listarElegiveisManifestacao(
     return data;
 }
 
+/** O desfecho lido pelo backend (`manifestacao-desfecho.js`): só 'aceita' e 'ja-existia' gravam o evento. */
+export interface DesfechoManifestacao {
+    situacao: 'aceita' | 'ja-existia' | 'recusada' | 'sem-resposta';
+    cStat: string | null;
+    xMotivo: string | null;
+    registraEvento: boolean;
+    frase: string;
+}
+
 export interface ManifestarUmaResult {
     ok?: boolean;
+    desfecho?: DesfechoManifestacao | null;
     status?: string;
     motivo?: string;
     cStat?: string;
     xMotivo?: string;
     erro?: string;
+}
+
+/** Sucesso é FATO gravado (aceita agora ou já existia na SEFAZ) — nunca "HTTP 200". */
+export function manifestacaoGravada(r: ManifestarUmaResult | null | undefined): boolean {
+    return !!r && !r.erro && !!r.desfecho && r.desfecho.registraEvento === true;
+}
+
+/** A frase que a tela mostra quando NÃO gravou. */
+export function motivoDaManifestacaoNaoGravada(r: ManifestarUmaResult | null | undefined): string {
+    if (!r) return 'sem resposta';
+    if (r.erro) return r.erro;
+    if (r.desfecho) return r.desfecho.frase;
+    return 'a resposta não trouxe o desfecho (versão antiga do servidor?)';
 }
 
 /**
@@ -200,19 +223,21 @@ export interface ManifestarUmaResult {
  * caracteres (Manual ENT 6.0), e quem recusa é o backend.
  */
 export async function manifestarUmaChave({
-    chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false,
+    chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId,
 }: {
     chNFe: string;
     cnpjDestinatario: string;
     tipo?: TipoManifestacao;
     xJustificativa?: string;
     dryRun?: boolean;
+    /** Fora de admin, a ciência é por cliente da carteira — o backend confere. */
+    empresaId?: string | null;
 }): Promise<ManifestarUmaResult> {
     const token = await getToken();
     const res = await fetch('/api/admin/sefaz/manifest-one', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun }),
+        body: JSON.stringify({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun, empresaId: empresaId || null }),
     });
     const data = await res.json();
     if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };

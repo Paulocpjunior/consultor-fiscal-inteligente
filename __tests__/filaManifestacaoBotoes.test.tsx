@@ -23,6 +23,9 @@ jest.mock('../services/manifestoService', () => ({
     listarElegiveisManifestacao: (...a: unknown[]) => listar(...a),
     manifestarUmaChave: (...a: unknown[]) => manifestarUma(...a),
     resetarFalhasInfraManifestacao: (...a: unknown[]) => resetInfra(...a),
+    // As réguas PURAS do desfecho (28/09) entram de verdade: o card decide o ✓/✕ por elas.
+    manifestacaoGravada: jest.requireActual('../services/manifestoService').manifestacaoGravada,
+    motivoDaManifestacaoNaoGravada: jest.requireActual('../services/manifestoService').motivoDaManifestacaoNaoGravada,
 }));
 
 // O painel inteiro puxa Firebase; o card é exportado à parte, então o teste

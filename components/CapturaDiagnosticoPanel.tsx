@@ -28,6 +28,7 @@ import ConferenciaChavesPanel from './ConferenciaChavesPanel';
 import {
     manifestarPendentes, listarElegiveisManifestacao, manifestarUmaChave,
     resetarFalhasInfraManifestacao,
+    manifestacaoGravada, motivoDaManifestacaoNaoGravada,
     type ManifestarPendentesResult, type TipoManifestacao,
     type ElegivelManifestacao,
 } from '../services/manifestoService';
@@ -748,7 +749,10 @@ export const FilaManifestacaoCard: React.FC = () => {
             const r = await manifestarUmaChave({ chNFe: it.chave, cnpjDestinatario: cnpj, tipo });
             setResultadoPorChave(p => ({
                 ...p,
-                [it.chave]: r.erro ? `✕ ${r.erro}` : `✓ ${r.status || r.cStat || 'enviada'} ${r.xMotivo || ''}`.trim(),
+                // 🚨 Sucesso é FATO gravado (28/09): 200 com recusa da SEFAZ saía "✓ enviada".
+                [it.chave]: manifestacaoGravada(r)
+                    ? `✓ ${r.desfecho?.frase || 'gravada'}`
+                    : `✕ ${motivoDaManifestacaoNaoGravada(r)}`,
             }));
         } catch (e: any) {
             setResultadoPorChave(p => ({ ...p, [it.chave]: `✕ ${e.message || 'erro'}` }));

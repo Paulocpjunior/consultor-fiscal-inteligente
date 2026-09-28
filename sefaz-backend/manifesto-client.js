@@ -41,7 +41,7 @@ const COD_AMBIENTE_NACIONAL = '91';
 const TP_AMB = parseInt(process.env.SEFAZ_TPAMB || '1', 10);
 
 // ── Mapeamento de tipos ──────────────────────────────────────────────────────
-const TIPOS_EVENTO = {
+export const TIPOS_EVENTO = {
   ciencia:           { tpEvento: '210210', descEvento: 'Ciencia da Operacao' },
   confirmacao:       { tpEvento: '210200', descEvento: 'Confirmacao da Operacao' },
   desconhecimento:   { tpEvento: '210220', descEvento: 'Desconhecimento da Operacao' },

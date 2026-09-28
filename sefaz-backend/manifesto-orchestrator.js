@@ -5,7 +5,9 @@
 
 import admin from 'firebase-admin';
 import { refsDaChave } from './documento-lado-io.js';
-import { manifestarNFe, TIPOS_MANIFESTACAO } from './manifesto-client.js';
+import { manifestarNFe, TIPOS_MANIFESTACAO, TIPOS_EVENTO } from './manifesto-client.js';
+// 🚨 O desfecho (aceita / já existia / recusada / sem resposta) é lido pelo dono (28/09).
+import { desfechoDaManifestacao, eventoDaManifestacao } from './manifestacao-desfecho.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { loadCertificate, extrairPem } from './secret-loader.js';
@@ -320,7 +322,15 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
     auditoria.xMotivoLote = result.retorno.xMotivoLote;
     auditoria.eventosRetornados = result.retorno.eventos;
 
-    const evtAceito = result.retorno.eventos.find(e => ['135', '136'].includes(e.cStat));
+    // 🚨 O DESFECHO É LIDO PELO DONO (28/09): aceita (135/136) OU "já existia"
+    // (573 — a ciência já estava na SEFAZ) gravam o evento; recusa sai DITA
+    // no retorno, nunca como 200 mudo que a tela lia como sucesso.
+    const desfecho = desfechoDaManifestacao(result.retorno);
+    result.desfecho = desfecho;
+    auditoria.desfecho = desfecho.situacao;
+    const evtAceito = desfecho.registraEvento
+      ? result.retorno.eventos.find(e => String(e.cStat) === String(desfecho.cStat))
+      : null;
     if (evtAceito) {
       // NOS DOIS LADOS DA CHAVE (11/09): se a destinatária é o OUTRO LADO
       // (a emitente importou a saída antes), o evento de manifestação tem de
@@ -335,25 +345,17 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
         const s = ref === docRef ? snap : await ref.get();
         if (!s.exists) continue;
         const eventosExistentes = s.data().eventos || [];
-        const novoEvento = {
-          tpEvento: evtAceito.tpEvento,
-          tipo: `manifestacao_${tipo}`,
-          descricao: tipo === 'ciencia' ? 'Ciência da Operação' :
-                     tipo === 'confirmacao' ? 'Confirmação da Operação' :
-                     tipo === 'desconhecimento' ? 'Desconhecimento da Operação' :
-                     'Operação não Realizada',
-          nSeqEvento: '1',
-          dhEvento: evtAceito.dhRegEvento,
-          nProt: evtAceito.nProt,
-          cStat: evtAceito.cStat,
-          xMotivo: evtAceito.xMotivo,
-          importadoPor: capturadoPor?.email || 'manifesto-auto',
-        };
+        const novoEvento = eventoDaManifestacao({
+          evt: evtAceito, tipo, capturadoPor,
+          jaExistia: desfecho.situacao === 'ja-existia',
+          tpEventoPadrao: TIPOS_EVENTO?.[tipo]?.tpEvento || null,
+        });
         await ref.update({ eventos: [...eventosExistentes, novoEvento] });
       }
-      // Ciência/Confirmação aceita → busca a procNFe completa na hora.
+      // Ciência/Confirmação aceita AGORA → busca a procNFe completa na hora.
       // Em lote (skipRedownload), adia: a completa vem no próximo DistDFe.
-      if (tipo === 'ciencia' || tipo === 'confirmacao') {
+      // "Já existia" não rebaixa: a nota que chega aqui pela Rotina já é a completa.
+      if ((tipo === 'ciencia' || tipo === 'confirmacao') && desfecho.situacao === 'aceita') {
         auditoria.baixaCompleta = skipRedownload
           ? { ok: false, adiada: true, motivo: 'lote — completa virá no próximo ciclo DistDFe' }
           : await baixarCompletaAposManifestacao({
