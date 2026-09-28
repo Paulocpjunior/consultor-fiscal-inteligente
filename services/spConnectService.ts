@@ -195,9 +195,14 @@ export const statusLigacaoSaida = (numero: string, pedidoId: string) =>
 
 /** O agente da VM do SBC está vivo? (aba ⚙️ → ☎️) */
 export const agenteSbcStatus = () =>
-    req<{ segredoConfigurado: boolean; agente: { vivo: boolean; texto: string; haMs: number | null }; ultimoContatoEm: string | null; pendentes: number }>(
-        '/api/admin/whatsapp/sbc/agente',
-    );
+    req<{
+        segredoConfigurado: boolean; agente: { vivo: boolean; texto: string; haMs: number | null };
+        ultimoContatoEm: string | null; pendentes: number;
+        /** ☎️ ligações RECEBIDAS que o SBC registrou via CDR — e quantas vieram sem número de cliente no src. */
+        cdr?: { recebidas: number; semNumero: number; ultimaEm: string | null };
+        /** 📞 pedidos de retorno que chegaram sem número legível (o cru está no webhook). */
+        retornosSemNumero?: number;
+    }>('/api/admin/whatsapp/sbc/agente');
 
 /** Ramal do atendente no HitPhone (só admin grava; vazio limpa). */
 export const salvarRamalAtendente = (uid: string, ramal: string) =>

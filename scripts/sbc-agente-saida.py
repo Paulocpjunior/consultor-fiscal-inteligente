@@ -26,10 +26,17 @@ import time
 import urllib.error
 import urllib.request
 
-VERSAO = "1.0.0"
+VERSAO = "1.1.0"
 ENV_FILE = os.environ.get("SBC_AGENTE_ENV", "/etc/sbc-agente.env")
 SPOOL = os.environ.get("SBC_SPOOL", "/var/spool/asterisk/outgoing")
 CDR_CSV = os.environ.get("SBC_CDR_CSV", "/var/log/asterisk/cdr-csv/Master.csv")
+# ☎️ ENTRADA: a ligação que o cliente fez vira linha na conversa. O agente
+# acompanha o Master.csv a partir de um OFFSET gravado aqui e manda ao app as
+# linhas novas de ENTRADA da Meta (POST /sbc/cdr). Sem offset gravado, começa
+# do FIM do arquivo: nada de despejar meses de testes nas conversas.
+CDR_OFFSET_FILE = os.environ.get("SBC_CDR_OFFSET", "/var/spool/asterisk/tmp/sbc-agente-cdr.offset")
+CAMPOS_CDR = ["accountcode", "src", "dst", "dcontext", "clid", "channel", "dstchannel", "lastapp",
+              "lastdata", "start", "answer", "end", "duration", "billsec", "disposition", "amaflags", "uniqueid"]
 INTERVALO_S = float(os.environ.get("SBC_INTERVALO_S", "2"))
 # Espera do ramal (40 s) + do cliente (60 s) + folga: depois disso, sem CDR, é falha.
 ESPERA_CDR_S = int(os.environ.get("SBC_ESPERA_CDR_S", "130"))
@@ -159,6 +166,63 @@ def ler_linha_csv(linha):
     return campos
 
 
+def ler_offset(caminho):
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            return int(f.read().strip() or "0")
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def gravar_offset(caminho, valor):
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    tmp = caminho + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(str(valor))
+    os.replace(tmp, caminho)
+
+
+def ler_cdr_novas(caminho, offset):
+    # Devolve (linhas_como_dicts, novo_offset). Arquivo menor que o offset =
+    # rotacionou: recomeça do zero (o app é idempotente por uniqueid). Linha
+    # sem quebra no fim (Asterisk ainda escrevendo) fica para a próxima volta.
+    try:
+        tamanho = os.path.getsize(caminho)
+    except FileNotFoundError:
+        return [], offset
+    if offset is None:
+        return [], tamanho          # 1ª vez: sem backfill
+    if tamanho < offset:
+        offset = 0
+    if tamanho == offset:
+        return [], offset
+    with open(caminho, "rb") as f:
+        f.seek(offset)
+        bruto = f.read(tamanho - offset)
+    fim = bruto.rfind(b"\n")
+    if fim < 0:
+        return [], offset
+    trecho = bruto[:fim + 1].decode("utf-8", errors="replace")
+    linhas = []
+    for linha in trecho.split("\n"):
+        if not linha.strip():
+            continue
+        campos = ler_linha_csv(linha.rstrip("\r"))
+        if len(campos) < 15:
+            continue
+        linhas.append({k: (campos[i] if i < len(campos) else "") for i, k in enumerate(CAMPOS_CDR)})
+    return linhas, offset + fim + 1
+
+
+def eh_entrada_da_meta(cdr):
+    # Mesma régua de interpretarCdrDeEntrada() no núcleo JS: perna que a Meta
+    # abriu (contexto de-meta ou canal do endpoint meta, nunca meta-saida) e
+    # que não é click-to-call (accountcode lig_…).
+    canal = cdr.get("channel", "")
+    da_meta = cdr.get("dcontext", "") == "de-meta" or (canal.startswith("PJSIP/meta-") and not canal.startswith("PJSIP/meta-saida"))
+    return da_meta and not cdr.get("accountcode", "").startswith("lig_")
+
+
 def traduzir(cdr):
     # Mesma tradução de traduzirResultado() no núcleo JS.
     if cdr is None:
@@ -208,10 +272,23 @@ def main():
     log("agente %s de pé — app=%s spool=%s cdr=%s" % (VERSAO, base, SPOOL, CDR_CSV))
     em_andamento = {}
     falhas_seguidas = 0
+    cdr_offset = ler_offset(CDR_OFFSET_FILE)
+    if cdr_offset is None:
+        log("sem offset do CDR gravado: começo do FIM do %s (sem backfill)" % CDR_CSV)
     while True:
         try:
             r = http("GET", base + "/api/admin/whatsapp/sbc/pedidos", segredo)
             falhas_seguidas = 0
+            # ☎️ ENTRADA — linhas novas do CDR que a Meta abriu viram linha na conversa.
+            novas, prox = ler_cdr_novas(CDR_CSV, cdr_offset)
+            entrada = [c for c in novas if eh_entrada_da_meta(c)]
+            if entrada:
+                resp = http("POST", base + "/api/admin/whatsapp/sbc/cdr", segredo, {"linhas": entrada})
+                log("cdr: %d linha(s) de entrada enviadas — gravadas=%s semNumero=%s repetidas=%s" % (
+                    len(entrada), resp.get("gravadas"), resp.get("semNumero"), resp.get("repetidas")))
+            if prox != cdr_offset:
+                cdr_offset = prox
+                gravar_offset(CDR_OFFSET_FILE, cdr_offset)
             for p in r.get("pedidos") or []:
                 pid = p.get("id")
                 try:

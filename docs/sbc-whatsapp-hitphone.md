@@ -206,6 +206,28 @@ Por que o SBC **pergunta** ao app e não o contrário: a VM não abre porta
 nova (só a 5061 da Meta), o Cloud Run não tem IP fixo, e ARI/AMI exposto
 seria uma superfície a mais. O agente fala para fora, por HTTPS, com segredo.
 
+### ENTRADA vira linha na conversa — pelo CDR (28/09)
+
+Em modo SIP a Meta **não manda evento de chamada no webhook** (medido em
+25/08): a ligação que o cliente fazia pelo ☎️ caía na URA e o SP Connect não
+ficava sabendo. Desde 28/09 o **mesmo agente** acompanha o `Master.csv` por
+offset (sem backfill: começa do fim quando sobe pela primeira vez) e manda as
+linhas de **entrada da Meta** (contexto `de-meta`, canal `PJSIP/meta-…`, nunca
+`meta-saida` nem `accountcode lig_…`) para `POST /sbc/cdr`. Cada linha entra
+pela mesma função do webhook de chamadas: **atendida** (com a duração) ou
+**perdida** (conta não-lida e reabre conversa encerrada).
+
+⚠️ **Não provado**: a forma do `src` que a Meta manda. Se não for o E.164 do
+cliente, a linha fica em `whatsapp_chamadas_sem_numero` com o src cru e a aba
+☎️ conta — a régua nasce do dado real.
+
+📞 **Pedido de retorno de ligação** (fora do horário da Meta): o webhook lê o
+mínimo sem conhecer o leiaute (`from`/`wa_id`), grava a linha "pediu RETORNO"
+na conversa, conta não-lida, e a lista mostra o chip **📞 pediu retorno** até
+alguém ligar pelo ☎️ (`atendidoComo: 'ligacao'`) ou encerrar
+(`encerrado-sem-ligar`). Sem número legível, é contado em
+`whatsapp_config/pedidos_retorno` e o cru fica no webhook.
+
 **Como ligar a saída, na ordem:**
 
 1. Descobrir `META_SIP_DESTINO` (seção 7b do `scripts/sbc-diagnostico.sh`,

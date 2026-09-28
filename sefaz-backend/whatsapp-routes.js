@@ -42,8 +42,9 @@ import {
     CANDIDATOS_SONDA, ANTES_DE_LIGAR, interpretarSondaChamadas, concluirSonda,
     montarCallHoursDoAtendimento, validarSipDestino, montarPayloadChamadas,
     lerCallingDasSettings, conferirCallHours, lerEstadoDaChamada,
-    ehEventoDeChamada, rotularEventoCru, naturezaDoEventoCru,
+    ehEventoDeChamada, rotularEventoCru, naturezaDoEventoCru, interpretarCdrDeEntrada,
 } from './whatsapp-chamadas.js';
+import { gravarEventoChamada } from './whatsapp-webhook-routes.js';
 import {
     BASES_LEGAIS, CORES_ETIQUETA, validarEtiqueta, montarCatalogoEtiquetas,
     validarEtiquetasDoContato, pendenciasLgpdDoContato, filtrarContatos,
@@ -492,6 +493,7 @@ async function montarResumosDeConversas(db, docsConversas) {
             janela24hAte: x.janela24hAte || null,
             permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
             ultimaLigacaoSaida: x.ultimaLigacaoSaida || null, // ☎️ o último click-to-call desta conversa (estado + ramal)
+            retornoDeLigacao: x.retornoDeLigacao || null,   // 📞 o cliente pediu retorno (pendência até alguém ligar/encerrar)
             ultimaMensagem: x.ultimaMensagem || null,
             naoLidas: x.naoLidas || 0,
             atualizadoEm: x.atualizadoEm || null,
@@ -1260,6 +1262,13 @@ router.post('/conversas/:numero/ligar', requireAuth, async (req, res) => {
         });
         await db.collection(COLECAO_PEDIDOS_LIGACAO).doc(id).set(pedido);
         await gravarEstadoNaConversa(db, pedido);
+        // 📞 Ligar de volta ATENDE o pedido de retorno pendente — é a pendência
+        // sendo fechada pelo ato que ela pedia.
+        if (conv.retornoDeLigacao && !conv.retornoDeLigacao.atendidoEm) {
+            await db.collection('whatsapp_conversas').doc(numero).set({
+                retornoDeLigacao: { ...conv.retornoDeLigacao, atendidoEm: agora.toISOString(), atendidoPor: eu, atendidoComo: 'ligacao' },
+            }, { merge: true });
+        }
         console.log(`[whatsapp/ligar] pedido ${id}: ${eu} → ramal ${veredito.ramal} → ${numero}`);
         return res.json({ ok: true, pedido: { id, ...resumoDoPedido(pedido, agora), ramal: veredito.ramal } });
     } catch (e) {
@@ -1378,6 +1387,55 @@ router.post('/sbc/pedidos/:id/resultado', requireSbcSecret, async (req, res) => 
     }
 });
 
+/**
+ * ☎️ O CDR DE ENTRADA DO SBC — a ligação que o cliente fez vira linha na
+ * conversa. Em modo SIP a Meta não avisa o webhook (25/08); o agente da VM
+ * manda as linhas novas do Master.csv e cada uma que for ENTRADA da Meta
+ * entra pela MESMA função do webhook de chamadas (`gravarEventoChamada`:
+ * idempotente por callId, reabre conversa encerrada, conta não-lida na
+ * perdida). Linha sem número reconhecível NÃO some: fica em
+ * `whatsapp_chamadas_sem_numero` com o src cru, e a aba ☎️ conta.
+ */
+router.post('/sbc/cdr', requireSbcSecret, async (req, res) => {
+    try {
+        const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas.slice(0, 200) : [];
+        const db = getDb();
+        const agora = new Date().toISOString();
+        let gravadas = 0; let semNumero = 0; let ignoradas = 0; let repetidas = 0;
+        for (const cdr of linhas) {
+            const r = interpretarCdrDeEntrada(cdr);
+            if (!r.ehEntradaDaMeta) { ignoradas += 1; continue; }
+            if (!r.numero) {
+                semNumero += 1;
+                await db.collection('whatsapp_chamadas_sem_numero').doc(r.callId).set({
+                    callId: r.callId, srcCru: r.srcCru, evento: r.evento, timestamp: r.timestamp,
+                    duracaoSegundos: r.duracaoSegundos, bruto: cdr, recebidoEm: agora,
+                }, { merge: true });
+                continue;
+            }
+            const g = await gravarEventoChamada(db, {
+                callId: r.callId, conversaId: r.numero, direcao: 'entrada', evento: r.evento,
+                duracaoSegundos: r.duracaoSegundos, timestamp: r.timestamp, phoneNumberId: null,
+                bruto: { origem: 'sbc-cdr', ...cdr },
+            });
+            if (g.jaExiste) repetidas += 1; else gravadas += 1;
+        }
+        if (gravadas || semNumero) {
+            await db.collection('whatsapp_config').doc(DOC_AGENTE_SBC).set({
+                cdr: {
+                    recebidas: admin.firestore.FieldValue.increment(gravadas),
+                    semNumero: admin.firestore.FieldValue.increment(semNumero),
+                    ultimaEm: agora,
+                },
+            }, { merge: true });
+        }
+        return res.json({ ok: true, gravadas, repetidas, semNumero, ignoradas });
+    } catch (e) {
+        console.error('[whatsapp/sbc/cdr]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 /** A aba ☎️ pergunta: o agente da VM está vivo? O segredo está configurado? */
 router.get('/sbc/agente', requireAuth, async (_req, res) => {
     try {
@@ -1385,12 +1443,18 @@ router.get('/sbc/agente', requireAuth, async (_req, res) => {
         const agora = new Date();
         const doc = (await db.collection('whatsapp_config').doc(DOC_AGENTE_SBC).get()).data() || null;
         const pendentes = (await db.collection(COLECAO_PEDIDOS_LIGACAO).where('status', '==', 'pendente').limit(20).get()).size;
+        const retornos = (await db.collection('whatsapp_config').doc('pedidos_retorno').get()).data() || null;
         return res.json({
             ok: true,
             segredoConfigurado: agenteSbcConfigurado(),
             agente: situacaoDoAgente(doc, agora),
             ultimoContatoEm: doc?.ultimoContatoEm || null,
             pendentes,
+            // ☎️ ligações RECEBIDAS que o SBC registrou (via CDR) — e quantas
+            // vieram com src que não é número de cliente.
+            cdr: { recebidas: doc?.cdr?.recebidas || 0, semNumero: doc?.cdr?.semNumero || 0, ultimaEm: doc?.cdr?.ultimaEm || null },
+            // 📞 pedidos de retorno que chegaram sem número legível (o cru está no webhook).
+            retornosSemNumero: retornos?.semNumero || 0,
         });
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
@@ -1689,6 +1753,11 @@ router.post('/conversas/:numero/situacao', requireAuth, async (req, res) => {
             // volta para a triagem, sem dono. Se o cliente voltar, é um
             // atendimento NOVO — e é aí que o menu e a IA têm de agir.
             ...(s === 'resolvida' ? { fila: null, atribuidoA: null, submenuAberto: null } : {}),
+            // 📞 Encerrar fecha a pendência de retorno — dita como encerrada
+            // SEM ligar, para o relatório não confundir com retorno feito.
+            ...(s === 'resolvida' && conv.retornoDeLigacao && !conv.retornoDeLigacao.atendidoEm
+                ? { retornoDeLigacao: { ...conv.retornoDeLigacao, atendidoEm: agora, atendidoPor: eu, atendidoComo: 'encerrado-sem-ligar' } }
+                : {}),
             atualizadoEm: agora,
         }, { merge: true });
 
