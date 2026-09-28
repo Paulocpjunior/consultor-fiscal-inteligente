@@ -87,6 +87,23 @@
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
 
+    <h3>📗 <strong>SPED Contribuições: o plano de contas do 0500 virou uma lista com USO, e o COD_CTA do C170/A170 passou a sair preenchido</strong></h3>
+    <p>ELS 08/2026, PVA de 28/09: 1259 recusas "cadastre e/ou selecione previamente a conta contábil analítica
+    representativa da operação, no registro 0500", uma por item (1249 C170 e 6 A170). Desde 11/2017 o COD_CTA é
+    obrigatório para quem tem escrituração contábil, e o app só tinha UMA conta cadastrável, a da receita financeira do
+    F100, onde acabou entrando a conta de vendas.</p>
+    <p>Agora Empresas → Dados Fiscais tem <strong>"Plano de contas do SPED (0500), uma conta por uso"</strong>: receita de
+    vendas (C170 de saída), receita de serviços (A170 emitida), compras (C170 de entrada), serviços tomados (A170 tomada) e
+    receita financeira (F100). Cada linha leva código, nome, nível e natureza (01 ativo, 02 passivo, 03 PL, 04 resultado,
+    05 compensação, 09 outras; sem escolher, vale a natureza padrão do uso). O gerador emite <strong>um 0500 por conta</strong>
+    e preenche o COD_CTA pelo lado do documento. A conta antiga da receita financeira continua valendo, sem duplicar.
+    Sem conta para um uso, o campo sai vazio e o aviso da geração diz <strong>qual uso falta e quantos itens</strong>
+    ficaram sem: o app não inventa conta, porque só o plano de contas da empresa sabe qual é a credora ou devedora
+    principal.</p>
+    <p><strong>Para a ELS:</strong> cadastre a conta de vendas (3.1.1.01.0002) no uso "receita de vendas", a conta de
+    estoque ou compras no uso "compras" e a de serviços tomados, e regere o arquivo.</p>
+    <p><strong>Onde:</strong> Empresas → ⚙️ Dados Fiscais → bloco do SPED Contribuições → "Plano de contas do SPED (0500) — uma conta por uso" · aviso da geração na aba SPED Contribuições.</p>
+
     <h3>📗 <strong>SPED Contribuições: a CST de PIS/COFINS da COMPRA passou a ter régua — pessoa física sem crédito, cadastro por NCM, M105/M505 e o C100 pela soma dos itens</strong></h3>
     <p>ELS 08/2026, PVA de 28/09, segunda rodada: 30 recusas "CST com direito a crédito (50 a 56) para participante pessoa
     física", 80 avisos "CST 50–56 em produto a alíquota zero", 4 "deverá existir M105/M505", 6 "natureza da base do crédito

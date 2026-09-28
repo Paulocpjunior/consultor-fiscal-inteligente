@@ -5,6 +5,34 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 PLANO DE CONTAS DO 0500 COM USO + COD_CTA NO C170/A170 (28/09, ELS
+  08/2026, item 3 da 2ª rodada do PVA: 1259 recusas "cadastre e/ou selecione
+  previamente a conta contábil analítica no registro 0500")** (Paulo: *"acho
+  que esse cadastro vai servir apenas para código de receita financeira, vai
+  ter que criar um campo para adicionarmos mais receitas financeiras"* → não
+  é "mais receitas financeiras", é UMA CONTA POR USO). `plano-contas-sped.js`
+  (puro, com `.d.ts`): `USOS_PLANO_CONTAS` (receita-vendas C170 saída ·
+  receita-servicos A170 saída · compras C170 entrada · servicos-tomados A170
+  entrada · receita-financeira F100), `NATUREZAS_CONTA` (01/02/03/04/05/09,
+  Guia 0500 campo 03), `conferirPlanoContasSped` (código ≤60, nome ≤60, nível
+  1–99, natureza do leiaute ou padrão do uso, uso único), `contaDoUso`,
+  `contas0500DoPlano` (um 0500 por CÓDIGO, a conta legada da receita
+  financeira entra pela mesma lista sem duplicar — a ELS tinha a conta de
+  VENDAS nos três campos antigos), `criarSeletorDeConta` (confere uma vez,
+  `codCta(uso)` e `aviso()` com uso + contagem). Bloco C: C170 campo 37 =
+  vendas/compras pela direção; bloco A: A170 campo 17 = serviços/tomados;
+  F100 cai em `contaDoUso(…, 'receita-financeira')` quando os campos legados
+  faltam. Bloco 0 emite `contas0500` em laço. Cadastro: `planoContasSped`
+  na whitelist de `empresa-status-routes.js`, conferido ANTES do update
+  (400 `PLANO_CONTAS_INVALIDO` com os erros ditos); `types.ts`; orquestrador
+  passa `empresa.dadosFiscais.planoContasSped`; modal com editor em lista
+  (uso, código, nome, nível, natureza) — uso já usado fica desabilitado no
+  select, `handleField` aceita a lista. Sem conta: campo vazio e aviso
+  "[0500] COD_CTA vazio em N item(ns) em <onde> (uso …)" — nunca conta
+  inventada. Trava `planoContasSped.test.ts` (16 casos: conferência, 0500
+  sem duplicar, C170/A170 pelo lado, aviso, os DOIS lados do cadastro).
+  FICA: COD_MUN do 0150 (♻️ reler o XML) e o cadastro na ELS pelo Paulo.
+
 - **📗 CST DE PIS/COFINS DA COMPRA TEM RÉGUA + M105/M505 + C100 = Σ C170 (28/09,
   ELS 08/2026, 2ª rodada do PVA: 1315 erros — 1259 COD_CTA, 30 PF com crédito,
   80 alíquota zero, 4 sem M105, 6 natureza inválida, 15 C100 < itens, 1

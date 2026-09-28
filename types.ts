@@ -1609,6 +1609,20 @@ export interface EmpresaDadosFiscais {
      */
     contaContabilReceitaFinanceira?: string;
     /**
+     * 📗 **PLANO DE CONTAS mínimo do SPED (0500) — uma conta por USO** (28/09,
+     * ELS: 1259 recusas "COD_CTA obrigatório, cadastre no 0500"). O gerador
+     * escolhe a conta pelo lado do documento e pelo tipo do item (`uso`):
+     * receita-vendas (C170 saída) · receita-servicos (A170 saída) · compras
+     * (C170 entrada) · servicos-tomados (A170 entrada) · receita-financeira
+     * (F100). Código, nome, nível e natureza (01 ativo · 02 passivo · 03 PL ·
+     * 04 resultado · 05 compensação · 09 outras) são do plano de contas da
+     * empresa — o app não inventa. Régua em `sefaz-backend/plano-contas-sped.js`.
+     */
+    planoContasSped?: Array<{
+        codigo: string; nome: string; nivel: string; natureza?: string;
+        uso: 'receita-vendas' | 'receita-servicos' | 'compras' | 'servicos-tomados' | 'receita-financeira';
+    }>;
+    /**
      * Nome e nível da conta no PLANO DE CONTAS da empresa — o registro **0500**
      * precisa dos dois. Sem eles o COD_CTA do F100 fica ÓRFÃO e o PVA recusa:
      * *"Informar código no Registro 0500 antes de utilizá-lo"* (CF BANK,

@@ -521,6 +521,9 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     return {
         empresa,
         cadastroNcm: ncmCat.catalogo,
+        // 📗 Plano de contas do SPED (0500 + COD_CTA do C170/A170/F100), uma
+        // conta por uso — lido do cadastro da empresa (28/09, ELS).
+        planoContasSped: empresa?.dadosFiscais?.planoContasSped || [],
         // 🚨 O contabilista do 0100 não recebe mais default INVENTADO: NOME e
         // CRC saíam 'CONTADOR SP CONTABIL' / '1SP123456/O-7' quando a env
         // faltava (29/08). Faltando, o campo sai VAZIO e a falta vai DITA —

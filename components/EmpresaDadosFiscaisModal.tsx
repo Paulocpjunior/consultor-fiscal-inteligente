@@ -17,6 +17,7 @@ import { REGIMES_ESPECIFICOS_IBS_CBS, ATIVIDADES_DERE } from '../sefaz-backend/d
 import { IND_NAT_TRIB, TABELA_13_UF } from '../sefaz-backend/dere-evento-d1001.js';
 import { buscarCep } from '../services/cepService';
 import { listarContadores, salvarContador, type Contador } from '../services/contadoresService';
+import { USOS_PLANO_CONTAS, NATUREZAS_CONTA, type UsoPlanoContas } from '../sefaz-backend/plano-contas-sped.js';
 // As tabelas do frete contratado vêm do DONO no backend — reescrevê-las aqui
 // seria a segunda cópia de uma tabela oficial, que é o defeito que esta casa
 // mais paga (lição do IVA-ST e do catálogo de CFOP).
@@ -73,6 +74,18 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
     const removerResp = (i: number) =>
         setResponsaveis(responsaveis.length > 1 ? responsaveis.filter((_, x) => x !== i) : [{ nome: '', cpf: '', cargo: '' }]);
 
+    // ── Plano de contas do SPED (0500) — uma conta por USO; o gerador escolhe
+    //    pelo lado do documento e preenche o COD_CTA do C170/A170/F100 (28/09).
+    type ContaSped = NonNullable<EmpresaDadosFiscais['planoContasSped']>[number];
+    const CONTA_VAZIA: ContaSped = { codigo: '', nome: '', nivel: '', natureza: '', uso: 'receita-vendas' };
+    const planoContas: ContaSped[] = dados.planoContasSped ?? [];
+    const setPlanoContas = (lista: ContaSped[]) => handleField('planoContasSped', lista);
+    const handleConta = (i: number, campo: keyof ContaSped, valor: string) =>
+        setPlanoContas(planoContas.map((c, x) => x === i ? { ...c, [campo]: valor } : c));
+    const adicionarConta = () => setPlanoContas([...planoContas, { ...CONTA_VAZIA }]);
+    const removerConta = (i: number) => setPlanoContas(planoContas.filter((_, x) => x !== i));
+    const usosJaUsados = new Set(planoContas.map(c => c.uso));
+
     // ── Catálogo de contadores do escritório ─────────────────────────────────
     const [contadores, setContadores] = useState<Contador[]>([]);
     const [salvandoContador, setSalvandoContador] = useState(false);
@@ -112,7 +125,7 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
     // `gerarInventario` é uma DECISÃO de sim/não e o backend a lê como
     // booleano (`!!gerarInventario`). Guardá-la como a string 'nao' seria
     // truthy — o bloco sairia justamente quando alguém marcasse que NÃO.
-    const handleField = (key: keyof EmpresaDadosFiscais, value: string | boolean) => {
+    const handleField = (key: keyof EmpresaDadosFiscais, value: string | boolean | EmpresaDadosFiscais['planoContasSped']) => {
         // Guarda a string COMO ESTÁ, inclusive vazia. O `value || undefined`
         // antigo virava undefined ao limpar o campo, o JSON perdia a chave e o
         // backend nunca recebia ordem de apagar — era por isso que "limpar e
@@ -577,6 +590,68 @@ const EmpresaDadosFiscaisModal: React.FC<Props> = ({
                                 recusa conta referenciada sem declaração ("informar código no Registro 0500 antes
                                 de utilizá-lo").
                             </p>
+
+                            {/* 📗 Plano de contas do SPED — LISTA com uso (28/09, ELS: 1259
+                                itens recusados por COD_CTA vazio). Uma conta por uso; o
+                                gerador emite um 0500 por conta e preenche o COD_CTA. */}
+                            <div className="md:col-span-2 border-t border-slate-200 dark:border-slate-700 pt-3 mt-2">
+                                <label className="text-xs uppercase font-medium block mb-1 text-slate-500 dark:text-slate-400">
+                                    Plano de contas do SPED (0500) — uma conta por uso
+                                </label>
+                                <p className="text-[11px] mb-2 text-slate-400 dark:text-slate-500">
+                                    Desde 11/2017 o COD_CTA do C170/A170 é obrigatório para quem tem escrituração contábil
+                                    (ECD): o PVA recusa cada item sem conta. Cadastre a conta analítica do plano de contas
+                                    da empresa para cada uso; o app emite um 0500 por conta e preenche o COD_CTA. Sem conta
+                                    para um uso, o campo sai vazio e o aviso da geração diz qual uso falta — o app não
+                                    inventa conta.
+                                </p>
+                                {planoContas.map((c, i) => (
+                                    <div key={i} className="grid grid-cols-1 md:grid-cols-[14rem_1fr_4rem_9rem_12rem_auto] gap-2 mb-2 items-end">
+                                        <div>
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Uso</label>
+                                            <select
+                                                className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1.5 text-sm"
+                                                value={c.uso}
+                                                onChange={e => handleConta(i, 'uso', e.target.value)}
+                                            >
+                                                {(Object.keys(USOS_PLANO_CONTAS) as UsoPlanoContas[]).map(u => (
+                                                    <option key={u} value={u} disabled={u !== c.uso && usosJaUsados.has(u)}>
+                                                        {USOS_PLANO_CONTAS[u].rotulo} — {USOS_PLANO_CONTAS[u].onde}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <Field label="Código (COD_CTA)" value={c.codigo || ''} onChange={v => handleConta(i, 'codigo', v)} placeholder="Ex.: 3.1.1.01.0002" />
+                                        <Field label="Nome" value={c.nome || ''} onChange={v => handleConta(i, 'nome', v)} placeholder="Ex.: VENDAS DE MERCADORIAS" />
+                                        <Field label="Nível" value={c.nivel || ''} onChange={v => handleConta(i, 'nivel', v)} placeholder="5" />
+                                        <div>
+                                            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Natureza (COD_NAT_CC)</label>
+                                            <select
+                                                className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1.5 text-sm"
+                                                value={c.natureza || ''}
+                                                onChange={e => handleConta(i, 'natureza', e.target.value)}
+                                            >
+                                                <option value="">— padrão do uso ({USOS_PLANO_CONTAS[c.uso]?.naturezaPadrao || '04'})</option>
+                                                {Object.entries(NATUREZAS_CONTA).map(([k, v]) => (
+                                                    <option key={k} value={k}>{k} — {v}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => removerConta(i)}
+                                            className="h-10 px-3 text-xs font-bold rounded-lg text-slate-400 hover:text-red-600 border border-slate-200 dark:border-slate-600"
+                                            title="Remover esta conta"
+                                        >✕</button>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={adicionarConta}
+                                    disabled={usosJaUsados.size >= Object.keys(USOS_PLANO_CONTAS).length}
+                                    className="px-3 py-1.5 text-xs font-bold rounded-lg text-blue-700 border border-blue-300 hover:bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900/20 disabled:opacity-40"
+                                >＋ Adicionar conta</button>
+                            </div>
                             <p className="md:col-span-2 text-[11px] mt-1 text-slate-400 dark:text-slate-500">
                                 Obrigatório quando a receita entra pelo F550 (aluguel). O PVA recusa o arquivo
                                 sem o 1900. O CNPJ, o valor e os CST o app já deriva do próprio arquivo — estes

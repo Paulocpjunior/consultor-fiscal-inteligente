@@ -15,6 +15,9 @@ import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 // 📗 A CST DE PIS/COFINS DA AQUISIÇÃO TEM DONO (28/09, ELS): regime → pessoa
 // física → cadastro NCM → padrão. C170, A170 e o bloco M leem a MESMA régua.
 import { cstDaAquisicao, cstGeraCredito, criarResumoDaCstDeEntrada, NAT_BC_CRED } from './cst-pis-cofins-entrada.js';
+// 📗 O COD_CTA do C170/A170/F100 sai do PLANO DE CONTAS do SPED (0500), uma conta
+// por uso (28/09, ELS: 1259 recusas). Sem conta para o uso, vazio e DITO.
+import { contaDoUso, criarSeletorDeConta } from './plano-contas-sped.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
@@ -462,6 +465,9 @@ export function buildBlocoA(dados) {
     const linhas = [];
     /** Documentos que o PVA recusaria por VL_DOC = 0 — saem, mas NOMEADOS. */
     const valorZero = [];
+    // 📗 COD_CTA do A170 pelo plano de contas do SPED (0500), uma conta por uso
+    // (28/09, ELS: 6 A170 recusados sem conta). Sem conta, vazio e DITO.
+    const contas = criarSeletorDeConta(dados.planoContasSped);
     // 🚨 SERVIÇO TOMADO SEM COD_PART BARRA O ARQUIVO INTEIRO (03/09, INSTITUTO
     // HAYAY 08/2026 — "Campo obrigatório na entrada · 4 - COD_PART"). Quem
     // decide é o DONO, porque o coletor do 0200 tem de concordar: tirar o A100
@@ -640,7 +646,8 @@ export function buildBlocoA(dados) {
                 fmt.formatValue(aq ? aq.baseCofins : it.valor),
                 fmt.formatValue(aq ? aq.aliqCofins : aliq.cofins * 100, 4),
                 fmt.formatValue(aq ? aq.vlCofins : it.valor * aliq.cofins),
-                '', '',                               // COD_CTA, COD_CCUS
+                contas.codCta(direcao === 'saida' ? 'receita-servicos' : 'servicos-tomados'), // 17 COD_CTA
+                '',                                   // 18 COD_CCUS
             ]));
         }
     }
@@ -648,6 +655,8 @@ export function buildBlocoA(dados) {
     // Nada sai calado deste bloco: o que ficou de fora e o que foi AFIRMADO em
     // nome do cliente voltam nos warnings da geração.
     if (Array.isArray(dados.warnings)) {
+        const avisoConta = contas.aviso();
+        if (avisoConta) dados.warnings.push(`Bloco A: ${avisoConta}`);
         if (valorZero.length) {
             dados.warnings.push(
                 `Bloco A: ${valorZero.length} documento(s) de serviço ficaram FORA porque o valor é `
@@ -682,6 +691,9 @@ export function buildBlocoC_Contrib(dados) {
     if (Array.isArray(dados.warnings)) dados.warnings.push(...avisosDaSelecao(selecaoC));
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
+    // 📗 COD_CTA do C170 pelo plano de contas do SPED (0500): vendas na saída,
+    // compras na entrada (28/09, ELS: 1249 C170 recusados sem conta).
+    const contas = criarSeletorDeConta(dados.planoContasSped);
 
     if (notasC.length === 0) {
         linhas.push(fmt.buildLine(['C001', '1']));
@@ -997,10 +1009,13 @@ export function buildBlocoC_Contrib(dados) {
                 '',                                                   // 34 QUANT_BC_COFINS
                 '',                                                   // 35 ALIQ_COFINS_QUANT
                 fmt.formatValue(p.vlCofins),                          // 36 VL_COFINS
-                '',                                                   // 37 COD_CTA
+                contas.codCta(direcao === 'saida' ? 'receita-vendas' : 'compras'), // 37 COD_CTA
             ]));
         });
     }
+
+    const avisoConta = contas.aviso();
+    if (avisoConta && Array.isArray(dados.warnings)) dados.warnings.push(`Bloco C: ${avisoConta}`);
 
     const totalBloco = linhas.length + 1;
     linhas.push(fmt.buildLine(['C990', totalBloco]));
@@ -1359,7 +1374,10 @@ function contaDeclaradaNo0500(dados) {
         nivel: dados.contaContabilReceitaFinanceiraNivel,
         ano: String(dados.competencia || '').slice(0, 4),
     });
-    return r?.campos ? r.campos.codCta : '';
+    if (r?.campos) return r.campos.codCta;
+    // 📗 Sem os três campos legados, vale a conta de uso 'receita-financeira'
+    // do plano de contas do SPED (28/09) — o bloco 0 a declara no 0500.
+    return contaDoUso(dados.planoContasSped, 'receita-financeira')?.codigo || '';
 }
 
 export function buildBlocoF(dados) {

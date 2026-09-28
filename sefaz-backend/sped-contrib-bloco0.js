@@ -31,6 +31,10 @@ import { indRegCumDoArquivo } from './receita-sem-documento-f550.js';
 // 🚨 O 0500 (plano de contas) — sem ele o COD_CTA do F100 fica ÓRFÃO e o PVA
 // recusa: "Informar código no Registro 0500 antes de utilizá-lo" (CF BANK).
 import { montar0500ContaReceita } from './receita-aplicacao-financeira.js';
+// 📗 Plano de contas mínimo do SPED — um 0500 por conta declarada, uma conta
+// por uso (28/09, ELS: 1259 recusas de COD_CTA). A conta legada da receita
+// financeira entra pela mesma régua.
+import { contas0500DoPlano } from './plano-contas-sped.js';
 // TIPO_ITEM/NCM do item de serviço — régua única, a mesma que os dois
 // orquestradores usam para classificar o item.
 import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-documentos.js';
@@ -111,8 +115,16 @@ function buildBloco0Contrib(dados) {
         nivel: dados.contaContabilReceitaFinanceiraNivel,
         ano: String(dados.competencia || '').slice(0, 4),
     });
-    if (c0500?.campos) {
-        const c = c0500.campos;
+    // 📗 Um 0500 por conta do PLANO DE CONTAS do SPED (28/09) — a conta legada
+    // da receita financeira entra pela mesma lista, sem duplicar código.
+    const contas0500 = contas0500DoPlano({
+        plano: dados.planoContasSped,
+        ano: String(dados.competencia || '').slice(0, 4),
+        legadoReceitaFinanceira: c0500?.campos
+            ? { codigo: c0500.campos.codCta, nome: c0500.campos.nomeCta, nivel: c0500.campos.nivel }
+            : null,
+    });
+    for (const c of contas0500) {
         // ⚠️ SÃO 8 CAMPOS APÓS O REG, NÃO 9 (Paulo, 24/08: *"uma está com 4
         // barrinhas e a outra com 3"*). O 0500 do EFD **ICMS/IPI** tem um
         // `COD_CCUS` a mais no fim; o do EFD-**Contribuições** termina no
@@ -124,7 +136,8 @@ function buildBloco0Contrib(dados) {
         linhas.push(fmt.buildLine([
             '0500', c.dtAlt, c.codNatCc, c.indCta, c.nivel, c.codCta, c.nomeCta, '', '',
         ]));
-    } else if (c0500?.falta && Array.isArray(dados.warnings)) {
+    }
+    if (c0500?.falta && Array.isArray(dados.warnings)) {
         dados.warnings.push(
             `Registro 0500 (plano de contas) NÃO foi gerado: falta ${c0500.falta.join(' e ')} da conta `
             + `${c0500.codConta}. Sem ele o COD_CTA do F100 ficaria ÓRFÃO e o PVA recusa com "Código da conta `
