@@ -28,3 +28,7 @@ delete-mocks-caixa.mjs
 listar-3-empresas.mjs
 smoke-procuracoes.mjs
 sped-fiscal-TESTE-*.txt
+
+# Python (agente do SBC): bytecode nunca entra no repositório
+__pycache__/
+*.pyc
