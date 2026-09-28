@@ -204,6 +204,25 @@ export const agenteSbcStatus = () =>
         retornosSemNumero?: number;
     }>('/api/admin/whatsapp/sbc/agente');
 
+// ─── 📊 Painel da IA de triagem (admin) ─────────────────────────────────────
+export interface RegistroTriagemIa {
+    em: string; numero: string; situacao: string; fila: string | null; rotulo: string | null;
+    confianca: number | null; motivo: string | null; detalhe: string | null; textoResumo: string; modelo: string | null;
+}
+export interface PainelTriagemIa {
+    dias: number; desde: string; total: number;
+    contadores: Record<string, number>;
+    /** % das chamadas que classificaram; null quando não houve chamada nenhuma (não é 0%). */
+    taxaClassificada: number | null;
+    filas: { fila: string; quantidade: number }[];
+    motivosIndisponivel: { motivo: string; quantidade: number }[];
+    ultimaEm: string | null;
+    ultimas: RegistroTriagemIa[];
+    truncado?: boolean;
+}
+export const painelTriagemIa = (dias = 7) =>
+    req<PainelTriagemIa>(`/api/admin/whatsapp/triagem-ia/painel?dias=${dias}`);
+
 /** Ramal do atendente no HitPhone (só admin grava; vazio limpa). */
 export const salvarRamalAtendente = (uid: string, ramal: string) =>
     post<{ uid: string; ramal: string | null }>(`/api/admin/whatsapp/atendentes/${encodeURIComponent(uid)}/ramal`, { ramal });

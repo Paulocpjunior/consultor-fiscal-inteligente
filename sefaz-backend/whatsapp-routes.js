@@ -66,6 +66,7 @@ import {
     podeIniciarTemplateNaConversa, dentroDoHorario,
 } from './whatsapp-atendimento.js';
 import { ehDono } from './auditoria-dono.js';
+import { COLECAO_TRIAGEM_IA_LOG, resumirTriagemIa } from './whatsapp-triagem-ia.js';
 import { INTERVALO_SINAL_MS, quemDaFilaEstaNoAr } from './whatsapp-presenca.js';
 import { PORTA_SIP_TLS, interpretarCertificado, concluirSondaSbc } from './sbc-sonda.js';
 import { medirSbc } from './sbc-medicao.js';
@@ -1484,6 +1485,27 @@ router.get('/atendimento-config', requireAuth, async (_req, res) => {
         const doc = await getDb().collection('whatsapp_config').doc('atendimento').get();
         return res.json({ ok: true, config: resolverConfig(doc.data()), filas: FILAS_ATENDIMENTO });
     } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * 📊 PAINEL DA IA DE TRIAGEM (28/09) — "a IA está pegando?" com número.
+ * Lê os registros da janela (até 500, os mais novos) e soma no núcleo puro.
+ * Zero registros com a IA ligada NÃO é "tudo certo": é "ninguém escreveu
+ * frase na triagem" ou "o registro não está sendo gravado" — a tela diz.
+ */
+router.get('/triagem-ia/painel', requireAdmin, async (req, res) => {
+    try {
+        const dias = Math.min(30, Math.max(1, Number(req.query?.dias) || 7));
+        const agora = new Date();
+        const desde = new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000).toISOString();
+        const snap = await getDb().collection(COLECAO_TRIAGEM_IA_LOG)
+            .where('em', '>=', desde).orderBy('em', 'desc').limit(500).get();
+        const registros = snap.docs.map((d) => d.data());
+        return res.json({ ok: true, ...resumirTriagemIa(registros, { agora, dias }), truncado: snap.size >= 500 });
+    } catch (e) {
+        console.error('[whatsapp/triagem-ia/painel]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

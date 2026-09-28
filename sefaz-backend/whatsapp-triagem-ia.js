@@ -156,3 +156,74 @@ export function decidirDestinoDaTriagem({ resultado, filas, minimo = CONFIANCA_M
         confianca: resultado.confianca, motivo: resultado.motivo || null,
     };
 }
+
+// ═══ 📊 O PAINEL DA IA — "a IA está pegando?" deixa de ser palpite (28/09) ══
+// Paulo (27/09): *"a IA está ativa?"*. A resposta honesta era "ligada, mas
+// não sei se está trabalhando": cada decisão só ia para o console.log do
+// Cloud Run. Agora cada decisão vira UM registro em `whatsapp_triagem_ia_log`
+// — inclusive as que NÃO classificaram (sem-certeza, nao-entendi,
+// ia-indisponivel, fila-inexistente) — e a aba 🤖 soma os últimos 7 dias.
+//
+// DECISÕES:
+//  · O texto do cliente entra CORTADO (80 chars): é o que faz "sem-certeza"
+//    ser lido ("ah, era só um 'oi tudo bem?'"), e não vaza mais do que a
+//    própria conversa já mostra. Nunca o texto inteiro.
+//  · `ia-indisponivel` distingue o motivo (sem chave / tempo esgotado / erro):
+//    são três ações diferentes para o mesmo contador.
+//  · A soma é PURA e recebe `agora` — trava não lê relógio.
+
+export const COLECAO_TRIAGEM_IA_LOG = 'whatsapp_triagem_ia_log';
+export const SITUACOES_TRIAGEM = ['classificada', 'sem-certeza', 'nao-entendi', 'fila-inexistente', 'ia-indisponivel'];
+
+/** Um registro de decisão — o que a rota grava (best-effort, nunca lança). */
+export function registroDeTriagem({ numero, texto, destino, modelo = null, agora = new Date() }) {
+    const d = destino || {};
+    return {
+        em: new Date(agora).toISOString(),
+        numero: String(numero || ''),
+        situacao: SITUACOES_TRIAGEM.includes(d.situacao) ? d.situacao : 'nao-entendi',
+        fila: d.fila || d.sugeria || null,
+        rotulo: d.rotulo || null,
+        confianca: Number.isFinite(d.confianca) ? d.confianca : null,
+        motivo: d.motivo || null,
+        detalhe: d.detalhe ? String(d.detalhe).slice(0, 200) : null,
+        textoResumo: String(texto || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+        modelo: modelo || null,
+    };
+}
+
+/**
+ * Soma os registros de uma janela. Devolve contadores por situação, as filas
+ * mais escolhidas, os motivos de indisponibilidade, e as últimas decisões —
+ * tudo do que veio, sem inventar zero como "tudo certo".
+ */
+export function resumirTriagemIa(registros, { agora = new Date(), dias = 7, ultimas = 10 } = {}) {
+    const desde = new Date(new Date(agora).getTime() - dias * 24 * 60 * 60 * 1000).toISOString();
+    // `em` tem de ser DATA legível: comparar string com string deixaria "lixo"
+    // (l > 2) passar como se fosse hoje — pego pela trava na 1ª rodada.
+    const naJanela = (registros || []).filter((r) => r && typeof r.em === 'string' && Number.isFinite(Date.parse(r.em)) && r.em >= desde);
+    const contadores = Object.fromEntries(SITUACOES_TRIAGEM.map((s) => [s, 0]));
+    const porFila = {};
+    const motivosIndisponivel = {};
+    for (const r of naJanela) {
+        const s = SITUACOES_TRIAGEM.includes(r.situacao) ? r.situacao : 'nao-entendi';
+        contadores[s] += 1;
+        if (s === 'classificada' && r.fila) porFila[r.fila] = (porFila[r.fila] || 0) + 1;
+        if (s === 'ia-indisponivel') {
+            const k = String(r.detalhe || 'sem detalhe').slice(0, 60);
+            motivosIndisponivel[k] = (motivosIndisponivel[k] || 0) + 1;
+        }
+    }
+    const ordenados = [...naJanela].sort((a, b) => (a.em < b.em ? 1 : a.em > b.em ? -1 : 0));
+    const total = naJanela.length;
+    return {
+        dias, desde, total,
+        contadores,
+        // "pegou" = classificou. Sem chamada nenhuma, a taxa é null, não 0%.
+        taxaClassificada: total ? Math.round((contadores.classificada / total) * 100) : null,
+        filas: Object.entries(porFila).sort((a, b) => b[1] - a[1]).map(([fila, quantidade]) => ({ fila, quantidade })),
+        motivosIndisponivel: Object.entries(motivosIndisponivel).sort((a, b) => b[1] - a[1]).map(([motivo, quantidade]) => ({ motivo, quantidade })),
+        ultimaEm: ordenados[0]?.em || null,
+        ultimas: ordenados.slice(0, ultimas),
+    };
+}

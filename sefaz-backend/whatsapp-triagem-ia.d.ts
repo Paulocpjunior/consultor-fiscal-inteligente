@@ -43,3 +43,22 @@ export function decidirDestinoDaTriagem(p: {
     minimo?: number;
     erro?: unknown;
 }): DestinoDaTriagem;
+
+// ── 📊 Painel da IA (28/09) ─────────────────────────────────────────────────
+export const COLECAO_TRIAGEM_IA_LOG: string;
+export const SITUACOES_TRIAGEM: string[];
+export interface RegistroTriagem {
+    em: string; numero: string; situacao: string; fila: string | null; rotulo: string | null;
+    confianca: number | null; motivo: string | null; detalhe: string | null; textoResumo: string; modelo: string | null;
+}
+export function registroDeTriagem(p: { numero: string | null; texto: string | null; destino: unknown; modelo?: string | null; agora?: Date }): RegistroTriagem;
+export interface ResumoTriagemIa {
+    dias: number; desde: string; total: number;
+    contadores: Record<string, number>;
+    taxaClassificada: number | null;
+    filas: { fila: string; quantidade: number }[];
+    motivosIndisponivel: { motivo: string; quantidade: number }[];
+    ultimaEm: string | null;
+    ultimas: RegistroTriagem[];
+}
+export function resumirTriagemIa(registros: Partial<RegistroTriagem>[], p?: { agora?: Date; dias?: number; ultimas?: number }): ResumoTriagemIa;

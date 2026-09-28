@@ -46,6 +46,7 @@ import {
 import {
     filasParaTriagem, valeClassificar, montarPromptTriagem,
     interpretarRespostaTriagem, decidirDestinoDaTriagem,
+    COLECAO_TRIAGEM_IA_LOG, registroDeTriagem,
 } from './whatsapp-triagem-ia.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -567,12 +568,29 @@ async function capturarAvaliacao(db, msg) {
  * transformaria "a IA melhorou a triagem" em "o bot demora a responder". Passou
  * do tempo, cai no menu — o pior caso da IA é o comportamento de hoje.
  */
-async function triarComIa({ app, config, texto }) {
+/**
+ * 📊 Cada decisão da IA vira um registro (best-effort: falha aqui NUNCA cala
+ * o bot). É o que a aba 🤖 soma — sem isto "a IA está pegando?" era palpite.
+ */
+async function registrarTriagem(db, { numero, texto, destino, modelo }) {
+    try {
+        if (!db) return;
+        await db.collection(COLECAO_TRIAGEM_IA_LOG).add(registroDeTriagem({ numero, texto, destino, modelo }));
+    } catch (e) {
+        console.warn('[whatsapp/triagem-ia] registro não gravado:', e.message);
+    }
+}
+
+async function triarComIa({ app, config, texto, db = null, numero = null }) {
+    let modelo;
     try {
         if (!config?.triagemIaAtiva) return null;
         if (!valeClassificar(texto)) return null;         // dígito, "oi", "ok"
         const ai = app?.get?.('ai');
-        if (!ai) return null;                             // sem GEMINI_API_KEY
+        if (!ai) {                                        // sem GEMINI_API_KEY
+            await registrarTriagem(db, { numero, texto, destino: { situacao: 'ia-indisponivel', detalhe: 'sem cliente Gemini (GEMINI_API_KEY?)' }, modelo: null });
+            return null;
+        }
 
         const filas = filasParaTriagem(config);
         if (!filas.length) return null;
@@ -581,7 +599,7 @@ async function triarComIa({ app, config, texto }) {
         // novo da família alvo na conta do Paulo). Cravar um id aqui seria a
         // segunda régua do modelo, que já custou caro em 15/08.
         const modelos = app.get('geminiModelos');
-        const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+        modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
 
         const corrida = ai.models.generateContent({
             model: modelo,
@@ -598,6 +616,9 @@ async function triarComIa({ app, config, texto }) {
             resultado: interpretarRespostaTriagem(r?.text ?? '', filas),
             filas,
         });
+        // 📊 TODA decisão vira registro — a que classificou e a que não. É o
+        // painel da aba 🤖; antes só o console.log sabia.
+        await registrarTriagem(db, { numero, texto, destino, modelo: modelo || null });
         if (destino.situacao !== 'classificada') {
             // Não é erro — é a IA sendo honesta. Fica no log porque é assim
             // que se descobre que a triagem parou de pegar (silêncio aqui
@@ -608,6 +629,7 @@ async function triarComIa({ app, config, texto }) {
         return destino;
     } catch (e) {
         console.warn('[whatsapp/triagem-ia] falhou (bot segue no menu):', e.message);
+        await registrarTriagem(db, { numero, texto, destino: { situacao: 'ia-indisponivel', detalhe: e.message }, modelo: modelo || null });
         return null;
     }
 }
@@ -635,7 +657,7 @@ async function rodarBot(db, msg, deps = {}) {
         // sub-menu) e perguntar seria gastar chamada para atrapalhar.
         const emTriagem = !conversa.fila && !conversa.atribuidoA && !conversa.submenuAberto;
         const filaSugerida = emTriagem
-            ? await triarComIa({ app: deps.app, config, texto: msg.texto })
+            ? await triarComIa({ app: deps.app, config, texto: msg.texto, db, numero: msg.de })
             : null;
 
         const acoes = decidirAutomacao({
