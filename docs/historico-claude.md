@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏁 SPED CONTRIBUIÇÕES — SITUAÇÃO ESPECIAL NO 0000 (28/09, GIRY 1365)**
+  (*"vou gerar um EFD de encerramento… gerei, validei no PVA e continua
+  como um arquivo normal"*). `build0000` escrevia IND_SIT_ESP vazio e o mês
+  inteiro, sem campo na tela. Nasce `sped-contrib-situacao-especial.js`
+  (puro): `SITUACOES_ESPECIAIS` 0–4, `conferirSituacaoEspecial({situacaoEspecial,
+  dataEvento, competencia})` → recusa dita (código fora, sem data, data
+  ilegível, fora da competência) ou `{indSitEsp, dtIni|null, dtFin|null,
+  aviso}`; a data do evento vai no DT_INI (abertura) ou DT_FIN (demais),
+  o outro extremo segue o mês (Guia Prático, 0000 campos 04/06/07).
+  `build0000` lê `dados.situacaoEspecial` (conferido ou cru; inválido =
+  throw, nunca normal em silêncio). Rota `/gerar` aceita
+  `situacaoEspecial` + `dataEvento`, 400 `SITUACAO_ESPECIAL_INVALIDA`,
+  aviso `[situação especial]` e sufixo `_SITESP<n>` no nome do arquivo.
+  Tela: select + date no bloco 2 da aba SPED Contribuições. Trava
+  `spedContribSituacaoEspecial.test.ts` (régua, 0000 nos três casos, resto
+  do bloco igual). FORA: TIPO_ESCRIT retificadora + NUM_REC_ANTERIOR
+  (mesma tela do PVA) — pendente, ninguém pediu ainda.
+
 - **📨 CIÊNCIA APÓS COMPLETA IMPORTADA À MÃO VIROU PARÂMETRO (28/09)**
   (colaborador, B & T: *"não tô mais recebendo a mensagem pra manifestar
   ciência"*; Paulo: *"isso deve ser parametrizado, um ajuste não pode

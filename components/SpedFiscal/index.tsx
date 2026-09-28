@@ -77,6 +77,9 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const [gerandoContrib, setGerandoContrib] = useState(false);
     const [mensagemContrib, setMensagemContrib] = useState<MensagemRetorno | null>(null);
     const [competenciaContrib, setCompetenciaContrib] = useState<string>(getCompetenciaAtual());
+    // 🏁 Situação especial do 0000 (GIRY 1365, 28/09): '' = arquivo normal.
+    const [situacaoEspecialContrib, setSituacaoEspecialContrib] = useState<'' | '0' | '1' | '2' | '3' | '4'>('');
+    const [dataEventoContrib, setDataEventoContrib] = useState<string>('');
     // 🧾 Natureza da receita sem ônus (M410/M810) — cadastro por empresa e CST.
     // PVA da EDUARDO GUERRA 08/2026 (25/09): sem M400/M800 o arquivo é recusado,
     // e o código depende do produto (tabelas 4.3.13 etc.) — é cadastro, nunca chute.
@@ -328,7 +331,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const token = await auth?.currentUser?.getIdToken();
             if (!token) throw new Error('Sessão expirada. Faça login novamente.');
 
-            const body = { empresaId, competencia: competenciaContrib };
+            if (situacaoEspecialContrib && !dataEventoContrib) {
+                setMensagemContrib({ tipo: 'error', titulo: 'Situação especial sem a data do evento', detalhes: 'Informe a data do evento (encerramento, cisão, fusão, incorporação ou abertura): é ela que vai no 0000.' });
+                return;
+            }
+            const body = {
+                empresaId, competencia: competenciaContrib,
+                ...(situacaoEspecialContrib ? { situacaoEspecial: situacaoEspecialContrib, dataEvento: dataEventoContrib } : {}),
+            };
 
             const resp = await fetch('/api/admin/sped-contrib/gerar', {
                 method: 'POST',
@@ -943,6 +953,50 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                             color: 'var(--text-primary)',
                         }}
                     />
+                </div>
+
+                {/* 🏁 SITUAÇÃO ESPECIAL (GIRY 1365, 28/09): o 0000 recebe IND_SIT_ESP e a
+                    data do evento no DT_INI (abertura) ou DT_FIN (demais). Sem
+                    isto o PVA lia o arquivo como mensal comum. */}
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Situação especial (0000, campo IND_SIT_ESP)
+                        </label>
+                        <select
+                            value={situacaoEspecialContrib}
+                            onChange={e => { setSituacaoEspecialContrib(e.target.value as '' | '0' | '1' | '2' | '3' | '4'); setMensagemContrib(null); }}
+                            className="w-full p-2.5 text-sm rounded-lg outline-none"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        >
+                            <option value="">Nenhuma — arquivo mensal normal</option>
+                            <option value="0">0 · Abertura</option>
+                            <option value="1">1 · Cisão</option>
+                            <option value="2">2 · Fusão</option>
+                            <option value="3">3 · Incorporação</option>
+                            <option value="4">4 · Encerramento</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Data do evento {situacaoEspecialContrib ? '(obrigatória)' : ''}
+                        </label>
+                        <input
+                            type="date"
+                            value={dataEventoContrib}
+                            disabled={!situacaoEspecialContrib}
+                            onChange={e => { setDataEventoContrib(e.target.value); setMensagemContrib(null); }}
+                            className="w-full p-2.5 text-sm rounded-lg outline-none disabled:opacity-50"
+                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                        />
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                            {situacaoEspecialContrib === '0'
+                                ? 'Abertura: a data vai no DT_INI do 0000; o DT_FIN segue o último dia do mês.'
+                                : situacaoEspecialContrib
+                                    ? 'A data vai no DT_FIN do 0000; o DT_INI segue o 1º dia do mês. Tem de estar dentro da competência escolhida.'
+                                    : 'Só para abertura, cisão, fusão, incorporação ou encerramento.'}
+                        </p>
+                    </div>
                 </div>
 
                 <div className="mt-4 p-3 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>

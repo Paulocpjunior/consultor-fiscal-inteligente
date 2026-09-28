@@ -37,6 +37,8 @@ import { ehItemDeServico, TIPO_ITEM_MERCADORIA_REVENDA } from './sped-selecao-do
 // A natureza da PJ (IND_NAT_PJ) sai do CADASTRO — nunca do regime, que é outro
 // eixo. Aqui só se lê o regime para SABER quando o '00' é uma afirmação falsa.
 import { regimeDaEmpresa, semFinsLucrativos } from './regime-tributario.js';
+// 🏁 Situação especial do 0000 (abertura/cisão/fusão/incorporação/encerramento), 28/09.
+import { conferirSituacaoEspecial } from './sped-contrib-situacao-especial.js';
 
 const COD_VER = '006';  // Versao 006 vigente desde 01/01/2026
 
@@ -169,14 +171,21 @@ function build0000(dados) {
     const { empresa, competenciaInicio, competenciaFim } = dados;
     const df = empresa.dadosFiscais || {};
     conferirIndNatPJ(dados, df);
+    // 🏁 SITUAÇÃO ESPECIAL (GIRY 1365, 28/09): `dados.situacaoEspecial` já
+    // conferido pela rota (ou pelo chamador) — {indSitEsp, dtIni|null,
+    // dtFin|null}. Sem ele, o arquivo é o normal: IND_SIT_ESP vazio e o mês
+    // inteiro. A data do evento substitui SÓ o campo que o leiaute manda
+    // (DT_INI na abertura; DT_FIN nas demais). Aceita também a forma crua
+    // {situacaoEspecial, dataEvento} para quem monta `dados` sem a rota.
+    const sit = situacaoDo0000(dados);
     return fmt.buildLine([
         '0000',
         COD_VER,
         '0',  // TIPO_ESCRIT: 0=Original
-        '',   // IND_SIT_ESP: vazio = normal
+        sit ? sit.indSitEsp : '',   // IND_SIT_ESP: vazio = normal
         '',   // NUM_REC_ANTERIOR: vazio (original)
-        fmt.formatCompetenciaInicio(competenciaInicio),
-        fmt.formatCompetenciaFim(competenciaFim),
+        sit?.dtIni || fmt.formatCompetenciaInicio(competenciaInicio),
+        sit?.dtFin || fmt.formatCompetenciaFim(competenciaFim),
         fmt.sanitizeString(empresa.nome, 100),
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),
@@ -185,6 +194,20 @@ function build0000(dados) {
         fmt.sanitizeString(df.indNatPJ || '00', 2),
         df.indAtividade === 'industrial' ? '0' : '1',
     ]);
+}
+
+/** A situação especial já conferida, ou conferida agora a partir da forma crua. Inválida = recusa (throw), nunca arquivo normal em silêncio. */
+function situacaoDo0000(dados) {
+    const s = dados.situacaoEspecial;
+    if (!s) return null;
+    if (typeof s === 'object' && 'indSitEsp' in s) return s;
+    const conf = conferirSituacaoEspecial({
+        situacaoEspecial: typeof s === 'object' ? s.situacaoEspecial : s,
+        dataEvento: typeof s === 'object' ? s.dataEvento : dados.dataEvento,
+        competencia: dados.competenciaFim || dados.competencia,
+    });
+    if (!conf.ok) throw new Error(`0000 situação especial: ${conf.erro}`);
+    return conf.valor;
 }
 
 /**
