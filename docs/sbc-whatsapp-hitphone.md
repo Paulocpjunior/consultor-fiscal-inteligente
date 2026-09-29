@@ -306,6 +306,16 @@ gcloud compute ssh sbc-whatsapp --zone=us-west1-a --command='sudo bash -s -- 12:
 SBC_SHARED_SECRET="$S" META_SIP_DESTINO='<host da 7b>' META_SIP_ORIGENS='<ip da origem TLS>/32' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
 ```
 
+**2ª rodada (29/09, `13:2`), com a 7b nova.** A varredura de `84.32.32.222`
+vem por **TLS** (153.321 INVITE, 4.719 usuários distintos, até 26/09) — ou
+seja, o filtro "só TLS" não bastava; o que a pegou foi o limite de usuários.
+E sobrou **uma** origem TLS com 3+4 hosts de Contact (`31.70.90.94`, 46
+INVITE, portas altas variadas, **todos com o mesmo carimbo** 25/09 11:50:07
+UTC), que o Paulo não tinha como julgar. Por isso a 7b passou a mostrar, por
+origem, **para que número discou** (user do Request-URI do INVITE): a Meta
+disca para o nosso número do WhatsApp com o From do cliente; robô de fraude
+disca `100`, `1000`, `00972…`. A leitura fica com a pessoa, com o dado ao lado.
+
 ⚠️ `META_SIP_ORIGENS` com **um** `/32` é o que o log mostrou, não o que a Meta
 usa. Se a ligação seguinte não entrar, a origem mudou: a 7b (com o trace
 armado) mostra o IP novo e a lista cresce — nunca se volta ao `0.0.0.0/0` em

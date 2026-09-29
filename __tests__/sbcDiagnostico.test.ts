@@ -473,6 +473,25 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             expect(saida).toMatch(/ZERO candidatos da Meta/);
         });
 
+        // 🎯 29/09, 2ª rodada real: a 7b devolveu 3 candidatos TLS de UMA origem
+        // (31.70.90.94, 46 INVITE, 7 hosts com porta alta, MESMO carimbo) e o
+        // Paulo não tinha como decidir. O que decide é PARA QUEM ela discou: a
+        // Meta disca para o nosso número do WhatsApp; robô disca 100/00972…
+        it('🎯 cada origem diz PARA QUE NÚMERO discou — é o que separa a Meta do robô sem whois', () => {
+            const saida = rodarCom(
+                invite('TLS:157.240.1.1:39104', 'sip:+5511999990000@157.240.1.1:5061')
+                + invite('TLS:31.70.90.94:40000', 'sip:100@31.70.90.94:37756', '2026-09-25 11:50:07')
+                    .replace('INVITE sip:+551131551554@', 'INVITE sip:00972599123456@')
+                + invite('TLS:31.70.90.94:40001', 'sip:100@31.70.90.94:32468', '2026-09-25 11:50:07')
+                    .replace('INVITE sip:+551131551554@', 'INVITE sip:9011972599123456@'),
+            );
+            expect(saida).toMatch(/TLS:157\.240\.1\.1 discou para: \+551131551554/);
+            expect(saida).toMatch(/TLS:31\.70\.90\.94 discou para: 00972599123456 9011972599123456/);
+            // E o script ensina a ler, sem escolher.
+            expect(saida).toMatch(/a Meta disca para o NOSSO número/);
+            expect(saida).toMatch(/robô de fraude, mesmo em TLS/);
+        });
+
         it('🛡️ falha de mídia COM varredura no log e trace desligado não vira "a causa é NOSSA"', () => {
             // O print de 29/09 saía "🔴 Houve INVITE: a causa é NOSSA" sobre 4
             // falhas que podem ser do robô (SDP torto, aceito pelo identify
