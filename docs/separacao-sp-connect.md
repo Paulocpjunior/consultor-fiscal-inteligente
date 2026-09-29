@@ -5,10 +5,13 @@
      NADA aqui se executa — e cada fase fechada atualiza este arquivo no MESMO
      PR que a fecha. -->
 
-> **Estado: PLANEJADO, não iniciado.** A ordem do Paulo tem uma condição
-> temporal explícita — *depois do corte da Ultra Fox*. Começar antes trocaria
-> um risco conhecido (dois apps num container) por um desconhecido (mexer na
-> infraestrutura do canal no meio da migração de plataforma).
+> **Estado: F1 FEITA em 29/09/2026** (Paulo: *"vai"*, com a Ultra Fox cancelada
+> em 28/09 — a condição temporal da ordem de 17/08 estava cumprida). O código
+> do Connect vive em **`Paulocpjunior/sp-connect`** (commit inicial d623983),
+> com esteira própria; este documento tem cópia lá e é LÁ que as fases
+> seguintes se atualizam. O CFI **ainda serve `/connect`**, o webhook e a
+> credencial da WABA — nada foi cortado. Próximo: F2 (P8 + P7 do Paulo →
+> primeira revisão sem tráfego → provar leitura).
 
 ## 1. Por que separar
 
@@ -187,6 +190,7 @@ não alcança e que ninguém deve fazer no lugar dele. **É meu todo o resto.**
 | P5 | **Escolher a janela da F3** (dia e hora, fora do expediente) e estar por perto | F3 | é o momento de risco: o canal do escritório fica virando |
 | P6 | **Reapontar o webhook no painel da Meta** e publicar a credencial da WABA no serviço novo | F3 | credencial e painel externo — não passo por aqui |
 | P7 | **Mapear o domínio** `app.spassessoriacontabil.com.br` no serviço novo | F2 | DNS e GCP |
+| P8 | **Cadastrar os secrets do repositório novo** (GitHub → `sp-connect` → Settings → Secrets → Actions): `GCP_SA_KEY` e, se quiser fixar, `VITE_FIREBASE_*`/`VITE_SENTRY_*` — mesmos valores do CFI. Sem `GCP_SA_KEY` o workflow roda o gate e PULA o deploy, avisando | F2 | credencial e painel externo |
 
 ### Minha parte — o resto
 
