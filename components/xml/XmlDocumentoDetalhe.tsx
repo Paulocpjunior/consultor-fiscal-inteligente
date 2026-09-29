@@ -41,6 +41,7 @@ import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml
 import { conferirDataEntrada, brDe } from '../../sefaz-backend/data-entrada-escrituracao.js';
 import { cfopsDistintosDaNota, cfopDoLancamento } from '../../sefaz-backend/cfop-correlacao.js';
 import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { cteEntraNaEscrituracao } from '../../sefaz-backend/cte-tomador.js';
 import { cfopDoCte } from '../../sefaz-backend/cte-escrituracao.js';
 import { escrituracaoDoItem, resumoEscrituracaoItens, chaveDoItem } from '../../sefaz-backend/escrituracao-item.js';
 
@@ -400,6 +401,11 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         </h3>
                         <p className="text-xs text-slate-500 mt-0.5">
                             {d.natOp} • Emissão: {formatDate(d.dhEmi)} • Status: {d.status} • {d.direcao}
+                            {ehCte && (() => { const r = cteEntraNaEscrituracao(d as any, d.empresaCnpj); return (
+                                <span className={`ml-2 ${r.entra ? 'text-slate-500' : 'text-amber-700 dark:text-amber-300 font-semibold'}`} title="Quem escritura o frete é o tomador (e a transportadora). O papel vem do próprio XML do CT-e.">
+                                    🚚 {r.entra ? '' : 'FORA da escrituração: '}{r.motivo}
+                                </span>
+                            ); })()}
                         </p>
                         {procedencia.temChave && (
                             <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Chave: {d.chave}</p>

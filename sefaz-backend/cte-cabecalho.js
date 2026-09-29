@@ -58,7 +58,9 @@ import { ehConhecimentoDeTransporte } from './sped-selecao-documentos.js';
  * (era só contagem) e quebrou ao gerar o relatório de entradas ("Ocorreu um
  * erro ao gerar o relatório"), só na EDUARDO GUERRA, a única com CT-e.
  */
-export const VERSAO_RELEITURA_CTE = 3;
+// 4 (29/09) — passou a ler o TOMADOR (`toma3`/`toma4`): quem escritura o frete
+// é só o tomador; A CASTELLANO via 50 CT-e de terceiro como saída própria.
+export const VERSAO_RELEITURA_CTE = 4;
 
 const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
 
@@ -129,6 +131,23 @@ export function lerCabecalhoCte(xml) {
     const codMunIni = soDigitos(tag(ide, 'cMunIni'));
     const codMunFim = soDigitos(tag(ide, 'cMunFim'));
 
+    // 🚚 O TOMADOR DO SERVIÇO (29/09, A CASTELLANO): `<ide><toma3><toma>` aponta
+    // um dos participantes (0 remetente · 1 expedidor · 2 recebedor · 3
+    // destinatário) e `<ide><toma4>` traz o quarto (4 = outro) com o próprio
+    // CNPJ/CPF. É este documento que diz QUEM escritura o frete — o CT-e chega
+    // pela DFe a todo interessado, mas só o tomador (e a transportadora) o
+    // escrituram. Sem a tag, `null`: ausência não vira "é tomador".
+    const toma3 = bloco(ide, 'toma3');
+    const toma4 = bloco(ide, 'toma4');
+    const toma = soDigitos(tag(toma3, 'toma') || tag(toma4, 'toma')).slice(0, 1) || null;
+    const docDe = (nome) => { const b = bloco(xml, nome); return soDigitos(tag(b, 'CNPJ') || tag(b, 'CPF')) || null; };
+    const cnpjTomador = toma === '0' ? docDe('rem')
+        : toma === '1' ? docDe('exped')
+        : toma === '2' ? docDe('receb')
+        : toma === '3' ? docDe('dest')
+        : toma === '4' ? (soDigitos(tag(toma4, 'CNPJ') || tag(toma4, 'CPF')) || null)
+        : null;
+
     // ICMS do conhecimento: <imp><ICMS><ICMS00|ICMS20|ICMS45|ICMS60|ICMS90|
     // ICMSOutraUF|ICMSSN>. Os campos do grupo "OutraUF" levam sufixo próprio,
     // e ICMS45 (isento/não tributado/diferido) traz SÓ o CST — por isso cada
@@ -150,6 +169,8 @@ export function lerCabecalhoCte(xml) {
         vICMS,
         codMunIni: codMunIni.length === 7 ? codMunIni : null,
         codMunFim: codMunFim.length === 7 ? codMunFim : null,
+        toma,
+        cnpjTomador,
     };
 }
 
@@ -174,7 +195,10 @@ export function classificarCteParaCabecalho(d) {
     // O número entra no "completo" porque é o NUM_DOC do D100 — e a captura
     // antiga não o gravava em CT-e nenhum.
     const temNumero = !!soDigitos(d?.numero);
-    if (temCfop && temCst && temAliq && temIcms && temMunicipios && temNumero) return 'completo';
+    // O tomador entra no "completo" porque é ele que decide se o CT-e é desta
+    // empresa (29/09): sem ele, o frete de terceiro entra como saída própria.
+    const temTomador = !!soDigitos(d?.cnpjTomadorCte);
+    if (temCfop && temCst && temAliq && temIcms && temMunicipios && temNumero && temTomador) return 'completo';
 
     if (Number(d?.cabecalhoCteVersao) >= VERSAO_RELEITURA_CTE) return 'ja-relido';
     if (!d?.storagePath) return 'sem-arquivo';
@@ -197,6 +221,7 @@ export function patchDoCabecalhoCte(d, lido) {
     if (!soDigitos(d?.cstIcms) && lido.cstIcms) patch.cstIcms = lido.cstIcms;
     if (!soDigitos(d?.codMunIniCte) && lido.codMunIni) patch.codMunIniCte = lido.codMunIni;
     if (!soDigitos(d?.codMunFimCte) && lido.codMunFim) patch.codMunFimCte = lido.codMunFim;
+    if (!soDigitos(d?.cnpjTomadorCte) && lido.cnpjTomador) { patch.cnpjTomadorCte = lido.cnpjTomador; patch.cteToma = lido.toma; }
     // Zero DECLARADO entra (é a resposta do documento isento); ausente, não.
     if (vazio(d?.aliqIcms) && lido.aliqIcms !== null) patch.aliqIcms = lido.aliqIcms;
 

@@ -112,6 +112,9 @@ import {
     itensParaEscriturar, cfopDoCte, cstDoCte, icmsDestacadoDoCte,
 } from '../../sefaz-backend/cte-escrituracao.js';
 import { ehConhecimentoDeTransporte, numeroDoDocumento } from '../../sefaz-backend/sped-selecao-documentos.js';
+import { cteEntraNaEscrituracao } from '../../sefaz-backend/cte-tomador.js';
+/** 🚚 CT-e só entra na escrituração do TOMADOR ou da transportadora (29/09, A CASTELLANO). */
+const cteDaEmpresa = (d: any, cnpj: string) => !ehConhecimentoDeTransporte(d) || cteEntraNaEscrituracao(d, cnpj).entra;
 import { valorDoDocumento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/cteCstEmLote';
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
@@ -548,7 +551,8 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         // 🚚 O CT-e ENTRA NO LIVRO (21/09): o D100/D190 do SPED o escritura
         // desde 21/08 e o Livro do CFI o escondia — tela e arquivo divergindo.
         const filtrados = docs.filter(d => direcaoEfetivaDoc(d) === direcao && docValido(d)
-            && (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)));
+            && (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d))
+            && cteDaEmpresa(d, empresa.cnpj));
         const montar = (d: any) => {
             const ehCte = ehConhecimentoDeTransporte(d);
             const contabil = ehCte ? valorDoDocumento(d) : (d.totais?.vNF || d.valorTotal || 0);
@@ -832,7 +836,7 @@ const AbaCfopPorNota: React.FC<AbaDocsProps & { currentUser: User; onShowToast?:
             // 🚚 O CT-e ENTRA AQUI (21/09): é nesta aba que se informa CFOP e CST
             // por documento, e o frete não tinha ONDE — o conhecimento não tem
             // item, mas o campo por NOTA é exatamente o que ele precisa.
-            .filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && docValido(d))
+            .filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && docValido(d) && cteDaEmpresa(d, empresa.cnpj))
             .map((d: any) => {
                 const ehCte = ehConhecimentoDeTransporte(d);
                 const direcao = direcaoEfetivaDoc(d) as 'entrada' | 'saida';
@@ -1569,7 +1573,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
     const [soFretes, setSoFretes] = useState(false);
     const todasAsLinhas = useMemo(
         () => resumoPorCfop(
-            docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)),
+            docs.filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && cteDaEmpresa(d, empresa.cnpj)),
             {
                 naturezaAtividade: natureza.natureza,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,

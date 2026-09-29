@@ -52,7 +52,8 @@ export function selecionarNotasBlocoC<T = any>(
     empresaCnpj: string | null | undefined,
 ): SelecaoBlocoC<T>;
 
-export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined): T[];
+export function selecionarCtesBlocoD<T = any>(notas: T[] | null | undefined, empresaCnpj?: string): T[];
+export function selecionarCtesBlocoDComAvisos<T = any>(notas: T[] | null | undefined, empresaCnpj?: string): { notas: T[]; avisos: string[] };
 
 /** O que ficou de fora do arquivo, dito com a ação — nunca calado. */
 export function avisosDaSelecao(p?: {

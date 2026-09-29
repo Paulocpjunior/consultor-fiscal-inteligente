@@ -1,3 +1,4 @@
+import { direcaoDoCte } from './cte-tomador.js';
 /**
  * Direção do documento: entrada ou saída, do ponto de vista da EMPRESA-CLIENTE.
  *
@@ -160,6 +161,10 @@ export function extrairParticipantesNfe(xml) {
  */
 export function direcaoEfetivaDoc(d) {
     if (!d) return undefined;
+    // 🚚 CT-e: a direção é pelo PAPEL da empresa no conhecimento (tomador →
+    // entrada; transportadora → saída), lido do próprio documento (29/09).
+    const dirCte = direcaoDoCte(d, d.empresaCnpj);
+    if (dirCte) return dirCte;
     if (d.direcao === 'saida' && ehNotaPropriaDeEntrada(d).sim) return 'entrada';
     return d.direcao;
 }
