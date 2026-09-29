@@ -243,6 +243,11 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
             'HIT_HOST=9.9.9.9', 'HIT_PORT=21694', 'SBC_DESTINO=221',
             "META_SIP_DESTINO=''", "SBC_PREFIXO_WHATSAPP='*55'",
             "BLOCO_META_SAIDA='; saida desligada'",
+            // 🛡️ 29/09: o identify recebe as faixas da Meta (vazio = aberto).
+            "META_MATCH='0.0.0.0/0'",
+            // ☎️ 28/09: o agente do click-to-call viaja no startup em base64 —
+            // o mesmo comando que o script real usa, sobre o arquivo real.
+            `AGENTE_B64=$(base64 < ${JSON.stringify(join(process.cwd(), 'scripts/sbc-agente-saida.py'))} | tr -d '\\n')`,
             `export TMPDIR=${dir}`,
             script.slice(i, j),
         ].join('\n'));
@@ -272,10 +277,46 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
         expect(gerado).toContain("cat > /etc/asterisk/pjsip.conf <<'CONF'");
     });
 
+    // ☎️ 28/09 — o agente do click-to-call chega à VM INTEIRO e intacto. Vai
+    // em base64 justamente porque o startup é heredoc SEM aspas: um `$` ou
+    // uma crase no python seriam expandidos no Mac. O teste decodifica o que
+    // foi gerado e compara byte a byte com o arquivo do repositório.
+    it('o agente python viaja em base64 e chega igual ao arquivo do repositório', () => {
+        const m = gerado.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d > \/usr\/local\/bin\/sbc-agente-saida\.py/);
+        expect(m).toBeTruthy();
+        const decodificado = Buffer.from(m![1]!, 'base64').toString('utf8');
+        expect(decodificado).toBe(fs.readFileSync(join(process.cwd(), 'scripts/sbc-agente-saida.py'), 'utf8'));
+        // E o serviço sobe como asterisk (spool e CDR são dele), com restart.
+        expect(gerado).toContain('User=asterisk');
+        expect(gerado).toContain('systemctl enable sbc-agente-saida');
+        // O contexto do call file existe e as variáveis do Asterisk chegam intactas nele.
+        expect(gerado).toContain('[saida-whatsapp]');
+        expect(gerado).toContain('Dial(PJSIP/${EXTEN}@meta-saida,60)');
+        expect(gerado).toContain('${CDR(accountcode)}');
+    });
+
     it('e as variáveis de SHELL já vieram resolvidas (nada sobra para a VM)', () => {
         expect(gerado).toContain('Dial(PJSIP/221@hit,60)');
         expect(gerado).not.toContain('${SBC_DESTINO}');
         expect(gerado).not.toContain('${IP}');
+    });
+
+    // 🛡️ 29/09 — a 7b listou centenas de `sip:<nome>@84.32.32.222:5060` como
+    // "candidatos" a META_SIP_DESTINO: varredura SIP, que o identify aberto
+    // (match=0.0.0.0/0) trata como Meta. O aperto NÃO é chutado: entra por
+    // parâmetro, com as faixas lidas do INVITE real, e fecha só a SINALIZAÇÃO.
+    it('🛡️ o identify e a 5061 fecham para as faixas da Meta SÓ quando elas são dadas', () => {
+        expect(script).toMatch(/META_SIP_ORIGENS="\$\{META_SIP_ORIGENS:-\}"/);
+        // Vazio = aberto, e o script DIZ isso em vez de ficar calado.
+        expect(gerado).toContain('match=0.0.0.0/0');
+        expect(script).toMatch(/ABERTOS ao mundo/);
+        // O match do pjsip vem da mesma variável que vai ao firewall.
+        expect(script).toMatch(/match=\$\{META_MATCH\}/);
+        expect(script).toMatch(/firewall-rules update sbc-wa-tls .*--source-ranges="\$META_MATCH"/);
+        // A regra de RTP NÃO é apertada pelo IP do INVITE — mataria o áudio.
+        expect(script).not.toMatch(/firewall-rules update sbc-wa-rtp/);
+        // E lixo no parâmetro para o script, nunca vira match torto.
+        expect(script).toMatch(/não é IPv4 nem CIDR/);
     });
 
     it('nenhuma CRASE no heredoc externo (ela vira comando no shell LOCAL)', () => {

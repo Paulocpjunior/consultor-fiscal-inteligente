@@ -31,6 +31,102 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   a nota movida some do mês da emissão e aparece no da entrada (é o
   esperado; o detalhe diz "emitida em MM/AAAA").
 
+- **🛡️ A 7b DEVOLVEU VARREDURA SIP, NÃO A META** (29/09, primeira rodada real
+  do Paulo, do Mac, `09:3`). Centenas de `sip:<nome>@84.32.32.222:5060`
+  (workgroup, yahia, yasmin, zach, zoe, zuhair… em ordem alfabética, mesmo
+  IP, UDP) listadas como "candidatos" a `META_SIP_DESTINO`, com a dica "pegue
+  o mais recente" — obedecida, a saída do escritório discaria para um
+  scanner. Causa: a 7b lia QUALQUER `Contact:` sem perguntar de quem era o
+  INVITE, e o `[meta-identify]` está ABERTO (`match=0.0.0.0/0`, 23/08) com a
+  5061 sem `source-ranges`: qualquer IP vira "meta" e cai no dialplan (toca a
+  URA da HIT e gera CDR com `src`=nome). Feito: 7b atribui cada Contact ao
+  `<--- Received SIP request … from TLS:ip:porta` que o carrega; só origem
+  TLS é candidata; origem com >5 usuários distintos é VARREDURA (alerta 🛡️);
+  valor = host do Contact (o user é quem ligou). Veredito: falha de mídia +
+  trace desligado + varredura no log NÃO carimba "a causa é NOSSA" (as 4
+  falhas podem ser do robô). Setup: `META_SIP_ORIGENS='<ip>/32,…'` entra no
+  `match=` E no `--source-ranges` da `sbc-wa-tls` (RTP não é tocado — a mídia
+  pode vir de outro IP da Meta); vazio = aberto, dito em voz alta. Fixtures
+  da trava passaram a ter a forma do trace real (mawk provado). ⚠️ A ligação
+  de 23/09 entrou com o trace DESLIGADO, então o INVITE da Meta não está em
+  log nenhum: o caminho é `--ao-vivo` → ligar dentro da grade → 7b → setup
+  com `META_SIP_DESTINO` + `META_SIP_ORIGENS` de uma vez. Scripts, travas e
+  doc copiados IGUAIS para o `sp-connect` (uma verdade, dois clones, até a F5).
+  2ª rodada (13:2): a varredura vem por TLS (153 mil INVITE, 4.719 nomes) — o
+  limite de usuários é o que a pega; e sobrou UMA origem TLS (31.70.90.94, 46
+  INVITE, 7 hosts de porta alta, mesmo carimbo 25/09 11:50 UTC) que ninguém
+  tinha como julgar. A 7b passou a mostrar, por origem, PARA QUE NÚMERO discou
+  (Request-URI): a Meta disca para o nosso WhatsApp; robô disca 100/00972…
+  Paulo colou os placeholders `<host da 7b>` literais no setup e a validação
+  de CIDR recusou (bom): valor só entra quando houver um real.
+- **🔀 SEPARAÇÃO DO CONNECT — F1 FEITA: repositório próprio `Paulocpjunior/sp-connect`**
+  (29/09, Paulo: *"vai"*; Ultra Fox cancelada em 28/09 cumpria a condição de
+  17/08). Movido pelo FECHO de imports (87 arquivos de código, 38 suítes,
+  assets, scripts do SBC, cinco docs) — commit inicial d623983, portas verdes
+  lá (lint, strict, build, 815 testes). Régua por régua: `types.ts` recorte;
+  `novidadesService` inteiro; `catalogo-banco.js` FICA aqui (mesmo banco);
+  `App.tsx` só o ramo Connect; `server.js` próprio com cron PRÓPRIO do
+  arquivo SharePoint (`/api/internal/cron/arquivo-sp` — aqui pegava carona
+  no cofre de e-mail; o job do Scheduler ainda não existe); Dockerfile sem
+  Playwright; workflow `sp-connect` com gate de segredo (sem `GCP_SA_KEY`
+  pula o deploy avisando). ⚠️ **Este repo NÃO mudou de código**: continua
+  servindo `/connect`, webhook, WABA, painel 📡 e envio de guia até a F3/F5.
+  Regra que fica (CLAUDE.md): mudança no atendimento se faz no `sp-connect`;
+  não editar os dois lados. Pendente do Paulo para a F2: P8 (secrets do repo
+  novo, `GCP_SA_KEY` + VITE_*) e P7 (domínio); depois a primeira revisão sem
+  tráfego prova LEITURA. Travas movidas que liam Footer/ConfigAdminModal/
+  catálogo/envio-imposto/ingestor passaram a cobrar o que existe lá.
+- **📊 PAINEL DA IA DE TRIAGEM — "a IA está pegando?" com número** (28/09,
+  item 5 da fila; Paulo, 27/09: *"a IA está ativa?"*, e a resposta honesta
+  era "ligada, mas não sei se trabalha": só o console.log sabia). Cada
+  decisão de `triarComIa` vira UM doc em `whatsapp_triagem_ia_log`
+  (`registroDeTriagem`: situação classificada / sem-certeza / nao-entendi /
+  fila-inexistente / ia-indisponivel, fila, confiança, motivo, detalhe,
+  texto do cliente CORTADO em 80, modelo) — inclusive "sem cliente Gemini" e o
+  catch (tempo esgotado etc.), best-effort (falha do registro nunca cala o
+  bot). `GET /triagem-ia/painel?dias=` (admin; janela ≤30 d, 500 mais novos,
+  `truncado`) soma pelo puro `resumirTriagemIa` (contadores, taxa NULL sem
+  chamada — nunca 0%, filas, motivos de indisponibilidade, últimas 10). Aba
+  🤖 mostra os cinco chips, a taxa e as últimas decisões; ZERO vem com a
+  frase "não significa que ela acertou tudo". 🐛 A trava pegou na 1ª rodada:
+  `em >= desde` em string deixava "lixo" passar (l > 2) — filtro exige
+  `Date.parse` finito. Catálogo: coleção candidata a TTL.
+- **☎️ LIGAÇÃO RECEBIDA VIRA LINHA NA CONVERSA (CDR) + 📞 PEDIDO DE RETORNO
+  VIRA PENDÊNCIA** (28/09, itens 3 e 4 da fila que o Paulo aprovou: *"Pode
+  seguir na sua ordem!"*). A Meta não manda evento de chamada em modo SIP
+  (25/08); o agente da VM (`sbc-agente-saida.py` 1.1.0) acompanha o
+  `Master.csv` por offset (`/var/spool/asterisk/tmp/sbc-agente-cdr.offset`;
+  1ª vez = fim do arquivo, SEM backfill; rotação = recomeça, idempotente por
+  uniqueid) e manda só as linhas de ENTRADA da Meta (`de-meta`/`PJSIP/meta-`,
+  nunca `meta-saida` nem `lig_…`) para `POST /sbc/cdr` (segredo do agente).
+  `interpretarCdrDeEntrada` (puro, em `whatsapp-chamadas.js`) lê src → número
+  (plano B: clid), disposição → accepted/missed/busy/failed, `start` UTC + Z;
+  a rota grava pela MESMA `gravarEventoChamada` do webhook (exportada de
+  `whatsapp-webhook-routes.js`; sem import circular). Linha sem número fica
+  em `whatsapp_chamadas_sem_numero` com o src cru; a aba ☎️ conta recebidas e
+  sem-número (`whatsapp_config/sbc_agente.cdr`). 📞 Retorno: o webhook, ao
+  ver `naturezaDoEventoCru === 'pedido-de-retorno'`, lê o mínimo sem conhecer
+  o leiaute (`lerPedidoDeRetorno`: `from`/`wa_id`, NUNCA display_phone_number)
+  e grava linha `retorno_<hash>` + `retornoDeLigacao {pedidoEm, atendidoEm:null}`
+  + não-lida + reabertura; a lista mostra o chip "📞 pediu retorno" até
+  `/ligar` (`atendidoComo: 'ligacao'`) ou `situacao=resolvida`
+  (`encerrado-sem-ligar`); sem número → `whatsapp_config/pedidos_retorno`.
+  Trava `cdrEntradaSbc.test.ts` executa o python (leitura incremental,
+  linha pela metade, rotação) e compara a régua "é entrada da Meta?" nos
+  dois lados. ⚠️ NÃO PROVADO: a forma do src da Meta e o leiaute do pedido de
+  retorno — os dois saem do dado real, contados na aba ☎️.
+- **📥 ULTRA FOX CANCELADA — o importador SAIU do app** (28/09, Paulo: *"Pode
+  seguir na sua ordem! Ultrafox já caiu está fora"*). Removidos: aba ⚙️ → 📥 e
+  o botão 📥 em 📇 (`SpConnect/index.tsx`), rotas `/importar-ultrafox` e
+  `/lote`, `whatsapp-import-ultrafox.js`, `whatsapp-import-lote.js`,
+  `services/ultrafox-browser-parser.js` (e o COPY dele no Dockerfile), as
+  duas suítes de importação e `importarUltrafox*`/`ImportPreview` do service.
+  O que FICA: `origem: 'ultrafox-import'` nas mensagens/contatos (fato
+  histórico, o 📇 mostra "veio do backup"), o catálogo do banco, e os
+  comentários que contam a convivência. `deParaUltrafox.test.ts` passou a
+  cobrar o CONTRÁRIO (rota ausente + de-para dizendo REMOVIDO/CANCELADA).
+  ⚠️ Aberto ainda: as apps `Business Agent`/`f-bot` assinadas na WABA —
+  cancelar o contrato não desassina; só o fornecedor ou a Meta.
 - **📗 ELS 3ª RODADA DO PVA (28/09, após o plano de contas: 1315 → 19 erros +
   50 avisos)**: 1 COD_MUN 0150 (Ovidio, produtor PF) · 8 COD_CTA em A170
   tomado (cadastro: falta a conta do uso servicos-tomados) · 9 VL_PIS + 1
@@ -299,6 +395,39 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   📗 **Guia do teste** (`/guia-dere-planilha.html`, par duplo com `docs/guia-colaborador-dere-planilha.md`, 27/09):
   roteiro dos três testes com critério de aceite e o pedido ao contador — botão no bloco 📥.
 
+- **☎️ CLICK-TO-CALL PELO SBC — a SAÍDA da ligação de WhatsApp, construída**
+  (28/09, Paulo: *"quanto ao cliente autorizar já estamos cientes e
+  funcionamos; precisamos ativar o resto das funções"*). Desenho de 25/08
+  executado: botão ☎️ Ligar na conversa (permissão aceita) → pedido em
+  `whatsapp_ligacoes_saida` → agente `scripts/sbc-agente-saida.py` na VM
+  (systemd, usuário asterisk, só stdlib) pega por `GET /sbc/pedidos` com
+  `x-sbc-secret` (claim em transação; pedido >2 min vira `expirado`) → call
+  file `/var/spool/asterisk/outgoing` toca `PJSIP/<ramal>@hit` → ao atender,
+  `[saida-whatsapp]` disca `PJSIP/<cliente>@meta-saida` → o agente lê o CDR
+  (`accountcode` = id do pedido) e devolve atendida/não atendida/ocupado/
+  falhou; a tela acompanha a cada 3 s e a conversa ganha a linha. Núcleo
+  puro `whatsapp-click-to-call.js` (travas da Meta na ordem da rota velha:
+  Permitir aceito, não vencido, condução, ramal, agente). Ramal por
+  atendente (`users.ramal`, ⚙️ → 👥, só admin). Aba ☎️ mostra o agente ("no
+  ar há N s / parado / nunca"). 🚨 **Por que a VM pergunta ao app** e não o
+  contrário: nenhuma porta nova na VM, Cloud Run sem IP fixo, ARI/AMI exposto
+  é superfície — e o segredo NÃO vai ao metadata da VM (legível): entra por
+  ssh em `/etc/sbc-agente.env`. A rota antiga que chamava a API (`/calls`,
+  131055) foi substituída; `iniciarChamadaParaCliente` fica em
+  `whatsapp-cloud.js` só como prova. 🐍 A trava executa o python de verdade
+  (call file e tradução do CDR iguais ao JS), `bash -n` e `py_compile`.
+  📜 Diagnóstico 7b passou a ler `full.1`/`full.*.gz` (gzip -dcf): a ligação
+  de 23/09 é a única fonte do `META_SIP_DESTINO` e o logrotate gira por
+  semana. ⚠️ **NÃO PROVADO, dito antes do teste**: permissão pedida pelo
+  3337 × tronco SIP no 3155; `From` da saída (param `SBC_NUMERO_WHATSAPP`);
+  leiaute do INVITE de saída — o log do Asterisk é a régua. Pendente do
+  Paulo: 7b na VM → `sbc-shared-secret` no Secret Manager + `--update-secrets`
+  → setup com `META_SIP_DESTINO` e `SBC_SHARED_SECRET` → ramal em 👥 → teste
+  dentro da grade. 📌 **E a regra do domingo**: "a IA não entrou" porque a
+  conversa do Paulo tinha fila/dono (IA só na triagem) e "Teste" é texto sem
+  destino; "o 3337 não mandou aviso" porque a conversa é POR CLIENTE, não
+  por número da SP, e o aviso de ausência é um por dia por conversa — os
+  dois são desenho, não defeito, e ele aceitou (*"Vc setou por cliente! Ok"*).
 - **☎️ TEXTO FIXO COM DATA ENVELHECE SOZINHO, E A TRAVA QUE O PRENDE PRENDE O
   ERRO** (27/09, Paulo: *"sobre as ligações, temos que testar"*). O painel
   lateral da conversa dizia desde 25/08 *"Ligação ainda NÃO funciona nos dois

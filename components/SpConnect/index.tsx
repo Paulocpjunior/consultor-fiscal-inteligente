@@ -15,12 +15,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     listarConversas, listarMensagens, marcarLida, responderConversa, iniciarConversa,
     procurarConversas,
-    importarUltrafoxLote,
     atendimentoConfig, salvarAtendimentoConfig, subirImagemFila, removerImagemFila, transferirFila, assumirConversa,
     mudarSituacao, criarNota, vincularCliente, buscarClientes, sugestoesDeVinculo,
-    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, importarUltrafox,
+    listarAtendentes, salvarFilasAtendente, salvarPapelAtendente, salvarRamalAtendente,
+    chamarClientePeloSbc, statusLigacaoSaida, agenteSbcStatus, PedidoLigacaoResumo,
+    painelTriagemIa, PainelTriagemIa,
     listarAvaliacoes, clienteDaConversa, abrirMidia, enviarAnexo,
-    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, ImportPreview, AvaliacaoAtendimento,
+    listarCanais, salvarCanal, registrarCanal, statusDoCanal, pedirPermissaoLigacao, Atendente, AvaliacaoAtendimento,
     ClienteDaConversa, CanalWhatsapp, sondarChamadas, SondaChamada, configurarChamadas, HorariosChamada,
     sondarSbc, SondaSbc,
     baterPresenca, presencaDaFila, PresencaDaFila, SugestoesDeVinculo,
@@ -58,8 +59,6 @@ import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
 import { conferirEscalaNaMensagem, coberturaDasFilas, dentroDoHorario, podeVerEncerrados } from '../../sefaz-backend/whatsapp-atendimento.js';
 import { saiuPorOutraPlataforma } from '../../services/sp-connect-message-origin.js';
-import { mapearArquivosDoBackup, resumoDaVarredura, consolidarPrevia, dividirEmBlocos, avisoDeAnexos } from '../../sefaz-backend/whatsapp-import-lote.js';
-import { interpretarConversaTxt } from '../../services/ultrafox-browser-parser.js';
 
 const TOM_TICK: Record<string, string> = {
     ok: 'text-emerald-600 dark:text-emerald-400',
@@ -481,15 +480,64 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         setPermLigAviso('☎️ Pedido enviado — a resposta do cliente aparece na conversa.');
     };
 
-    // ☎️ NÃO EXISTE AÇÃO DE LIGAR AQUI, e o motivo é a resposta da própria Meta
-    // (24/08, código 131055): "Graph API calls are not allowed for SIP enabled
-    // numbers". Em modo SIP a saída não sai por API — quem disca é o tronco.
-    // A ação existia e ficou ÓRFÃ quando o botão saiu: código morto com cara de
-    // entrega é a isca para alguém religar um caminho que a Meta recusa por
-    // desenho, então ela foi DELETADA em 25/08 junto com a porta de fetch.
-    // A rota do backend (`/conversas/:numero/ligar`) fica de pé com as travas
-    // dela (permissão do cliente, validade, condução) — ela é a régua do dia em
-    // que este número sair do modo SIP, e não é ela que promete botão.
+    // ☎️ LIGAR PELO SBC (28/09) — click-to-call. NÃO é a API da Meta (131055:
+    // "Graph API calls are not allowed for SIP enabled numbers", 24/08): a
+    // rota grava um PEDIDO, o agente na VM do SBC toca o MEU ramal e, quando
+    // eu atendo, disca o cliente. Aqui: confirmação antes (o meu telefone vai
+    // tocar e o cliente vai receber uma ligação), o pedido, e o acompanhamento
+    // a cada 3 s até o estado final — que vem do CDR do Asterisk, não de mim.
+    const [ligacaoPedido, setLigacaoPedido] = useState<PedidoLigacaoResumo | null>(null);
+    const [ligacaoErro, setLigacaoErro] = useState<string | null>(null);
+    const [ligacaoConducao, setLigacaoConducao] = useState(false);
+    const ligacaoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pararAcompanharLigacao = () => {
+        if (ligacaoPollRef.current) { clearInterval(ligacaoPollRef.current); ligacaoPollRef.current = null; }
+    };
+    const acompanharLigacao = (numero: string, pedidoId: string) => {
+        pararAcompanharLigacao();
+        const inicio = Date.now();
+        ligacaoPollRef.current = setInterval(async () => {
+            const r = await statusLigacaoSaida(numero, pedidoId);
+            if (selRef.current?.numero !== numero) { pararAcompanharLigacao(); return; }
+            if (!r.ok) { setLigacaoErro(r.error || 'Perdi o acompanhamento da ligação.'); pararAcompanharLigacao(); return; }
+            setLigacaoPedido(r.pedido);
+            if (r.pedido.final) {
+                pararAcompanharLigacao();
+                patchSel({ ultimaLigacaoSaida: { id: pedidoId, status: r.pedido.estado, ramal: r.pedido.ramal || '', em: new Date().toISOString(), por: null } });
+                return;
+            }
+            // Cinco minutos é mais que ramal (40 s) + cliente (60 s) + CDR: passou
+            // disso, o agente não devolveu — e a tela diz isso, não "discando…".
+            if (Date.now() - inicio > 5 * 60 * 1000) {
+                setLigacaoErro('O SBC não devolveu o resultado em 5 min — confira o agente em ⚙️ → ☎️.');
+                pararAcompanharLigacao();
+            }
+        }, 3000);
+    };
+    useEffect(() => () => pararAcompanharLigacao(), []);
+    // Trocar de conversa limpa o status da ligação anterior — status de um
+    // cliente ao lado do nome de outro é a leitura dupla de sempre.
+    useEffect(() => { setLigacaoPedido(null); setLigacaoErro(null); setLigacaoConducao(false); pararAcompanharLigacao(); }, [sel?.numero]);
+    const acaoChamarCliente = async () => {
+        if (!sel) return;
+        setLigacaoErro(null); setLigacaoConducao(false);
+        const ok = await pedirConfirmacao(
+            `O SEU ramal vai tocar agora. Quando você atender, o SBC liga para ${sel.nome || sel.numero} no WhatsApp `
+            + '(o cliente vê uma ligação da SP). Fora do horário da Meta a chamada é recusada por ela.',
+            'Ligar',
+        );
+        if (!ok) return;
+        setLigacaoPedido({ id: '', estado: 'enviando', texto: '⏳ Pedindo ao SBC…', final: false });
+        const r = await chamarClientePeloSbc(sel.numero);
+        if (!r.ok) {
+            setLigacaoPedido(null);
+            setLigacaoErro(`${r.error}${(r as any).acao ? ` — ${(r as any).acao}` : ''}`);
+            setLigacaoConducao(Boolean((r as any).emConducaoPor));
+            return;
+        }
+        setLigacaoPedido(r.pedido);
+        acompanharLigacao(sel.numero, r.pedido.id);
+    };
 
     const acaoSituacao = async () => {
         if (!sel) return;
@@ -684,7 +732,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'importar' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
     // A aba 🔔 lê o estado ao abrir — o efeito mora DEPOIS do `cfgAba`
     // (usá-lo antes da declaração estourava TS2448 no tsconfig normal).
     useEffect(() => { if (cfgAba === 'avisos') void carregarAvisos(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cfgAba]);
@@ -732,6 +780,37 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     } | null>(null);
     const [sondando, setSondando] = useState(false);
     const [sondaErro, setSondaErro] = useState<string | null>(null);
+    // ☎️ O agente do click-to-call na VM do SBC está vivo? Lido ao abrir a
+    // aba: "no ar há N s" ou "parado/nunca" — farol honesto, nunca deduzido
+    // do segredo existir.
+    const [agenteSbc, setAgenteSbc] = useState<{
+        segredoConfigurado: boolean; agente: { vivo: boolean; texto: string }; pendentes: number;
+        cdr?: { recebidas: number; semNumero: number; ultimaEm: string | null }; retornosSemNumero?: number;
+    } | null>(null);
+    const [agenteSbcErro, setAgenteSbcErro] = useState<string | null>(null);
+    const lerAgenteSbc = async () => {
+        const r = await agenteSbcStatus();
+        if (r.ok) { setAgenteSbc({ segredoConfigurado: r.segredoConfigurado, agente: r.agente, pendentes: r.pendentes, cdr: r.cdr, retornosSemNumero: r.retornosSemNumero }); setAgenteSbcErro(null); }
+        else setAgenteSbcErro(r.error || 'Não consegui ler o estado do agente.');
+    };
+    useEffect(() => {
+        if (cfgAberta && cfgAba === 'chamadas') void lerAgenteSbc();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfgAberta, cfgAba]);
+    // 📊 O painel da IA de triagem (aba 🤖): "a IA está pegando?" com número.
+    // Lido ao abrir a aba; o botão 🔄 relê. Zero com a IA ligada não é
+    // "tudo certo" — a tela diz o que zero significa.
+    const [painelIa, setPainelIa] = useState<PainelTriagemIa | null>(null);
+    const [painelIaErro, setPainelIaErro] = useState<string | null>(null);
+    const lerPainelIa = async (dias = 7) => {
+        const r = await painelTriagemIa(dias);
+        if (r.ok) { setPainelIa(r); setPainelIaErro(null); }
+        else setPainelIaErro(r.error || 'Não consegui ler o painel da IA.');
+    };
+    useEffect(() => {
+        if (cfgAberta && cfgAba === 'bot' && ehAdmin) void lerPainelIa();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfgAberta, cfgAba]);
     // ☎️ DE QUAL NÚMERO ESTAMOS FALANDO (Paulo, 26/08): *"já que nosso tronco
     // chave na URA é o 3155-1554, as ligações por WhatsApp saem por ele; o
     // 3337 continua sendo o WhatsApp principal"*. A chamada é POR NÚMERO —
@@ -1373,109 +1452,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally { setSalvandoCanal(false); }
     };
 
-    // ── ⚙️ aba 📥 Importar backup da Ultra Fox (preview antes de gravar)
-    const [impTipo, setImpTipo] = useState<'contatos' | 'mensagens-txt' | 'mensagens-csv'>('contatos');
-    const [impConteudo, setImpConteudo] = useState('');
-    const [impNumero, setImpNumero] = useState('');
-    const [impAutores, setImpAutores] = useState<string[]>([]);
-    const [impPreview, setImpPreview] = useState<ImportPreview | null>(null);
-    const [impResultado, setImpResultado] = useState<ImportPreview | null>(null);
-    const [impErro, setImpErro] = useState<string | null>(null);
-    const [impRodando, setImpRodando] = useState(false);
-
-    // ── 📦 PASTA INTEIRA do backup (o export tem ~800 MB e centenas de pastas)
-    //
-    // O navegador LÊ e INTERPRETA aqui, na máquina de quem importa: o zip
-    // inteiro não passa numa requisição (teto de 20 MB) e a mídia não precisa
-    // sair do computador nesta etapa. Quem decide entrada × saída e quem
-    // calcula o id de cada mensagem é o SERVIDOR — ver a rota do lote.
-    const [loteVarredura, setLoteVarredura] = useState<ReturnType<typeof resumoDaVarredura> | null>(null);
-    const [loteLidas, setLoteLidas] = useState<{ numero: string; mensagens: any[]; descartadas?: any[] }[]>([]);
-    const [lotePrevia, setLotePrevia] = useState<ReturnType<typeof consolidarPrevia> | null>(null);
-    const [loteAutores, setLoteAutores] = useState<string[]>([]);
-    const [loteLendo, setLoteLendo] = useState<string | null>(null);
-    const [loteResultado, setLoteResultado] = useState<{ gravadas: number; conversas: number; recusadas: number } | null>(null);
-    const [loteErro, setLoteErro] = useState<string | null>(null);
-
-    const escolherPastaBackup = async (arquivos: FileList | null) => {
-        setLoteErro(null); setLoteResultado(null); setLotePrevia(null); setLoteLidas([]); setLoteAutores([]);
-        const lista = Array.from(arquivos || []);
-        if (!lista.length) return;
-        // O caminho relativo é o que diz de QUEM é cada arquivo — o nome
-        // sozinho ("_full-chat.txt") é igual em todas as pastas.
-        const porCaminho = new Map(lista.map((f) => [(f as any).webkitRelativePath || f.name, f]));
-        const mapa = mapearArquivosDoBackup([...porCaminho.keys()]);
-        const resumo = resumoDaVarredura(mapa);
-        setLoteVarredura(resumo);
-        if (!resumo.arquivosParaLer) return;
-
-        const lidas: { numero: string; mensagens: any[]; descartadas?: any[] }[] = [];
-        const aLer = [...mapa.conversas, ...mapa.semDono];
-        for (let i = 0; i < aLer.length; i += 1) {
-            const item = aLer[i];
-            setLoteLendo(`Lendo ${i + 1} de ${aLer.length}…`);
-            const f = porCaminho.get(item.caminho);
-            if (!f) continue;
-            try {
-                const r = interpretarConversaTxt(await f.text());
-                lidas.push({ numero: item.numero, mensagens: r.mensagens, descartadas: r.descartadas });
-            } catch {
-                // Arquivo ilegível não derruba a varredura inteira: ele some
-                // da conta e aparece no contador de "sem mensagem".
-                lidas.push({ numero: item.numero, mensagens: [], descartadas: [] });
-            }
-        }
-        setLoteLendo(null);
-        setLoteLidas(lidas);
-        setLotePrevia(consolidarPrevia(lidas));
-    };
-
-    const gravarLote = async () => {
-        if (!lotePrevia || !loteAutores.length) return;
-        setLoteErro(null); setLoteLendo('Gravando…');
-        let gravadas = 0; let conversas = 0; let recusadas = 0;
-        try {
-            const blocos = dividirEmBlocos(loteLidas as any);
-            for (let i = 0; i < blocos.length; i += 1) {
-                setLoteLendo(`Gravando bloco ${i + 1} de ${blocos.length}…`);
-                const r = await importarUltrafoxLote({ conversas: blocos[i] as any, autoresEscritorio: loteAutores });
-                if (!r.ok) {
-                    // PARA no primeiro erro e diz onde parou: seguir em frente
-                    // deixaria metade gravada sem ninguém saber qual metade.
-                    setLoteErro(`${r.error} (parou no bloco ${i + 1} de ${blocos.length}; o que já entrou está gravado e reimportar não duplica)`);
-                    break;
-                }
-                gravadas += r.gravadas || 0;
-                conversas += r.conversas || 0;
-                recusadas += r.totalRecusadas || 0;
-            }
-            setLoteResultado({ gravadas, conversas, recusadas });
-        } finally {
-            setLoteLendo(null);
-        }
-    };
-
-    const lerArquivoImport = (f: File | null) => {
-        if (!f) return;
-        const leitor = new FileReader();
-        leitor.onload = () => { setImpConteudo(String(leitor.result || '')); setImpPreview(null); setImpResultado(null); };
-        leitor.readAsText(f);
-    };
-    const rodarImport = async (confirmar: boolean) => {
-        if (!impConteudo.trim() || impRodando) return;
-        setImpRodando(true);
-        setImpErro(null);
-        try {
-            const r = await importarUltrafox({
-                tipo: impTipo, conteudo: impConteudo, confirmar,
-                ...(impTipo === 'mensagens-txt' ? { numero: impNumero, autoresEscritorio: impAutores } : {}),
-            });
-            if (!r.ok) { setImpErro(r.error || 'A importação falhou.'); return; }
-            if (confirmar) { setImpResultado(r); setImpPreview(null); }
-            else { setImpPreview(r); setImpResultado(null); setImpAutores([]); }
-        } finally { setImpRodando(false); }
-    };
-
     // ── ✚ Nova conversa (template aprovado — a porta de fora da janela) ─────
     // DUAS fontes de template: o cadastro da ⚙️ (variáveis nomeadas) e os
     // APROVADOS direto da Meta (o corpo aparece e preenche-se {{1}},{{2}}…) —
@@ -2095,13 +2071,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] hover:bg-[#091d8d] text-white">
                                     ➕ Novo
                                 </button>
-                                {ehAdmin && (
-                                    <button onClick={() => { setContatosAberto(false); setCfgAba('importar'); setCfgAberta(true); }}
-                                        title="Importar o backup da Ultra Fox (contatos e mensagens)"
-                                        className="text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">
-                                        📥 Importar
-                                    </button>
-                                )}
                                 <button onClick={() => setContatosAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                             </div>
                         </div>
@@ -2540,7 +2509,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['importar', '📥 Importar Ultra Fox']] as const).map(([id, rotulo]) => (
+                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -2636,13 +2605,33 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             {a.filasAtendimento.length === 0 && a.departamentos.length > 0 && (
                                                 <p className="text-[9px] text-slate-400 mt-1">sem atribuição — hoje vale o departamento: {a.departamentos.join(', ')}</p>
                                             )}
+                                            {/* ☎️ RAMAL — é onde o click-to-call toca ANTES de discar o cliente.
+                                                Salva ao sair do campo; vazio limpa (a pessoa deixa de poder ligar,
+                                                e a recusa do botão diz isso). Ramal torto é recusado pela rota. */}
+                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                <span className="text-[10px] text-slate-500 dark:text-slate-400">☎️ Ramal no HitPhone</span>
+                                                <input
+                                                    defaultValue={a.ramal || ''}
+                                                    placeholder="ex.: 221"
+                                                    inputMode="numeric"
+                                                    title="Ramal do colaborador: o botão ☎️ Ligar na conversa toca aqui primeiro e, quando ele atende, disca o cliente no WhatsApp."
+                                                    onBlur={async (e) => {
+                                                        const novo = e.target.value.trim();
+                                                        if (novo === (a.ramal || '')) return;
+                                                        const r = await salvarRamalAtendente(a.uid, novo);
+                                                        if (!r.ok) { setAtdErro(r.error || 'Falha ao salvar o ramal.'); e.target.value = a.ramal || ''; return; }
+                                                        setAtdErro(null);
+                                                        setAtendentes((lst) => lst.map((x) => (x.uid === a.uid ? { ...x, ramal: r.ramal } : x)));
+                                                    }}
+                                                    className="w-20 text-[11px] px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono" />
+                                                {!a.ramal && <span className="text-[9px] text-amber-600 dark:text-amber-400">sem ramal: não consegue ligar pelo ☎️</span>}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* ── aba 📥 Importar backup da Ultra Fox ───────────── */}
                         {/* ── aba ☎️ Voz e vídeo (SONDA — não liga nada) ──── */}
                         {cfgAba === 'chamadas' && (
                             <div className="space-y-2">
@@ -2654,6 +2643,61 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     clientes</strong>: é decisão sua, com o destino de atendimento definido antes,
                                     não efeito de um clique de diagnóstico.
                                 </p>
+
+                                {/* ☎️ CLICK-TO-CALL (28/09): a SAÍDA sai pelo SBC, e quem a executa é um
+                                    agente na VM. Esta linha diz se ele está VIVO — sem ela, "o botão não
+                                    liga" viraria chamado no lugar errado. */}
+                                <div className={`rounded-lg border p-2 space-y-1 ${agenteSbc?.agente.vivo
+                                    ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20'
+                                    : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">🤖 Agente de SAÍDA (click-to-call) na VM do SBC</p>
+                                        <button onClick={() => void lerAgenteSbc()} className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🔄</button>
+                                    </div>
+                                    {agenteSbcErro && <p className="text-[10px] text-red-600 dark:text-red-400">{agenteSbcErro}</p>}
+                                    {!agenteSbc && !agenteSbcErro && <p className="text-[10px] text-slate-400">Lendo…</p>}
+                                    {agenteSbc && (
+                                        <>
+                                            <p className={`text-[10px] ${agenteSbc.agente.vivo ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300'}`}>
+                                                {agenteSbc.agente.vivo ? '✅' : '❌'} Agente {agenteSbc.agente.texto}
+                                                {agenteSbc.pendentes > 0 && <> · <strong>{agenteSbc.pendentes}</strong> pedido(s) esperando</>}
+                                            </p>
+                                            {!agenteSbc.segredoConfigurado && (
+                                                <p className="text-[10px] text-red-700 dark:text-red-400">
+                                                    🔑 <strong>SBC_SHARED_SECRET não está no Cloud Run</strong> — sem ele o agente não consegue pegar
+                                                    pedido nenhum e o botão ☎️ Ligar recusa. Secret Manager <code>sbc-shared-secret</code> → env do
+                                                    serviço, e o MESMO valor no setup da VM.
+                                                </p>
+                                            )}
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                Como funciona: ☎️ Ligar na conversa → o agente toca o <strong>ramal do colaborador</strong> (cadastro
+                                                em 👥 Atendentes) → ele atende → o SBC disca o cliente no WhatsApp. Sem <code>META_SIP_DESTINO</code>
+                                                no SBC, o ramal toca e a perna do cliente é recusada com motivo no log.
+                                            </p>
+                                            {/* ☎️ ENTRADA pelo CDR: a Meta não avisa o webhook em modo SIP, então quem
+                                                registra a ligação RECEBIDA na conversa é o mesmo agente, lendo o CDR.
+                                                Zero recebidas com o agente no ar não é defeito: é "ninguém ligou desde
+                                                que ele subiu" (sem backfill, de propósito). */}
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                📥 Ligações <strong>recebidas</strong> registradas nas conversas pelo CDR do SBC:{' '}
+                                                <strong>{agenteSbc.cdr?.recebidas ?? 0}</strong>
+                                                {agenteSbc.cdr?.ultimaEm ? ` (última ${new Date(agenteSbc.cdr.ultimaEm).toLocaleString('pt-BR')})` : ' — nenhuma desde que o agente subiu'}
+                                                {(agenteSbc.cdr?.semNumero ?? 0) > 0 && (
+                                                    <span className="block text-amber-700 dark:text-amber-400">
+                                                        ⚠️ {agenteSbc.cdr?.semNumero} ligação(ões) chegaram com um <code>src</code> que não é número de cliente —
+                                                        ficaram em <code>whatsapp_chamadas_sem_numero</code> com o cru. É dali que sai a régua do From da Meta.
+                                                    </span>
+                                                )}
+                                                {(agenteSbc.retornosSemNumero ?? 0) > 0 && (
+                                                    <span className="block text-amber-700 dark:text-amber-400">
+                                                        ⚠️ {agenteSbc.retornosSemNumero} pedido(s) de retorno de ligação chegaram sem número legível — o cru está em
+                                                        "Ver eventos de chamada (crus)".
+                                                    </span>
+                                                )}
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
 
                                 {/* ☎️ DE QUAL NÚMERO — Paulo, 26/08: o tronco da URA é o 3155-1554,
                                     então é NELE que a ligação de WhatsApp deve entrar; o 3337 segue
@@ -3575,184 +3619,6 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             </div>
                         )}
 
-                        {cfgAba === 'importar' && (
-                            <div className="space-y-2">
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Restaura o backup da Ultra Fox. <strong>Nada é gravado sem o preview</strong>: primeiro
-                                    a leitura, depois a confirmação. Contato que já existe no SP Connect
-                                    <strong> não é sobrescrito</strong>, e reimportar o mesmo arquivo não duplica mensagem.
-                                </p>
-                                {/* 📦 PASTA INTEIRA — o caminho normal para o backup de verdade.
-                                    Os botões abaixo continuam para arquivo avulso. */}
-                                <div className="rounded-lg border border-[#0e3bfa]/30 dark:border-[#0e3bfa]/50 bg-[#0e3bfa]/5 p-2.5 space-y-1.5">
-                                    <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">📦 Pasta inteira do backup</p>
-                                    <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-snug">
-                                        Escolha a pasta que contém <strong>uma pasta por número</strong> (dentro de
-                                        <code className="mx-1">whatsapp/</code>, a pasta do número do escritório). O navegador lê
-                                        tudo <strong>aqui na sua máquina</strong> — a mídia não sai do computador nesta etapa.
-                                    </p>
-                                    <input type="file" multiple
-                                        // @ts-expect-error atributo de diretório não está no tipo do React
-                                        webkitdirectory=""
-                                        onChange={(e) => escolherPastaBackup(e.target.files)}
-                                        className="text-[11px] text-slate-500" />
-                                    {loteLendo && <p className="text-[11px] text-slate-500">⏳ {loteLendo}</p>}
-                                    {loteVarredura && (
-                                        <div className="space-y-0.5">
-                                            <p className="text-[11px] text-slate-700 dark:text-slate-200">
-                                                {loteVarredura.contatos} contato(s) · {loteVarredura.arquivosParaLer} arquivo(s) de conversa
-                                            </p>
-                                            {loteVarredura.avisos.map((a, i) => (
-                                                <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>
-                                            ))}
-                                            {loteVarredura.foraDoPadrao > 0 && (
-                                                <p className="text-[10px] text-slate-500">{loteVarredura.foraDoPadrao} arquivo(s) fora do padrão do export (ignorados).</p>
-                                            )}
-                                        </div>
-                                    )}
-                                    {lotePrevia && (
-                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-2 space-y-1.5">
-                                            <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                                {lotePrevia.mensagens} mensagens em {lotePrevia.conversas} conversa(s)
-                                                {lotePrevia.descartadas > 0 ? ` · ${lotePrevia.descartadas} linha(s) descartada(s)` : ''}
-                                            </p>
-                                            {(() => {
-                                                const av = avisoDeAnexos({ midias: loteVarredura?.midias || 0, comAnexo: lotePrevia.comAnexo });
-                                                if (!av) return null;
-                                                return (
-                                                    <p className={`text-[10px] ${av.grave ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-slate-600 dark:text-slate-300'}`}>
-                                                        📎 {av.texto}
-                                                    </p>
-                                                );
-                                            })()}
-                                            {lotePrevia.arquivosSemMensagem > 0 && (
-                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                                    ⚠️ {lotePrevia.arquivosSemMensagem} arquivo(s) foram lidos e <strong>nenhuma mensagem foi reconhecida</strong> —
-                                                    sinal de que o formato daqueles é diferente. Me diga se este número for grande.
-                                                </p>
-                                            )}
-                                            {lotePrevia.mensagens === 0 ? (
-                                                <p className="text-[11px] text-red-600 dark:text-red-400">
-                                                    Nenhuma mensagem reconhecida. Não grave — o formato do export não é o que o leitor espera.
-                                                </p>
-                                            ) : (
-                                                <>
-                                                    {/* A DIREÇÃO É ESCOLHA HUMANA e continua sendo: sem saber
-                                                        quem é do escritório, "enviada" e "recebida" seriam chute. */}
-                                                    <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                                                        Quais autores são do ESCRITÓRIO? (viram mensagens ENVIADAS)
-                                                    </p>
-                                                    <div className="flex gap-1.5 flex-wrap max-h-32 overflow-y-auto">
-                                                        {lotePrevia.autores.slice(0, 60).map((a) => (
-                                                            <button key={a.autor}
-                                                                onClick={() => setLoteAutores((l) => (l.includes(a.autor) ? l.filter((x) => x !== a.autor) : [...l, a.autor]))}
-                                                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${loteAutores.includes(a.autor)
-                                                                    ? 'bg-emerald-600 text-white'
-                                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                                                {loteAutores.includes(a.autor) ? '🏢 ' : ''}{a.autor} · {a.total}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    {lotePrevia.autores.length > 60 && (
-                                                        <p className="text-[10px] text-slate-500">
-                                                            mostrando 60 de {lotePrevia.autores.length} autores (os de maior volume) — os demais entram como CLIENTE.
-                                                        </p>
-                                                    )}
-                                                    {!loteAutores.length && (
-                                                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                                                            Marque ao menos um: sem isso a direção das mensagens seria chute, e o servidor recusa.
-                                                        </p>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                    {loteErro && <p className="text-[11px] text-red-600 dark:text-red-400">{loteErro}</p>}
-                                    {loteResultado && (
-                                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                                            ✓ {loteResultado.gravadas} mensagens gravadas em {loteResultado.conversas} conversa(s)
-                                            {loteResultado.recusadas > 0 ? ` · ${loteResultado.recusadas} recusada(s) por data ou texto ilegível` : ''}
-                                        </p>
-                                    )}
-                                    <div className="flex justify-end">
-                                        <button onClick={gravarLote}
-                                            disabled={Boolean(loteLendo) || !lotePrevia || !lotePrevia.mensagens || !loteAutores.length}
-                                            className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                            Confirmar e gravar o lote
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">Ou um arquivo avulso:</p>
-                                <div className="flex gap-1.5 flex-wrap">
-                                    {([['contatos', '👥 Contatos (CSV)'], ['mensagens-csv', '💬 Mensagens (CSV)'], ['mensagens-txt', '📄 Conversa (.txt do WhatsApp)']] as const).map(([id, rotulo]) => (
-                                        <button key={id} onClick={() => { setImpTipo(id); setImpPreview(null); setImpResultado(null); }}
-                                            className={`text-[10px] font-bold px-2 py-1 rounded-full ${impTipo === id
-                                                ? 'bg-[#0e3bfa] text-white'
-                                                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                            {rotulo}
-                                        </button>
-                                    ))}
-                                </div>
-                                <input type="file" accept=".csv,.txt,.tsv" onChange={(e) => lerArquivoImport(e.target.files?.[0] || null)}
-                                    className="text-[11px] text-slate-500" />
-                                <textarea value={impConteudo} onChange={(e) => { setImpConteudo(e.target.value); setImpPreview(null); setImpResultado(null); }}
-                                    rows={5} placeholder="…ou cole aqui o conteúdo do arquivo exportado da Ultra Fox"
-                                    className={`${CAMPO} font-mono !text-[10px]`} />
-                                {impTipo === 'mensagens-txt' && (
-                                    <label className="block text-[11px] text-slate-500">
-                                        Número do WhatsApp do CONTATO desta conversa
-                                        <input value={impNumero} onChange={(e) => setImpNumero(e.target.value)} placeholder="(11) 96444-0000" className={CAMPO} />
-                                    </label>
-                                )}
-                                {impErro && <p className="text-[11px] text-red-600 dark:text-red-400">{impErro}</p>}
-                                {impPreview && (
-                                    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2.5 space-y-1.5">
-                                        <p className="text-[12px] font-bold text-slate-800 dark:text-slate-100">
-                                            Preview: {impPreview.total} {impTipo === 'contatos' ? 'contatos' : 'mensagens'} legíveis
-                                            {(impPreview.totalDescartados || impPreview.totalDescartadas) ? ` · ${impPreview.totalDescartados || impPreview.totalDescartadas} descartadas (motivo abaixo)` : ''}
-                                        </p>
-                                        {(impPreview.avisos || []).map((a, i) => <p key={i} className="text-[10px] text-amber-700 dark:text-amber-400">⚠️ {a}</p>)}
-                                        {[...(impPreview.descartados || []), ...(impPreview.descartadas || [])].slice(0, 8).map((d, i) => (
-                                            <p key={i} className="text-[10px] text-slate-500">• {d.motivo}{'linha' in d && d.linha ? ` (linha ${d.linha})` : ''}</p>
-                                        ))}
-                                        {impTipo === 'mensagens-txt' && (impPreview.autores || []).length > 0 && (
-                                            <div>
-                                                <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">Quais autores são do ESCRITÓRIO? (viram mensagens enviadas)</p>
-                                                <div className="flex gap-1.5 flex-wrap mt-1">
-                                                    {(impPreview.autores || []).map((a) => (
-                                                        <button key={a} onClick={() => setImpAutores((l) => (l.includes(a) ? l.filter((x) => x !== a) : [...l, a]))}
-                                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${impAutores.includes(a)
-                                                                ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
-                                                            {impAutores.includes(a) ? '🏢 ' : ''}{a}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <pre className="text-[9px] text-slate-500 overflow-x-auto max-h-32 overflow-y-auto">{JSON.stringify(impPreview.amostra, null, 1)}</pre>
-                                    </div>
-                                )}
-                                {impResultado && (
-                                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                                        ✓ Importado: {impResultado.criados != null
-                                            ? `${impResultado.criados} contatos novos · ${impResultado.jaExistiam} já existiam (não sobrescritos)`
-                                            : `${impResultado.gravadas} mensagens em ${impResultado.conversas} conversa(s)`}
-                                    </p>
-                                )}
-                                <div className="flex items-center justify-end gap-2">
-                                    <button onClick={() => rodarImport(false)} disabled={impRodando || !impConteudo.trim()}
-                                        className="text-[12px] px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40">
-                                        {impRodando ? '…' : '🔎 Ler (preview)'}
-                                    </button>
-                                    <button onClick={() => rodarImport(true)} disabled={impRodando || !impPreview || impPreview.total === 0}
-                                        className="text-[12px] font-bold px-4 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
-                                        Confirmar e gravar
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
                         {cfgAba === 'avisos' && (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
@@ -4127,6 +3993,70 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </span>
                                         </span>
                                     </label>
+                                    {/* 📊 PAINEL DA IA (28/09). Paulo (27/09): "a IA está ativa?" — ligada
+                                        não é trabalhando. Cada decisão vira registro, e aqui está a soma
+                                        dos últimos 7 dias, com o que NÃO classificou nomeado. */}
+                                    {ehAdmin && (
+                                        <div className="mt-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2 space-y-1">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">📊 A IA nos últimos {painelIa?.dias ?? 7} dias</p>
+                                                <button onClick={() => void lerPainelIa()} className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">🔄</button>
+                                            </div>
+                                            {painelIaErro && <p className="text-[10px] text-red-600 dark:text-red-400">{painelIaErro}</p>}
+                                            {!painelIa && !painelIaErro && <p className="text-[10px] text-slate-400">Lendo…</p>}
+                                            {painelIa && painelIa.total === 0 && (
+                                                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                                                    Nenhuma decisão registrada no período. Isso significa que <strong>nenhum cliente escreveu frase
+                                                    na triagem</strong> desde que o registro começou (28/09) — ou que a IA está desligada acima. Não
+                                                    significa que ela acertou tudo.
+                                                </p>
+                                            )}
+                                            {painelIa && painelIa.total > 0 && (
+                                                <>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {([
+                                                            ['classificada', '✅ encaminhou', 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'],
+                                                            ['sem-certeza', '🤔 sem certeza → menu', 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'],
+                                                            ['nao-entendi', '❔ não entendeu → menu', 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'],
+                                                            ['fila-inexistente', '⚠️ fila inventada (descartada)', 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'],
+                                                            ['ia-indisponivel', '⛔ IA fora do ar → menu', 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'],
+                                                        ] as const).map(([k, rotulo, cls]) => (
+                                                            <span key={k} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cls}`}>
+                                                                {rotulo} · {painelIa.contadores[k] ?? 0}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-600 dark:text-slate-300">
+                                                        {painelIa.total} decisão(ões){painelIa.truncado ? ' (mostrando as 500 mais recentes)' : ''} ·
+                                                        encaminhou <strong>{painelIa.taxaClassificada}%</strong>
+                                                        {painelIa.ultimaEm ? ` · última ${new Date(painelIa.ultimaEm).toLocaleString('pt-BR')}` : ''}
+                                                        {painelIa.filas.length > 0 && <> · filas: {painelIa.filas.map((f) => `${rotuloCurtoFila(f.fila)} ${f.quantidade}`).join(', ')}</>}
+                                                    </p>
+                                                    {painelIa.motivosIndisponivel.length > 0 && (
+                                                        <p className="text-[10px] text-red-700 dark:text-red-400">
+                                                            ⛔ Fora do ar por: {painelIa.motivosIndisponivel.map((m) => `${m.motivo} (${m.quantidade})`).join(' · ')}
+                                                        </p>
+                                                    )}
+                                                    <details className="text-[10px]">
+                                                        <summary className="cursor-pointer text-slate-500 dark:text-slate-400">Últimas {painelIa.ultimas.length} decisões</summary>
+                                                        <ul className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                                                            {painelIa.ultimas.map((u, i) => (
+                                                                <li key={i} className="text-slate-600 dark:text-slate-300">
+                                                                    {new Date(u.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {u.numero} ·{' '}
+                                                                    <strong>{u.situacao}</strong>
+                                                                    {u.fila ? ` → ${rotuloCurtoFila(u.fila)}` : ''}
+                                                                    {u.confianca != null ? ` (${Math.round(u.confianca * 100)}%)` : ''}
+                                                                    {u.motivo ? ` — ${u.motivo}` : ''}
+                                                                    {u.detalhe ? ` — ${u.detalhe}` : ''}
+                                                                    <span className="block text-slate-400 italic">“{u.textoResumo}”</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </details>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                     <label className="flex items-center gap-2 cursor-pointer mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                                         <input type="checkbox" checked={cfg.avisarClienteTransferencia}
                                             onChange={(e) => setCfg((c) => (c ? { ...c, avisarClienteTransferencia: e.target.checked } : c))} />
@@ -4577,6 +4507,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300">↪ de {rotuloCurtoFila(c.transferidaDe)}</span>
                                                 )}
                                                 {j.aberta && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">janela aberta</span>}
+                                                {/* 📞 PENDÊNCIA: o cliente pediu retorno de ligação e ninguém ligou
+                                                    nem encerrou. Some quando alguém liga pelo ☎️ ou encerra. */}
+                                                {c.retornoDeLigacao && !c.retornoDeLigacao.atendidoEm && (
+                                                    <span title={`Pediu retorno de ligação em ${new Date(c.retornoDeLigacao.pedidoEm).toLocaleString('pt-BR')} — ligue pelo ☎️ da conversa`}
+                                                        className="text-[9px] font-bold px-1.5 py-px rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">📞 pediu retorno</span>
+                                                )}
                                                 {!c.empresaId && <span className="text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">vincular</span>}
                                             </div>
                                         </div>
@@ -5083,15 +5019,43 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                         recurso que funcionava é o custo de texto fixo com data:
                                                         por isso esta linha agora diz O QUE funciona, QUANDO, e o
                                                         que NÃO sai por aqui (saída por API, 131055). */}
+                                                    {/* ☎️ CLICK-TO-CALL (28/09): o botão pede ao SBC que ligue. O SBC toca o
+                                                        RAMAL de quem clicou e, quando atende, disca o cliente. Não é a API da
+                                                        Meta (131055) — é o tronco. O status abaixo vem do CDR do Asterisk. */}
+                                                    <button onClick={acaoChamarCliente} disabled={Boolean(ligacaoPedido && !ligacaoPedido.final)}
+                                                        className="w-full text-left text-[11px] font-bold px-2 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50">
+                                                        ☎️ Ligar para {sel.nome || 'o cliente'} pelo WhatsApp (toca no meu ramal primeiro)
+                                                    </button>
+                                                    {ligacaoPedido && (
+                                                        <p className={`text-[10px] ${ligacaoPedido.final && ligacaoPedido.estado !== 'atendida' ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                                            {ligacaoPedido.texto}
+                                                        </p>
+                                                    )}
+                                                    {ligacaoErro && (
+                                                        <div className="text-[11px] font-semibold rounded px-2 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700 space-y-1.5">
+                                                            <p>⛔ {ligacaoErro}</p>
+                                                            {ligacaoConducao && (
+                                                                <button onClick={() => { acaoAssumir(); setLigacaoErro(null); setLigacaoConducao(false); }}
+                                                                    className="w-full px-2 py-1 rounded bg-[#0e3bfa] text-white btn-press">
+                                                                    🙋 Assumir a conversa e tentar de novo
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {!ligacaoPedido && sel.ultimaLigacaoSaida && (
+                                                        <p className="text-[9px] text-slate-400">
+                                                            última ligação: {sel.ultimaLigacaoSaida.status}{sel.ultimaLigacaoSaida.por ? ` · ${sel.ultimaLigacaoSaida.por}` : ''}{sel.ultimaLigacaoSaida.em ? ` · ${new Date(sel.ultimaLigacaoSaida.em).toLocaleString('pt-BR')}` : ''}
+                                                        </p>
+                                                    )}
                                                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                                         <span className="block text-emerald-600 dark:text-emerald-400">
                                                             ☎️ Ligação do cliente para a SP <strong>funciona</strong> (provada em 23/09): toca na URA do
                                                             HitPhone, dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele
                                                             o botão ☎️ do cliente fica indisponível — isso é regra da Meta, não defeito.
                                                         </span>
-                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> (ramal 221 no HitPhone), da SP para o
-                                                        cliente, não por aqui — a Meta recusa chamada por API em número SIP. Precisa falar por voz agora?
-                                                        Ligue do ramal ou combine por mensagem.
+                                                        📞 A ligação de saída sai pelo <strong>tronco SIP</strong> do HitPhone, nunca pela API — a Meta recusa
+                                                        chamada por API em número SIP. O botão acima toca o SEU ramal e depois o cliente. Sem ramal
+                                                        cadastrado (⚙️ → 👥), ligue do ramal ou combine por mensagem.
                                                     </p>
                                                 </>
                                             ) : sel.permissaoLigacao?.status === 'recusada' ? (

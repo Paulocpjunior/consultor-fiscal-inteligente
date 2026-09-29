@@ -170,6 +170,63 @@ export const pedirPermissaoLigacao = (numero: string) =>
         code?: number | null;
     }>(urlConversa(numero, 'pedir-permissao-ligacao'));
 
+// ─── ☎️ CLICK-TO-CALL pelo SBC (28/09) ──────────────────────────────────────
+// A ligação de SAÍDA não sai pela API da Meta (131055, número em modo SIP):
+// o app grava um PEDIDO, o agente na VM do SBC toca o RAMAL do colaborador e
+// depois disca o cliente. Estas portas são desse caminho — nunca da API.
+
+export interface PedidoLigacaoResumo {
+    id: string; ramal?: string;
+    estado: string; texto: string; final: boolean;
+}
+
+/** ☎️ Pede ao SBC que ligue para o cliente (toca no MEU ramal primeiro). */
+export const chamarClientePeloSbc = (numero: string) =>
+    post<{
+        pedido: PedidoLigacaoResumo; acao?: string; emConducaoPor?: string; permissao?: string;
+        semRamal?: boolean; agenteNaoConfigurado?: boolean;
+    }>(urlConversa(numero, 'ligar'));
+
+/** Acompanha o pedido até o estado final (a tela pergunta a cada poucos segundos). */
+export const statusLigacaoSaida = (numero: string, pedidoId: string) =>
+    req<{ pedido: PedidoLigacaoResumo; agente: { vivo: boolean; texto: string } }>(
+        `${urlConversa(numero, 'ligacoes')}/${encodeURIComponent(pedidoId)}`,
+    );
+
+/** O agente da VM do SBC está vivo? (aba ⚙️ → ☎️) */
+export const agenteSbcStatus = () =>
+    req<{
+        segredoConfigurado: boolean; agente: { vivo: boolean; texto: string; haMs: number | null };
+        ultimoContatoEm: string | null; pendentes: number;
+        /** ☎️ ligações RECEBIDAS que o SBC registrou via CDR — e quantas vieram sem número de cliente no src. */
+        cdr?: { recebidas: number; semNumero: number; ultimaEm: string | null };
+        /** 📞 pedidos de retorno que chegaram sem número legível (o cru está no webhook). */
+        retornosSemNumero?: number;
+    }>('/api/admin/whatsapp/sbc/agente');
+
+// ─── 📊 Painel da IA de triagem (admin) ─────────────────────────────────────
+export interface RegistroTriagemIa {
+    em: string; numero: string; situacao: string; fila: string | null; rotulo: string | null;
+    confianca: number | null; motivo: string | null; detalhe: string | null; textoResumo: string; modelo: string | null;
+}
+export interface PainelTriagemIa {
+    dias: number; desde: string; total: number;
+    contadores: Record<string, number>;
+    /** % das chamadas que classificaram; null quando não houve chamada nenhuma (não é 0%). */
+    taxaClassificada: number | null;
+    filas: { fila: string; quantidade: number }[];
+    motivosIndisponivel: { motivo: string; quantidade: number }[];
+    ultimaEm: string | null;
+    ultimas: RegistroTriagemIa[];
+    truncado?: boolean;
+}
+export const painelTriagemIa = (dias = 7) =>
+    req<PainelTriagemIa>(`/api/admin/whatsapp/triagem-ia/painel?dias=${dias}`);
+
+/** Ramal do atendente no HitPhone (só admin grava; vazio limpa). */
+export const salvarRamalAtendente = (uid: string, ramal: string) =>
+    post<{ uid: string; ramal: string | null }>(`/api/admin/whatsapp/atendentes/${encodeURIComponent(uid)}/ramal`, { ramal });
+
 /** Config do atendimento (bot, horário, mensagens, menu) — leitura de qualquer logado. */
 export const atendimentoConfig = () =>
     req<{ config: ConfigAtendimento; filas: FilaAtendimento[] }>('/api/admin/whatsapp/atendimento-config');
@@ -573,6 +630,8 @@ export interface Atendente {
     uid: string; email: string | null; nome: string | null; role: string;
     papelAtendimento: string;
     departamentos: string[]; filasAtendimento: string[];
+    /** ☎️ Ramal no HitPhone — onde o click-to-call toca primeiro. null = não pode ligar. */
+    ramal?: string | null;
     /** 👑 Dono do escritório — vê tudo por construção. Quem responde é o
      *  BACKEND (`ehDono`, que tem a env); a tela só imprime o selo. */
     dono?: boolean;
@@ -601,35 +660,6 @@ export const listarAvaliacoes = () =>
         porNota: { nota: number; quantidade: number }[];
         avaliacoes: AvaliacaoAtendimento[];
     }>('/api/admin/whatsapp/avaliacoes');
-
-// ─── 📥 Importar backup da Ultra Fox (admin; preview antes de gravar) ───────
-
-export interface ImportPreview {
-    preview?: boolean; tipo: string; total: number;
-    amostra?: unknown[]; autores?: string[]; avisos?: string[];
-    descartados?: { linha?: number; valor?: string; motivo: string }[];
-    descartadas?: { linha?: number; trecho?: string; motivo: string }[];
-    totalDescartados?: number; totalDescartadas?: number;
-    criados?: number; jaExistiam?: number; gravadas?: number; conversas?: number;
-}
-
-export const importarUltrafox = (p: {
-    tipo: 'contatos' | 'mensagens-txt' | 'mensagens-csv';
-    conteudo: string; confirmar: boolean;
-    numero?: string; autoresEscritorio?: string[];
-}) => post<ImportPreview>('/api/admin/whatsapp/importar-ultrafox', p);
-
-/**
- * Grava UM bloco do lote. As mensagens já vêm lidas (o parser roda no
- * navegador, na máquina de quem importa) — mas quem decide ENTRADA × SAÍDA e
- * quem calcula o id de cada mensagem é o servidor.
- */
-export const importarUltrafoxLote = (p: {
-    conversas: { numero: string; mensagens: { em: string; autor: string; texto: string }[] }[];
-    autoresEscritorio: string[];
-}) => post<{ gravadas?: number; conversas?: number; totalRecusadas?: number; recusadas?: { numero: string; motivo: string }[] }>(
-    '/api/admin/whatsapp/importar-ultrafox/lote', p,
-);
 
 /**
  * 🗄 Arquiva AGORA a mídia das conversas no SharePoint (o cron faz o mesmo

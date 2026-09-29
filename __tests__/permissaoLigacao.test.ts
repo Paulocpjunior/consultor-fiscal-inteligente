@@ -182,27 +182,35 @@ describe('a conversa aberta não vive de foto velha', () => {
 // que o app não cumpria: não havia caminho de saída. O botão passa a existir
 // e a régua da Meta (só liga com o "Permitir") é trava do BACKEND, nunca só
 // da tela — quem some com o botão não impede a rota.
+//
+// 🔁 28/09: a rota deixou de chamar a API da Meta (131055) e passou a gravar
+// um PEDIDO para o SBC (click-to-call — `clickToCallSbc.test.ts` prova o
+// caminho novo). As travas da Meta continuam sendo do backend, agora no
+// núcleo puro `whatsapp-click-to-call.js`, que a rota consulta ANTES de
+// gravar. As asserções abaixo cobram as travas ONDE elas moram hoje.
 describe('📞 ligar para o cliente', () => {
     const rotas = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-routes.js'), 'utf8');
     const cloud = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-cloud.js'), 'utf8');
     const tela = fs.readFileSync(path.join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
-    const rota = rotas.slice(rotas.indexOf("router.post('/conversas/:numero/ligar'"));
+    const nucleo = fs.readFileSync(path.join(process.cwd(), 'sefaz-backend/whatsapp-click-to-call.js'), 'utf8');
+    const rota = rotas.slice(rotas.indexOf("router.post('/conversas/:numero/ligar'"), rotas.indexOf("router.get('/conversas/:numero/ligacoes/:id'"));
 
     it('sem o "Permitir" do cliente a ROTA recusa — e diz o que fazer', () => {
-        expect(rota).toMatch(/perm\?\.status !== 'aceita'/);
-        expect(rota).toMatch(/ainda não autorizou ligações/);
+        expect(rota).toMatch(/avaliarPedidoDeLigacao\(/);   // a rota decide pelo núcleo…
+        expect(nucleo).toMatch(/perm\?\.status !== 'aceita'/); // …e é no núcleo que a trava mora
+        expect(nucleo).toMatch(/ainda não autorizou ligações/);
         // Recusa do cliente NÃO vira "peça de novo": insistir é o que faz
         // ele bloquear o número.
-        expect(rota).toMatch(/respeite a recusa/);
+        expect(nucleo).toMatch(/respeite a recusa/);
     });
 
     it('autorização EXPIRADA é recusa própria, não "sem permissão"', () => {
-        expect(rota).toMatch(/EXPIROU/);
-        expect(rota).toMatch(/permissao: 'expirada'/);
+        expect(nucleo).toMatch(/EXPIROU/);
+        expect(nucleo).toMatch(/permissao: 'expirada'/);
     });
 
     it('condução vale aqui também (duas vozes ligando é pior que duas escrevendo)', () => {
-        expect(rota).toMatch(/Assuma a conversa \(🙋\) antes de ligar/);
+        expect(nucleo).toMatch(/Assuma a conversa \(🙋\) antes de ligar/);
     });
 
     it('a chamada sai no endpoint /calls e na base da CHAMADA, sem SDP inventado', () => {
@@ -220,13 +228,14 @@ describe('📞 ligar para o cliente', () => {
     // ⚠️ Premissa TROCADA pela RESPOSTA DA META (24/08, código 131055):
     // "Graph API calls are not allowed for SIP enabled numbers". O botão que
     // eu tinha acabado de escrever seria um botão que nunca funciona — em
-    // modo SIP a saída sai pelo TRONCO. A rota fica (ela é a prova, e o dia
-    // em que o número sair do modo SIP ela volta a valer), mas a tela não
-    // oferece o clique: ela DIZ como se liga.
-    it('a tela NÃO oferece ligar por API — ela diz que a saída é pelo ramal', () => {
+    // modo SIP a saída sai pelo TRONCO. 28/09: o botão VOLTOU, mas pelo
+    // tronco — ele pede ao SBC, que toca o ramal e disca o cliente. O que
+    // continua proibido é o clique que chama a API de chamadas.
+    it('a tela NÃO oferece ligar por API — o botão que existe é o do SBC, e a frase diz que a saída é pelo tronco', () => {
         expect(tela).not.toMatch(/📞 Ligar para o cliente \(atende no ramal 221\)/);
         expect(tela).toMatch(/A ligação de saída sai pelo <strong>tronco SIP<\/strong>/);
         expect(tela).toMatch(/permissaoLigacao\?\.status === 'aceita' \?/);
+        expect(tela).toMatch(/chamarClientePeloSbc\(/);
     });
 
     // 🚨 TRAVA TROCADA PELA 3ª VEZ NESTE BLOCO — e desta vez pelo FATO (27/09).
@@ -249,14 +258,16 @@ describe('📞 ligar para o cliente', () => {
         expect(tela).toMatch(/Ligação do cliente para a SP <strong>funciona<\/strong>/);
         expect(tela).toMatch(/08:00–12:00 e 13:00–17:30/);
         // Estado sem saída é beco: a linha diz o que dá pra fazer HOJE.
-        expect(tela).toMatch(/Ligue do ramal ou combine por mensagem/);
+        expect(tela).toMatch(/[Ll]igue do ramal ou combine por mensagem/);
     });
 
     // 🚨 CÓDIGO MORTO COM CARA DE ENTREGA: a ação de ligar e a porta de fetch
     // ficaram órfãs quando o botão saiu (24/08). Órfã é a isca para alguém
     // religar um caminho que a Meta recusa POR DESENHO — as duas foram
-    // deletadas em 25/08. Se voltarem, é junto do botão, e o botão só existe
-    // quando o número sair do modo SIP.
+    // deletadas em 25/08. 28/09: o caminho que existe é o do SBC
+    // (`acaoChamarCliente` / `chamarClientePeloSbc`); os nomes do caminho da
+    // API seguem proibidos, para que ninguém os "restaure" achando que é
+    // regressão.
     it('não sobra ação nem porta de fetch órfã de ligar por API', () => {
         expect(tela).not.toMatch(/const acaoLigar/);
         expect(tela).not.toMatch(/ligarParaCliente/);

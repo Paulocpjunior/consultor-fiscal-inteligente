@@ -39,10 +39,14 @@ import { resolverConfig, decidirAutomacao, gerarProtocolo, leituraDaNota, filaVa
 import { montarCatalogoCanais, canalDoEvento, normalizarCanalCadastrado, cfgDeEnvioDaConversa } from './whatsapp-canais.js';
 import { notificarMensagem } from './whatsapp-push-envio.js';
 import { extrairEventosInstagram, resumoDaMensagemIg, paginaDoInstagram } from './instagram-dm.js';
-import { extrairEventosChamada, resumoDaChamada, resumoDaPermissao } from './whatsapp-chamadas.js';
+import {
+    extrairEventosChamada, resumoDaChamada, resumoDaPermissao,
+    naturezaDoEventoCru, lerPedidoDeRetorno, resumoDoPedidoDeRetorno,
+} from './whatsapp-chamadas.js';
 import {
     filasParaTriagem, valeClassificar, montarPromptTriagem,
     interpretarRespostaTriagem, decidirDestinoDaTriagem,
+    COLECAO_TRIAGEM_IA_LOG, registroDeTriagem,
 } from './whatsapp-triagem-ia.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -235,7 +239,7 @@ async function gravarMensagemRecebida(db, msg, catalogo = null) {
  * 🚨 Chamada NÃO abre a janela de 24h — janela é de MENSAGEM (regra da Meta);
  * afirmá-la por ligação liberaria texto livre que a Meta vai recusar depois.
  */
-async function gravarEventoChamada(db, c) {
+export async function gravarEventoChamada(db, c) {
     const agora = new Date().toISOString();
     const resumo = resumoDaChamada(c);
     const ref = db.collection('whatsapp_mensagens').doc(`call_${c.callId}_${c.evento || 'evento'}`);
@@ -564,12 +568,29 @@ async function capturarAvaliacao(db, msg) {
  * transformaria "a IA melhorou a triagem" em "o bot demora a responder". Passou
  * do tempo, cai no menu — o pior caso da IA é o comportamento de hoje.
  */
-async function triarComIa({ app, config, texto }) {
+/**
+ * 📊 Cada decisão da IA vira um registro (best-effort: falha aqui NUNCA cala
+ * o bot). É o que a aba 🤖 soma — sem isto "a IA está pegando?" era palpite.
+ */
+async function registrarTriagem(db, { numero, texto, destino, modelo }) {
+    try {
+        if (!db) return;
+        await db.collection(COLECAO_TRIAGEM_IA_LOG).add(registroDeTriagem({ numero, texto, destino, modelo }));
+    } catch (e) {
+        console.warn('[whatsapp/triagem-ia] registro não gravado:', e.message);
+    }
+}
+
+async function triarComIa({ app, config, texto, db = null, numero = null }) {
+    let modelo;
     try {
         if (!config?.triagemIaAtiva) return null;
         if (!valeClassificar(texto)) return null;         // dígito, "oi", "ok"
         const ai = app?.get?.('ai');
-        if (!ai) return null;                             // sem GEMINI_API_KEY
+        if (!ai) {                                        // sem GEMINI_API_KEY
+            await registrarTriagem(db, { numero, texto, destino: { situacao: 'ia-indisponivel', detalhe: 'sem cliente Gemini (GEMINI_API_KEY?)' }, modelo: null });
+            return null;
+        }
 
         const filas = filasParaTriagem(config);
         if (!filas.length) return null;
@@ -578,7 +599,7 @@ async function triarComIa({ app, config, texto }) {
         // novo da família alvo na conta do Paulo). Cravar um id aqui seria a
         // segunda régua do modelo, que já custou caro em 15/08.
         const modelos = app.get('geminiModelos');
-        const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+        modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
 
         const corrida = ai.models.generateContent({
             model: modelo,
@@ -595,6 +616,9 @@ async function triarComIa({ app, config, texto }) {
             resultado: interpretarRespostaTriagem(r?.text ?? '', filas),
             filas,
         });
+        // 📊 TODA decisão vira registro — a que classificou e a que não. É o
+        // painel da aba 🤖; antes só o console.log sabia.
+        await registrarTriagem(db, { numero, texto, destino, modelo: modelo || null });
         if (destino.situacao !== 'classificada') {
             // Não é erro — é a IA sendo honesta. Fica no log porque é assim
             // que se descobre que a triagem parou de pegar (silêncio aqui
@@ -605,6 +629,7 @@ async function triarComIa({ app, config, texto }) {
         return destino;
     } catch (e) {
         console.warn('[whatsapp/triagem-ia] falhou (bot segue no menu):', e.message);
+        await registrarTriagem(db, { numero, texto, destino: { situacao: 'ia-indisponivel', detalhe: e.message }, modelo: modelo || null });
         return null;
     }
 }
@@ -632,7 +657,7 @@ async function rodarBot(db, msg, deps = {}) {
         // sub-menu) e perguntar seria gastar chamada para atrapalhar.
         const emTriagem = !conversa.fila && !conversa.atribuidoA && !conversa.submenuAberto;
         const filaSugerida = emTriagem
-            ? await triarComIa({ app: deps.app, config, texto: msg.texto })
+            ? await triarComIa({ app: deps.app, config, texto: msg.texto, db, numero: msg.de })
             : null;
 
         const acoes = decidirAutomacao({
@@ -834,6 +859,45 @@ router.post('/webhook', async (req, res) => {
         if (ch.ilegiveis.length) {
             console.warn('[whatsapp/chamadas] eventos de chamada ilegíveis:', ch.ilegiveis.length,
                 '— o cru está em whatsapp_webhook_eventos (é dele que sai a régua).');
+        }
+
+        // ── 📞 PEDIDO DE RETORNO DE LIGAÇÃO (28/09) — vira PENDÊNCIA de alguém.
+        // Fora do horário da Meta o cliente vê "Pedir retorno de ligação" e a
+        // promessa "entraremos em contato" — feita em nosso nome. O leiaute do
+        // evento segue não provado; o que se faz é o mínimo honesto: achar o
+        // número do cliente nas chaves que a Meta usa para ele (from/wa_id).
+        // Achou ⇒ linha na conversa (conta não-lida, reabre encerrada) + carimbo
+        // `retornoDeLigacao` que a lista mostra como chip até alguém LIGAR pelo
+        // ☎️ ou encerrar. Não achou ⇒ conta em whatsapp_config/pedidos_retorno
+        // e o cru (já gravado no passo 1) é a régua para a próxima versão.
+        if (naturezaDoEventoCru(req.body) === 'pedido-de-retorno') {
+            const pr = lerPedidoDeRetorno(req.body);
+            if (pr.numero) {
+                const ref = db.collection('whatsapp_mensagens').doc(`retorno_${hash}`);
+                const jaExiste = (await ref.get()).exists;
+                await ref.set({
+                    conversaId: pr.numero, direcao: 'entrada', tipo: 'chamada',
+                    texto: resumoDoPedidoDeRetorno(), eventoChamada: 'callback_request',
+                    midia: null, timestamp: agora, statusEntrega: null, phoneNumberId: pr.phoneNumberId,
+                    brutoHash: hash, recebidoEm: agora,
+                }, { merge: true });
+                const convRef = db.collection('whatsapp_conversas').doc(pr.numero);
+                const convAnterior = (await convRef.get()).data() || {};
+                await convRef.set({
+                    numero: pr.numero,
+                    retornoDeLigacao: { pedidoEm: agora, atendidoEm: null, hash },
+                    ultimaMensagem: { resumo: '📞 pediu retorno de ligação', direcao: 'entrada', em: agora },
+                    ...(!jaExiste ? { naoLidas: admin.firestore.FieldValue.increment(1) } : {}),
+                    ...(patchDeReabertura(convAnterior, { direcao: 'entrada', agora }) || {}),
+                    atualizadoEm: agora,
+                }, { merge: true });
+                console.log(`[whatsapp/retorno] pedido de retorno de ${pr.numero} (evento ${hash})`);
+            } else {
+                await db.collection('whatsapp_config').doc('pedidos_retorno').set({
+                    semNumero: admin.firestore.FieldValue.increment(1), ultimoHash: hash, ultimoEm: agora,
+                }, { merge: true });
+                console.warn(`[whatsapp/retorno] pedido de retorno SEM número legível — cru em whatsapp_webhook_eventos/${hash}`);
+            }
         }
         // 🔔 Ligação do cliente notifica como mensagem — MESMA régua de filas e
         // horário do push (a regra do Paulo vale aqui também). Best-effort.

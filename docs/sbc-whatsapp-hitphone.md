@@ -190,9 +190,137 @@ SBC liga a outra perna à Meta → toca no WhatsApp do cliente
 Sem prefixo, sem teclado, sem redigitar. O colaborador atende o próprio
 telefone e a ligação já está a caminho.
 
-🚧 **Ainda não dá para construir a discagem:** ela precisa do
-`META_SIP_DESTINO`, que só se lê no INVITE da **primeira ligação recebida**.
-**A entrada destrava a saída** — não há como inverter.
+✅ **CONSTRUÍDO EM 28/09** (Paulo: *"quanto ao cliente autorizar já estamos
+cientes e funcionamos; precisamos ativar o resto das funções"*). As peças:
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Botão **☎️ Ligar** | conversa com "Ligações AUTORIZADAS" | confirma, grava um **pedido** (`whatsapp_ligacoes_saida`) e acompanha o estado a cada 3 s |
+| Ramal do colaborador | ⚙️ → 👥 Atendentes (admin) | é onde a ligação toca primeiro; sem ramal, o botão recusa dizendo onde cadastrar |
+| Agente `sbc-agente-saida.py` | **dentro da VM**, serviço systemd, usuário `asterisk` | a cada 2 s pergunta ao app (`GET /sbc/pedidos`, header `x-sbc-secret`), escreve o **call file** em `/var/spool/asterisk/outgoing/` e lê o **CDR** (`Master.csv`, `accountcode` = id do pedido) para devolver *atendida / não atendida / ocupado / falhou* |
+| Contexto `[saida-whatsapp]` | `extensions.conf` (setup) | quando o ramal atende, `Dial(PJSIP/<cliente>@meta-saida,60)`; sem `META_SIP_DESTINO`, recusa com motivo no log |
+| `SBC_SHARED_SECRET` | Secret Manager `sbc-shared-secret` → env do Cloud Run **e** `/etc/sbc-agente.env` na VM | o mesmo valor nos dois lados; sem ele o botão recusa (503 nomeado) e o agente fica parado dizendo o que falta |
+| Linha na aba ☎️ | ⚙️ → ☎️ Voz e vídeo | "Agente de SAÍDA: no ar há N s / parado / nunca" — farol honesto, lido do último GET do agente |
+
+Por que o SBC **pergunta** ao app e não o contrário: a VM não abre porta
+nova (só a 5061 da Meta), o Cloud Run não tem IP fixo, e ARI/AMI exposto
+seria uma superfície a mais. O agente fala para fora, por HTTPS, com segredo.
+
+### ENTRADA vira linha na conversa — pelo CDR (28/09)
+
+Em modo SIP a Meta **não manda evento de chamada no webhook** (medido em
+25/08): a ligação que o cliente fazia pelo ☎️ caía na URA e o SP Connect não
+ficava sabendo. Desde 28/09 o **mesmo agente** acompanha o `Master.csv` por
+offset (sem backfill: começa do fim quando sobe pela primeira vez) e manda as
+linhas de **entrada da Meta** (contexto `de-meta`, canal `PJSIP/meta-…`, nunca
+`meta-saida` nem `accountcode lig_…`) para `POST /sbc/cdr`. Cada linha entra
+pela mesma função do webhook de chamadas: **atendida** (com a duração) ou
+**perdida** (conta não-lida e reabre conversa encerrada).
+
+⚠️ **Não provado**: a forma do `src` que a Meta manda. Se não for o E.164 do
+cliente, a linha fica em `whatsapp_chamadas_sem_numero` com o src cru e a aba
+☎️ conta — a régua nasce do dado real.
+
+📞 **Pedido de retorno de ligação** (fora do horário da Meta): o webhook lê o
+mínimo sem conhecer o leiaute (`from`/`wa_id`), grava a linha "pediu RETORNO"
+na conversa, conta não-lida, e a lista mostra o chip **📞 pediu retorno** até
+alguém ligar pelo ☎️ (`atendidoComo: 'ligacao'`) ou encerrar
+(`encerrado-sem-ligar`). Sem número legível, é contado em
+`whatsapp_config/pedidos_retorno` e o cru fica no webhook.
+
+**Como ligar a saída, na ordem:**
+
+1. Descobrir `META_SIP_DESTINO` (seção 7b do `scripts/sbc-diagnostico.sh`,
+   dentro da VM — desde 28/09 ela lê também os logs rotacionados).
+   **A entrada destrava a saída**: o endereço só existe no INVITE que a
+   Meta mandou numa ligação recebida — não há como inverter. E o INVITE
+   só é escrito com o trace SIP **armado** (`--ao-vivo`) antes da ligação;
+   a de 23/09 entrou com o trace desligado, então ela não está no log.
+2. Criar o segredo e passar ao Cloud Run (nunca `--set-*`):
+   ```bash
+   gcloud config set project consultorfiscalapp
+   read -s S && printf '%s' "$S" | wc -c      # o tamanho vale como conferência
+   printf '%s' "$S" | gcloud secrets create sbc-shared-secret --data-file=- --replication-policy=automatic
+   gcloud run services update consultor-fiscal-inteligente --region us-west1 --update-secrets=SBC_SHARED_SECRET=sbc-shared-secret:latest
+   ```
+   (a conta de serviço do Cloud Run precisa de `secretmanager.secretAccessor` no segredo, como nos outros).
+3. Reaplicar o setup com o destino e o segredo (a VM já existe: o script só reaplica a config e grava o env por ssh):
+   ```bash
+   cd ~/consultor-fiscal-inteligente && git pull
+   SBC_SHARED_SECRET="$S" META_SIP_DESTINO='<valor da 7b>' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
+   ```
+4. ⚙️ → ☎️: a linha do agente tem de dizer **no ar**. ⚙️ → 👥: cadastrar o
+   ramal de quem vai testar.
+5. Conversa com "Ligações AUTORIZADAS", **dentro da grade** da Meta: ☎️ Ligar
+   → o ramal toca → atender → o WhatsApp do cliente toca.
+
+⚠️ **O QUE NÃO ESTÁ PROVADO, e é dito antes do teste**: (a) a permissão do
+cliente foi pedida pela conversa, que vive no número **3337** (principal);
+o tronco SIP está no **3155** (☎️ tab). Se a Meta amarrar a permissão ao
+número que disca, a primeira tentativa volta recusada — e a correção é
+pedir a permissão pelo 3155 ou ligar SIP no 3337, decidido pelo erro, não
+por dedução. (b) O `From` da chamada de saída: se a Meta exigir o número
+do WhatsApp no user do From, o parâmetro `SBC_NUMERO_WHATSAPP` do setup
+grava `from_user` no endpoint `meta-saida` — só se define depois que o log
+disser que falta. (c) Leiaute do INVITE de saída contra a Meta — igual à
+entrada em agosto: **o log do Asterisk é a régua**.
+
+### 🛡️ 29/09 — a 7b devolveu VARREDURA, não a Meta
+
+A primeira rodada da 7b (Paulo, do Mac, `09:3`) listou **centenas** de
+"candidatos": `sip:workgroup@84.32.32.222:5060`, `sip:yahia@…`, `sip:yasmin@…`,
+`sip:zach@…`, `sip:zoe@…`, `sip:zuhair@…` — em ordem alfabética, todos do
+**mesmo IP**, por **UDP na 5060**. Isso é um robô testando ramais por nome
+(varredura SIP), não a Meta. E a 7b dizia *"vários candidatos — pegue o mais
+recente"*: obedecida, a saída do escritório discaria para um scanner.
+
+Dois fatos saíram dessa rodada:
+
+- **O `[meta-identify]` está aberto** (`match=0.0.0.0/0`, decisão de 23/08
+  para não derrubar a primeira chamada) e a regra de firewall da 5061 não tem
+  `source-ranges`. Qualquer IP que bata no SBC é tratado como Meta e cai no
+  dialplan `de-meta` — ou seja, o robô também toca a URA da HIT e gera linha
+  de CDR (com `src` = nome, que o agente manda a `whatsapp_chamadas_sem_numero`).
+- **As 4 "falhas de negociação de mídia"** que o veredito carimbava como *"a
+  causa é NOSSA"* podem ser do robô (SDP torto aceito pelo identify aberto),
+  não da Meta. Com o trace desligado não dá para atribuir.
+
+O que mudou (mesmo dia):
+
+| Peça | Antes | Agora |
+|---|---|---|
+| 7b | lia **qualquer** `Contact:` do log | atribui cada Contact ao INVITE recebido que o carrega (linha `<--- Received SIP request … from TLS:ip:porta`); origem que **não é TLS** não é candidata; origem com mais de 5 usuários diferentes no Contact é **varredura** e vira alerta 🛡️; o valor candidato é o **host** (o user é o número de quem ligou) |
+| Veredito | falha de mídia + trace desligado = "a causa é NOSSA" | com varredura no log, diz que **não dá para atribuir** e manda olhar a data de cada falha |
+| Setup | identify e 5061 sempre abertos | `META_SIP_ORIGENS='<ip>/32,…'` entra no `match=` do identify **e** no `--source-ranges` da regra `sbc-wa-tls`; vazio = aberto, e o script **diz** que está aberto. A regra de RTP não é tocada (a mídia pode vir de outro IP da Meta) |
+
+**O caminho, na ordem** (o valor NÃO se chuta — sai do log):
+
+```bash
+# 1. armar o trace (do Mac; a VM roda em UTC, a grade da Meta é BRT)
+cd ~/consultor-fiscal-inteligente && git pull
+gcloud compute ssh sbc-whatsapp --zone=us-west1-a --command='sudo bash -s -- --ao-vivo' < scripts/sbc-diagnostico.sh
+# 2. ligar do celular para a SP pelo ☎️ do WhatsApp, DENTRO da grade (seg–sex 08–12 / 13–17:30), deixar cair na URA
+# 3. ler (a janela é HH:M da hora da VM, em UTC)
+gcloud compute ssh sbc-whatsapp --zone=us-west1-a --command='sudo bash -s -- 12:0' < scripts/sbc-diagnostico.sh 2>&1 | sed -n '/7b/,/^── 8/p'
+# 4. com UM candidato TLS na mão, os dois parâmetros de uma vez:
+SBC_SHARED_SECRET="$S" META_SIP_DESTINO='<host da 7b>' META_SIP_ORIGENS='<ip da origem TLS>/32' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
+```
+
+**2ª rodada (29/09, `13:2`), com a 7b nova.** A varredura de `84.32.32.222`
+vem por **TLS** (153.321 INVITE, 4.719 usuários distintos, até 26/09) — ou
+seja, o filtro "só TLS" não bastava; o que a pegou foi o limite de usuários.
+E sobrou **uma** origem TLS com 3+4 hosts de Contact (`31.70.90.94`, 46
+INVITE, portas altas variadas, **todos com o mesmo carimbo** 25/09 11:50:07
+UTC), que o Paulo não tinha como julgar. Por isso a 7b passou a mostrar, por
+origem, **para que número discou** (user do Request-URI do INVITE): a Meta
+disca para o nosso número do WhatsApp com o From do cliente; robô de fraude
+disca `100`, `1000`, `00972…`. A leitura fica com a pessoa, com o dado ao lado.
+
+⚠️ `META_SIP_ORIGENS` com **um** `/32` é o que o log mostrou, não o que a Meta
+usa. Se a ligação seguinte não entrar, a origem mudou: a 7b (com o trace
+armado) mostra o IP novo e a lista cresce — nunca se volta ao `0.0.0.0/0` em
+silêncio. A lista oficial de faixas da Meta, se existir na documentação da
+Calling API, substitui os `/32` lidos do log.
 
 ### ENTRADA — pela URA, não por um ramal
 

@@ -45,6 +45,29 @@ LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
 # propósito: o endereço se LÊ no INVITE que ela manda na primeira ligação
 # recebida (asterisk -rvvv). Chutá-lo faria o colaborador ouvir silêncio.
 META_SIP_DESTINO="${META_SIP_DESTINO:-}"
+# 🛡️ DE ONDE A META PODE FALAR COM A 5061 (29/09). Faixas de IP (CIDR, separadas
+# por vírgula ou espaço) que entram no `match=` do [meta-identify] E no
+# `--source-ranges` da regra de firewall da 5061. NASCE VAZIO = identify aberto
+# (0.0.0.0/0) e porta aberta ao mundo, que é o estado desde 23/08 — e foi o que
+# deixou um robô de varredura SIP (84.32.32.222, centenas de INVITE com nomes
+# como yahia/zoe/zuhair) ser tratado como Meta e aparecer na 7b como
+# "candidato" a META_SIP_DESTINO. O valor NÃO se chuta: sai da linha
+# "<--- Received SIP request … from TLS:<ip>:<porta>" de uma ligação real (7b do
+# sbc-diagnostico.sh com --ao-vivo). Apertar por suposição derruba a entrada.
+# ⚠️ Só a SINALIZAÇÃO (5061) é apertada. A mídia (RTP 10000-10500) pode vir de
+# outros IPs da Meta; fechá-la pelo IP do INVITE mataria o áudio.
+META_SIP_ORIGENS="${META_SIP_ORIGENS:-}"
+META_MATCH="0.0.0.0/0"
+if [ -n "$META_SIP_ORIGENS" ]; then
+    META_MATCH=""
+    for faixa in $(echo "$META_SIP_ORIGENS" | tr ',' ' '); do
+        if ! echo "$faixa" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$'; then
+            echo "❌ META_SIP_ORIGENS: '$faixa' não é IPv4 nem CIDR (ex.: 157.240.1.1/32,157.240.2.0/24)."
+            exit 1
+        fi
+        META_MATCH="${META_MATCH}${META_MATCH:+,}${faixa}"
+    done
+fi
 # ☎️ SAÍDA PELO TECLADO — CAMINHO SECUNDÁRIO, e o motivo está registrado.
 #
 # 🚨 PAULO CORRIGIU O DESENHO (25/08): "não faz o menor sentido — uma vez que
@@ -77,9 +100,32 @@ META_SIP_DESTINO="${META_SIP_DESTINO:-}"
 # iria ao WhatsApp em SILÊNCIO; por isso, definido o prefixo, o que NÃO casa é
 # RECUSADO com o motivo no log, nunca discado por engano.
 SBC_PREFIXO_WHATSAPP="${SBC_PREFIXO_WHATSAPP:-}"
+# ☎️ CLICK-TO-CALL (28/09, Paulo: "precisamos ativar o resto das funções").
+# O agente scripts/sbc-agente-saida.py roda NESTA VM como serviço systemd,
+# pergunta ao SP Connect se há pedido de ligação e escreve o call file que
+# toca o RAMAL do colaborador e depois disca o cliente pela perna Meta.
+# SBC_SHARED_SECRET é o MESMO valor do Secret Manager `sbc-shared-secret`
+# (lido pelo Cloud Run como env SBC_SHARED_SECRET). Vazio = o agente é
+# instalado mas fica parado dizendo o que falta — nunca disca no escuro.
+# 🔐 O segredo NÃO vai para o metadata da VM (legível por qualquer viewer do
+# projeto): ele entra por ssh, direto em /etc/sbc-agente.env (passo 6).
+SBC_SHARED_SECRET="${SBC_SHARED_SECRET:-}"
+# ☎️ Número do WhatsApp (só dígitos, ex.: 551131551554) que a Meta deve ver
+# no From da chamada de SAÍDA. Vazio = o Asterisk usa o padrão (o user do
+# ramal). Só se define depois que o log de uma tentativa disser que a Meta
+# exige — leiaute não se chuta.
+SBC_NUMERO_WHATSAPP="${SBC_NUMERO_WHATSAPP:-}"
+AGENTE_SRC="$(cd "$(dirname "$0")" && pwd)/sbc-agente-saida.py"
+if [ ! -f "$AGENTE_SRC" ]; then
+    echo "❌ Não achei $AGENTE_SRC — rode este script de dentro do repositório (cd ~/consultor-fiscal-inteligente)."
+    exit 1
+fi
+# base64 sem quebras: entra no startup script (heredoc SEM aspas) e nada dele
+# contém $ ou crase — é justamente por isso que vai codificado.
+AGENTE_B64=$(base64 < "$AGENTE_SRC" | tr -d '\n')
 
 echo "== SBC WhatsApp → HitPhone =="
-echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT"
+echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT origens-meta=${META_MATCH}"
 
 # 0) API do Compute Engine — o projeto só rodava Cloud Run, então ela pode
 #    nunca ter sido habilitada. 🐛 Na 1ª versão isto travava MUDO (23/08): o
@@ -106,14 +152,25 @@ for regra in "sbc-wa-cert:tcp:80" "sbc-wa-tls:tcp:5061" "sbc-wa-rtp:udp:10000-10
             --allow="${proto}:${portas}" --target-tags=sbc-whatsapp --direction=INGRESS
     fi
 done
+# 🛡️ A 5061 só fecha para as faixas da Meta quando elas são DADAS (29/09). A
+#    regra de RTP não é tocada — ver META_SIP_ORIGENS acima.
+if [ -n "$META_SIP_ORIGENS" ]; then
+    echo "== 🛡️ Apertando a 5061 (regra sbc-wa-tls) para: $META_MATCH"
+    gcloud compute firewall-rules update sbc-wa-tls --project="$PROJECT" --source-ranges="$META_MATCH"
+else
+    echo "== ⚠️ 5061 e [meta-identify] ABERTOS ao mundo (META_SIP_ORIGENS vazio): qualquer IP que bata na 5061 é tratado como Meta."
+fi
 
 # 3) O provisionamento da VM (startup script). Ele também roda na REINSTALAÇÃO
 #    de config (passo 5), então tudo aqui é idempotente.
 if [ -n "$META_SIP_DESTINO" ]; then
+    FROM_USER_LINHA=""
+    if [ -n "$SBC_NUMERO_WHATSAPP" ]; then FROM_USER_LINHA="from_user=${SBC_NUMERO_WHATSAPP}"; fi
     BLOCO_META_SAIDA="[meta-saida]
 type=endpoint
 transport=transport-tls
 aors=meta-saida-aor
+${FROM_USER_LINHA}
 disallow=all
 allow=opus
 allow=alaw
@@ -232,8 +289,9 @@ bind=0.0.0.0:5060
 external_signaling_address=${IP}
 external_media_address=${IP}
 
-; A Meta não se registra: identifica-se pelo TRANSPORTE (a 5061 só existe pra
-; ela). Apertar para as faixas de IP dela quando os logs as mostrarem.
+; A Meta não se registra: identifica-se pela ORIGEM. Com META_SIP_ORIGENS vazio
+; o match é 0.0.0.0/0 (qualquer IP na 5061 vira "meta" — inclusive varredura,
+; visto em 29/09). Apertar com as faixas que a 7b do diagnostico mostrar.
 [meta]
 type=endpoint
 transport=transport-tls
@@ -251,7 +309,7 @@ force_rport=yes
 [meta-identify]
 type=identify
 endpoint=meta
-match=0.0.0.0/0
+match=${META_MATCH}
 
 [hit]
 type=endpoint
@@ -313,7 +371,54 @@ exten => _.,1,NoOp(Saida 221 -> WhatsApp | discado=\${EXTEN})
  same => n,Hangup()
  same => n(semdestino),Verbose(1, SAIDA BLOQUEADA: META_SIP_DESTINO vazio - leia o INVITE da Meta numa ligacao recebida e rode o script com ele)
  same => n,Hangup()
+
+[saida-whatsapp]
+; ☎️ CLICK-TO-CALL — o CALL FILE do agente (sbc-agente-saida.py) toca o RAMAL
+; do colaborador (Channel: PJSIP/<ramal>@hit) e, quando ele ATENDE, cai AQUI
+; com EXTEN = número do cliente. Daqui sai a perna Meta. O accountcode é o
+; id do pedido: é por ele que o agente acha a linha no CDR e devolve ao app
+; "atendida / não atendida / ocupado / falhou" — resposta do tronco, não
+; dedução.
+; ⚠️ Sem META_SIP_DESTINO a saída RECUSA aqui também, com motivo no log — o
+; colaborador ouve o desligar, e a tela diz "confira META_SIP_DESTINO".
+exten => _X.,1,NoOp(Click-to-call pedido=\${CDR(accountcode)} ramal atendeu -> WhatsApp \${EXTEN})
+ same => n,GotoIf(\$["${META_SIP_DESTINO}" = ""]?semdestino)
+ same => n,GotoIf(\$[\${LEN(\${EXTEN})} < 10 | \${LEN(\${EXTEN})} > 15]?numeroruim)
+ same => n,Dial(PJSIP/\${EXTEN}@meta-saida,60)
+ same => n,Hangup()
+ same => n(numeroruim),Verbose(1, RECUSADA: \${EXTEN} nao parece numero de telefone - pedido \${CDR(accountcode)})
+ same => n,Hangup()
+ same => n(semdestino),Verbose(1, SAIDA BLOQUEADA: META_SIP_DESTINO vazio - pedido \${CDR(accountcode)} nao discado; rode o setup com META_SIP_DESTINO)
+ same => n,Hangup()
 CONF
+
+# ── ☎️ O AGENTE DO CLICK-TO-CALL (systemd, usuário asterisk) ────────────────
+#    Só biblioteca padrão do Python 3 (Ubuntu 24.04 já tem). Ele fica parado
+#    (dizendo o que falta) enquanto /etc/sbc-agente.env não existir — o
+#    arquivo entra por ssh no passo 6, nunca por aqui (metadata é legível).
+echo "${AGENTE_B64}" | base64 -d > /usr/local/bin/sbc-agente-saida.py
+chmod 755 /usr/local/bin/sbc-agente-saida.py
+mkdir -p /var/spool/asterisk/tmp && chown asterisk:asterisk /var/spool/asterisk/tmp
+cat > /etc/systemd/system/sbc-agente-saida.service <<'UNIT'
+[Unit]
+Description=SP Connect - agente do click-to-call (pedidos de ligacao -> call file do Asterisk)
+After=network-online.target asterisk.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=asterisk
+Group=asterisk
+ExecStart=/usr/bin/python3 /usr/local/bin/sbc-agente-saida.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable sbc-agente-saida
+systemctl restart sbc-agente-saida
 
 systemctl enable asterisk
 systemctl restart asterisk
@@ -393,9 +498,30 @@ else
 fi
 rm -f "$STARTUP"
 
+# 6) ☎️ O segredo do agente entra por SSH (stdin), nunca pelo metadata da VM.
+#    O CFI_URL é derivado do Cloud Run — nunca digitado (regra da casa).
+if [ -n "$SBC_SHARED_SECRET" ]; then
+    CFI_URL=$(gcloud run services describe consultor-fiscal-inteligente --region="$REGION" --project="$PROJECT" --format='value(status.url)')
+    if [ -z "$CFI_URL" ]; then
+        echo "== ❌ Não consegui derivar a URL do Cloud Run — o agente fica sem /etc/sbc-agente.env."
+    else
+        echo "== Gravando /etc/sbc-agente.env na VM (segredo via ssh, não via metadata)…"
+        printf 'CFI_URL=%s\nSBC_SHARED_SECRET=%s\n' "$CFI_URL" "$SBC_SHARED_SECRET" \
+            | gcloud compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" \
+                --command="sudo install -m 640 -o root -g asterisk /dev/stdin /etc/sbc-agente.env && sudo systemctl restart sbc-agente-saida && sleep 3 && sudo journalctl -u sbc-agente-saida -n 3 --no-pager"
+    fi
+else
+    echo "== ☎️ Agente do click-to-call instalado, mas SEM segredo (SBC_SHARED_SECRET vazio): ele fica parado."
+    echo "   Para ligar: SBC_SHARED_SECRET=\"\$S\" SBC_HOST=$SBC_HOST $0   (o mesmo valor do Secret Manager sbc-shared-secret)"
+fi
+
 echo ""
 echo "== PRÓXIMOS PASSOS (docs/sbc-whatsapp-hitphone.md) =="
 echo "   1. Aba ⚙️ → ☎️ do SP Connect → 📞 cadastrar: ${SBC_HOST} porta 5061"
 echo "   2. 🕒 aplicar horários + 👁 mostrar o botão (nesta ordem)"
 echo "   3. Chamada de teste pelo ☎️ do WhatsApp → deve tocar no HitPhone (${SBC_DESTINO})"
 echo "   4. Não tocou? gcloud compute ssh $VM --zone=$ZONE → sudo asterisk -rvvv"
+echo "   5. SAÍDA (click-to-call): ⚙️ → ☎️ mostra se o agente está no ar; ramal do colaborador em ⚙️ → 👥;"
+echo "      botão ☎️ Ligar na conversa com 'Ligações AUTORIZADAS'. Sem META_SIP_DESTINO a saída recusa com motivo no log."
+echo "   6. 🛡️ Quando a 7b do diagnóstico mostrar a origem TLS real da Meta, feche a 5061 para ela:"
+echo "      META_SIP_ORIGENS='<ip>/32' SBC_HOST=$SBC_HOST $0   (hoje: ${META_MATCH})"

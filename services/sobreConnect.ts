@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-09-27';
+export const SOBRE_VERSAO = '2026-09-28';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -216,7 +216,7 @@ export const MANUAL: PassoManual[] = [
             'O 📇 abre a agenda inteira: quem já escreveu, quem veio do backup da Ultra Fox e quem você cadastrou à mão.',
             'Clique no contato e marque as etiquetas dele: Lead, Cliente, Marketing, Colaborador, Candidato…',
             'Os chips do topo filtram por etiqueta e mostram quantos há em cada uma. "Sem etiqueta" é a sua fila de trabalho.',
-            '➕ Novo cadastra um número à mão; 📥 Importar (admin) traz o backup da Ultra Fox.',
+            '➕ Novo cadastra um número à mão.',
         ],
         atencao: 'Etiqueta classifica uma PESSOA, então fica gravado quem etiquetou e quando. "Marketing" pede consentimento do titular: enquanto ele não estiver registrado, o contato aparece com aviso âmbar — e não se manda campanha para esse número.',
     },
@@ -264,10 +264,32 @@ export const MANUAL: PassoManual[] = [
         ],
         atencao: 'O Instagram é atendido por uma LISTA de usuários (⚙️ → 📷) — não está vendo as conversas 📷? Peça a um admin pra te incluir. E o recebimento é ligado UMA vez pelo admin (botão 📡): DM não chegando se confere lá.',
     },
+    {
+        titulo: '14. Ligar para o cliente pelo WhatsApp (☎️)',
+        passos: [
+            'Só depois que o cliente tocou em "Permitir" (☎️ Pedir permissão de ligação → o cartão chega no WhatsApp dele). O painel da direita mostra "✅ Ligações AUTORIZADAS".',
+            'Clique em "☎️ Ligar para … pelo WhatsApp". O SEU ramal toca primeiro — atenda. Quando você atende, a ligação sai para o WhatsApp do cliente.',
+            'A linha abaixo do botão acompanha: "aguardando o SBC" → "tocando o seu ramal" → atendida / não atendida / ocupado / falhou (com o motivo).',
+            'Sem ramal cadastrado, o botão recusa e diz onde cadastrar (⚙️ → 👥 Atendentes, um admin faz).',
+            'Ligação que o CLIENTE faz pelo ☎️ do WhatsApp entra na conversa como "atendida" (com a duração) ou "perdida" — perdida conta como não lida. E o chip vermelho "📞 pediu retorno" na lista é o cliente que tentou ligar fora do horário e pediu retorno: ligue de volta pelo ☎️ (o chip some) ou encerre.',
+        ],
+        atencao: 'A Meta só aceita ligação de WhatsApp dentro do horário de atendimento (seg–sex 08:00–12:00 e 13:00–17:30). Fora dele, a chamada é recusada — fale por mensagem. E ligue de onde o seu ramal está: é ele que toca.',
+    },
 ];
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-09-28',
+        itens: [
+            '☎️ LIGAR PARA O CLIENTE pelo WhatsApp, de dentro da conversa: com a permissão aceita, o botão "☎️ Ligar para … pelo WhatsApp" toca o SEU ramal primeiro e, quando você atende, disca o cliente. O status (tocando o ramal, atendida, não atendida, ocupado, falhou) aparece abaixo do botão e entra como linha na conversa. Precisa de ramal cadastrado (⚙️ → 👥, admin) e do agente do SBC no ar (⚙️ → ☎️ mostra).',
+            '👥 Cadastro de RAMAL por atendente em ⚙️ → Atendentes e filas — é onde a ligação de saída toca.',
+            '📥 A aba "Importar Ultra Fox" saiu da ⚙️: a plataforma foi cancelada e o backup dela já está dentro do SP Connect desde 21/08 (os contatos e mensagens importados continuam, marcados "veio do backup").',
+            '☎️ A ligação que o CLIENTE faz pelo WhatsApp passa a aparecer na conversa: "atendida" com a duração, ou "perdida" (conta como não lida e reabre a conversa encerrada). Só a partir de agora; as antigas não entram.',
+            '📞 "Pedir retorno de ligação" (o que o cliente vê fora do horário) vira pendência: linha na conversa, não lida, e o chip vermelho "📞 pediu retorno" na lista até alguém ligar de volta pelo ☎️ ou encerrar.',
+            '📊 Painel da IA de triagem (⚙️ → 🤖, admin): quantas frases a IA encaminhou, quantas ficaram sem certeza, não entendeu ou pegaram a IA fora do ar nos últimos 7 dias — com as últimas dez decisões e o começo da frase do cliente. "A IA está pegando?" deixou de ser palpite.',
+        ],
+    },
     {
         data: '2026-09-27',
         itens: [

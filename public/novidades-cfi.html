@@ -199,6 +199,45 @@
     ficou só com o que importa (manual, digitada, ZIP, cofre de e-mail) e deixa um ponteiro para a aba nova.</p>
     <p><strong>Onde:</strong> Central de XMLs → 🛰️ Captura → 📤 Cobertura de Saída → primeiro bloco, "✅ O cliente fez certo?" → 🔎 Apurar aptidão. No topo da aba há três atalhos, um por bloco.</p>
 
+    <h3>☎️ <strong>SP Connect: ligar para o cliente pelo WhatsApp de dentro da conversa (o seu ramal toca primeiro)</strong></h3>
+    <p>Com a permissão do cliente aceita ("✅ Ligações AUTORIZADAS" no painel da direita), o botão
+    "☎️ Ligar para … pelo WhatsApp" pede ao servidor de voz que ligue. O SEU ramal toca primeiro; quando você atende,
+    a ligação sai para o WhatsApp do cliente. Abaixo do botão aparece o andamento (aguardando, tocando o ramal,
+    atendida, não atendida, ocupado ou falhou com o motivo) e a ligação entra como linha na conversa. Não sai pela
+    API da Meta, que recusa chamada por API em número SIP; sai pelo tronco.</p>
+    <p><strong>O que precisa:</strong> ramal cadastrado no seu usuário (⚙️ → 👥 Atendentes e filas, um admin
+    faz) e o agente de saída no ar na VM do SBC (⚙️ → ☎️ mostra "no ar há N s"). Sem um dos dois, o botão recusa e diz
+    o que falta. A Meta só aceita ligação dentro do horário de atendimento.</p>
+    <p><strong>Onde:</strong> SP Connect → conversa com "Ligações AUTORIZADAS" → painel da direita; ⚙️ → 👥 (ramal);
+    ⚙️ → ☎️ (agente); ⓘ Sobre → item 14.</p>
+
+    <h3>📥 <strong>SP Connect: a aba "Importar Ultra Fox" saiu da ⚙️</strong></h3>
+    <p>A Ultra Fox foi cancelada. O backup dela está dentro do SP Connect desde 21/08 (contatos e mensagens
+    importados continuam, marcados "veio do backup"), então a porta de importar não tem mais o que importar e saiu do
+    app junto com o código. Nada muda nas conversas.</p>
+    <p><strong>Onde:</strong> SP Connect → ⚙️ (a aba não existe mais); 📇 Contatos (o botão 📥 Importar saiu).</p>
+
+    <h3>☎️ <strong>SP Connect: a ligação que o cliente faz pelo WhatsApp passa a aparecer na conversa (atendida ou perdida)</strong></h3>
+    <p>A Meta não avisa o sistema quando o cliente liga pelo ☎️ do WhatsApp, então a ligação caía na URA e a conversa
+    não registrava nada. Agora o servidor de voz informa cada ligação recebida e ela entra na conversa como uma linha:
+    "atendida" com a duração, ou "perdida". Ligação perdida conta como não lida e reabre a conversa se estava
+    encerrada, para alguém ver e retornar. Só valem as ligações a partir de agora; as antigas não entram.</p>
+    <p><strong>Onde:</strong> SP Connect → conversa do cliente; ⚙️ → ☎️ mostra quantas foram registradas.</p>
+
+    <h3>📞 <strong>SP Connect: "Pedir retorno de ligação" vira pendência na lista</strong></h3>
+    <p>Fora do horário, o cliente que tenta ligar vê no WhatsApp a opção "Pedir retorno de ligação" e a promessa de
+    que entraremos em contato. Esse pedido agora entra na conversa dele, conta como não lida e a lista mostra o chip
+    vermelho "📞 pediu retorno" até alguém ligar de volta pelo ☎️ da conversa ou encerrar o atendimento.</p>
+    <p><strong>Onde:</strong> SP Connect → lista de conversas (chip) e conversa do cliente (linha).</p>
+
+    <h3>📊 <strong>SP Connect: "a IA está pegando?" agora tem número — painel da IA de triagem na ⚙️</strong></h3>
+    <p>Cada decisão da IA que lê o texto do cliente passa a ficar registrada: encaminhou (para qual fila e com que
+    certeza), ficou sem certeza e mostrou o menu, não entendeu, inventou fila (descartada) ou estava fora do ar (e por
+    quê). A aba 🤖 Bot e mensagens soma os últimos 7 dias, mostra a taxa de encaminhamento e as últimas dez decisões
+    com o começo da frase do cliente. Zero decisões não significa acerto: significa que ninguém escreveu frase na
+    triagem desde 28/09, e a tela diz isso.</p>
+    <p><strong>Onde:</strong> SP Connect → ⚙️ → 🤖 Bot e mensagens → bloco "📊 A IA nos últimos 7 dias" (admin).</p>
+
     <h2>Antes disso (27/09)</h2>
 
     <h3>🏦 <strong>DeRE: o plano de contas e o balancete da contabilidade viram D-1011 e D-1101</strong>, conferidos contra o XSD</h3>
