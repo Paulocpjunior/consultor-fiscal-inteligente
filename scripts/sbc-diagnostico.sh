@@ -379,10 +379,13 @@ if [ -f "$LOG_FULL" ]; then
     # 📜 OLHO OS LOGS ROTACIONADOS TAMBÉM (full.1, full.2.gz…): a ligação
     #    de 23/09 pode já ter saído do `full` corrente quando alguém vier ler
     #    — o logrotate gira por semana. `gzip -dcf` lê comprimido e texto puro.
-    # Cada linha de saída: ORIGEM(transporte:ip) TAB carimbo TAB user TAB host TAB esquema
+    # Cada linha de saída: ORIGEM(transporte:ip) TAB carimbo TAB user TAB host TAB esquema TAB destino
+    # 🎯 29/09, 2ª rodada: o DESTINO discado (user do Request-URI do INVITE) é o
+    #    que separa a Meta de um robô sem precisar de whois — a Meta disca para
+    #    o NOSSO número do WhatsApp; robô disca 100, 1000, 00972…
     ATRIBUIDOS=$(gzip -dcf "$LOG_FULL" "$LOG_FULL".[0-9]* 2>/dev/null | awk '
         /<--- Received SIP request/ {
-            origem = ""; carimbo = ""; invite = 0
+            origem = ""; carimbo = ""; invite = 0; destino = ""
             if (match($0, /from [A-Za-z]+:[0-9A-Fa-f.:]+:[0-9]+/)) {
                 origem = substr($0, RSTART + 5, RLENGTH - 5)
                 sub(/:[0-9]+$/, "", origem)
@@ -391,7 +394,14 @@ if [ -f "$LOG_FULL" ]; then
             next
         }
         /<--- / { invite = 0; next }
-        /^INVITE / { if (origem != "") invite = 1; next }
+        /^INVITE / {
+            if (origem != "") invite = 1
+            destino = "?"
+            if (match($0, /^INVITE sips?:[^@ ;>]+@/)) {
+                destino = substr($0, RSTART, RLENGTH - 1); sub(/^INVITE sips?:/, "", destino)
+            }
+            next
+        }
         invite && tolower(substr($0, 1, 8)) == "contact:" {
             if (match($0, /sips?:[^>;" ]+/)) {
                 uri = substr($0, RSTART, RLENGTH)
@@ -401,7 +411,7 @@ if [ -f "$LOG_FULL" ]; then
                     user = substr(host, 1, index(host, "@") - 1)
                     host = substr(host, index(host, "@") + 1)
                 }
-                print origem "\t" carimbo "\t" user "\t" host "\t" esquema
+                print origem "\t" carimbo "\t" user "\t" host "\t" esquema "\t" destino
             }
             invite = 0
         }')
@@ -412,8 +422,8 @@ if [ -f "$LOG_FULL" ]; then
     ATRIBUIDOS_N=0
     [ -n "$ATRIBUIDOS" ] && ATRIBUIDOS_N=$(printf '%s\n' "$ATRIBUIDOS" | grep -c .)
 
-    # Por ORIGEM: quantos INVITE, quantos usuários distintos, último carimbo e
-    # até 3 hosts distintos (o resto só é contado).
+    # Por ORIGEM: quantos INVITE, quantos usuários distintos, último carimbo,
+    # até 3 hosts distintos e até 3 destinos discados (o resto só é contado).
     ORIGENS=""
     if [ -n "$ATRIBUIDOS" ]; then
         ORIGENS=$(printf '%s\n' "$ATRIBUIDOS" | awk -F'\t' '
@@ -424,23 +434,30 @@ if [ -f "$LOG_FULL" ]; then
                     h[$1 SUBSEP $4] = 1; hosts[$1]++
                     if (hosts[$1] <= 3) lista[$1] = lista[$1] (lista[$1] == "" ? "" : " ") $5 ":" $4
                 }
+                if (!(($1 SUBSEP $6) in d)) {
+                    d[$1 SUBSEP $6] = 1; dests[$1]++
+                    if (dests[$1] <= 3) ldest[$1] = ldest[$1] (ldest[$1] == "" ? "" : " ") $6
+                }
                 if ($2 > ultimo[$1]) ultimo[$1] = $2
             }
-            END { for (o in n) print o "\t" n[o] "\t" users[o] "\t" ultimo[o] "\t" hosts[o] "\t" lista[o] }' | sort)
+            END { for (o in n) print o "\t" n[o] "\t" users[o] "\t" ultimo[o] "\t" hosts[o] "\t" lista[o] "\t" dests[o] "\t" ldest[o] }' | sort)
     fi
     VARREDURAS=""; OUTRAS=""; CAND_LINHAS=""; CAND_HOSTS=""
-    while IFS=$'\t' read -r origem n users ultimo nhosts lista; do
+    while IFS=$'\t' read -r origem n users ultimo nhosts lista ndests ldest; do
         [ -z "$origem" ] && continue
+        DISCOU="discou para: ${ldest:-?}"
+        [ "${ndests:-0}" -gt 3 ] && DISCOU="${DISCOU} (… e mais $((ndests - 3)) destino(s))"
         if [ "${users:-0}" -gt "$LIMITE_VARREDURA" ]; then
-            VARREDURAS="${VARREDURAS}      ${origem} — ${n} INVITE com ${users} usuários DIFERENTES no Contact (último: ${ultimo:-?})"$'\n'
+            VARREDURAS="${VARREDURAS}      ${origem} — ${n} INVITE com ${users} usuários DIFERENTES no Contact (último: ${ultimo:-?}); ${DISCOU}"$'\n'
         elif [ "${origem%%:*}" != "TLS" ]; then
-            OUTRAS="${OUTRAS}      ${origem} — ${n} INVITE (último: ${ultimo:-?}): não é TLS, e a Meta só fala pela 5061/TLS"$'\n'
+            OUTRAS="${OUTRAS}      ${origem} — ${n} INVITE (último: ${ultimo:-?}): não é TLS, e a Meta só fala pela 5061/TLS; ${DISCOU}"$'\n'
         else
             for h in $lista; do
                 CAND_LINHAS="${CAND_LINHAS}       ${h}   ← ${origem}, ${n} INVITE, último ${ultimo:-?}"$'\n'
                 CAND_HOSTS="${CAND_HOSTS}${h}"$'\n'
             done
             [ "${nhosts:-0}" -gt 3 ] && CAND_LINHAS="${CAND_LINHAS}       (… e mais $((nhosts - 3)) host(s) da mesma origem)"$'\n'
+            CAND_LINHAS="${CAND_LINHAS}         ↳ ${origem} ${DISCOU}"$'\n'
         fi
     done <<< "$ORIGENS"
     if [ -n "$VARREDURAS" ]; then
@@ -491,6 +508,10 @@ if [ -f "$LOG_FULL" ]; then
         echo "     Vários costumam ser tentativas de épocas diferentes. Pegue o"
         echo "     do INVITE MAIS RECENTE (o carimbo está ao lado) — endereço"
         echo "     velho disca para lugar nenhum, ou pior, para outro."
+        echo "     ⚠️  E olhe o 'discou para': a Meta disca para o NOSSO número do"
+        echo "     WhatsApp (o do tronco SIP), com o From do cliente. Origem que"
+        echo "     disca 100, 1000, 00972… ou vários hosts com porta alta e o MESMO"
+        echo "     carimbo é robô de fraude, mesmo em TLS — não é candidata."
     fi
 else
     echo "   🚨 NÃO CONSEGUI OLHAR: sem o log não há INVITE, e sem INVITE não"

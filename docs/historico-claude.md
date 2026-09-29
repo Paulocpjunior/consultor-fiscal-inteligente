@@ -26,6 +26,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   log nenhum: o caminho é `--ao-vivo` → ligar dentro da grade → 7b → setup
   com `META_SIP_DESTINO` + `META_SIP_ORIGENS` de uma vez. Scripts, travas e
   doc copiados IGUAIS para o `sp-connect` (uma verdade, dois clones, até a F5).
+  2ª rodada (13:2): a varredura vem por TLS (153 mil INVITE, 4.719 nomes) — o
+  limite de usuários é o que a pega; e sobrou UMA origem TLS (31.70.90.94, 46
+  INVITE, 7 hosts de porta alta, mesmo carimbo 25/09 11:50 UTC) que ninguém
+  tinha como julgar. A 7b passou a mostrar, por origem, PARA QUE NÚMERO discou
+  (Request-URI): a Meta disca para o nosso WhatsApp; robô disca 100/00972…
+  Paulo colou os placeholders `<host da 7b>` literais no setup e a validação
+  de CIDR recusou (bom): valor só entra quando houver um real.
 - **🔀 SEPARAÇÃO DO CONNECT — F1 FEITA: repositório próprio `Paulocpjunior/sp-connect`**
   (29/09, Paulo: *"vai"*; Ultra Fox cancelada em 28/09 cumpria a condição de
   17/08). Movido pelo FECHO de imports (87 arquivos de código, 38 suítes,
