@@ -1744,6 +1744,8 @@ export interface DocumentoFiscalItem {
     aliqST?: number;
     /** Valor do ICMS-ST. */
     vICMSST?: number;
+    /** Base de cálculo do IPI do item (<vBC> do IPITrib). Ausente quando o item não tem IPI. */
+    vBCIPI?: number;
     vIPI: number;
     /** Alíquota do IPI em %. */
     aliqIPI?: number;
