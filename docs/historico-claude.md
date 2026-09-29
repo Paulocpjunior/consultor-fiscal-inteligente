@@ -5,6 +5,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚚 QUEM ESCRITURA O CT-e É O TOMADOR (29/09, A CASTELLANO)** (Paulo, Resumo
+  por CFOP: *"o consultor está puxando o CT-e vinculado à nota fiscal, não
+  deveria aparecer na minha escrituração"* — 50 CT-e com CFOP 5351/5353/6352/
+  6353 da transportadora como SAÍDA da empresa). Causa: o app não lia
+  `<ide><toma3>/<toma4>`; todo CT-e da DFe (remetente/destinatário da carga)
+  entrava, e a direção vinha de `cnpjDest` da carga. `cte-tomador.js` (puro,
+  sem imports — o dono da direção o importa): `ehCteDoc`,
+  `papelDaEmpresaNoCte` (emitente · tomador · terceiro · sem-tomador ·
+  sem-empresa), `direcaoDoCte` (tomador → entrada; emitente → saída; senão
+  null), `cteEntraNaEscrituracao` (só terceiro fica fora), `selecionarCtes`
+  + `avisosDosCtes` (fora NOMEADO; sem-tomador entra NOMEADO com "rode ♻️").
+  `lerCabecalhoCte` lê `toma`/`cnpjTomador` (0 rem · 1 exped · 2 receb · 3
+  dest · 4 = CNPJ do toma4); `patchDoCabecalhoCte` grava `cnpjTomadorCte`/
+  `cteToma`; "completo" exige tomador; `VERSAO_RELEITURA_CTE` = 4 (reabre o
+  já-relido). Importer grava os dois campos e decide a direção do CT-e pelo
+  papel. `direcaoEfetivaDoc` (régua única) responde pelo papel antes do
+  tpNF. `selecionarCtesBlocoD(notas, empresaCnpj)` +
+  `selecionarCtesBlocoDComAvisos` (fiscal blocoD e contrib blocoD empilham
+  os avisos); `documentosEscrituradosNoFiscal` passa a empresa (0150 não
+  cadastra participante de CT-e fora). Relatórios: Livro, ✏️ CFOP por nota e
+  Resumo por CFOP filtram por `cteDaEmpresa`. Detalhe mostra o papel. Trava
+  `cteTomador.test.ts`; `cteCabecalhoReleitura` ajustada ao fato (campos
+  novos, "completo" com tomador). Novidade 29/09. PENDÊNCIA do Paulo: rodar
+  ♻️ Reler cabeçalho dos CT-e na A CASTELLANO (e nas demais) para os CT-e
+  antigos ganharem o tomador.
+
 - **🧾 IMPOSTOS DO ITEM NA NOTA DIGITADA (29/09, após o 1068)** (Paulo, print
   do E-Fiscal: *"precisa ter os campos BASE DE ICMS / ALIQUOTA / VALOR DE
   ICMS - BASE SUBST TRIB. / ICMS SUBST. TRIB. - BASE IPI / VLR. IPI"*).

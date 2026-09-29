@@ -94,6 +94,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
             // 🚨 Campos 24 e 25 do D100 (EFD ICMS/IPI): o município da
             // PRESTAÇÃO, não o dos participantes.
             codMunIni: '3550308', codMunFim: '4106902',
+            toma: null, cnpjTomador: null,
         });
     });
 
@@ -102,6 +103,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
             numero: null,
             cfop: '6353', cstIcms: '90', aliqIcms: 7, vBC: 200, vICMS: 14,
             codMunIni: null, codMunFim: null,
+            toma: null, cnpjTomador: null,
         });
     });
 
@@ -120,6 +122,7 @@ describe('lerCabecalhoCte — o que o conhecimento DECLARA', () => {
             numero: null,
             cfop: '5353', cstIcms: '40', aliqIcms: null, vBC: null, vICMS: null,
             codMunIni: null, codMunFim: null,
+            toma: null, cnpjTomador: null,
         });
     });
 
@@ -187,6 +190,8 @@ describe('classificarCteParaCabecalho — cada causa tem ação própria', () =>
             ...CTE_GRAVADO_SEM_CFOP, cfop: '6353', cstIcms: '90',
             aliqIcms: 0, totais: { vBC: 0, vICMS: 0 },
             codMunIniCte: '3550308', codMunFimCte: '3509502',
+            // O tomador entrou no "completo" (29/09): é ele que diz se o frete é desta empresa.
+            cnpjTomadorCte: '11222333000181',
         })).toBe('completo');
     });
 

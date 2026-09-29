@@ -7,6 +7,7 @@
 
 import crypto from 'crypto';
 import { competenciaDeEscrituracao } from './data-entrada-escrituracao.js';
+import { direcaoDoCte } from './cte-tomador.js';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
@@ -361,6 +362,9 @@ export function extrairMetadados(xml, schema) {
   // ICMS/IPI, obrigatórios nas entradas. Não são o município dos participantes.
   const codMunIniCte = cabecalhoCte?.codMunIni || null;
   const codMunFimCte = cabecalhoCte?.codMunFim || null;
+  // O TOMADOR do frete (29/09): decide quem escritura o CT-e e a direção.
+  const cnpjTomadorCte = cabecalhoCte?.cnpjTomador || null;
+  const cteToma = cabecalhoCte?.toma || null;
 
   // Classificacao em modulo PURO (testavel direto em jest). Cobre NFe, NFCe,
   // CTe, MDFe (proc/res), seus eventos, e fallback por modelo da chave quando
@@ -434,7 +438,7 @@ export function extrairMetadados(xml, schema) {
     numero, serie, natOp, cStat,
     // CFOP/CST do CABEÇALHO — é onde o CT-e os guarda (o D190 os exige e
     // estava inventando '5352'/'000' porque a captura só lia <prod>).
-    cfopCabecalho, cstCabecalho, codMunIniCte, codMunFimCte,
+    cfopCabecalho, cstCabecalho, codMunIniCte, codMunFimCte, cnpjTomadorCte, cteToma,
     // Endereço dos DOIS participantes. Vem daqui (e não de uma variável solta
     // no importer) porque `participantes` só existe NESTE escopo — usá-la lá
     // fora quebrou a captura inteira com "participantes is not defined"
@@ -847,6 +851,13 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
   const itens = extrairItens(xml);
   const totais = extrairTotais(xml);
   let direcao = decidirDirecaoPorTpNF(meta.cnpjEmit, meta.cnpjDest, empresaCnpj, meta.tpNF);
+  // 🚚 CT-e: a direção é pelo PAPEL (tomador → entrada; transportadora →
+  // saída), nunca por quem é destinatário da CARGA (29/09, A CASTELLANO).
+  if (empresaCnpj) {
+    // `direcaoDoCte` só responde para CT-e (modelo 57/67 pela chave ou tipo); nos demais devolve null.
+    const dirCte = direcaoDoCte({ chave: meta.chave, tipoDoc: meta.tipoNormalizado, cnpjEmit: meta.cnpjEmit, cnpjTomadorCte: meta.cnpjTomadorCte }, empresaCnpj);
+    if (dirCte) direcao = dirCte;
+  }
   const status = statusFromCStat(xml);
   const temItens = itens.length > 0;
 
@@ -939,6 +950,7 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
     ...(meta.cfopCabecalho ? { cfop: meta.cfopCabecalho } : {}),
     ...(meta.cstCabecalho ? { cstIcms: meta.cstCabecalho } : {}),
     ...(meta.codMunIniCte ? { codMunIniCte: meta.codMunIniCte } : {}),
+    ...(meta.cnpjTomadorCte ? { cnpjTomadorCte: meta.cnpjTomadorCte, cteToma: meta.cteToma } : {}),
     ...(meta.codMunFimCte ? { codMunFimCte: meta.codMunFimCte } : {}),
     tipoDoc: tipoDocFinal,
     tipo: meta.tipoNormalizado,

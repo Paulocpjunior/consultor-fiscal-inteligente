@@ -41,6 +41,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { selecionarCtes, avisosDosCtes } from './cte-tomador.js';
 import { modeloDoDoc } from './participante-doc-helper.js';
 import { isResumoSchema, isResumoTipoDoc } from './gravacao-nfe-regua.js';
 // O número que a CHAVE carrega (posições 26-34) — a régua já existia para o ♻️.
@@ -240,7 +241,7 @@ export function documentosEscrituradosNoFiscal(notas, empresaCnpj) {
         if (docCancelado(n)) continue;
         ids.add(n.id || n.chave);
     }
-    for (const c of selecionarCtesBlocoD(notas)) {
+    for (const c of selecionarCtesBlocoD(notas, empresaCnpj)) {
         if (docCancelado(c)) continue;
         ids.add(c.id || c.chave);
     }
@@ -339,8 +340,16 @@ export function avisoDeItemComDuasUnidades(lista) {
 }
 
 /** CT-e do período (bloco D), sem os resumos. */
-export function selecionarCtesBlocoD(notas) {
-    return (notas || []).filter(ehConhecimentoDeTransporte);
+export function selecionarCtesBlocoD(notas, empresaCnpj) {
+    // 🚚 Só o TOMADOR (e a transportadora) escrituram o frete (29/09). Sem o
+    // CNPJ da empresa a régua não tem como afirmar papel — entra tudo, como antes.
+    return selecionarCtes((notas || []).filter(ehConhecimentoDeTransporte), empresaCnpj).notas;
+}
+
+/** A mesma seleção, com o que ficou de fora e o que entrou sem prova, para os avisos. */
+export function selecionarCtesBlocoDComAvisos(notas, empresaCnpj) {
+    const sel = selecionarCtes((notas || []).filter(ehConhecimentoDeTransporte), empresaCnpj);
+    return { notas: sel.notas, avisos: avisosDosCtes(sel) };
 }
 
 /**

@@ -38,7 +38,7 @@ import { lerRetencoesFederaisDoDoc } from './reinf-retencoes-pj.js';
 import { retencaoEfetivaDaNota, chaveDoAjuste } from './retencao-pj-ajuste.js';
 // Régua ÚNICA de qual documento entra em qual bloco — o modelo vem dela.
 import {
-    selecionarNotasBlocoC, selecionarCtesBlocoD, avisosDaSelecao, ehNotaDeServico,
+    selecionarNotasBlocoC, selecionarCtesBlocoDComAvisos, avisosDaSelecao, ehNotaDeServico,
     serieDoDocumento, numeroDoDocumento, codItemNoArquivo, unidadeDoItem, levaC170NoContribuicoes,
     codSitDoDocumento,
 } from './sped-selecao-documentos.js';
@@ -1063,7 +1063,9 @@ export function buildBlocoC_Contrib(dados) {
 export function buildBlocoD_Contrib(dados) {
     const linhas = [];
     // Modelo pela RÉGUA (o campo cru não existe em documento capturado).
-    const notasD = selecionarCtesBlocoD(dados.notas);
+    const selD = selecionarCtesBlocoDComAvisos(dados.notas, dados.empresa?.cnpj);
+    if (Array.isArray(dados.warnings)) dados.warnings.push(...selD.avisos);
+    const notasD = selD.notas;
     const regimeApuracao = dados.regimeApuracao || '2';
     const aliq = getAliquotas(regimeApuracao);
     const cadastro = cadastroDoFreteContratado(dados.empresa?.dadosFiscais);

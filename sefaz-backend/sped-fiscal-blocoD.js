@@ -14,7 +14,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
-import { selecionarCtesBlocoD, codSitDoDocumento, serieDoDocumento, numeroDoDocumento } from './sped-selecao-documentos.js';
+import { selecionarCtesBlocoDComAvisos, codSitDoDocumento, serieDoDocumento, numeroDoDocumento } from './sped-selecao-documentos.js';
 // Réguas DONAS da leitura do documento — o CT-e capturado grava os campos
 // achatados, e ler só a forma aninhada fazia o COD_PART cair num literal.
 import {
@@ -70,11 +70,13 @@ function regimeDoArquivoD(dados) {
  * - Modelo 57 (CTe)
  * - Tipo 'CTe' (defensivo - se modelo bate, tipo ja deve estar ok)
  */
-function filtrarNotasBlocoD(notas) {
+function filtrarNotasBlocoD(notas, empresaCnpj, warnings) {
     // O modelo sai da RÉGUA, não do campo cru: o importer principal não grava
     // `modelo`, e ler o campo deixava todo CT-e capturado fora do bloco (mesma
     // causa do caso PS VIDROS no bloco C, 19/08).
-    return selecionarCtesBlocoD(notas);
+    const sel = selecionarCtesBlocoDComAvisos(notas, empresaCnpj);
+    if (Array.isArray(warnings)) warnings.push(...sel.avisos);
+    return sel.notas;
 }
 
 /**
@@ -303,7 +305,7 @@ export function buildBlocoD(dados) {
     // `|D001|0|` seguido de `|D990|2|`. Quem decide o IND_MOV é o que este
     // gerador EMITIU; ver `fmt.abrirBloco`.
     const linhas = [];
-    const notas = filtrarNotasBlocoD(dados.notas);
+    const notas = filtrarNotasBlocoD(dados.notas, dados.empresa?.cnpj, dados.warnings);
 
     // D100 + D190 por CTe
     /** CT-e sem CFOP legível: sai NOMEADO em vez de entrar com natureza inventada. */

@@ -87,6 +87,19 @@
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
 
+    <h3>🚚 <strong>CT-e: só o TOMADOR do frete (e a transportadora) escritura o conhecimento; o CT-e em que a empresa é só remetente ou destinatária da carga sai do Livro, do Resumo por CFOP e dos dois SPEDs</strong></h3>
+    <p>Paulo, testando na A CASTELLANO: "o consultor está puxando o CT-e vinculado à nota fiscal, não deveria aparecer na
+    minha escrituração". Eram 50 conhecimentos com o CFOP da transportadora (5351, 5353, 6352, 6353) saindo como SAÍDA da
+    empresa. O CT-e chega pela SEFAZ a todo interessado na carga, mas quem o escritura é quem contratou e paga o frete
+    (o tomador, entrada) e quem o prestou (a transportadora, saída). O tomador está no próprio XML, e o app não o lia.</p>
+    <p>Agora a captura lê o tomador do CT-e e decide o papel da empresa. <strong>Terceiro fica fora</strong> (Livro,
+    ✏️ CFOP por nota, Resumo por CFOP, D100 dos dois SPEDs e 0150), com aviso na geração dizendo quais e por quê.
+    <strong>Tomadora entra como ENTRADA</strong>, com o CFOP de aquisição (1353/2353…). <strong>CT-e capturado antes
+    desta versão</strong> ainda não tem o tomador gravado: ele continua entrando como antes, com aviso, até rodar
+    "♻️ Reler cabeçalho dos CT-e" (aba ✏️ CFOP por nota), que lê o tomador do XML guardado e tira sozinho os que forem de
+    terceiro. No detalhe da nota, o CT-e mostra o papel da empresa.</p>
+    <p><strong>Onde:</strong> Relatórios → ✏️ CFOP por nota → "♻️ Reler cabeçalho dos CT-e" · Relatórios → Resumo por CFOP e Livro · SPED Fiscal / SPED Contribuições → avisos da geração.</p>
+
     <h3>🧾 <strong>Lançar nota à mão: cada item ganhou a linha de impostos do SAGE (Base ICMS, Alíquota, ICMS, Base ST, ICMS ST, Base IPI, IPI)</strong></h3>
     <p>Paulo, depois do deploy 1068, com o print do E-Fiscal: "nesse lugar onde lançamos manual precisa ter os campos
     base de ICMS / alíquota / valor de ICMS, base subst. trib. / ICMS subst. trib., base IPI / vlr. IPI". Em Lançar
