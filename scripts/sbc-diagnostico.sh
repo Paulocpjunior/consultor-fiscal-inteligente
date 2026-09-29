@@ -356,40 +356,140 @@ fi
 #    pessoa decide olhando; nenhum = o trace estava desligado. Carimbar um
 #    endereço SIP deduzido mandaria a ligação do escritório para um estranho,
 #    que é a mesma família do prefixo redigitado à mão que o Paulo recusou.
+#
+# 🛡️ 29/09 — A 7b LISTOU CENTENAS DE "CANDIDATOS", E NENHUM ERA A META.
+#    Eram `sip:<nome>@84.32.32.222:5060` — yahia, yasmin, zach, zoe, zuhair… —
+#    um robô testando ramais por NOME (varredura SIP), que o `[meta-identify]`
+#    aberto (match=0.0.0.0/0) trata como se fosse a Meta. A versão anterior
+#    lia QUALQUER "Contact:" do log sem perguntar de quem era o INVITE; se o
+#    Paulo tivesse "escolhido o mais recente", a saída do escritório discaria
+#    para um scanner. Agora cada Contact é ATRIBUÍDO ao INVITE recebido que o
+#    carrega (transporte, IP e hora da linha "<--- Received SIP request … from
+#    TLS:ip:porta --->" que o pjsip logger escreve), e a régua é:
+#      · origem que NÃO é TLS não é candidata — a Meta só fala pela 5061/TLS;
+#      · origem com mais de LIMITE_VARREDURA usuários DIFERENTES no Contact é
+#        VARREDURA: vira alerta de segurança, nunca candidato;
+#      · o valor candidato é o HOST do Contact (sip:host:porta): o user é o
+#        número de QUEM LIGOU e muda a cada chamada.
+LIMITE_VARREDURA="${LIMITE_VARREDURA:-5}"
+TEM_VARREDURA="nao"
 echo
 echo "── 7b. O endereço SIP da Meta (para habilitar a SAÍDA)"
 if [ -f "$LOG_FULL" ]; then
-    # O Contact do INVITE recebido é para onde se disca de volta. Pego só os
-    # sip:/sips: das linhas de Contact, tiro <>, ; e aspas, e deduplico.
-    # 📜 E OLHO OS LOGS ROTACIONADOS TAMBÉM (full.1, full.2.gz…): a ligação
+    # 📜 OLHO OS LOGS ROTACIONADOS TAMBÉM (full.1, full.2.gz…): a ligação
     #    de 23/09 pode já ter saído do `full` corrente quando alguém vier ler
     #    — o logrotate gira por semana. `gzip -dcf` lê comprimido e texto puro.
-    CANDIDATOS=$(gzip -dcf "$LOG_FULL" "$LOG_FULL".[0-9]* 2>/dev/null \
-        | grep -ih "^Contact:" | grep -o "sips\?:[^>;\"]*" | sort -u)
-    # 🐛 ARMADILHA DA CASA, e eu caí nela aqui: `grep -c` SAI COM 1 quando a
-    # conta dá zero, então `$(... || echo 0)` imprimia "0" duas vezes e o
-    # `[ "$QUANTOS" = "0" ]` dava falso — o desfecho "nenhum candidato" caía
-    # no ramo de "vários", listando o vazio. É a mesma pegadinha que a seção 4
-    # já documenta; escrevi o bloco novo sem reler a lição do bloco velho.
-    if [ -z "$CANDIDATOS" ]; then
+    # Cada linha de saída: ORIGEM(transporte:ip) TAB carimbo TAB user TAB host TAB esquema
+    ATRIBUIDOS=$(gzip -dcf "$LOG_FULL" "$LOG_FULL".[0-9]* 2>/dev/null | awk '
+        /<--- Received SIP request/ {
+            origem = ""; carimbo = ""; invite = 0
+            if (match($0, /from [A-Za-z]+:[0-9A-Fa-f.:]+:[0-9]+/)) {
+                origem = substr($0, RSTART + 5, RLENGTH - 5)
+                sub(/:[0-9]+$/, "", origem)
+            }
+            if (match($0, /^\[[^]]+\]/)) carimbo = substr($0, RSTART + 1, RLENGTH - 2)
+            next
+        }
+        /<--- / { invite = 0; next }
+        /^INVITE / { if (origem != "") invite = 1; next }
+        invite && tolower(substr($0, 1, 8)) == "contact:" {
+            if (match($0, /sips?:[^>;" ]+/)) {
+                uri = substr($0, RSTART, RLENGTH)
+                esquema = (substr(uri, 1, 5) == "sips:") ? "sips" : "sip"
+                host = uri; sub(/^sips?:/, "", host); user = ""
+                if (index(host, "@") > 0) {
+                    user = substr(host, 1, index(host, "@") - 1)
+                    host = substr(host, index(host, "@") + 1)
+                }
+                print origem "\t" carimbo "\t" user "\t" host "\t" esquema
+            }
+            invite = 0
+        }')
+    # Contacts "soltos" — sem a linha de recebimento na frente (formato de
+    # trace diferente). Contam como aviso, nunca como candidato.
+    CONTATOS_SOLTOS=$(gzip -dcf "$LOG_FULL" "$LOG_FULL".[0-9]* 2>/dev/null | grep -ic "^Contact:" 2>/dev/null)
+    [ "$?" -ge 2 ] && CONTATOS_SOLTOS=0
+    ATRIBUIDOS_N=0
+    [ -n "$ATRIBUIDOS" ] && ATRIBUIDOS_N=$(printf '%s\n' "$ATRIBUIDOS" | grep -c .)
+
+    # Por ORIGEM: quantos INVITE, quantos usuários distintos, último carimbo e
+    # até 3 hosts distintos (o resto só é contado).
+    ORIGENS=""
+    if [ -n "$ATRIBUIDOS" ]; then
+        ORIGENS=$(printf '%s\n' "$ATRIBUIDOS" | awk -F'\t' '
+            {
+                n[$1]++
+                if (!(($1 SUBSEP $3) in u)) { u[$1 SUBSEP $3] = 1; users[$1]++ }
+                if (!(($1 SUBSEP $4) in h)) {
+                    h[$1 SUBSEP $4] = 1; hosts[$1]++
+                    if (hosts[$1] <= 3) lista[$1] = lista[$1] (lista[$1] == "" ? "" : " ") $5 ":" $4
+                }
+                if ($2 > ultimo[$1]) ultimo[$1] = $2
+            }
+            END { for (o in n) print o "\t" n[o] "\t" users[o] "\t" ultimo[o] "\t" hosts[o] "\t" lista[o] }' | sort)
+    fi
+    VARREDURAS=""; OUTRAS=""; CAND_LINHAS=""; CAND_HOSTS=""
+    while IFS=$'\t' read -r origem n users ultimo nhosts lista; do
+        [ -z "$origem" ] && continue
+        if [ "${users:-0}" -gt "$LIMITE_VARREDURA" ]; then
+            VARREDURAS="${VARREDURAS}      ${origem} — ${n} INVITE com ${users} usuários DIFERENTES no Contact (último: ${ultimo:-?})"$'\n'
+        elif [ "${origem%%:*}" != "TLS" ]; then
+            OUTRAS="${OUTRAS}      ${origem} — ${n} INVITE (último: ${ultimo:-?}): não é TLS, e a Meta só fala pela 5061/TLS"$'\n'
+        else
+            for h in $lista; do
+                CAND_LINHAS="${CAND_LINHAS}       ${h}   ← ${origem}, ${n} INVITE, último ${ultimo:-?}"$'\n'
+                CAND_HOSTS="${CAND_HOSTS}${h}"$'\n'
+            done
+            [ "${nhosts:-0}" -gt 3 ] && CAND_LINHAS="${CAND_LINHAS}       (… e mais $((nhosts - 3)) host(s) da mesma origem)"$'\n'
+        fi
+    done <<< "$ORIGENS"
+    if [ -n "$VARREDURAS" ]; then
+        TEM_VARREDURA="sim"
+        echo "   🛡️ VARREDURA SIP no log — robô testando ramais por nome. NÃO é a Meta:"
+        printf '%s' "$VARREDURAS"
+        echo "      Nada disto vira META_SIP_DESTINO. E é aviso de SEGURANÇA: o"
+        echo "      [meta-identify] está aberto (match=0.0.0.0/0), então esse robô é"
+        echo "      tratado como Meta e cai no dialplan. Quando a origem REAL da Meta"
+        echo "      aparecer abaixo (TLS), aperte a porta 5061 e o identify para ela:"
+        echo "        META_SIP_ORIGENS='<ip-da-meta>/32' SBC_HOST=<host> ./scripts/setup-sbc-whatsapp.sh"
+    fi
+    if [ -n "$OUTRAS" ]; then
+        echo "   ⚪ Origens que NÃO contam como candidato:"
+        printf '%s' "$OUTRAS"
+    fi
+    # 🐛 ARMADILHA DA CASA: `grep -c` SAI COM 1 quando a conta dá zero, então
+    # `$(... || echo 0)` imprimia "0" duas vezes e a comparação com "0" dava
+    # falso — "nenhum candidato" caía no ramo de "vários". Por isso a contagem
+    # nasce vazia e só passa pelo grep quando há o que contar.
+    if [ -z "$CAND_HOSTS" ]; then
         QUANTOS=0
     else
-        QUANTOS=$(printf '%s\n' "$CANDIDATOS" | grep -c .)
+        QUANTOS=$(printf '%s' "$CAND_HOSTS" | sort -u | grep -c .)
     fi
     if [ "$QUANTOS" = "0" ]; then
-        echo "   ⚪ NENHUM Contact no log (nem nos rotacionados) — e isso é sobre o GRAVADOR, não sobre"
-        echo "      a Meta: o cabeçalho só aparece com o trace SIP LIGADO."
+        if [ "$ATRIBUIDOS_N" = "0" ] && [ "${CONTATOS_SOLTOS:-0}" = "0" ]; then
+            echo "   ⚪ NENHUM Contact no log (nem nos rotacionados) — e isso é sobre o GRAVADOR, não sobre"
+            echo "      a Meta: o cabeçalho só aparece com o trace SIP LIGADO."
+        elif [ "$ATRIBUIDOS_N" = "0" ]; then
+            echo "   ⚪ Há ${CONTATOS_SOLTOS} linha(s) Contact no log, mas NENHUMA dentro de um INVITE"
+            echo "      recebido que eu consiga atribuir a uma origem (a linha '<--- Received"
+            echo "      SIP request … from …' não está na frente). Sem origem não há candidato."
+        else
+            echo "   ⚪ ZERO candidatos da Meta: todo Contact do log veio de origem que não"
+            echo "      é TLS ou de varredura (acima). O INVITE dela de 23/09 aconteceu com"
+            echo "      o trace SIP DESLIGADO, então não foi escrito."
+        fi
         echo "      Rode com --ao-vivo, peça uma ligação DENTRO da grade e volte."
     elif [ "$QUANTOS" = "1" ]; then
-        echo "   ✓ UM candidato — este é o valor:"
-        printf '%s\n' "$CANDIDATOS" | sed 's/^/       /'
-        echo "     Para habilitar a saída, rode o setup com ele:"
-        echo "       sudo META_SIP_DESTINO='<o valor acima>' bash setup-sbc-whatsapp.sh"
+        echo "   ✓ UM candidato — este é o valor (host do Contact, sem o user):"
+        printf '%s' "$CAND_LINHAS"
+        echo "     Para habilitar a saída, rode o setup NO MAC (dentro do clone) com ele:"
+        echo "       SBC_SHARED_SECRET=\"\$S\" META_SIP_DESTINO='<o valor acima>' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh"
     else
         echo "   ⚠️  $QUANTOS candidatos distintos — NÃO vou escolher por você:"
-        printf '%s\n' "$CANDIDATOS" | sed 's/^/       /'
+        printf '%s' "$CAND_LINHAS"
         echo "     Vários costumam ser tentativas de épocas diferentes. Pegue o"
-        echo "     do INVITE MAIS RECENTE (a seção 4 mostra o horário) — endereço"
+        echo "     do INVITE MAIS RECENTE (o carimbo está ao lado) — endereço"
         echo "     velho disca para lugar nenhum, ou pior, para outro."
     fi
 else
@@ -458,9 +558,19 @@ elif [ "$TRACE_SIP" = "nao" ]; then
     echo "     Arme e refaça a ligação:"
     comando_de_rodar "--ao-vivo"
     if [ -n "${MIDIA_ERRO:-}" ] && [ "$MIDIA_ERRO" != "0" ]; then
-        echo "  🔴 E MESMO ASSIM há $MIDIA_ERRO falha(s) de negociação de mídia no"
-        echo "     log (seção 7) — esse erro NÃO depende do trace SIP. Houve"
-        echo "     INVITE: a causa é NOSSA."
+        if [ "$TEM_VARREDURA" = "sim" ]; then
+            # 🛡️ 29/09: com varredura no log, a falha de mídia pode ser do robô
+            # (INVITE com SDP torto, aceito pelo identify aberto) — carimbar
+            # "a causa é NOSSA" sobre isso mandaria mexer em config que funciona.
+            echo "  ⚠️  E há $MIDIA_ERRO falha(s) de negociação de mídia no log (seção 7),"
+            echo "     MAS há varredura SIP no mesmo log (7b): sem o trace não dá para"
+            echo "     dizer se foram da Meta ou do robô. A data de cada falha, ao lado"
+            echo "     da hora das ligações reais, é o que decide."
+        else
+            echo "  🔴 E MESMO ASSIM há $MIDIA_ERRO falha(s) de negociação de mídia no"
+            echo "     log (seção 7) — esse erro NÃO depende do trace SIP. Houve"
+            echo "     INVITE: a causa é NOSSA."
+        fi
     fi
 elif [ "$DENTRO_GRADE" = "nao" ]; then
     # 🚨 23/09: sem este desfecho, teste às 07:50 BRT saía 🟡 apontando a Meta.

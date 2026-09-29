@@ -385,26 +385,116 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             });
         };
 
+        // 🛡️ 29/09 — AS FIXTURES PASSARAM A TER A FORMA DO TRACE REAL. A versão
+        // anterior lia QUALQUER "Contact:" do log, e a rodada de 29/09 devolveu
+        // centenas de `sip:<nome>@84.32.32.222:5060` (yahia, zoe, zuhair…):
+        // varredura SIP, não a Meta. O Contact só vale quando se sabe de QUEM
+        // é o INVITE — e isso está na linha que o pjsip logger escreve na
+        // frente de cada mensagem. Fixture sem essa linha não alcança o ramo.
+        const invite = (origem: string, contact: string, carimbo = '2026-09-23 14:03:12') => [
+            `[${carimbo}] VERBOSE[2231] res_pjsip_logger.c: <--- Received SIP request (1180 bytes) from ${origem} --->`,
+            'INVITE sip:+551131551554@sip.spassessoriacontabil.com.br:5061;transport=tls SIP/2.0',
+            'Via: SIP/2.0/TLS 1.2.3.4:5061;branch=z9hG4bK1',
+            `Contact: <${contact}>`,
+            'Content-Length: 0',
+            '',
+        ].join('\n') + '\n';
+
         it('UM candidato vira resposta, com o comando de habilitar junto', () => {
-            const saida = rodarCom('Contact: <sip:meta.whatsapp.net:5061;transport=tls>\n');
+            const saida = rodarCom(invite('TLS:157.240.1.1:39104', 'sip:+5511999990000@meta.whatsapp.net:5061;transport=tls'));
             expect(saida).toMatch(/UM candidato/);
+            // O valor é o HOST — o user é o número de quem ligou e muda a cada chamada.
             expect(saida).toMatch(/sip:meta\.whatsapp\.net:5061/);
-            // Resposta sem o que fazer com ela é meia resposta.
+            expect(saida).not.toMatch(/\+5511999990000@/);
+            // Resposta sem o que fazer com ela é meia resposta — e o setup roda no Mac.
             expect(saida).toMatch(/META_SIP_DESTINO='<o valor acima>'/);
+            expect(saida).toMatch(/setup-sbc-whatsapp\.sh/);
             // E o `;transport=tls` e os <> ficam de fora do valor.
             expect(saida).not.toMatch(/sip:meta\.whatsapp\.net:5061;/);
+            // De quem veio e quando, ao lado — é o que permite escolher entre épocas.
+            expect(saida).toMatch(/TLS:157\.240\.1\.1/);
+            expect(saida).toMatch(/2026-09-23 14:03:12/);
         });
 
         it('🚨 VÁRIOS candidatos o script MOSTRA e NÃO escolhe', () => {
             // Carimbar um endereço deduzido manda a ligação do escritório
             // para um estranho — a família do prefixo redigitado à mão.
             const saida = rodarCom(
-                'Contact: <sip:a.whatsapp.net:5061>\nContact: <sip:b.whatsapp.net:5061>\n',
+                invite('TLS:157.240.1.1:39104', 'sip:a.whatsapp.net:5061', '2026-09-23 14:03:12')
+                + invite('TLS:157.240.2.2:39105', 'sip:b.whatsapp.net:5061', '2026-09-25 10:00:00'),
             );
             expect(saida).toMatch(/2 candidatos distintos/);
             expect(saida).toMatch(/NÃO vou escolher por você/);
             expect(saida).toMatch(/sip:a\.whatsapp\.net/);
             expect(saida).toMatch(/sip:b\.whatsapp\.net/);
+            expect(saida).not.toMatch(/UM candidato/);
+        });
+
+        // ════════════════════════════════════════════════════════════════════
+        // 🛡️ 29/09 — O QUE A 7b DEVOLVEU DE VERDADE: VARREDURA, NÃO A META.
+        //
+        // O print do Paulo: `sip:workgroup@84.32.32.222:5060`, `sip:yahia@…`,
+        // `sip:zoe@…`, `sip:zuhair@…` — centenas, em ordem alfabética, todas
+        // do MESMO IP e por UDP na 5060. É um robô testando ramais por nome,
+        // que o [meta-identify] aberto (0.0.0.0/0) aceita como Meta. A 7b
+        // dizia "N candidatos distintos — pegue o mais recente": se ele
+        // tivesse obedecido, a saída do escritório discaria para um scanner.
+        // ════════════════════════════════════════════════════════════════════
+        it('🛡️ varredura SIP (um IP, muitos nomes) vira ALERTA, nunca candidato', () => {
+            const nomes = ['workgroup', 'yahia', 'yahya', 'yasin', 'yasmin', 'zach', 'zoe', 'zuhair'];
+            const saida = rodarCom(nomes.map((n, i) =>
+                invite('UDP:84.32.32.222:5060', `sip:${n}@84.32.32.222:5060`, `2026-09-27 03:1${i % 10}:00`)).join(''));
+            expect(saida).toMatch(/VARREDURA SIP/);
+            expect(saida).toMatch(/84\.32\.32\.222 — 8 INVITE com 8 usuários DIFERENTES/);
+            expect(saida).toMatch(/NÃO é a Meta/);
+            expect(saida).toMatch(/Nada disto vira META_SIP_DESTINO/);
+            // E diz o que fazer com o achado: fechar a porta para a origem REAL.
+            expect(saida).toMatch(/META_SIP_ORIGENS=/);
+            // Nenhum dos nomes vira "candidato".
+            expect(saida).not.toMatch(/candidatos distintos/);
+            expect(saida).not.toMatch(/UM candidato/);
+            expect(saida).toMatch(/ZERO candidatos da Meta/);
+        });
+
+        it('🛡️ e com a Meta E a varredura no mesmo log, só a Meta é candidata', () => {
+            const robo = ['yahia', 'yahya', 'yasin', 'yasmin', 'zach', 'zoe'].map((n) =>
+                invite('UDP:84.32.32.222:5060', `sip:${n}@84.32.32.222:5060`, '2026-09-27 03:10:00')).join('');
+            const saida = rodarCom(robo + invite('TLS:157.240.1.1:39104', 'sip:+5511999990000@157.240.1.1:39104;transport=tls'));
+            expect(saida).toMatch(/UM candidato/);
+            expect(saida).toMatch(/sip:157\.240\.1\.1:39104/);
+            expect(saida).not.toMatch(/sip:84\.32\.32\.222/);
+            expect(saida).toMatch(/VARREDURA SIP/);
+        });
+
+        it('⚪ origem que não é TLS, mesmo com poucos nomes, NÃO é candidata — a Meta só fala pela 5061/TLS', () => {
+            const saida = rodarCom(invite('UDP:9.9.9.9:5060', 'sip:221@9.9.9.9:5060'));
+            expect(saida).toMatch(/não é TLS/);
+            expect(saida).not.toMatch(/UM candidato/);
+            expect(saida).toMatch(/ZERO candidatos da Meta/);
+        });
+
+        it('🛡️ falha de mídia COM varredura no log e trace desligado não vira "a causa é NOSSA"', () => {
+            // O print de 29/09 saía "🔴 Houve INVITE: a causa é NOSSA" sobre 4
+            // falhas que podem ser do robô (SDP torto, aceito pelo identify
+            // aberto). Carimbar culpa nossa mandaria mexer em config que funciona.
+            const log = join(dirD, `full-var-${Math.random().toString(36).slice(2)}`);
+            writeFileSync(log, [
+                '[2026-09-27 03:12:01] ERROR[35904] res_pjsip_session.c: meta: Couldn\'t negotiate stream 0:audio-0:audio:sendrecv (nothing)',
+                '',
+            ].join('\n'));
+            writeFileSync(`${log}.1`, ['yahia', 'yahya', 'yasin', 'yasmin', 'zach', 'zoe'].map((n) =>
+                invite('UDP:84.32.32.222:5060', `sip:${n}@84.32.32.222:5060`, '2026-09-27 03:10:00')).join(''));
+            const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
+                input: script, env: { ...envD, LOG_FULL: log }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+            });
+            expect(saida).toMatch(/NÃO DÁ PARA CONCLUIR — o trace SIP/);
+            expect(saida).toMatch(/sem o trace não dá para\s*\n?\s*dizer se foram da Meta ou do robô/);
+            expect(saida).not.toMatch(/a causa é NOSSA/);
+        });
+
+        it('⚪ Contact SOLTO (sem a linha de recebimento na frente) é dito, e não vira candidato', () => {
+            const saida = rodarCom('Contact: <sip:meta.whatsapp.net:5061;transport=tls>\n');
+            expect(saida).toMatch(/1 linha\(s\) Contact no log, mas NENHUMA dentro de um INVITE/);
             expect(saida).not.toMatch(/UM candidato/);
         });
 
@@ -429,8 +519,8 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             // "nenhum" sobre um dado que está a um arquivo de distância.
             const log = join(dirD, `full-rot-${Math.random().toString(36).slice(2)}`);
             writeFileSync(log, 'nada aqui\n');
-            writeFileSync(`${log}.1`, 'Contact: <sip:rot.whatsapp.net:5061;transport=tls>\n');
-            writeFileSync(`${log}.2.gz`, execFileSync('gzip', ['-c'], { input: 'Contact: <sip:rot.whatsapp.net:5061>\n' }));
+            writeFileSync(`${log}.1`, invite('TLS:157.240.1.1:39104', 'sip:rot.whatsapp.net:5061;transport=tls'));
+            writeFileSync(`${log}.2.gz`, execFileSync('gzip', ['-c'], { input: invite('TLS:157.240.1.1:39104', 'sip:rot.whatsapp.net:5061', '2026-09-16 10:00:00') }));
             const saida = execFileSync('bash', ['-s', '--', '1999-01-01'], {
                 input: script, env: { ...envD, LOG_FULL: log }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
             });

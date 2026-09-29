@@ -5,6 +5,27 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🛡️ A 7b DEVOLVEU VARREDURA SIP, NÃO A META** (29/09, primeira rodada real
+  do Paulo, do Mac, `09:3`). Centenas de `sip:<nome>@84.32.32.222:5060`
+  (workgroup, yahia, yasmin, zach, zoe, zuhair… em ordem alfabética, mesmo
+  IP, UDP) listadas como "candidatos" a `META_SIP_DESTINO`, com a dica "pegue
+  o mais recente" — obedecida, a saída do escritório discaria para um
+  scanner. Causa: a 7b lia QUALQUER `Contact:` sem perguntar de quem era o
+  INVITE, e o `[meta-identify]` está ABERTO (`match=0.0.0.0/0`, 23/08) com a
+  5061 sem `source-ranges`: qualquer IP vira "meta" e cai no dialplan (toca a
+  URA da HIT e gera CDR com `src`=nome). Feito: 7b atribui cada Contact ao
+  `<--- Received SIP request … from TLS:ip:porta` que o carrega; só origem
+  TLS é candidata; origem com >5 usuários distintos é VARREDURA (alerta 🛡️);
+  valor = host do Contact (o user é quem ligou). Veredito: falha de mídia +
+  trace desligado + varredura no log NÃO carimba "a causa é NOSSA" (as 4
+  falhas podem ser do robô). Setup: `META_SIP_ORIGENS='<ip>/32,…'` entra no
+  `match=` E no `--source-ranges` da `sbc-wa-tls` (RTP não é tocado — a mídia
+  pode vir de outro IP da Meta); vazio = aberto, dito em voz alta. Fixtures
+  da trava passaram a ter a forma do trace real (mawk provado). ⚠️ A ligação
+  de 23/09 entrou com o trace DESLIGADO, então o INVITE da Meta não está em
+  log nenhum: o caminho é `--ao-vivo` → ligar dentro da grade → 7b → setup
+  com `META_SIP_DESTINO` + `META_SIP_ORIGENS` de uma vez. Scripts, travas e
+  doc copiados IGUAIS para o `sp-connect` (uma verdade, dois clones, até a F5).
 - **🔀 SEPARAÇÃO DO CONNECT — F1 FEITA: repositório próprio `Paulocpjunior/sp-connect`**
   (29/09, Paulo: *"vai"*; Ultra Fox cancelada em 28/09 cumpria a condição de
   17/08). Movido pelo FECHO de imports (87 arquivos de código, 38 suítes,

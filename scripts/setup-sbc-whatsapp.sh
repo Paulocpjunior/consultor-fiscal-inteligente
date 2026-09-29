@@ -45,6 +45,29 @@ LE_EMAIL="${LE_EMAIL:-junior@spassessoriacontabil.com.br}"
 # propósito: o endereço se LÊ no INVITE que ela manda na primeira ligação
 # recebida (asterisk -rvvv). Chutá-lo faria o colaborador ouvir silêncio.
 META_SIP_DESTINO="${META_SIP_DESTINO:-}"
+# 🛡️ DE ONDE A META PODE FALAR COM A 5061 (29/09). Faixas de IP (CIDR, separadas
+# por vírgula ou espaço) que entram no `match=` do [meta-identify] E no
+# `--source-ranges` da regra de firewall da 5061. NASCE VAZIO = identify aberto
+# (0.0.0.0/0) e porta aberta ao mundo, que é o estado desde 23/08 — e foi o que
+# deixou um robô de varredura SIP (84.32.32.222, centenas de INVITE com nomes
+# como yahia/zoe/zuhair) ser tratado como Meta e aparecer na 7b como
+# "candidato" a META_SIP_DESTINO. O valor NÃO se chuta: sai da linha
+# "<--- Received SIP request … from TLS:<ip>:<porta>" de uma ligação real (7b do
+# sbc-diagnostico.sh com --ao-vivo). Apertar por suposição derruba a entrada.
+# ⚠️ Só a SINALIZAÇÃO (5061) é apertada. A mídia (RTP 10000-10500) pode vir de
+# outros IPs da Meta; fechá-la pelo IP do INVITE mataria o áudio.
+META_SIP_ORIGENS="${META_SIP_ORIGENS:-}"
+META_MATCH="0.0.0.0/0"
+if [ -n "$META_SIP_ORIGENS" ]; then
+    META_MATCH=""
+    for faixa in $(echo "$META_SIP_ORIGENS" | tr ',' ' '); do
+        if ! echo "$faixa" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$'; then
+            echo "❌ META_SIP_ORIGENS: '$faixa' não é IPv4 nem CIDR (ex.: 157.240.1.1/32,157.240.2.0/24)."
+            exit 1
+        fi
+        META_MATCH="${META_MATCH}${META_MATCH:+,}${faixa}"
+    done
+fi
 # ☎️ SAÍDA PELO TECLADO — CAMINHO SECUNDÁRIO, e o motivo está registrado.
 #
 # 🚨 PAULO CORRIGIU O DESENHO (25/08): "não faz o menor sentido — uma vez que
@@ -102,7 +125,7 @@ fi
 AGENTE_B64=$(base64 < "$AGENTE_SRC" | tr -d '\n')
 
 echo "== SBC WhatsApp → HitPhone =="
-echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT"
+echo "   projeto=$PROJECT zona=$ZONE host=$SBC_HOST destino=$SBC_DESTINO hit=$HIT_HOST:$HIT_PORT origens-meta=${META_MATCH}"
 
 # 0) API do Compute Engine — o projeto só rodava Cloud Run, então ela pode
 #    nunca ter sido habilitada. 🐛 Na 1ª versão isto travava MUDO (23/08): o
@@ -129,6 +152,14 @@ for regra in "sbc-wa-cert:tcp:80" "sbc-wa-tls:tcp:5061" "sbc-wa-rtp:udp:10000-10
             --allow="${proto}:${portas}" --target-tags=sbc-whatsapp --direction=INGRESS
     fi
 done
+# 🛡️ A 5061 só fecha para as faixas da Meta quando elas são DADAS (29/09). A
+#    regra de RTP não é tocada — ver META_SIP_ORIGENS acima.
+if [ -n "$META_SIP_ORIGENS" ]; then
+    echo "== 🛡️ Apertando a 5061 (regra sbc-wa-tls) para: $META_MATCH"
+    gcloud compute firewall-rules update sbc-wa-tls --project="$PROJECT" --source-ranges="$META_MATCH"
+else
+    echo "== ⚠️ 5061 e [meta-identify] ABERTOS ao mundo (META_SIP_ORIGENS vazio): qualquer IP que bata na 5061 é tratado como Meta."
+fi
 
 # 3) O provisionamento da VM (startup script). Ele também roda na REINSTALAÇÃO
 #    de config (passo 5), então tudo aqui é idempotente.
@@ -258,8 +289,9 @@ bind=0.0.0.0:5060
 external_signaling_address=${IP}
 external_media_address=${IP}
 
-; A Meta não se registra: identifica-se pelo TRANSPORTE (a 5061 só existe pra
-; ela). Apertar para as faixas de IP dela quando os logs as mostrarem.
+; A Meta não se registra: identifica-se pela ORIGEM. Com META_SIP_ORIGENS vazio
+; o match é 0.0.0.0/0 (qualquer IP na 5061 vira "meta" — inclusive varredura,
+; visto em 29/09). Apertar com as faixas que a 7b do diagnostico mostrar.
 [meta]
 type=endpoint
 transport=transport-tls
@@ -277,7 +309,7 @@ force_rport=yes
 [meta-identify]
 type=identify
 endpoint=meta
-match=0.0.0.0/0
+match=${META_MATCH}
 
 [hit]
 type=endpoint
@@ -491,3 +523,5 @@ echo "   3. Chamada de teste pelo ☎️ do WhatsApp → deve tocar no HitPhone 
 echo "   4. Não tocou? gcloud compute ssh $VM --zone=$ZONE → sudo asterisk -rvvv"
 echo "   5. SAÍDA (click-to-call): ⚙️ → ☎️ mostra se o agente está no ar; ramal do colaborador em ⚙️ → 👥;"
 echo "      botão ☎️ Ligar na conversa com 'Ligações AUTORIZADAS'. Sem META_SIP_DESTINO a saída recusa com motivo no log."
+echo "   6. 🛡️ Quando a 7b do diagnóstico mostrar a origem TLS real da Meta, feche a 5061 para ela:"
+echo "      META_SIP_ORIGENS='<ip>/32' SBC_HOST=$SBC_HOST $0   (hoje: ${META_MATCH})"
