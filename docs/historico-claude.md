@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 IMPOSTOS DO ITEM NA NOTA DIGITADA (29/09, após o 1068)** (Paulo, print
+  do E-Fiscal: *"precisa ter os campos BASE DE ICMS / ALIQUOTA / VALOR DE
+  ICMS - BASE SUBST TRIB. / ICMS SUBST. TRIB. - BASE IPI / VLR. IPI"*).
+  `ItemDigitado` ganhou `aliqIcms`, `vBCST`, `vICMSST`, `vBCIPI` (já tinha
+  `vBC`, `vICMS`, `vIPI` sem tela); `IMPOSTOS_DO_ITEM` (ordem do SAGE),
+  `impostosInformados(it)` (só o digitado; zero DIGITADO é resposta),
+  `totaisDosImpostos(itens)` (vBC/vICMS/vBCST/vST/vIPI, cada um só quando
+  algum item informou — o C100 lê `totais`). Formulário: linha de 7 campos
+  por item (`${campo}Texto`), ilegível passa pelo `conferir` de sempre.
+  `types.ts`: `vBCIPI` no item. Trava `notaDigitadaImpostosItem.test.ts`
+  (item/totais, C170 dos dois arquivos, tela). Novidade 29/09.
+
 - **📅 DATA DE ENTRADA E COMPETÊNCIA DE ESCRITURAÇÃO (29/09)** (Paulo, print do
   SAGE IOB "Emissão 30/07 · Entrada 01/08": *"nota do mês anterior que foi
   escriturada no 08, no consultor não temos essa opção … esse campo aqui está

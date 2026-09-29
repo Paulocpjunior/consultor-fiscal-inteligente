@@ -15,7 +15,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { conferirDataEntrada, brDe } from '../../sefaz-backend/data-entrada-escrituracao.js';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
-import {
+import { IMPOSTOS_DO_ITEM, type ImpostoDoItem,
     validarNotaDigitada, montarNotaDigitada, idNotaDigitada, podeGravarSobre,
     type ItemDigitado, type ServicoDigitado, type TransporteDigitado,
 } from '../../services/notaDigitada';
@@ -42,7 +42,11 @@ interface Props {
  * caso APATEL (21/08), que saiu num documento assinado — e estava vivo aqui,
  * numa porta que grava DOCUMENTO FISCAL. O número é derivado na gravação.
  */
-type ItemNaTela = Omit<ItemDigitado, 'vProd'> & { vProdTexto: string };
+type ItemNaTela = Omit<ItemDigitado, 'vProd' | ImpostoDoItem> & { vProdTexto: string } & Partial<Record<`${ImpostoDoItem}Texto`, string>>;
+/** Rótulos da linha de impostos do item, na ordem do SAGE ("Base ICMS · Alíq. · Vlr. ICMS · Base ST · ICMS ST · Base IPI · Vlr. IPI"). */
+const ROTULO_IMPOSTO: Record<ImpostoDoItem, string> = {
+    vBC: 'Base ICMS', aliqIcms: 'Alíq. ICMS %', vICMS: 'Vlr. ICMS', vBCST: 'Base ICMS ST', vICMSST: 'ICMS ST', vBCIPI: 'Base IPI', vIPI: 'Vlr. IPI',
+};
 
 const itemVazio = (): ItemNaTela => ({ cfop: '', vProdTexto: '' });
 
@@ -138,7 +142,10 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             conferir('Alíquota do ICMS', aliqIcmsTexto);
             conferir('ICMS destacado', vIcmsTexto);
         } else {
-            itens.forEach((it, idx) => conferir(`Item ${idx + 1} — valor`, it.vProdTexto));
+            itens.forEach((it, idx) => {
+                conferir(`Item ${idx + 1} — valor`, it.vProdTexto);
+                IMPOSTOS_DO_ITEM.forEach(c => conferir(`Item ${idx + 1} — ${ROTULO_IMPOSTO[c]}`, it[`${c}Texto`] || ''));
+            });
         }
         // A retenção passa pelo MESMO conferidor: ilegível é recusa com o campo
         // nomeado, nunca zero — zero aqui AFIRMA que não houve retenção.
@@ -174,7 +181,18 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             dataEntrada: direcao === 'entrada' ? dataEntrada : '',
             participanteNome, participanteDoc, participanteUf,
             valorTotal: parseValorMoeda(valorTotal),
-            itens: itens.map(({ vProdTexto, ...resto }) => ({ ...resto, vProd: parseValorMoeda(vProdTexto) })),
+            // Imposto do item só entra quando INFORMADO (ausente ≠ zero).
+            itens: itens.map(({ vProdTexto, vBCTexto, aliqIcmsTexto: aliqTexto, vICMSTexto, vBCSTTexto, vICMSSTTexto, vBCIPITexto, vIPITexto, ...resto }) => {
+                const textos: Record<ImpostoDoItem, string | undefined> = { vBC: vBCTexto, aliqIcms: aliqTexto, vICMS: vICMSTexto, vBCST: vBCSTTexto, vICMSST: vICMSSTTexto, vBCIPI: vBCIPITexto, vIPI: vIPITexto };
+                const impostos: Partial<Record<ImpostoDoItem, number>> = {};
+                for (const c of IMPOSTOS_DO_ITEM) {
+                    const t = String(textos[c] || '').trim();
+                    if (!t) continue;
+                    const n = parseValorMoeda(t);
+                    if (n !== null) impostos[c] = n;
+                }
+                return { ...resto, vProd: parseValorMoeda(vProdTexto), ...impostos };
+            }),
             digitadaPorEmail: currentUser.email || '',
             // Sem o UID o Firestore RECUSA a criação — a regra de
             // `documentos_fiscais` exige createdBy == auth.uid no CREATE, e não
@@ -491,6 +509,19 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                                 <button onClick={() => setItens(p => p.filter((_, i) => i !== idx))}
                                     className="text-xs text-red-500">remover</button>
                             )}
+                            {/* 🧾 Impostos do item, como na linha do SAGE (Paulo, 29/09). Todos
+                                opcionais; vazio é "não informado", nunca zero. */}
+                            <div className="col-span-2 md:col-span-6 grid grid-cols-2 md:grid-cols-7 gap-2">
+                                {IMPOSTOS_DO_ITEM.map(c => (
+                                    <div key={c}>
+                                        <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-0.5">{ROTULO_IMPOSTO[c]}</label>
+                                        <input value={it[`${c}Texto`] || ''}
+                                            onChange={e => setItem(idx, { [`${c}Texto`]: e.target.value } as Partial<ItemNaTela>)}
+                                            className={campo} placeholder={c === 'aliqIcms' ? 'ex.: 18' : 'vazio ≠ zero'} />
+                                        <Eco texto={it[`${c}Texto`] || ''} sufixo={c === 'aliqIcms' ? '%' : undefined} />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </div>

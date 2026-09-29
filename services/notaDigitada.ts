@@ -91,10 +91,24 @@ export interface ItemDigitado {
     ncm?: string;
     xProd?: string;
     cst?: string;
+    /**
+     * 🧾 Impostos do item, como na linha do SAGE (Paulo, 29/09, print do E-Fiscal:
+     * "Base ICMS · Alíq. · Vlr. ICMS · Base Subst. Trib. · ICMS Subst. Trib."
+     * e o IPI). Todos OPCIONAIS e AUSENTE ≠ ZERO: o que a pessoa não informou
+     * fica fora do item, e o C170/C190 saem sem afirmar base que ninguém digitou.
+     */
     vBC?: number;
+    aliqIcms?: number;
     vICMS?: number;
+    vBCST?: number;
+    vICMSST?: number;
+    vBCIPI?: number;
     vIPI?: number;
 }
+
+/** Os campos de imposto do item digitado, na ordem da linha do SAGE. */
+export const IMPOSTOS_DO_ITEM = ['vBC', 'aliqIcms', 'vICMS', 'vBCST', 'vICMSST', 'vBCIPI', 'vIPI'] as const;
+export type ImpostoDoItem = typeof IMPOSTOS_DO_ITEM[number];
 
 /** O que a pessoa digita quando a nota é de SERVIÇO (NFS-e). */
 export interface ServicoDigitado {
@@ -193,6 +207,39 @@ function escrituracaoDigitada(i: NotaDigitadaInput): { competencia: string; comp
     const competenciaEmissao = String(i.dhEmi).slice(0, 7);
     const conf = conferirDataEntrada({ direcao: i.direcao, dhEmi: i.dhEmi, dataEntrada: i.dataEntrada });
     return { competencia: conf.ok ? conf.competencia : competenciaEmissao, competenciaEmissao, dataEntrada: conf.ok ? conf.dataEntrada : '' };
+}
+
+/** Só os impostos que a pessoa INFORMOU no item (ausente ≠ zero). */
+export function impostosInformados(it: ItemDigitado): Partial<Record<ImpostoDoItem, number>> {
+    const out: Partial<Record<ImpostoDoItem, number>> = {};
+    for (const campo of IMPOSTOS_DO_ITEM) {
+        const v = it[campo];
+        if (v !== undefined && v !== null && Number.isFinite(Number(v))) out[campo] = Number(v);
+    }
+    return out;
+}
+
+/**
+ * Os totais do documento pelos itens: cada total só existe quando algum item
+ * informou aquele imposto. Alíquota não soma. A chave do ST no total é `vST`
+ * (a do XML), e a base do IPI não tem total no leiaute do documento.
+ */
+export function totaisDosImpostos(itens: ItemDigitado[]): Partial<{ vBC: number; vICMS: number; vBCST: number; vST: number; vIPI: number }> {
+    const soma = (campo: ImpostoDoItem): number | undefined => {
+        let tem = false; let s = 0;
+        for (const it of itens || []) {
+            const v = impostosInformados(it)[campo];
+            if (v !== undefined) { tem = true; s += v; }
+        }
+        return tem ? Math.round(s * 100) / 100 : undefined;
+    };
+    const out: Partial<{ vBC: number; vICMS: number; vBCST: number; vST: number; vIPI: number }> = {};
+    const vBC = soma('vBC'); if (vBC !== undefined) out.vBC = vBC;
+    const vICMS = soma('vICMS'); if (vICMS !== undefined) out.vICMS = vICMS;
+    const vBCST = soma('vBCST'); if (vBCST !== undefined) out.vBCST = vBCST;
+    const vST = soma('vICMSST'); if (vST !== undefined) out.vST = vST;
+    const vIPI = soma('vIPI'); if (vIPI !== undefined) out.vIPI = vIPI;
+    return out;
 }
 
 /** Espécie efetiva — o padrão é mercadoria (como a porta nasceu). */
@@ -404,7 +451,9 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
         cnpjDest: destinatario.cnpjCpf,
         xNomeDest: destinatario.nome,
         ufDest: destinatario.uf,
-        totais: { vNF: Number(i.valorTotal) },
+        // Os totais de imposto só existem quando ALGUM item os informou — é a
+        // soma do digitado, nunca zero por conveniência (o C100 lê `totais`).
+        totais: { vNF: Number(i.valorTotal), ...totaisDosImpostos(i.itens) },
         valorTotal: Number(i.valorTotal),
         itens: i.itens.map((it, idx) => ({
             nItem: String(idx + 1),
@@ -413,9 +462,7 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
             xProd: it.xProd || `ITEM ${idx + 1} (digitado)`,
             vProd: Number(it.vProd),
             cst: it.cst || undefined,
-            vBC: it.vBC !== undefined ? Number(it.vBC) : undefined,
-            vICMS: it.vICMS !== undefined ? Number(it.vICMS) : undefined,
-            vIPI: it.vIPI !== undefined ? Number(it.vIPI) : undefined,
+            ...impostosInformados(it),
         })),
         // Só os tributos PREENCHIDOS entram — ver `retencaoFederalDigitada`.
         ...camposDaRetencaoDigitada(i.retencao),

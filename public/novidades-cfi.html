@@ -87,6 +87,14 @@
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
 
+    <h3>🧾 <strong>Lançar nota à mão: cada item ganhou a linha de impostos do SAGE (Base ICMS, Alíquota, ICMS, Base ST, ICMS ST, Base IPI, IPI)</strong></h3>
+    <p>Paulo, depois do deploy 1068, com o print do E-Fiscal: "nesse lugar onde lançamos manual precisa ter os campos
+    base de ICMS / alíquota / valor de ICMS, base subst. trib. / ICMS subst. trib., base IPI / vlr. IPI". Em Lançar
+    nota (mercadoria), abaixo de cada item aparecem os sete campos. <strong>Todos opcionais, e vazio não é zero:</strong>
+    o que não for informado fica fora do item e o SPED não afirma base que ninguém digitou. O que for informado vai
+    para o C170 e o C190 dos dois SPEDs e soma nos totais da nota (base, ICMS, ST e IPI), que é o que o C100 lê.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Importar → Lançar nota → Mercadoria (NF-e) → cada item → linha "Base ICMS · Alíq. ICMS % · Vlr. ICMS · Base ICMS ST · ICMS ST · Base IPI · Vlr. IPI".</p>
+
     <h3>📅 <strong>Data de ENTRADA da nota: a nota do fornecedor emitida num mês e recebida no seguinte passa a ser escriturada no mês da entrada</strong></h3>
     <p>Paulo, com o print do SAGE IOB (Notas Fiscais de Entrada: "Emissão 30/07/2026 · Entrada 01/08/2026"): "nota do mês
     anterior que foi escriturada no 08, no consultor não temos essa opção". O app só conhecia a emissão, então a nota de
