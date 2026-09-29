@@ -233,7 +233,9 @@ alguém ligar pelo ☎️ (`atendidoComo: 'ligacao'`) ou encerrar
 1. Descobrir `META_SIP_DESTINO` (seção 7b do `scripts/sbc-diagnostico.sh`,
    dentro da VM — desde 28/09 ela lê também os logs rotacionados).
    **A entrada destrava a saída**: o endereço só existe no INVITE que a
-   Meta mandou numa ligação recebida — não há como inverter.
+   Meta mandou numa ligação recebida — não há como inverter. E o INVITE
+   só é escrito com o trace SIP **armado** (`--ao-vivo`) antes da ligação;
+   a de 23/09 entrou com o trace desligado, então ela não está no log.
 2. Criar o segredo e passar ao Cloud Run (nunca `--set-*`):
    ```bash
    gcloud config set project consultorfiscalapp
@@ -262,6 +264,53 @@ do WhatsApp no user do From, o parâmetro `SBC_NUMERO_WHATSAPP` do setup
 grava `from_user` no endpoint `meta-saida` — só se define depois que o log
 disser que falta. (c) Leiaute do INVITE de saída contra a Meta — igual à
 entrada em agosto: **o log do Asterisk é a régua**.
+
+### 🛡️ 29/09 — a 7b devolveu VARREDURA, não a Meta
+
+A primeira rodada da 7b (Paulo, do Mac, `09:3`) listou **centenas** de
+"candidatos": `sip:workgroup@84.32.32.222:5060`, `sip:yahia@…`, `sip:yasmin@…`,
+`sip:zach@…`, `sip:zoe@…`, `sip:zuhair@…` — em ordem alfabética, todos do
+**mesmo IP**, por **UDP na 5060**. Isso é um robô testando ramais por nome
+(varredura SIP), não a Meta. E a 7b dizia *"vários candidatos — pegue o mais
+recente"*: obedecida, a saída do escritório discaria para um scanner.
+
+Dois fatos saíram dessa rodada:
+
+- **O `[meta-identify]` está aberto** (`match=0.0.0.0/0`, decisão de 23/08
+  para não derrubar a primeira chamada) e a regra de firewall da 5061 não tem
+  `source-ranges`. Qualquer IP que bata no SBC é tratado como Meta e cai no
+  dialplan `de-meta` — ou seja, o robô também toca a URA da HIT e gera linha
+  de CDR (com `src` = nome, que o agente manda a `whatsapp_chamadas_sem_numero`).
+- **As 4 "falhas de negociação de mídia"** que o veredito carimbava como *"a
+  causa é NOSSA"* podem ser do robô (SDP torto aceito pelo identify aberto),
+  não da Meta. Com o trace desligado não dá para atribuir.
+
+O que mudou (mesmo dia):
+
+| Peça | Antes | Agora |
+|---|---|---|
+| 7b | lia **qualquer** `Contact:` do log | atribui cada Contact ao INVITE recebido que o carrega (linha `<--- Received SIP request … from TLS:ip:porta`); origem que **não é TLS** não é candidata; origem com mais de 5 usuários diferentes no Contact é **varredura** e vira alerta 🛡️; o valor candidato é o **host** (o user é o número de quem ligou) |
+| Veredito | falha de mídia + trace desligado = "a causa é NOSSA" | com varredura no log, diz que **não dá para atribuir** e manda olhar a data de cada falha |
+| Setup | identify e 5061 sempre abertos | `META_SIP_ORIGENS='<ip>/32,…'` entra no `match=` do identify **e** no `--source-ranges` da regra `sbc-wa-tls`; vazio = aberto, e o script **diz** que está aberto. A regra de RTP não é tocada (a mídia pode vir de outro IP da Meta) |
+
+**O caminho, na ordem** (o valor NÃO se chuta — sai do log):
+
+```bash
+# 1. armar o trace (do Mac; a VM roda em UTC, a grade da Meta é BRT)
+cd ~/consultor-fiscal-inteligente && git pull
+gcloud compute ssh sbc-whatsapp --zone=us-west1-a --command='sudo bash -s -- --ao-vivo' < scripts/sbc-diagnostico.sh
+# 2. ligar do celular para a SP pelo ☎️ do WhatsApp, DENTRO da grade (seg–sex 08–12 / 13–17:30), deixar cair na URA
+# 3. ler (a janela é HH:M da hora da VM, em UTC)
+gcloud compute ssh sbc-whatsapp --zone=us-west1-a --command='sudo bash -s -- 12:0' < scripts/sbc-diagnostico.sh 2>&1 | sed -n '/7b/,/^── 8/p'
+# 4. com UM candidato TLS na mão, os dois parâmetros de uma vez:
+SBC_SHARED_SECRET="$S" META_SIP_DESTINO='<host da 7b>' META_SIP_ORIGENS='<ip da origem TLS>/32' SBC_HOST=sip.spassessoriacontabil.com.br ./scripts/setup-sbc-whatsapp.sh
+```
+
+⚠️ `META_SIP_ORIGENS` com **um** `/32` é o que o log mostrou, não o que a Meta
+usa. Se a ligação seguinte não entrar, a origem mudou: a 7b (com o trace
+armado) mostra o IP novo e a lista cresce — nunca se volta ao `0.0.0.0/0` em
+silêncio. A lista oficial de faixas da Meta, se existir na documentação da
+Calling API, substitui os `/32` lidos do log.
 
 ### ENTRADA — pela URA, não por um ramal
 
