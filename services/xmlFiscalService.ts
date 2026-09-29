@@ -52,6 +52,7 @@ import { retirarDocumentoDaEmpresa } from './documentoRetirada';
 // NÃO corrige: número, série e competência formam o id, então o relançamento
 // cria um SEGUNDO documento e a mesma venda conta duas vezes.
 import { corrigirNumeroDaNotaDigitada, idComOutroNumero } from './documentoCorrecaoNumero';
+import { patchDataEntrada, brDe } from '../sefaz-backend/data-entrada-escrituracao.js';
 import { declararNotaCancelada, removerCancelamentoDeclarado } from './cancelamentoDeclarado';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
@@ -1162,6 +1163,39 @@ export async function corrigirNumeroDaNota(
     );
     await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchAntigo!, { merge: true });
     return { ok: true, mensagem: decisao.avisoDepois, idNovo: decisao.idNovo };
+}
+
+/**
+ * 📅 DATA DE ENTRADA de um documento de ENTRADA capturado — e a competência em
+ * que ele é escriturado (29/09, print do SAGE: emissão 30/07, entrada 01/08).
+ *
+ * A decisão (formato, entrada ≥ emissão, para onde a competência vai, o que
+ * se guarda) mora no dono PURO `data-entrada-escrituracao.js`; aqui é só o
+ * I/O. Limpar a data devolve a nota à competência da emissão.
+ */
+export async function definirDataEntradaDaNota(
+    id: string,
+    dataEntrada: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string; competencia?: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+    if (direcaoEfetivaDoc(existing as any) !== 'entrada') {
+        return { ok: false, mensagem: 'Data de entrada só existe em documento de ENTRADA — a saída é escriturada pela emissão.' };
+    }
+    const r = patchDataEntrada({ doc: existing, dataEntrada, autor: { uid: auth?.currentUser?.uid ?? user?.id, email: user?.email } });
+    if (!r.ok || !r.patch) return { ok: false, mensagem: r.motivo || 'Data de entrada recusada.' };
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), r.patch, { merge: true });
+    const comp = r.patch.competencia || '';
+    const compBr = `${comp.slice(5)}/${comp.slice(0, 4)}`;
+    return {
+        ok: true,
+        competencia: comp,
+        mensagem: r.patch.dataEntrada
+            ? `Data de entrada ${brDe(r.patch.dataEntrada)} gravada — a nota passa a ser escriturada em ${compBr}${r.conf.mudaCompetencia ? ' (saiu da competência da emissão)' : ''}.`
+            : `Data de entrada limpa — a nota volta à competência da emissão (${compBr}).`,
+    };
 }
 
 /**

@@ -1877,8 +1877,18 @@ export interface DocumentoFiscal {
     modFrete?: string | null;
     /** Data/hora de emissão (ISO). */
     dhEmi: string;
-    /** Competência calculada a partir da emissão (YYYY-MM). */
+    /**
+     * Competência em que o documento é ESCRITURADO (YYYY-MM). Na entrada com
+     * `dataEntrada`, é o mês da entrada; senão, o da emissão. É por este campo
+     * que todo recorte pergunta (SPED, livros, DIPAM, fechamento).
+     */
     competencia: string;
+    /** Data de ENTRADA no estabelecimento (AAAA-MM-DD), decisão de quem escritura. Só na entrada. */
+    dataEntrada?: string;
+    /** Competência da EMISSÃO, guardada quando a escrituração foi movida pela data de entrada. */
+    competenciaEmissao?: string;
+    dataEntradaDefinidaEm?: string;
+    dataEntradaDefinidaPor?: string;
     direcao: XmlDirecao;
     categoriaOperacao?: CategoriaOperacao;
     status: XmlStatusDocumento;

@@ -6,6 +6,7 @@
 // ============================================================================
 
 import crypto from 'crypto';
+import { competenciaDeEscrituracao } from './data-entrada-escrituracao.js';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { classificarTipoDoc } from './xml-tipo-doc.js';
@@ -1004,6 +1005,13 @@ export async function importarXmlSefaz({ empresaId, empresaCnpj, xml, schema, ns
       // atropelava o 'cancelado' do stub (o evento tinha chegado antes). A
       // cancelada voltava a contar no Livro e no fechamento (bug 11/08).
       const ex = snap.exists ? (snap.data() || {}) : {};
+      // 📅 A DATA DE ENTRADA é decisão de quem escritura, não do XML: o
+      // reimport não a apaga nem devolve a nota à competência da emissão.
+      if (ex.dataEntrada) {
+        docData.dataEntrada = ex.dataEntrada;
+        docData.competenciaEmissao = ex.competenciaEmissao || competenciaFromDhEmi(meta.dhEmi);
+        docData.competencia = competenciaDeEscrituracao({ direcao: docData.direcao, dhEmi: meta.dhEmi, dataEntrada: ex.dataEntrada });
+      }
       if (docCancelado(ex)) {
         docData.status = 'cancelado';
         if (ex.canceladoEm !== undefined) docData.canceladoEm = ex.canceladoEm;

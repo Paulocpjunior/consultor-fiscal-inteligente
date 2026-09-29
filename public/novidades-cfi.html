@@ -68,14 +68,14 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 28/09/2026 · leitura de 30 minutos</p>
+            <p>Departamento Fiscal · atualizado em 29/09/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (28/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (29/09) — leia esta parte primeiro</h2>
 
     <h3>📨 <strong>Manifestar ciência: o "✔" só aparece quando a SEFAZ gravou — e diz por que não gravou</strong></h3>
     <p>Paulo, validando: "consigo marcar como ciente, porém quando atualizo ele volta a aparecer como sem ciência". O
@@ -86,6 +86,19 @@
     na própria carteira, não só para admin. Se ainda aparecer ✖, o motivo na tela é o que a SEFAZ respondeu: mande o
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
+
+    <h3>📅 <strong>Data de ENTRADA da nota: a nota do fornecedor emitida num mês e recebida no seguinte passa a ser escriturada no mês da entrada</strong></h3>
+    <p>Paulo, com o print do SAGE IOB (Notas Fiscais de Entrada: "Emissão 30/07/2026 · Entrada 01/08/2026"): "nota do mês
+    anterior que foi escriturada no 08, no consultor não temos essa opção". O app só conhecia a emissão, então a nota de
+    30/07 caía em julho e não existia no SPED de agosto. Agora a nota de entrada tem <strong>data de entrada</strong>, que
+    é decisão de quem escritura (o XML não a traz: o "saída/entrada" do XML é a saída do emitente).</p>
+    <p><strong>Na digitação</strong> (Lançar nota, direção Entrada) apareceu o campo "Data de entrada (escrituração)":
+    vazio, a nota entra na data da emissão como sempre; preenchido, ela nasce na competência da entrada e o aviso diz
+    para qual mês vai. <strong>Na nota capturada</strong>, o detalhe do documento de entrada ganhou "📅 Informar a data de
+    entrada": gravar move a nota para a competência da entrada (a da emissão fica guardada) e "limpar" devolve. Entrada
+    antes da emissão é recusada. Com a data, o C100 dos dois SPEDs sai com DT_E_S na entrada, e o arquivo do SAGE sai
+    com "Data de entrada/saída" e "Data de lançamento" na entrada. Reimportar o XML não apaga a decisão.</p>
+    <p><strong>Onde:</strong> Central de XMLs → Importar → Lançar nota → Entrada → "Data de entrada (escrituração)" · Central de XMLs → abrir uma nota de entrada → "📅 Informar a data de entrada".</p>
 
     <h3>📗 <strong>SPED Contribuições: o C100 soma os itens como saem impressos, e o município do produtor rural (0150) é relido do XML guardado</strong></h3>
     <p>ELS 08/2026, terceira rodada do PVA (28/09), depois do plano de contas: de 1315 para 19 erros. Dois eram do

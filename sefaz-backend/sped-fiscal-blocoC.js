@@ -19,6 +19,7 @@
 // ============================================================================
 
 import * as fmt from './sped-fiscal-format.js';
+import { dataEntradaDoDocumento } from './data-entrada-escrituracao.js';
 import { indicadorFrete } from './nfe-frete.js';
 import { montarC197Difal } from './sped-difal-c197.js';
 import { cfopDoLancamento, derivarNaturezaAtividade } from './cfop-correlacao.js';
@@ -640,7 +641,9 @@ function buildC100(nota, dados) {
         fmt.sanitizeString(numeroDoDocumento(nota), 9),
         fmt.sanitizeString(nota.chave || '', 44),
         soCancelavel(fmt.formatDate(nota.dhEmi)),
-        soCancelavel(fmt.formatDate(nota.dhSaiEnt || nota.dhEmi)),
+        // DT_E_S: a data de ENTRADA declarada por quem escritura vem antes do
+        // dhSaiEnt (que é a SAÍDA do emitente) — 29/09, print do SAGE.
+        soCancelavel(fmt.formatDate(dataEntradaDoDocumento(nota) || nota.dhSaiEnt || nota.dhEmi)),
         soCancelavel(fmt.formatValue(t.vNF, 2)),
         soCancelavel('0'),  // IND_PGTO: assume A vista (default conservador)
         soCancelavel(fmt.formatValue(t.vDesc, 2)),

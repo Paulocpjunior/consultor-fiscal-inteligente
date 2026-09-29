@@ -14,7 +14,7 @@ import { explicarRetirada, MIN_MOTIVO_RETIRADA } from '../../services/documentoR
 // e a mesma venda contaria duas vezes — sem nenhum validador acusar.
 import { explicarCorrecao } from '../../services/documentoCorrecaoNumero';
 import {
-    tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada, corrigirNumeroDaNota,
+    tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada, corrigirNumeroDaNota, definirDataEntradaDaNota,
 } from '../../services/xmlFiscalService';
 // 🚨 A PORTA PARA A NOTA QUE FOI CANCELADA DEPOIS DA CAPTURA (10/09, Paulo, JG
 // SOLUCOES · Barueri: *"essas duas notas são canceladas, importei as notas pelo
@@ -38,6 +38,7 @@ import { parseValorMoeda, ecoDoValorDigitado } from '../../services/valorDigitad
 import { gravarCfopEscriturado, gravarEscrituracaoItem } from '../../services/cfopEscrituradoService';
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml-metadata-helper.js';
+import { conferirDataEntrada, brDe } from '../../sefaz-backend/data-entrada-escrituracao.js';
 import { cfopsDistintosDaNota, cfopDoLancamento } from '../../sefaz-backend/cfop-correlacao.js';
 import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
 import { cfopDoCte } from '../../sefaz-backend/cte-escrituracao.js';
@@ -94,6 +95,12 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const [serieIn, setSerieIn] = useState('');
     const [gravandoNum, setGravandoNum] = useState(false);
     const [erroNum, setErroNum] = useState<string | null>(null);
+    // ── 📅 Data de ENTRADA (escrituração) desta nota de entrada (Paulo, 29/09,
+    //    print do SAGE: emissão 30/07 · entrada 01/08 → escriturada em agosto) ──
+    const [abrirEntrada, setAbrirEntrada] = useState(false);
+    const [entradaIn, setEntradaIn] = useState('');
+    const [gravandoEntrada, setGravandoEntrada] = useState(false);
+    const [erroEntrada, setErroEntrada] = useState<string | null>(null);
     // ⚠️ A CORREÇÃO É LIDA ANTES DA RETIRADA: as duas usam a MESMA lápide, e
     // `explicarRetirada` diria "tirada desta empresa" sobre uma nota que não
     // saiu da empresa — ela só virou outro número. Dizer a causa errada manda
@@ -203,6 +210,22 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
             setErroEscr(e?.message || 'Falha ao gravar.');
         } finally {
             setGravandoEscr(false);
+        }
+    };
+
+    const gravarDataEntrada = async (valor: string) => {
+        setGravandoEntrada(true); setErroEntrada(null);
+        try {
+            const r = await definirDataEntradaDaNota(d.id, valor, currentUser || null);
+            if (!r.ok) { setErroEntrada(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            setAbrirEntrada(false);
+            // A nota pode ter MUDADO de competência: a lista do mês precisa reler.
+            onRetirado?.();
+        } catch (e: any) {
+            setErroEntrada(e?.message || 'Falha ao gravar a data de entrada.');
+        } finally {
+            setGravandoEntrada(false);
         }
     };
 
@@ -997,6 +1020,74 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                             </div>
                         </div>
                     )
+                )}
+
+                {/* ═══ 📅 DATA DE ENTRADA (ESCRITURAÇÃO) ═══════════════════════
+                    Paulo, 29/09, com o print do SAGE ("Emissão 30/07/2026 · Entrada
+                    01/08/2026"): a nota do fornecedor emitida num mês e recebida no
+                    seguinte é escriturada pela ENTRADA. Só na entrada; a saída é
+                    pela emissão. Mover a data move a competência da nota. */}
+                {direcaoDoDoc === 'entrada' && !jaRetirada && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            📅 Data de entrada (escrituração):{' '}
+                            {(d as any).dataEntrada
+                                ? <strong>{brDe((d as any).dataEntrada)} — escriturada em {String(d.competencia || '').slice(5)}/{String(d.competencia || '').slice(0, 4)}{(d as any).competenciaEmissao && (d as any).competenciaEmissao !== d.competencia ? ` (emitida em ${String((d as any).competenciaEmissao).slice(5)}/${String((d as any).competenciaEmissao).slice(0, 4)})` : ''}</strong>
+                                : <span>não informada — a nota entra na data da emissão ({formatDate(d.dhEmi)}).</span>}
+                        </p>
+                        {!abrirEntrada ? (
+                            <button
+                                onClick={() => { setEntradaIn(String((d as any).dataEntrada || '').slice(0, 10)); setErroEntrada(null); setAbrirEntrada(true); }}
+                                className="mt-2 text-xs rounded-md border border-emerald-300 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 btn-press whitespace-nowrap"
+                                title="Nota emitida num mês e recebida no seguinte: informe a data de entrada e ela passa a ser escriturada no mês da entrada (DT_E_S do C100, data de lançamento do SAGE)."
+                            >
+                                📅 {(d as any).dataEntrada ? 'Alterar a data de entrada' : 'Informar a data de entrada'}
+                            </button>
+                        ) : (
+                            <div className="mt-2 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <label className="text-[11px] text-emerald-900 dark:text-emerald-300">
+                                        Data de entrada
+                                        <input
+                                            type="date"
+                                            value={entradaIn}
+                                            onChange={(e) => setEntradaIn(e.target.value)}
+                                            className="mt-0.5 block w-40 rounded border border-emerald-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                        />
+                                    </label>
+                                    {(() => {
+                                        const c = conferirDataEntrada({ direcao: 'entrada', dhEmi: d.dhEmi, dataEntrada: entradaIn });
+                                        if (!entradaIn) return <span className="text-[11px] text-slate-500">Vazio = volta à data da emissão.</span>;
+                                        if (!c.ok) return <span className="text-[11px] font-semibold text-red-700 dark:text-red-300">{c.erros.join(' ')}</span>;
+                                        return <span className="text-[11px] text-emerald-900 dark:text-emerald-300">{c.mudaCompetencia ? `Vai para a competência ${c.competencia.slice(5)}/${c.competencia.slice(0, 4)} (emitida em ${c.competenciaEmissao.slice(5)}/${c.competenciaEmissao.slice(0, 4)}).` : 'Mesma competência da emissão.'}</span>;
+                                    })()}
+                                </div>
+                                {erroEntrada && (
+                                    <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroEntrada}</p>
+                                )}
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <button
+                                        onClick={() => gravarDataEntrada(entradaIn)}
+                                        disabled={gravandoEntrada || !entradaIn || !conferirDataEntrada({ direcao: 'entrada', dhEmi: d.dhEmi, dataEntrada: entradaIn }).ok}
+                                        className="text-xs rounded-md bg-emerald-600 text-white px-3 py-1.5 font-semibold hover:bg-emerald-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                                    >
+                                        {gravandoEntrada ? 'gravando…' : '📅 Gravar data de entrada'}
+                                    </button>
+                                    {(d as any).dataEntrada && (
+                                        <button
+                                            onClick={() => gravarDataEntrada('')}
+                                            disabled={gravandoEntrada}
+                                            className="text-xs rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 btn-press whitespace-nowrap"
+                                            title="Limpa a data de entrada; a nota volta à competência da emissão."
+                                        >limpar (volta à emissão)</button>
+                                    )}
+                                    <button
+                                        onClick={() => { setAbrirEntrada(false); setErroEntrada(null); }}
+                                        className="text-xs underline text-slate-500 btn-press">cancelar</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {/* ═══ A NOTA FOI CANCELADA DEPOIS DA CAPTURA ════════════════
