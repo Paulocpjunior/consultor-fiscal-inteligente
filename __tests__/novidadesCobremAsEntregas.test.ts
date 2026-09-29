@@ -36,11 +36,9 @@ const RAIZ = resolve(__dirname, '..');
  * no arquivo gerado ou no que ela precisa fazer, é NOVIDADE — não exceção.
  */
 const DATAS_SEM_EFEITO_PARA_QUEM_USA: Record<string, string> = {
-    // 29/09: F1 da separação do SP Connect — o código do atendimento ganhou
-    // repositório próprio (Paulocpjunior/sp-connect). NADA muda na tela do CFI:
-    // ele continua servindo /connect, o webhook e a WABA até a F3. A novidade
-    // para quem usa vem na F3 (URL nova), e aí esta linha SAI.
-    '29/09': 'separação F1 — repositório novo do Connect; o CFI continua igual para quem usa',
+    // ✂️ A exceção de '29/09' (F1 da separação, "nada muda na tela") SAIU no
+    // MESMO dia: à tarde subiram ⏰ agendar, 📝 resumo por IA e 📣 campanhas no
+    // Connect — efeito para quem usa, então 29/09 tem novidade na página.
     // exemplo: '05/09': 'só varredura de teste — nada muda na tela nem no arquivo',
     //
     // ✂️ A exceção de '23/09' SAIU, e foi a própria ressalva dela que mandou:

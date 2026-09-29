@@ -82,6 +82,8 @@ const PERMITIDO: Record<string, string> = {
     'sefaz-backend/whatsapp-sharepoint-arquivo.js': 'direção de MENSAGEM',
     'services/notificacaoConnect.ts': 'direção de MENSAGEM',
     'components/SpConnect/index.tsx': 'direção de MENSAGEM',
+    'sefaz-backend/whatsapp-agenda.js': 'direção de MENSAGEM (follow-up: a última é do cliente?)',
+    'sefaz-backend/whatsapp-resumo-ia.js': 'direção de MENSAGEM (quem falou: cliente ou SP)',
 };
 
 function varrer(dir: string, acc: string[] = []): string[] {

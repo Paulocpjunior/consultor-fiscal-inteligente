@@ -48,6 +48,7 @@ import {
     interpretarRespostaTriagem, decidirDestinoDaTriagem,
     COLECAO_TRIAGEM_IA_LOG, registroDeTriagem,
 } from './whatsapp-triagem-ia.js';
+import { ehPedidoDeOptOut } from './whatsapp-campanhas.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -846,6 +847,18 @@ router.post('/webhook', async (req, res) => {
         const catalogo = await catalogoDeCanais(db);
         for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg, catalogo);
         for (const st of ev.statuses) await gravarStatus(db, st);
+        // 📣 OPT-OUT DE CAMPANHA (29/09): "PARAR" / "SAIR" carimba o contato e
+        // ele nunca mais entra em lote. Nota interna para a equipe ver; o
+        // atendimento normal continua (opt-out é de lote, não de conversa).
+        for (const msg of ev.mensagens) {
+            if (!msg.de || !ehPedidoDeOptOut(msg.texto)) continue;
+            const em = new Date().toISOString();
+            await db.collection('whatsapp_contatos').doc(msg.de).set({ optOutCampanhas: { em, texto: String(msg.texto).slice(0, 40) } }, { merge: true });
+            await db.collection('whatsapp_mensagens').add({
+                conversaId: msg.de, direcao: 'interna', tipo: 'nota', midia: null, timestamp: em, enviadoPor: null,
+                texto: `🚫 O cliente pediu para NÃO receber mais avisos em lote ("${String(msg.texto).slice(0, 40)}"). Campanhas passam a pular este número; a conversa normal continua.`,
+            });
+        }
 
         // ── ☎️ Eventos de CHAMADA (field "calls") — viram linha na conversa.
         // O extrator é tolerante e o ilegível volta NOMEADO no log (o cru já
