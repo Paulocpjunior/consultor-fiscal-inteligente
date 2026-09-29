@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔀 SEPARAÇÃO DO CONNECT — F1 FEITA: repositório próprio `Paulocpjunior/sp-connect`**
+  (29/09, Paulo: *"vai"*; Ultra Fox cancelada em 28/09 cumpria a condição de
+  17/08). Movido pelo FECHO de imports (87 arquivos de código, 38 suítes,
+  assets, scripts do SBC, cinco docs) — commit inicial d623983, portas verdes
+  lá (lint, strict, build, 815 testes). Régua por régua: `types.ts` recorte;
+  `novidadesService` inteiro; `catalogo-banco.js` FICA aqui (mesmo banco);
+  `App.tsx` só o ramo Connect; `server.js` próprio com cron PRÓPRIO do
+  arquivo SharePoint (`/api/internal/cron/arquivo-sp` — aqui pegava carona
+  no cofre de e-mail; o job do Scheduler ainda não existe); Dockerfile sem
+  Playwright; workflow `sp-connect` com gate de segredo (sem `GCP_SA_KEY`
+  pula o deploy avisando). ⚠️ **Este repo NÃO mudou de código**: continua
+  servindo `/connect`, webhook, WABA, painel 📡 e envio de guia até a F3/F5.
+  Regra que fica (CLAUDE.md): mudança no atendimento se faz no `sp-connect`;
+  não editar os dois lados. Pendente do Paulo para a F2: P8 (secrets do repo
+  novo, `GCP_SA_KEY` + VITE_*) e P7 (domínio); depois a primeira revisão sem
+  tráfego prova LEITURA. Travas movidas que liam Footer/ConfigAdminModal/
+  catálogo/envio-imposto/ingestor passaram a cobrar o que existe lá.
 - **📊 PAINEL DA IA DE TRIAGEM — "a IA está pegando?" com número** (28/09,
   item 5 da fila; Paulo, 27/09: *"a IA está ativa?"*, e a resposta honesta
   era "ligada, mas não sei se trabalha": só o console.log sabia). Cada
