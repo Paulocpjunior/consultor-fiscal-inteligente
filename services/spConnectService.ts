@@ -723,3 +723,50 @@ export interface TesteTudoResposta {
 }
 export const statusAvisos = () => req<StatusAvisosResposta>('/api/admin/whatsapp/avisos/status');
 export const testarTodosAvisos = () => req<TesteTudoResposta>('/api/admin/whatsapp/avisos/testar-tudo', { method: 'POST' });
+
+// ─── ⏰ Mensagem agendada e follow-up (29/09) ────────────────────────────────
+export interface AgendamentoResumo {
+    id: string; tipo: 'mensagem' | 'follow-up'; texto: string; enviarEm: string; aposHoras: number | null;
+    status: 'agendado' | 'enviado' | 'cancelado' | 'dispensado' | 'falhou';
+    criadoPor: string | null; criadoEm: string | null; desfecho: string | null; ultimoErro: string | null;
+}
+export const agendarMensagem = (numero: string, p: { texto: string; tipo: 'mensagem' | 'follow-up'; enviarEm?: string; aposHoras?: number }) =>
+    post<{ agendamento: AgendamentoResumo; acao?: string; emConducaoPor?: string }>(urlConversa(numero, 'agendamentos'), p);
+export const listarAgendamentos = (numero: string) =>
+    req<{ pendentes: AgendamentoResumo[]; recentes: AgendamentoResumo[] }>(urlConversa(numero, 'agendamentos'));
+export const cancelarAgendamento = (numero: string, id: string) =>
+    post<Record<string, never>>(`${urlConversa(numero, 'agendamentos')}/${encodeURIComponent(id)}`, undefined, 'DELETE');
+export interface EstadoDaAgenda { ultimoTickEm: string | null; silencioMin: number | null; tickNoAr: boolean; agendadosPendentes: number; truncado: boolean }
+export const estadoDaAgenda = () => req<EstadoDaAgenda>('/api/admin/whatsapp/agenda/estado');
+export const rodarAgendaAgora = () => post<{ em: string; agenda: { lidos: number; enviados: number; dispensados: number; falhas: number }; campanhas: { campanhasAtivas: number; lotes: unknown[] } }>('/api/admin/whatsapp/agenda/tick');
+
+// ─── 📝 Resumo da conversa por IA (29/09) ───────────────────────────────────
+export interface ResumoIaConversa {
+    texto: string; pendencias: string[]; assuntos: string[]; tom: 'ok' | 'atencao';
+    em: string; por: string | null; modelo: string | null; mensagensLidas: number; ateMensagemEm: string | null;
+}
+export const resumirConversa = (numero: string) =>
+    post<{ resumoIa: ResumoIaConversa; estado: 'atual' | 'desatualizado' | 'nenhum'; acao?: string }>(urlConversa(numero, 'resumo'));
+
+// ─── 📣 Campanhas em lote (29/09) ───────────────────────────────────────────
+export interface CampanhaTotais { total: number; pendentes: number; enviados: number; falhas: number; pulados: number }
+export interface CampanhaResumo {
+    id: string; nome: string; status: 'rascunho' | 'enviando' | 'pausada' | 'concluida';
+    template: { nome: string; idioma: string; categoria: string; corpo: string | null; departamento: string | null };
+    variaveis: string[];
+    publico: { tipo: 'etiqueta' | 'regime' | 'numeros'; etiqueta: string | null; regime: string | null; numeros: string[] | null };
+    totais: CampanhaTotais; puladosNoPublico: number;
+    criadoPor: string | null; criadoEm: string | null; iniciadoEm: string | null; concluidoEm: string | null; ultimoLoteEm: string | null;
+}
+export interface CampanhaDestinatario { numero: string; nome: string | null; empresaNome: string | null; status: string; motivo: string | null; em: string | null }
+export interface CampanhaPulado { numero: string; motivo: string; detalhe?: string }
+export const listarCampanhas = () => req<{ campanhas: CampanhaResumo[] }>('/api/admin/whatsapp/campanhas');
+export const lerCampanha = (id: string) =>
+    req<{ campanha: CampanhaResumo & { destinatarios: CampanhaDestinatario[]; pulados: CampanhaPulado[] } }>(`/api/admin/whatsapp/campanhas/${encodeURIComponent(id)}`);
+export const criarCampanha = (p: {
+    nome: string; template: { nome: string; idioma: string }; variaveis: string[]; departamento?: string | null;
+    publico: { tipo: 'etiqueta' | 'regime' | 'numeros'; etiqueta?: string; regime?: string; numeros?: string[] };
+}) => post<{ campanha: CampanhaResumo; pulados: CampanhaPulado[]; truncado: boolean; acao?: string }>('/api/admin/whatsapp/campanhas', p);
+export const iniciarCampanha = (id: string) =>
+    post<{ lote: { enviados: number; falhas: number; pulados: number; restantes: number; concluida: boolean }; campanha: CampanhaResumo }>(`/api/admin/whatsapp/campanhas/${encodeURIComponent(id)}/iniciar`);
+export const pausarCampanha = (id: string) => post<Record<string, never>>(`/api/admin/whatsapp/campanhas/${encodeURIComponent(id)}/pausar`);

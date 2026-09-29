@@ -33,6 +33,9 @@ import {
     RelatorioTitular, PlanoEliminacao,
     arquivarMidiasNoSharePoint, ResultadoArquivoSp,
     relatorioAtendimento, RelatorioAtendimento, testarAvisoTeams, statusAvisos, testarTodosAvisos, StatusAvisosResposta, TesteTudoResposta,
+    agendarMensagem, listarAgendamentos, cancelarAgendamento, AgendamentoResumo, estadoDaAgenda, rodarAgendaAgora, EstadoDaAgenda,
+    resumirConversa,
+    listarCampanhas, lerCampanha, criarCampanha, iniciarCampanha, pausarCampanha, CampanhaResumo, CampanhaPulado, CampanhaDestinatario,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -53,7 +56,7 @@ import {
     ConversaResumo, MensagemInbox, FilaAtendimento, ConfigAtendimento,
     estadoJanela, carimboStatus, nomeExibicao, formatarNumeroBr, horaCurta,
     rotuloMidia, filtrarConversas, filtrarMensagensDaThread, iniciais, rotuloCurtoFila, dentroDeIframe,
-    filaParaTemplate,
+    filaParaTemplate, dataHoraSp,
 } from '../../services/spConnect';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
@@ -486,6 +489,74 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     // eu atendo, disca o cliente. Aqui: confirmação antes (o meu telefone vai
     // tocar e o cliente vai receber uma ligação), o pedido, e o acompanhamento
     // a cada 3 s até o estado final — que vem do CDR do Asterisk, não de mim.
+    // ── ⏰ Mensagem agendada e follow-up (29/09, item 2 da comparação com o
+    // Clerk Chat). O texto do compositor vira agendamento; o envio é do tick
+    // (Cloud Scheduler). Follow-up: sai só se o cliente NÃO responder até lá.
+    const [agendaAberta, setAgendaAberta] = useState(false);
+    const [agendaTipo, setAgendaTipo] = useState<'mensagem' | 'follow-up'>('mensagem');
+    const [agendaQuando, setAgendaQuando] = useState('');
+    const [agendaHoras, setAgendaHoras] = useState(24);
+    const [agendaErro, setAgendaErro] = useState<string | null>(null);
+    const [agendando, setAgendando] = useState(false);
+    const [agendamentos, setAgendamentos] = useState<AgendamentoResumo[]>([]);
+    const carregarAgendamentos = async (numero: string) => {
+        const r = await listarAgendamentos(numero);
+        if (r.ok) setAgendamentos(r.pendentes || []);
+    };
+    useEffect(() => {
+        setAgendamentos([]); setAgendaAberta(false); setAgendaErro(null);
+        if (sel?.numero && sel.canal !== 'instagram') void carregarAgendamentos(sel.numero);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sel?.numero]);
+    const abrirAgenda = () => {
+        // Default: daqui a 1 h, no relógio DESTE computador (o input é local).
+        const d = new Date(Date.now() + 60 * 60 * 1000);
+        const dois = (n: number) => String(n).padStart(2, '0');
+        setAgendaQuando(`${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}`);
+        setAgendaErro(null);
+        setAgendaAberta((v) => !v);
+    };
+    const acaoAgendar = async () => {
+        if (!sel || !texto.trim() || agendando) return;
+        setAgendando(true); setAgendaErro(null);
+        try {
+            const r = await agendarMensagem(sel.numero, agendaTipo === 'follow-up'
+                ? { texto: texto.trim(), tipo: 'follow-up', aposHoras: agendaHoras }
+                : { texto: texto.trim(), tipo: 'mensagem', enviarEm: new Date(agendaQuando).toISOString() });
+            if (!r.ok) {
+                if (r.emConducaoPor) patchSel({ atribuidoA: r.emConducaoPor });
+                setAgendaErro(`${r.error}${r.acao ? ` ${r.acao}` : ''}`);
+                return;
+            }
+            setTexto(''); setAgendaAberta(false);
+            await carregarAgendamentos(sel.numero);
+            void carregarThread(sel.numero, true);   // a nota interna "⏰ agendado" entra na thread
+        } finally { setAgendando(false); }
+    };
+    const acaoCancelarAgendamento = async (id: string) => {
+        if (!sel) return;
+        const r = await cancelarAgendamento(sel.numero, id);
+        if (!r.ok) { setAgendaErro(r.error || 'Não consegui cancelar.'); return; }
+        await carregarAgendamentos(sel.numero);
+        void carregarThread(sel.numero, true);
+    };
+
+    // ── 📝 Resumo por IA (29/09, item 3). A IA lê e resume; não responde ao
+    // cliente nem aplica etiqueta. O resumo fica na conversa com "até quando".
+    const [resumindo, setResumindo] = useState(false);
+    const [resumoErro, setResumoErro] = useState<string | null>(null);
+    const acaoResumir = async () => {
+        if (!sel || resumindo) return;
+        setResumindo(true); setResumoErro(null);
+        try {
+            const r = await resumirConversa(sel.numero);
+            if (!r.ok) { setResumoErro(`${r.error}${r.acao ? ` ${r.acao}` : ''}`); return; }
+            patchSel({ resumoIa: r.resumoIa });
+        } finally { setResumindo(false); }
+    };
+    const resumoDesatualizado = Boolean(sel?.resumoIa?.texto && sel.ultimaMensagem?.em && sel.resumoIa.ateMensagemEm
+        && Date.parse(sel.ultimaMensagem.em) > Date.parse(sel.resumoIa.ateMensagemEm));
+
     const [ligacaoPedido, setLigacaoPedido] = useState<PedidoLigacaoResumo | null>(null);
     const [ligacaoErro, setLigacaoErro] = useState<string | null>(null);
     const [ligacaoConducao, setLigacaoConducao] = useState(false);
@@ -732,7 +803,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     };
 
     // ── ⚙️ aba 👥 Atendentes ↔ filas (users.filasAtendimento, só admin grava)
-    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos'>('bot');
+    const [cfgAba, setCfgAba] = useState<'avisos' | 'bot' | 'atendentes' | 'canais' | 'chamadas' | 'instagram' | 'arquivo' | 'vinculos' | 'campanhas'>('bot');
     // A aba 🔔 lê o estado ao abrir — o efeito mora DEPOIS do `cfgAba`
     // (usá-lo antes da declaração estourava TS2448 no tsconfig normal).
     useEffect(() => { if (cfgAba === 'avisos') void carregarAvisos(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cfgAba]);
@@ -1482,6 +1553,86 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         } finally {
             setCarregandoTpl(false);
         }
+    };
+
+    // ── 📣 Campanhas em lote (29/09, item 1). Admin. O público é montado no
+    // servidor na criação (com os pulados e o motivo); "▶ Iniciar" manda o
+    // primeiro lote na hora e o tick (Cloud Scheduler, 5 min) segue.
+    const [campanhas, setCampanhas] = useState<CampanhaResumo[]>([]);
+    const [campErro, setCampErro] = useState<string | null>(null);
+    const [campOcupado, setCampOcupado] = useState(false);
+    const [campAgenda, setCampAgenda] = useState<EstadoDaAgenda | null>(null);
+    const [campNome, setCampNome] = useState('');
+    const [campTemplate, setCampTemplate] = useState('');
+    const [campVars, setCampVars] = useState<string[]>([]);
+    const [campPublicoTipo, setCampPublicoTipo] = useState<'regime' | 'etiqueta' | 'numeros'>('regime');
+    const [campRegime, setCampRegime] = useState<'simples' | 'lucro'>('simples');
+    const [campEtiqueta, setCampEtiqueta] = useState('');
+    const [campNumeros, setCampNumeros] = useState('');
+    const [campCriada, setCampCriada] = useState<{ campanha: CampanhaResumo; pulados: CampanhaPulado[]; truncado: boolean } | null>(null);
+    const [campDetalhe, setCampDetalhe] = useState<(CampanhaResumo & { destinatarios: CampanhaDestinatario[]; pulados: CampanhaPulado[] }) | null>(null);
+    const campTpl = daMeta.find((t) => t.nome === campTemplate) || null;
+    const lerCampanhasAba = async () => {
+        setCampErro(null);
+        const [lista, agenda] = await Promise.all([listarCampanhas(), estadoDaAgenda()]);
+        if (lista.ok) setCampanhas(lista.campanhas || []); else setCampErro(lista.error || 'Não consegui listar as campanhas.');
+        if (agenda.ok) setCampAgenda(agenda);
+        void carregarTemplatesSePreciso();
+        if (!etiquetas.length) { const c = await listarContatos({}); if (c.ok) setEtiquetas(c.etiquetas); }
+    };
+    useEffect(() => {
+        if (cfgAberta && cfgAba === 'campanhas' && ehAdmin) void lerCampanhasAba();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cfgAberta, cfgAba]);
+    useEffect(() => {
+        // Trocou o template: as variáveis nascem vazias, uma por {{n}}.
+        setCampVars(campTpl ? Array.from({ length: campTpl.variaveis }, () => '') : []);
+    }, [campTemplate, campTpl]);
+    const acaoCriarCampanha = async () => {
+        if (!campTpl || campOcupado) return;
+        setCampOcupado(true); setCampErro(null); setCampCriada(null);
+        try {
+            const r = await criarCampanha({
+                nome: campNome, template: { nome: campTpl.nome, idioma: campTpl.idioma }, variaveis: campVars,
+                publico: campPublicoTipo === 'regime' ? { tipo: 'regime', regime: campRegime }
+                    : campPublicoTipo === 'etiqueta' ? { tipo: 'etiqueta', etiqueta: campEtiqueta }
+                        : { tipo: 'numeros', numeros: campNumeros.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean) },
+            });
+            if (!r.ok) { setCampErro(`${r.error}${r.acao ? ` ${r.acao}` : ''}`); return; }
+            setCampCriada({ campanha: r.campanha, pulados: r.pulados || [], truncado: Boolean(r.truncado) });
+            setCampNome('');
+            await lerCampanhasAba();
+        } finally { setCampOcupado(false); }
+    };
+    const acaoIniciarCampanha = async (c: CampanhaResumo) => {
+        if (campOcupado) return;
+        // Caixa do app, nunca window.confirm (dentro do Teams o diálogo do navegador não abre).
+        if (!await pedirConfirmacao(`Enviar "${c.nome}" para ${c.totais.pendentes} número(s)? O primeiro lote sai AGORA; o resto segue pelo tick.`, '▶ Enviar agora')) return;
+        const id = c.id;
+        setCampOcupado(true); setCampErro(null);
+        try {
+            const r = await iniciarCampanha(id);
+            if (!r.ok) { setCampErro(r.error || 'Não consegui iniciar.'); return; }
+            await lerCampanhasAba();
+        } finally { setCampOcupado(false); }
+    };
+    const acaoPausarCampanha = async (id: string) => {
+        const r = await pausarCampanha(id);
+        if (!r.ok) { setCampErro(r.error || 'Não consegui pausar.'); return; }
+        await lerCampanhasAba();
+    };
+    const acaoVerCampanha = async (id: string) => {
+        const r = await lerCampanha(id);
+        if (r.ok) setCampDetalhe(r.campanha); else setCampErro(r.error || 'Não consegui abrir a campanha.');
+    };
+    const acaoRodarAgenda = async () => {
+        if (campOcupado) return;
+        setCampOcupado(true); setCampErro(null);
+        try {
+            const r = await rodarAgendaAgora();
+            if (!r.ok) { setCampErro(r.error || 'O tick falhou.'); return; }
+            await lerCampanhasAba();
+        } finally { setCampOcupado(false); }
     };
 
     const abrirNova = async () => {
@@ -2509,7 +2660,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                             <button onClick={() => setCfgAberta(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint']] as const).map(([id, rotulo]) => (
+                            {([['avisos', '🔔 Avisos'], ['bot', '🤖 Bot e mensagens'], ['atendentes', '👥 Atendentes e filas'], ['canais', '📞 Números'], ['chamadas', '☎️ Voz e vídeo'], ['instagram', '📷 Instagram'], ['vinculos', '🔗 Vínculos'], ['arquivo', '🗄 SharePoint'], ['campanhas', '📣 Campanhas']] as const).map(([id, rotulo]) => (
                                 <button key={id} onClick={() => setCfgAba(id)}
                                     className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${cfgAba === id
                                         ? 'bg-[#0e3bfa] text-white'
@@ -3615,6 +3766,126 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                 ? <p>✓ Varredura completa — tudo que tinha mídia gravada está arquivado.</p>
                                                 : <p>Rodada parcial — o ciclo continua sozinho.</p>}
                                     </div>
+                                )}
+                            </div>
+                        )}
+
+                        {cfgAba === 'campanhas' && (
+                            <div className="space-y-3">
+                                {!ehAdmin ? (
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Campanhas em lote são do admin — mandar template para centenas de clientes de uma vez é ato do escritório, não de uma fila.</p>
+                                ) : (
+                                    <>
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                                            Aviso em lote por <strong>template aprovado na Meta</strong> (fora da janela de 24h é o único jeito): prazo de DAS, DCTFWeb, parcelamento…
+                                            O público é montado na hora de criar, e <strong>quem fica de fora aparece com o motivo</strong> (pediu PARAR, sem consentimento, número inválido).
+                                            <strong> MARKETING</strong> só sai para etiqueta com consentimento registrado (LGPD). O envio anda em lotes de 25 a cada 5 min pelo tick.
+                                        </p>
+                                        {/* 🕒 O tick é quem envia. Sem o job no Scheduler, nada sai sozinho — e a tela DIZ. */}
+                                        <div className={`rounded-lg border px-2.5 py-2 text-[11px] flex items-center justify-between gap-2 ${campAgenda?.tickNoAr
+                                            ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300'
+                                            : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}>
+                                            <span>
+                                                {campAgenda == null ? 'Lendo o estado do tick…'
+                                                    : campAgenda.tickNoAr ? `✓ Tick no ar — última rodada há ${campAgenda.silencioMin} min · ${campAgenda.agendadosPendentes} mensagem(ns) agendada(s) na fila`
+                                                        : campAgenda.ultimoTickEm ? `⚠️ Tick PARADO — última rodada há ${campAgenda.silencioMin} min. Agendados e campanhas não saem sozinhos até o job "connect-agenda-tick" do Cloud Scheduler voltar.`
+                                                            : '⚠️ O tick NUNCA rodou — falta o job "connect-agenda-tick" no Cloud Scheduler (scripts/setup-cloud-schedulers.sh). Até lá, só o botão ao lado envia.'}
+                                            </span>
+                                            <button onClick={acaoRodarAgenda} disabled={campOcupado} className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 disabled:opacity-50">▶ rodar agora</button>
+                                        </div>
+                                        {campErro && <p className="text-[11px] text-red-600 dark:text-red-400">{campErro}</p>}
+
+                                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-2">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">✚ Nova campanha</p>
+                                            <label className="block text-[10px] text-slate-400">Nome (para você achar depois)
+                                                <input value={campNome} onChange={(e) => setCampNome(e.target.value)} placeholder='ex.: "DAS 10/2026 — vence 20/10"' className={CAMPO} />
+                                            </label>
+                                            <label className="block text-[10px] text-slate-400">Template aprovado na Meta {carregandoTpl ? '(carregando…)' : ''}
+                                                <select value={campTemplate} onChange={(e) => setCampTemplate(e.target.value)} className={CAMPO}>
+                                                    <option value="">Escolha…</option>
+                                                    {daMeta.map((t) => <option key={`${t.nome}:${t.idioma}`} value={t.nome}>{t.nome} · {t.categoria} · {t.variaveis} variável(is)</option>)}
+                                                </select>
+                                            </label>
+                                            {campTpl && (
+                                                <div className="rounded bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2 text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{campTpl.corpo}</div>
+                                            )}
+                                            {campVars.map((v, i) => (
+                                                <label key={i} className="block text-[10px] text-slate-400">{'{{'}{i + 1}{'}}'} <span className="text-slate-300">— pode usar {'{empresa}'} e {'{nome}'} (viram o dado de cada destinatário)</span>
+                                                    <input value={v} onChange={(e) => setCampVars((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))} className={CAMPO} />
+                                                </label>
+                                            ))}
+                                            <div className="flex flex-wrap gap-3 text-[11px] text-slate-600 dark:text-slate-300">
+                                                <label className="flex items-center gap-1"><input type="radio" checked={campPublicoTipo === 'regime'} onChange={() => setCampPublicoTipo('regime')} /> Empresas do regime</label>
+                                                <select value={campRegime} onChange={(e) => setCampRegime(e.target.value as 'simples' | 'lucro')} disabled={campPublicoTipo !== 'regime'} className="px-2 py-1 text-[11px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50">
+                                                    <option value="simples">Simples Nacional</option>
+                                                    <option value="lucro">Lucro Presumido / Real</option>
+                                                </select>
+                                                <label className="flex items-center gap-1"><input type="radio" checked={campPublicoTipo === 'etiqueta'} onChange={() => setCampPublicoTipo('etiqueta')} /> Etiqueta</label>
+                                                <select value={campEtiqueta} onChange={(e) => setCampEtiqueta(e.target.value)} disabled={campPublicoTipo !== 'etiqueta'} className="px-2 py-1 text-[11px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50">
+                                                    <option value="">Escolha…</option>
+                                                    {etiquetas.map((e) => <option key={e.id} value={e.id}>{e.rotulo}</option>)}
+                                                </select>
+                                                <label className="flex items-center gap-1"><input type="radio" checked={campPublicoTipo === 'numeros'} onChange={() => setCampPublicoTipo('numeros')} /> Lista de números</label>
+                                            </div>
+                                            {campPublicoTipo === 'numeros' && (
+                                                <textarea value={campNumeros} onChange={(e) => setCampNumeros(e.target.value)} rows={3} placeholder="Um por linha, ou separados por vírgula (DDD + número)" className={CAMPO} />
+                                            )}
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">"Empresas do regime" = contatos <strong>vinculados</strong> a uma empresa daquele regime. Contato sem vínculo não entra — vincule em 🔗 antes.</p>
+                                            <button onClick={acaoCriarCampanha} disabled={campOcupado || !campNome.trim() || !campTpl || campVars.some((v) => !v.trim())}
+                                                className="text-[11px] font-bold px-3 py-1.5 rounded bg-[#0e3bfa] text-white disabled:opacity-50">
+                                                {campOcupado ? '…' : '📋 Montar o público (não envia)'}
+                                            </button>
+                                            {campCriada && (
+                                                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-2 text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
+                                                    <p><strong>{campCriada.campanha.totais.total}</strong> destinatário(s) · <strong>{campCriada.pulados.length}</strong> fora{campCriada.truncado ? ' · lista cortada no teto' : ''}. Rascunho salvo — nada saiu ainda.</p>
+                                                    {campCriada.pulados.slice(0, 8).map((p, i) => <p key={i} className="text-[10px]">✕ {p.numero}: {p.motivo}{p.detalhe ? ` — ${p.detalhe}` : ''}</p>)}
+                                                    {campCriada.pulados.length > 8 && <p className="text-[10px]">… e mais {campCriada.pulados.length - 8} (abra a campanha para ver todos).</p>}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">Campanhas ({campanhas.length})</p>
+                                            {campanhas.length === 0 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Nenhuma ainda.</p>}
+                                            {campanhas.map((c) => (
+                                                <div key={c.id} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between gap-2">
+                                                    <span className="min-w-0">
+                                                        <strong>{c.nome}</strong> · {c.template.nome} · {c.publico.tipo === 'regime' ? `regime ${c.publico.regime}` : c.publico.tipo === 'etiqueta' ? `etiqueta ${c.publico.etiqueta}` : 'lista'}
+                                                        <br />
+                                                        <span className={c.status === 'enviando' ? 'text-blue-700 dark:text-blue-300' : c.status === 'concluida' ? 'text-emerald-700 dark:text-emerald-300' : ''}>{c.status}</span>
+                                                        {' · '}{c.totais.enviados}/{c.totais.total} enviados · {c.totais.falhas} falha(s) · {c.totais.pulados + c.puladosNoPublico} fora
+                                                        {c.ultimoLoteEm ? ` · último lote ${dataHoraSp(c.ultimoLoteEm)}` : ''}
+                                                    </span>
+                                                    <span className="shrink-0 flex gap-1">
+                                                        <button onClick={() => acaoVerCampanha(c.id)} className="text-[10px] px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">ver</button>
+                                                        {(c.status === 'rascunho' || c.status === 'pausada') && (
+                                                            <button onClick={() => void acaoIniciarCampanha(c)} disabled={campOcupado}
+                                                                className="text-[10px] font-bold px-2 py-1 rounded bg-[#0e3bfa] text-white disabled:opacity-50">▶ Iniciar</button>
+                                                        )}
+                                                        {c.status === 'enviando' && (
+                                                            <button onClick={() => acaoPausarCampanha(c.id)} className="text-[10px] font-bold px-2 py-1 rounded bg-amber-500 text-white">⏸ Pausar</button>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {campDetalhe && (
+                                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="font-bold">{campDetalhe.nome} — destinatários</p>
+                                                    <button onClick={() => setCampDetalhe(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                                                </div>
+                                                <div className="max-h-56 overflow-y-auto space-y-0.5">
+                                                    {campDetalhe.destinatarios.map((d) => (
+                                                        <p key={d.numero} className="text-[10px]">
+                                                            {d.status === 'enviado' ? '✅' : d.status === 'falhou' ? '❌' : d.status === 'pulado' ? '⏭' : '⏳'} {formatarNumeroBr(d.numero)} {d.empresaNome ? `· ${d.empresaNome}` : d.nome ? `· ${d.nome}` : ''}{d.motivo ? ` — ${d.motivo}` : ''}
+                                                        </p>
+                                                    ))}
+                                                    {campDetalhe.pulados.map((p, i) => <p key={`p${i}`} className="text-[10px] text-slate-400">✕ {p.numero} — fora do público: {p.motivo}{p.detalhe ? ` (${p.detalhe})` : ''}</p>)}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         )}
@@ -4773,6 +5044,32 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </div>
                                 )}
                                 {conduzidaPorOutro || gravando || previa ? null : janela?.aberta ? (
+                                    <div className="space-y-2">
+                                    {agendaAberta && sel.canal !== 'instagram' && (
+                                        <div className="rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40 px-3 py-2 space-y-2">
+                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">⏰ Agendar o texto escrito abaixo</p>
+                                            <div className="flex flex-wrap gap-3 text-[11px] text-slate-600 dark:text-slate-300">
+                                                <label className="flex items-center gap-1"><input type="radio" checked={agendaTipo === 'mensagem'} onChange={() => setAgendaTipo('mensagem')} /> Enviar em</label>
+                                                <input type="datetime-local" value={agendaQuando} onChange={(e) => setAgendaQuando(e.target.value)} disabled={agendaTipo !== 'mensagem'}
+                                                    className="px-2 py-1 text-[11px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50" />
+                                                <label className="flex items-center gap-1"><input type="radio" checked={agendaTipo === 'follow-up'} onChange={() => setAgendaTipo('follow-up')} /> Follow-up: se o cliente não responder em</label>
+                                                <input type="number" min={1} max={336} value={agendaHoras} onChange={(e) => setAgendaHoras(Number(e.target.value))} disabled={agendaTipo !== 'follow-up'}
+                                                    className="w-16 px-2 py-1 text-[11px] rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 disabled:opacity-50" /> h
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                Sai como texto livre, então a <strong>janela de 24h precisa estar aberta na hora</strong>; se fechar antes, o agendamento falha nomeado na conversa (aí é template).
+                                                {agendaTipo === 'follow-up' ? ' Se o cliente escrever antes, o follow-up é dispensado sozinho.' : ' A hora é a deste computador.'}
+                                            </p>
+                                            {agendaErro && <p className="text-[11px] text-red-600 dark:text-red-400">{agendaErro}</p>}
+                                            <div className="flex gap-2">
+                                                <button onClick={acaoAgendar} disabled={agendando || !texto.trim()}
+                                                    className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[#0e3bfa] hover:bg-[#091d8d] text-white disabled:opacity-40">
+                                                    {agendando ? '…' : '⏰ Agendar'}
+                                                </button>
+                                                <button onClick={() => setAgendaAberta(false)} className="text-[11px] px-2 py-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700">cancelar</button>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="flex items-end gap-2">
                                         <input ref={inputAnexo} type="file" className="hidden"
                                             onChange={(e) => mandarAnexo(e.target.files?.[0] || null)} />
@@ -4796,6 +5093,14 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                     className="shrink-0 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40">
                                                     {anexando ? '⏳' : '📎'}
                                                 </button>
+                                                <button
+                                                    onClick={abrirAgenda}
+                                                    title="Agendar esta mensagem para depois, ou como follow-up se o cliente não responder"
+                                                    className={`shrink-0 px-3 py-2 rounded-xl border ${agendaAberta
+                                                        ? 'border-[#0e3bfa] text-[#0e3bfa] bg-blue-50 dark:bg-blue-900/20'
+                                                        : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                                    ⏰
+                                                </button>
                                             </>
                                         )}
                                         <textarea
@@ -4813,6 +5118,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         >
                                             {enviando ? '…' : 'Enviar ➤'}
                                         </button>
+                                    </div>
                                     </div>
                                 ) : sel.canal === 'instagram' ? (
                                     <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
@@ -4924,6 +5230,54 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                     </>
                                 )}
                             </div>
+                            {/* 📝 RESUMO POR IA (29/09): três linhas para quem assume. A IA lê e
+                                resume; nunca responde ao cliente, nunca aplica etiqueta. */}
+                            <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">📝 Resumo por IA</p>
+                                    <button onClick={acaoResumir} disabled={resumindo}
+                                        className="text-[10px] font-bold px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50">
+                                        {resumindo ? '⏳ lendo…' : sel.resumoIa?.texto ? '🔄 Atualizar' : '📝 Resumir agora'}
+                                    </button>
+                                </div>
+                                {resumoErro && <p className="text-[10px] text-red-600 dark:text-red-400 mb-1">{resumoErro}</p>}
+                                {sel.resumoIa?.texto ? (
+                                    <div className="space-y-1">
+                                        {resumoDesatualizado && <p className="text-[10px] text-amber-700 dark:text-amber-300">⚠️ Chegou mensagem depois deste resumo — atualize antes de confiar.</p>}
+                                        {sel.resumoIa.tom === 'atencao' && <p className="text-[10px] font-bold text-red-600 dark:text-red-400">🔴 Atenção: a IA leu insatisfação, prazo apertado ou pedido sem resposta.</p>}
+                                        <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-snug">{sel.resumoIa.texto}</p>
+                                        {sel.resumoIa.pendencias.length > 0 && (
+                                            <ul className="text-[10px] text-slate-600 dark:text-slate-300 list-disc pl-4">
+                                                {sel.resumoIa.pendencias.map((x, i) => <li key={i}>{x}</li>)}
+                                            </ul>
+                                        )}
+                                        {sel.resumoIa.assuntos.length > 0 && (
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">{sel.resumoIa.assuntos.map((a) => `#${a}`).join(' ')}</p>
+                                        )}
+                                        <p className="text-[9px] text-slate-400">lido por IA em {dataHoraSp(sel.resumoIa.em)} · {sel.resumoIa.mensagensLidas ?? '?'} mensagens · pedido por {sel.resumoIa.por ? sel.resumoIa.por.split('@')[0] : '?'}</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Ainda sem resumo. Serve para quem assume a conversa sem rolar o histórico — a IA só lê, não responde.</p>
+                                )}
+                            </div>
+                            {/* ⏰ AGENDADOS (29/09): o que vai sair sozinho desta conversa. */}
+                            {sel.canal !== 'instagram' && agendamentos.length > 0 && (
+                                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">⏰ Agendados ({agendamentos.length})</p>
+                                    <div className="space-y-1">
+                                        {agendamentos.map((a) => (
+                                            <div key={a.id} className="text-[10px] text-slate-600 dark:text-slate-300 flex items-start gap-1">
+                                                <span className="flex-1 min-w-0">
+                                                    <strong>{a.tipo === 'follow-up' ? `follow-up (${a.aposHoras} h)` : 'mensagem'}</strong> · {dataHoraSp(a.enviarEm)} · por {a.criadoPor ? a.criadoPor.split('@')[0] : '?'}
+                                                    <br /><span className="italic">"{a.texto.slice(0, 90)}{a.texto.length > 90 ? '…' : ''}"</span>
+                                                </span>
+                                                <button onClick={() => acaoCancelarAgendamento(a.id)} title="Cancelar este agendamento" className="shrink-0 text-red-500 hover:text-red-700">✕</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {agendaErro && !agendaAberta && <p className="text-[10px] text-red-600 dark:text-red-400 mt-1">{agendaErro}</p>}
+                                </div>
+                            )}
                             <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 p-2.5">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conversa</p>
                                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Fila: <strong>{rotuloCurtoFila(sel.fila)}</strong></p>

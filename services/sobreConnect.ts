@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-09-28';
+export const SOBRE_VERSAO = '2026-09-29';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -265,6 +265,35 @@ export const MANUAL: PassoManual[] = [
         atencao: 'O Instagram é atendido por uma LISTA de usuários (⚙️ → 📷) — não está vendo as conversas 📷? Peça a um admin pra te incluir. E o recebimento é ligado UMA vez pelo admin (botão 📡): DM não chegando se confere lá.',
     },
     {
+        titulo: '15. Agendar mensagem e follow-up (⏰)',
+        passos: [
+            'Escreva o texto no compositor e clique em ⏰ (ao lado do 📎). Escolha "Enviar em" com data e hora, ou "Follow-up: se o cliente não responder em N horas".',
+            'Clique em "⏰ Agendar". O texto some do compositor, a conversa ganha a nota "⏰ agendado por … para …" e o painel da direita lista o que vai sair, com ✕ para cancelar.',
+            'A mensagem sai como texto livre: a janela de 24h precisa estar aberta na hora. Se ela fechar antes, o agendamento NÃO sai e a conversa ganha a nota com o motivo — aí é template.',
+            'Follow-up: se o cliente escrever antes da hora, ele é dispensado sozinho (ninguém cobra quem já respondeu). Conversa encerrada também dispensa.',
+            'Quem envia é o "tick" (a cada 5 min). ⚙️ → 📣 mostra se ele está no ar; parado, nada sai sozinho e o admin pode "▶ rodar agora".',
+        ],
+    },
+    {
+        titulo: '16. Resumo da conversa por IA (📝)',
+        passos: [
+            'No painel da direita, "📝 Resumir agora". Em alguns segundos: 3 a 6 frases do que o cliente pediu, o que a SP respondeu e em que pé ficou; as pendências; os assuntos.',
+            '🔴 "Atenção" aparece quando a IA leu insatisfação, prazo apertado ou pedido sem resposta — é sinal para ler a conversa inteira, não um veredito.',
+            'Chegou mensagem depois do resumo? O bloco avisa "atualize antes de confiar". Clique em 🔄 Atualizar.',
+            'A IA só lê. Ela não responde ao cliente, não muda fila, não aplica etiqueta. Classificar continua sendo decisão de gente.',
+        ],
+    },
+    {
+        titulo: '17. Campanha em lote por template (📣, admin)',
+        passos: [
+            '⚙️ → 📣 Campanhas. Dê um nome ("DAS 10/2026 — vence 20/10"), escolha o template APROVADO na Meta e preencha as variáveis. Nas variáveis, {empresa} e {nome} viram o dado de cada destinatário.',
+            'Público: "Empresas do regime" (contatos VINCULADOS a empresa do Simples ou do Lucro — vincule em 🔗 antes), "Etiqueta" ou "Lista de números".',
+            '"📋 Montar o público (não envia)": a campanha nasce como rascunho, com quem entra e quem fica de fora COM o motivo (pediu PARAR, sem consentimento, número inválido).',
+            '"▶ Iniciar" pede confirmação, manda o primeiro lote na hora e o resto sai em lotes de 25 a cada 5 minutos pelo tick. "⏸ Pausar" segura o resto. "ver" abre a lista com ✅/❌/⏳ por número.',
+            'Cada envio entra na conversa do cliente como mensagem de template (📣). Cliente que responder PARAR/SAIR fica fora de toda campanha futura. MARKETING só sai para etiqueta com consentimento registrado (LGPD).',
+        ],
+    },
+    {
         titulo: '14. Ligar para o cliente pelo WhatsApp (☎️)',
         passos: [
             'Só depois que o cliente tocou em "Permitir" (☎️ Pedir permissão de ligação → o cartão chega no WhatsApp dele). O painel da direita mostra "✅ Ligações AUTORIZADAS".',
@@ -279,6 +308,14 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-09-29',
+        itens: [
+            '⏰ AGENDAR MENSAGEM: o botão ⏰ ao lado do 📎 agenda o texto escrito para uma data e hora — ou como FOLLOW-UP ("se o cliente não responder em N horas, manda"). O que está agendado aparece no painel da direita, com ✕ para cancelar, e vira nota interna na conversa. Sai como texto livre, então a janela de 24h precisa estar aberta na hora; se fechar antes, a conversa ganha a nota "NÃO saiu" com o motivo. Follow-up é dispensado sozinho se o cliente escrever antes.',
+            '📝 RESUMO POR IA no painel da direita: "Resumir agora" lê as últimas mensagens e devolve 3 a 6 frases, as pendências e os assuntos — para quem assume a conversa sem rolar o histórico. A IA só lê; não responde ao cliente nem aplica etiqueta. Se chegar mensagem depois, o bloco avisa "atualize antes de confiar".',
+            '📣 CAMPANHAS EM LOTE (⚙️ → 📣, admin): aviso por template aprovado na Meta para as empresas de um regime (Simples / Lucro), para uma etiqueta ou para uma lista de números. "Montar o público" mostra quem entra e quem fica de fora COM o motivo (pediu PARAR, sem consentimento, número inválido); "▶ Iniciar" manda o primeiro lote na hora e o resto sai em lotes de 25 a cada 5 minutos. Cada envio entra na conversa do cliente. Cliente que responder PARAR/SAIR nunca mais entra em lote. MARKETING só para etiqueta com consentimento registrado (LGPD).',
+        ],
+    },
     {
         data: '2026-09-28',
         itens: [

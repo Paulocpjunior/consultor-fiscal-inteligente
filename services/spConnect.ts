@@ -86,6 +86,8 @@ export interface ConversaResumo {
     ultimaLigacaoSaida?: { id: string; status: string; ramal: string; em: string | null; detalhe?: string | null; por?: string | null } | null;
     /** 📞 O cliente pediu retorno de ligação (fora do horário da Meta). Pendente enquanto `atendidoEm` for null. */
     retornoDeLigacao?: { pedidoEm: string; atendidoEm: string | null; atendidoPor?: string | null; atendidoComo?: string | null } | null;
+    /** 📝 último resumo por IA (29/09) — `ateMensagemEm` diz até onde ele leu. */
+    resumoIa?: { texto: string; pendencias: string[]; assuntos: string[]; tom: 'ok' | 'atencao'; em: string; por: string | null; ateMensagemEm: string | null; mensagensLidas?: number } | null;
     ultimaMensagem: { resumo: string; direcao: string; em: string } | null;
     naoLidas: number;
     atualizadoEm: string | null;

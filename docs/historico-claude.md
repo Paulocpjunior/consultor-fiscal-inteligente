@@ -5,6 +5,37 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **⏰📝📣 CONNECT: AGENDA, RESUMO POR IA E CAMPANHAS** (29/09, Paulo, depois
+  de eu comparar com o Clerk Chat: *"Concordo com você vamos implementar 1, 2 e
+  três"*). Núcleos puros + rotas + tela + travas, IDÊNTICOS nos dois repos
+  (os arquivos do Connect ainda são iguais; conferido com `diff` antes).
+  ⏰ `whatsapp-agenda.js`: `validarAgendamento` (mensagem em data/hora até 60 d;
+  follow-up em 1..336 h), `decidirAgendamento` (esperar/enviar/dispensar/
+  falhar — follow-up cai se o cliente respondeu depois do pedido ou a conversa
+  encerrou; texto livre com janela de 24h fechada FALHA nomeado, nunca vira
+  template por dedução), notas internas na conversa; rotas
+  `/conversas/:n/agendamentos` (guarda de condução), `DELETE …/:id`,
+  `POST /agenda/tick` (x-cron-secret OU admin) que envia os vencidos e empurra
+  campanhas; `GET /agenda/estado` (tick no ar? ≤15 min). 📝
+  `whatsapp-resumo-ia.js`: fatia sem nota interna, prompt JSON (resumo,
+  pendências, assuntos, tom), leitura tolerante; `POST /conversas/:n/resumo`
+  grava `conversa.resumoIa` com `ateMensagemEm` (a tela avisa "desatualizado").
+  A IA só lê. 📣 `whatsapp-campanhas.js`: `validarCampanha` (template APROVADO
+  na Meta, contagem de {{n}} dela; MARKETING só para etiqueta com base de
+  consentimento), `montarPublico` (regime = contatos VINCULADOS a
+  simples_/lucro_empresas; etiqueta com `podeEnviarPorEtiqueta`; lista; opt-out
+  e número torto ficam de fora NOMEADOS; teto 2000), `{empresa}`/`{nome}` por
+  destinatário, lote de 25 por tick, cada envio vira mensagem de template na
+  conversa + `whatsapp_envios`. Webhook: PARAR/SAIR/CANCELAR/STOP carimba
+  `optOutCampanhas` e deixa nota. Tela: ⏰ no compositor (datetime-local ou
+  horas), painel "⏰ Agendados", bloco "📝 Resumo por IA", aba ⚙️ → 📣 (admin)
+  com estado do tick e "▶ rodar agora"; confirmação pela caixa do app (trava
+  confirmacaoNoTeams pegou um `window.confirm` meu). Trava
+  `direcaoEfetivaNosLeitores` pediu exceção "direção de MENSAGEM" para os dois
+  módulos que leem `m.direcao` (a 3ª que declarei era órfã e a trava acusou).
+  ⚠️ PENDENTE DO PAULO: rodar `./scripts/setup-cloud-schedulers.sh` para criar
+  o job `connect-agenda-tick` (a cada 5 min); sem ele a ⚙️ → 📣 diz "tick NUNCA
+  rodou" e só o botão "rodar agora" envia. Novidade na página + Sobre 15/16/17.
 - **🚚 QUEM ESCRITURA O CT-e É O TOMADOR (29/09, A CASTELLANO)** (Paulo, Resumo
   por CFOP: *"o consultor está puxando o CT-e vinculado à nota fiscal, não
   deveria aparecer na minha escrituração"* — 50 CT-e com CFOP 5351/5353/6352/

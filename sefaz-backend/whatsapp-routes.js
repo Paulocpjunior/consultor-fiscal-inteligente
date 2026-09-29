@@ -78,6 +78,17 @@ import {
 } from './instagram-dm.js';
 import { enviarAvisoTeams, statusAvisoTeams } from './teams-aviso.js';
 import { getGraphToken, isGraphConfigured } from './graph-provider.js';
+import {
+    COLECAO_AGENDAMENTOS, LOTE_TICK_AGENDA, validarAgendamento, decidirAgendamento,
+    notaDoAgendamento, notaDoDesfecho, resumoDoAgendamento,
+} from './whatsapp-agenda.js';
+import {
+    COLECAO_CAMPANHAS, LOTE_CAMPANHA, validarCampanha, montarPublico, variaveisDoDestinatario,
+    proximoLote, totaisDaCampanha, campanhaConcluida, resumoDaCampanha, textoDaMensagemDeCampanha,
+} from './whatsapp-campanhas.js';
+import {
+    selecionarMensagensParaResumo, montarPromptResumo, interpretarResumo, estadoDoResumo, TEMPO_MAX_RESUMO_MS,
+} from './whatsapp-resumo-ia.js';
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -495,6 +506,7 @@ async function montarResumosDeConversas(db, docsConversas) {
             permissaoLigacao: x.permissaoLigacao || null,   // ☎️ status do "Permitir" do cliente
             ultimaLigacaoSaida: x.ultimaLigacaoSaida || null, // ☎️ o último click-to-call desta conversa (estado + ramal)
             retornoDeLigacao: x.retornoDeLigacao || null,   // 📞 o cliente pediu retorno (pendência até alguém ligar/encerrar)
+            resumoIa: x.resumoIa || null,                   // 📝 o último resumo por IA (com o estado: atual/desatualizado)
             ultimaMensagem: x.ultimaMensagem || null,
             naoLidas: x.naoLidas || 0,
             atualizadoEm: x.atualizadoEm || null,
@@ -3677,6 +3689,415 @@ router.get('/instagram/estado', requireAdmin, async (_req, res) => {
     } catch (e) {
         console.error('[whatsapp/instagram/estado]', e);
         return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ═══ ⏰ MENSAGEM AGENDADA E FOLLOW-UP (29/09) ══════════════════════════════
+// Paulo, 29/09 (comparação com o Clerk Chat): "vamos implementar 1, 2 e 3".
+// O núcleo é puro (whatsapp-agenda.js); aqui é banco + envio. Quem dispara é
+// o tick (Cloud Scheduler a cada 5 min → POST /agenda/tick com x-cron-secret),
+// que também empurra as campanhas em andamento.
+
+async function notaInterna(db, numero, texto, por) {
+    const agora = new Date().toISOString();
+    await db.collection('whatsapp_mensagens').add({
+        conversaId: numero, direcao: 'interna', tipo: 'nota', texto, midia: null, timestamp: agora, enviadoPor: por || null,
+    });
+}
+
+router.post('/conversas/:numero/agendamentos', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const { ok: podeLer, conversa } = await podeVerConversa(db, req.user, numero);
+        if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
+        if (ehConversaInstagram(numero) || conversa?.canal === 'instagram') {
+            return res.status(422).json({ ok: false, error: 'Agendamento é do WhatsApp — no Instagram a janela fecha e não há template para reabrir.' });
+        }
+        // Mesma guarda de condução do responder: agendar numa conversa de
+        // outro é a segunda voz, só que com hora marcada.
+        const dono = conversa?.atribuidoA || null;
+        const eu = req.user?.email || null;
+        if (dono && dono !== eu) {
+            return res.status(409).json({ ok: false, error: `Esta conversa está em condução por ${dono}.`, acao: 'Assuma a conversa (🙋) antes de agendar.', emConducaoPor: dono });
+        }
+        const v = validarAgendamento({
+            conversaId: numero, texto: req.body?.texto, tipo: req.body?.tipo || 'mensagem',
+            enviarEm: req.body?.enviarEm, aposHoras: req.body?.aposHoras, agora: new Date(), criadoPor: eu,
+        });
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+        const ag = v.agendamento;
+        const ref = db.collection(COLECAO_AGENDAMENTOS).doc(ag.id);
+        if ((await ref.get()).exists) {
+            return res.status(409).json({ ok: false, error: 'Já existe um agendamento desta conversa para este minuto.', acao: 'Escolha outro horário ou cancele o existente.' });
+        }
+        await ref.set(ag);
+        await notaInterna(db, numero, notaDoAgendamento(ag), eu);
+        return res.json({ ok: true, agendamento: resumoDoAgendamento(ag) });
+    } catch (e) {
+        console.error('[whatsapp/agendamentos]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/conversas/:numero/agendamentos', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const { ok: podeLer } = await podeVerConversa(db, req.user, numero);
+        if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
+        const snap = await db.collection(COLECAO_AGENDAMENTOS).where('conversaId', '==', numero).limit(100).get();
+        const todos = snap.docs.map((d) => resumoDoAgendamento({ id: d.id, ...d.data() }));
+        const pendentes = todos.filter((a) => a.status === 'agendado').sort((a, b) => String(a.enviarEm).localeCompare(String(b.enviarEm)));
+        const recentes = todos.filter((a) => a.status !== 'agendado').sort((a, b) => String(b.enviarEm).localeCompare(String(a.enviarEm))).slice(0, 10);
+        return res.json({ ok: true, pendentes, recentes });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.delete('/conversas/:numero/agendamentos/:id', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const { ok: podeLer } = await podeVerConversa(db, req.user, numero);
+        if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
+        const ref = db.collection(COLECAO_AGENDAMENTOS).doc(String(req.params.id));
+        const doc = await ref.get();
+        if (!doc.exists || doc.data().conversaId !== numero) return res.status(404).json({ ok: false, error: 'Agendamento não encontrado.' });
+        if (doc.data().status !== 'agendado') return res.status(409).json({ ok: false, error: `Este agendamento já está "${doc.data().status}" — não há o que cancelar.` });
+        const agora = new Date().toISOString();
+        await ref.set({ status: 'cancelado', desfecho: `cancelado por ${req.user?.email || '?'}`, canceladoEm: agora, canceladoPor: req.user?.email || null }, { merge: true });
+        await notaInterna(db, numero, `⏰ Agendamento cancelado por ${String(req.user?.email || 'alguém').split('@')[0]}.`, req.user?.email);
+        return res.json({ ok: true });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+/** Envia UM agendamento vencido. Devolve o desfecho nomeado. */
+async function executarAgendamento(db, doc, agora) {
+    const ag = { id: doc.id, ...doc.data() };
+    const ref = db.collection(COLECAO_AGENDAMENTOS).doc(doc.id);
+    const conversa = (await db.collection('whatsapp_conversas').doc(ag.conversaId).get()).data() || {};
+    const decisao = decidirAgendamento(ag, conversa, agora);
+    if (decisao.acao === 'esperar' || decisao.acao === 'nada') return { id: ag.id, ...decisao };
+    if (decisao.acao === 'dispensar' || decisao.acao === 'falhar') {
+        await ref.set({ status: decisao.acao === 'dispensar' ? 'dispensado' : 'falhou', desfecho: decisao.motivo, ultimoErro: decisao.detalhe || null, encerradoEm: agora.toISOString() }, { merge: true });
+        await notaInterna(db, ag.conversaId, notaDoDesfecho(ag, decisao), ag.criadoPor);
+        return { id: ag.id, ...decisao };
+    }
+    const canal = await cfgDeEnvioDaConversa(db, conversa);
+    if (canal.erro) {
+        await ref.set({ tentativas: admin.firestore.FieldValue.increment(1), ultimoErro: canal.erro }, { merge: true });
+        return { id: ag.id, acao: 'erro', motivo: canal.erro };
+    }
+    const envio = await enviarTextoLivre({ para: ag.conversaId, texto: ag.texto }, canal.cfg ? { cfg: canal.cfg } : {});
+    if (!envio.ok) {
+        // Erro DEFINITIVO da Meta (422: janela, número…) encerra; rede/indeterminado tenta de novo até 3.
+        const tentativas = Number(ag.tentativas || 0) + 1;
+        const definitivo = !envio.indeterminado && !envio.configuracaoIncompleta;
+        const esgotou = tentativas >= 3;
+        await ref.set({
+            tentativas, ultimoErro: envio.erro || 'falha no envio',
+            ...(definitivo || esgotou ? { status: 'falhou', desfecho: definitivo ? 'meta-recusou' : 'tentativas-esgotadas', encerradoEm: agora.toISOString() } : {}),
+        }, { merge: true });
+        if (definitivo || esgotou) await notaInterna(db, ag.conversaId, notaDoDesfecho(ag, { acao: 'falhar', motivo: 'envio', detalhe: envio.erro }), ag.criadoPor);
+        return { id: ag.id, acao: 'erro', motivo: envio.erro, definitivo };
+    }
+    const em = agora.toISOString();
+    const msg = {
+        conversaId: ag.conversaId, direcao: 'saida', tipo: 'text', texto: ag.texto, midia: null, timestamp: em,
+        statusEntrega: 'enviado', enviadoPor: ag.criadoPor || null, agendamentoId: ag.id, agendado: ag.tipo,
+    };
+    await db.collection('whatsapp_mensagens').doc(envio.messageId).set(msg, { merge: true });
+    await db.collection('whatsapp_conversas').doc(ag.conversaId).set({
+        ultimaMensagem: { resumo: ag.texto.slice(0, 140), direcao: 'saida', em },
+        atualizadoEm: em,
+    }, { merge: true });
+    await ref.set({ status: 'enviado', enviadoEm: em, messageId: envio.messageId, desfecho: 'enviado' }, { merge: true });
+    return { id: ag.id, acao: 'enviar', motivo: 'enviado' };
+}
+
+/** Roda até LOTE_TICK_AGENDA agendamentos vencidos. */
+async function tickAgenda(db, agora) {
+    const snap = await db.collection(COLECAO_AGENDAMENTOS)
+        .where('status', '==', 'agendado').where('enviarEm', '<=', agora.toISOString())
+        .orderBy('enviarEm', 'asc').limit(LOTE_TICK_AGENDA).get();
+    const desfechos = [];
+    for (const doc of snap.docs) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            desfechos.push(await executarAgendamento(db, doc, agora));
+        } catch (e) {
+            console.error('[whatsapp/agenda/tick]', doc.id, e);
+            desfechos.push({ id: doc.id, acao: 'erro', motivo: e.message });
+        }
+    }
+    const conta = (acao) => desfechos.filter((d) => d.acao === acao).length;
+    return { lidos: snap.size, enviados: conta('enviar'), dispensados: conta('dispensar'), falhas: conta('falhar') + conta('erro'), desfechos, maisNaFila: snap.size >= LOTE_TICK_AGENDA };
+}
+
+// ═══ 📣 CAMPANHAS EM LOTE (29/09) ═════════════════════════════════════════
+// Admin. Público montado UMA vez na criação (com os pulados nomeados); o
+// envio anda por lotes de LOTE_CAMPANHA a cada tick, e "▶ Iniciar" manda o
+// primeiro lote na hora para a pessoa ver andar.
+
+async function lerEmpresasPorId(db) {
+    const mapa = new Map();
+    const [simples, lucro] = await Promise.all([
+        db.collection('simples_empresas').get(),
+        db.collection('lucro_empresas').get(),
+    ]);
+    for (const [snap, regime] of [[simples, 'simples'], [lucro, 'lucro']]) {
+        for (const d of snap.docs) {
+            const x = d.data() || {};
+            if (x._deleted || x._merged_into) continue;
+            mapa.set(d.id, { nome: x.nome || x.razaoSocial || null, regime });
+        }
+    }
+    return mapa;
+}
+
+/** Envia UM lote de uma campanha em andamento. */
+async function enviarLoteDaCampanha(db, doc, agora, tamanho = LOTE_CAMPANHA) {
+    const c = { id: doc.id, ...doc.data() };
+    if (c.status !== 'enviando') return { id: c.id, pulado: `status ${c.status}` };
+    const ref = db.collection(COLECAO_CAMPANHAS).doc(c.id);
+    const destinatarios = Array.isArray(c.destinatarios) ? [...c.destinatarios] : [];
+    const idx = proximoLote(destinatarios, tamanho);
+    let corpoAprovado = c.template?.corpo || null;
+    if (!corpoAprovado) {
+        try {
+            const aprovados = await listarTemplatesAprovados();
+            const t = aprovados.ok ? (aprovados.templates || []).find((x) => x.nome === c.template?.nome) : null;
+            corpoAprovado = t?.corpo || null;
+        } catch (e) { console.warn('[whatsapp/campanhas] corpo do template não lido:', e.message); }
+    }
+    let enviados = 0; let falhas = 0; let pulados = 0;
+    for (const i of idx) {
+        const d = destinatarios[i];
+        const em = new Date().toISOString();
+        const vars = variaveisDoDestinatario(c.variaveis || [], d);
+        if (!vars.ok) { destinatarios[i] = { ...d, status: 'pulado', motivo: vars.motivo, em }; pulados += 1; continue; }
+        // eslint-disable-next-line no-await-in-loop
+        const envio = await enviarTemplateWhatsapp({ para: d.numero, template: c.template.nome, idioma: c.template.idioma, variaveis: vars.variaveis, pdfBase64: null, nomeArquivo: null });
+        if (!envio.ok) {
+            destinatarios[i] = { ...d, status: 'falhou', motivo: envio.erro || 'falha no envio', em };
+            falhas += 1;
+            // Canal sem configuração derruba o lote inteiro: continuar seria N falhas iguais.
+            if (envio.configuracaoIncompleta) break;
+            continue;
+        }
+        destinatarios[i] = { ...d, status: 'enviado', motivo: null, messageId: envio.messageId, em };
+        enviados += 1;
+        const corpo = corpoAprovado ? renderizarCorpoTemplate(corpoAprovado, vars.variaveis) : null;
+        const texto = textoDaMensagemDeCampanha({ campanha: c, corpoRenderizado: corpo });
+        // eslint-disable-next-line no-await-in-loop
+        await db.collection('whatsapp_mensagens').doc(envio.messageId).set({
+            conversaId: envio.numeroEnviado, direcao: 'saida', tipo: 'template', texto, template: c.template.nome,
+            corpoIndisponivel: !corpo, midia: null, timestamp: em, statusEntrega: 'enviado',
+            enviadoPor: c.criadoPor || null, campanhaId: c.id,
+        }, { merge: true });
+        // eslint-disable-next-line no-await-in-loop
+        const conv = (await db.collection('whatsapp_conversas').doc(envio.numeroEnviado).get()).data() || {};
+        // eslint-disable-next-line no-await-in-loop
+        await db.collection('whatsapp_conversas').doc(envio.numeroEnviado).set({
+            numero: envio.numeroEnviado,
+            ...(!conv.fila && c.template.departamento ? { fila: c.template.departamento } : {}),
+            ultimaMensagem: { resumo: texto.slice(0, 140), direcao: 'saida', em },
+            atualizadoEm: em,
+        }, { merge: true });
+        // eslint-disable-next-line no-await-in-loop
+        await db.collection('whatsapp_contatos').doc(envio.numeroEnviado).set({ numero: envio.numeroEnviado, atualizadoEm: em, ...(d.nome ? {} : {}) }, { merge: true });
+        // Auditoria compartilhada com o /enviar.
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            await db.collection('whatsapp_envios').add({
+                em: admin.firestore.FieldValue.serverTimestamp(), departamento: c.template.departamento || null,
+                template: c.template.nome, numeroEnviado: envio.numeroEnviado, messageId: envio.messageId,
+                por: c.criadoPor || null, projetoOrigem: 'cfi', referencia: `campanha:${c.id}`, temDocumento: false,
+            });
+        } catch (e) { console.warn('[whatsapp/campanhas] auditoria falhou:', e.message); }
+    }
+    const concluida = campanhaConcluida(destinatarios);
+    await ref.set({
+        destinatarios, ultimoLoteEm: agora.toISOString(), totais: totaisDaCampanha(destinatarios),
+        ...(concluida ? { status: 'concluida', concluidoEm: agora.toISOString() } : {}),
+    }, { merge: true });
+    return { id: c.id, enviados, falhas, pulados, restantes: totaisDaCampanha(destinatarios).pendentes, concluida };
+}
+
+async function tickCampanhas(db, agora) {
+    const snap = await db.collection(COLECAO_CAMPANHAS).where('status', '==', 'enviando').limit(5).get();
+    const lotes = [];
+    for (const doc of snap.docs) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            lotes.push(await enviarLoteDaCampanha(db, doc, agora));
+        } catch (e) {
+            console.error('[whatsapp/campanhas/tick]', doc.id, e);
+            lotes.push({ id: doc.id, erro: e.message });
+        }
+    }
+    return { campanhasAtivas: snap.size, lotes };
+}
+
+/** Cron (x-cron-secret) OU admin logado — o botão "rodar agora" da ⚙️. */
+async function requireCronOuAdmin(req, res, next) {
+    const header = req.headers['x-cron-secret'] || req.headers['x-sefaz-cron-secret'];
+    if (secretsMatch(header, process.env.SEFAZ_CRON_SECRET)) { req._cron = true; return next(); }
+    return requireAdmin(req, res, next);
+}
+
+router.post('/agenda/tick', requireCronOuAdmin, async (_req, res) => {
+    try {
+        const db = getDb();
+        const agora = new Date();
+        const agenda = await tickAgenda(db, agora);
+        const campanhas = await tickCampanhas(db, agora);
+        await db.collection('whatsapp_config').doc('agenda_tick').set({
+            ultimoEm: agora.toISOString(), agenda: { lidos: agenda.lidos, enviados: agenda.enviados, dispensados: agenda.dispensados, falhas: agenda.falhas },
+            campanhas: { ativas: campanhas.campanhasAtivas },
+        }, { merge: true });
+        return res.json({ ok: true, em: agora.toISOString(), agenda, campanhas });
+    } catch (e) {
+        console.error('[whatsapp/agenda/tick]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/** A ⚙️ pergunta: o tick está rodando? (Sem job no Scheduler, nada sai sozinho.) */
+router.get('/agenda/estado', requireAuth, async (_req, res) => {
+    try {
+        const db = getDb();
+        const doc = (await db.collection('whatsapp_config').doc('agenda_tick').get()).data() || null;
+        const pendentes = (await db.collection(COLECAO_AGENDAMENTOS).where('status', '==', 'agendado').limit(200).get()).size;
+        const ultimo = Date.parse(doc?.ultimoEm || '');
+        const silencioMin = Number.isFinite(ultimo) ? Math.round((Date.now() - ultimo) / 60000) : null;
+        return res.json({ ok: true, ultimoTickEm: doc?.ultimoEm || null, silencioMin, tickNoAr: silencioMin != null && silencioMin <= 15, agendadosPendentes: pendentes, truncado: pendentes >= 200 });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.get('/campanhas', requireAdmin, async (_req, res) => {
+    try {
+        const snap = await getDb().collection(COLECAO_CAMPANHAS).orderBy('criadoEm', 'desc').limit(50).get();
+        return res.json({ ok: true, campanhas: snap.docs.map((d) => resumoDaCampanha({ id: d.id, ...d.data() })) });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.get('/campanhas/:id', requireAdmin, async (req, res) => {
+    try {
+        const doc = await getDb().collection(COLECAO_CAMPANHAS).doc(String(req.params.id)).get();
+        if (!doc.exists) return res.status(404).json({ ok: false, error: 'Campanha não encontrada.' });
+        const c = { id: doc.id, ...doc.data() };
+        return res.json({ ok: true, campanha: { ...resumoDaCampanha(c), destinatarios: c.destinatarios || [], pulados: c.puladosNoPublico || [] } });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Criar = montar o público e guardar como RASCUNHO. Nada sai daqui.
+router.post('/campanhas', requireAdmin, async (req, res) => {
+    try {
+        const p = req.body || {};
+        const db = getDb();
+        // O template é o APROVADO NA META (categoria e contagem de variáveis são dela, não da tela).
+        const aprovados = await listarTemplatesAprovados();
+        if (!aprovados.ok) return res.status(503).json({ ok: false, error: aprovados.erro || 'Não consegui listar os templates aprovados na Meta.', acao: aprovados.acao });
+        const t = (aprovados.templates || []).find((x) => x.nome === String(p.template?.nome || '') && (!p.template?.idioma || !x.idioma || x.idioma === p.template.idioma));
+        if (!t) return res.status(400).json({ ok: false, error: `Template "${p.template?.nome || '?'}" não está entre os aprovados na Meta.` });
+        if (t.temDocumento) return res.status(400).json({ ok: false, error: 'Template com cabeçalho de DOCUMENTO não sai em campanha (cada guia é um PDF diferente — use as telas de guia).' });
+        const v = validarCampanha({
+            nome: p.nome, variaveis: p.variaveis, publico: p.publico,
+            template: { nome: t.nome, idioma: t.idioma, categoria: t.categoria, variaveis: t.variaveis, corpo: t.corpo, departamento: p.departamento || null },
+        });
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro, acao: v.acao });
+        const [contatosDocs, catalogo, empresas] = await Promise.all([lerTodosContatos(db), lerCatalogoEtiquetas(db), lerEmpresasPorId(db)]);
+        const contatos = contatosDocs.map((d) => ({ numero: d.id, ...(d.data() || {}) }));
+        const publico = montarPublico({ campanha: v.campanha, contatos, catalogoEtiquetas: catalogo, empresas });
+        if (!publico.destinatarios.length) {
+            return res.status(422).json({ ok: false, error: 'Ninguém entra neste público.', pulados: publico.pulados.slice(0, 20), acao: 'Confira a etiqueta/regime/vínculo dos contatos — ou os motivos dos pulados.' });
+        }
+        const agora = new Date().toISOString();
+        const id = `camp_${agora.replace(/[^0-9]/g, '').slice(0, 14)}`;
+        const campanha = {
+            ...v.campanha, id, status: 'rascunho', destinatarios: publico.destinatarios, puladosNoPublico: publico.pulados,
+            truncado: publico.truncado, totais: totaisDaCampanha(publico.destinatarios),
+            criadoPor: req.user?.email || null, criadoEm: agora, iniciadoEm: null, concluidoEm: null, ultimoLoteEm: null,
+        };
+        await db.collection(COLECAO_CAMPANHAS).doc(id).set(campanha);
+        return res.json({ ok: true, campanha: resumoDaCampanha(campanha), pulados: publico.pulados, truncado: publico.truncado });
+    } catch (e) {
+        console.error('[whatsapp/campanhas]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Iniciar = vira "enviando" e manda o PRIMEIRO lote agora; o tick segue.
+router.post('/campanhas/:id/iniciar', requireAdmin, async (req, res) => {
+    try {
+        const db = getDb();
+        const ref = db.collection(COLECAO_CAMPANHAS).doc(String(req.params.id));
+        const doc = await ref.get();
+        if (!doc.exists) return res.status(404).json({ ok: false, error: 'Campanha não encontrada.' });
+        const c = doc.data();
+        if (!['rascunho', 'pausada'].includes(c.status)) return res.status(409).json({ ok: false, error: `Campanha está "${c.status}".` });
+        const agora = new Date();
+        await ref.set({ status: 'enviando', iniciadoEm: c.iniciadoEm || agora.toISOString(), iniciadoPor: req.user?.email || null }, { merge: true });
+        const lote = await enviarLoteDaCampanha(db, await ref.get(), agora);
+        const depois = { id: doc.id, ...(await ref.get()).data() };
+        return res.json({ ok: true, lote, campanha: resumoDaCampanha(depois) });
+    } catch (e) {
+        console.error('[whatsapp/campanhas/iniciar]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.post('/campanhas/:id/pausar', requireAdmin, async (req, res) => {
+    try {
+        const ref = getDb().collection(COLECAO_CAMPANHAS).doc(String(req.params.id));
+        const doc = await ref.get();
+        if (!doc.exists) return res.status(404).json({ ok: false, error: 'Campanha não encontrada.' });
+        if (doc.data().status !== 'enviando') return res.status(409).json({ ok: false, error: `Campanha está "${doc.data().status}" — só campanha enviando pausa.` });
+        await ref.set({ status: 'pausada', pausadaEm: new Date().toISOString(), pausadaPor: req.user?.email || null }, { merge: true });
+        return res.json({ ok: true });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ═══ 📝 RESUMO DA CONVERSA POR IA (29/09) ══════════════════════════════════
+// Lê as últimas mensagens que o cliente viu, pede ao Gemini um JSON e grava
+// em `conversa.resumoIa` (com `ateMensagemEm`, para a tela saber quando ele
+// ficou velho). A IA não responde ao cliente e não aplica etiqueta.
+router.post('/conversas/:numero/resumo', requireAuth, async (req, res) => {
+    try {
+        const numero = idConversaDoParam(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const { ok: podeLer, conversa } = await podeVerConversa(db, req.user, numero);
+        if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
+        const ai = req.app?.get?.('ai');
+        if (!ai) return res.status(503).json({ ok: false, error: 'IA indisponível: sem cliente Gemini no servidor (GEMINI_API_KEY?).' });
+        const snap = await db.collection('whatsapp_mensagens').where('conversaId', '==', numero).orderBy('timestamp', 'desc').limit(120).get();
+        const mensagens = selecionarMensagensParaResumo(snap.docs.map((d) => d.data()));
+        if (mensagens.length < 2) return res.status(422).json({ ok: false, error: 'Conversa curta demais para resumir (menos de 2 mensagens).' });
+        const contato = (await db.collection('whatsapp_contatos').doc(numero).get()).data() || {};
+        const modelos = req.app.get('geminiModelos');
+        const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+        const corrida = ai.models.generateContent({
+            model: modelo,
+            contents: montarPromptResumo({ mensagens, nomeCliente: contato.nomePerfil || conversa?.nome || null, empresaNome: contato.empresaNome || null }),
+            config: { temperature: 0.2 },
+        });
+        const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), TEMPO_MAX_RESUMO_MS));
+        const r = await Promise.race([corrida, prazo]);
+        const lido = interpretarResumo(r?.text ?? '');
+        if (!lido.ok) return res.status(502).json({ ok: false, error: `A IA não devolveu um resumo legível (${lido.motivo}).`, acao: 'Tente de novo; se repetir, é o modelo.' });
+        const agora = new Date().toISOString();
+        const ultimaEm = mensagens.length ? conversa?.ultimaMensagem?.em || agora : agora;
+        const resumoIa = { ...lido.resumo, em: agora, por: req.user?.email || null, modelo: modelo || null, mensagensLidas: mensagens.length, ateMensagemEm: ultimaEm };
+        await db.collection('whatsapp_conversas').doc(numero).set({ resumoIa }, { merge: true });
+        return res.json({ ok: true, resumoIa, estado: estadoDoResumo({ resumoIa, ultimaMensagem: conversa?.ultimaMensagem }) });
+    } catch (e) {
+        console.error('[whatsapp/resumo]', e);
+        return res.status(e.message === 'tempo esgotado' ? 504 : 500).json({ ok: false, error: e.message === 'tempo esgotado' ? 'A IA demorou demais (15 s). Tente de novo.' : e.message });
     }
 });
 
