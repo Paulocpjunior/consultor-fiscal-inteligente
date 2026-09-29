@@ -763,6 +763,10 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
     // que na virada do mês a joga em OUTRA competência, e o E-Fiscal aceita
     // sem dizer nada. É a régua de 06/08: campo de data não recebe default.
     const dEmi = dataDeclaradaAAAAMMDD(d.dhEmi);
+    // 📅 Na ENTRADA a data de entrada/saída e a de lançamento são a data de
+    // ENTRADA declarada por quem escritura (29/09, print do SAGE: emissão
+    // 30/07, entrada 01/08); sem ela, a emissão, como sempre foi.
+    const dEs = (direcaoDoDoc(d) === 'entrada' && dataDeclaradaAAAAMMDD((d as any).dataEntrada)) || dEmi;
     if (!dEmi) {
         throw new Error(
             `nota ${d.numero || d.chave}: sem data de emissão legível. Sem ela o E200 sairia com a data de `
@@ -781,6 +785,7 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
         numero: numeroDaNota(d),
         codigoPart: consumidor ? codConsumidor : codigoParticipante(part!.cnpjCpf, codigos),
         dEmi,
+        dEs,
         ufNF: (consumidor ? ufConsumidor : sanitizeAlfa(part!.uf || '').slice(0, 2).toUpperCase()) || '  ',
         modelo: d.modelo || (d.tipo === 'NFCe' ? '65' : '55'),
     };
@@ -823,7 +828,7 @@ function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>, codCons
         'Nº FINAL DA N. F': c.es === 'S' ? c.numero : 0,
         'CÓDIGO DO CLIENTE/FORNECEDOR': c.codigoPart,
         'DATA DE EMISSÃO': c.dEmi,
-        'DATA DE ENTRADA/SAÍDA': c.dEmi,
+        'DATA DE ENTRADA/SAÍDA': c.dEs,
         'UF DA N.F.': c.ufNF,
         'MODELO DA N.F.': c.modelo,
         'EMITENTE DA N.F.': c.es === 'S' ? 'P' : 'T',
@@ -834,7 +839,7 @@ function buildE200(d: DocumentoFiscal, codigos?: Record<string, string>, codCons
         'TIPO DO FRETE': mapTipoFrete((d as any).tpFrete),
         'VALOR CONTÁBIL': d.totais?.vNF || 0,
         'Nº LINHAS DE LANÇAMENTO': calcQtdCfops(d),
-        'DATA DE LANÇAMENTO NO SISTEMA': c.dEmi,
+        'DATA DE LANÇAMENTO NO SISTEMA': c.dEs,
     });
 }
 

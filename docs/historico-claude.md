@@ -5,6 +5,32 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 DATA DE ENTRADA E COMPETÊNCIA DE ESCRITURAÇÃO (29/09)** (Paulo, print do
+  SAGE IOB "Emissão 30/07 · Entrada 01/08": *"nota do mês anterior que foi
+  escriturada no 08, no consultor não temos essa opção … esse campo aqui está
+  incompleto"*). `data-entrada-escrituracao.js` (puro, com `.d.ts`):
+  `competenciaDeEscrituracao({direcao, dhEmi, dataEntrada})` (entrada com
+  data → mês da entrada; senão emissão; saída ignora),
+  `conferirDataEntrada` (formato, entrada ≥ emissão, só na entrada,
+  `mudaCompetencia`), `patchDataEntrada({doc, dataEntrada, autor})` (move
+  `competencia`, guarda `competenciaEmissao` UMA vez, limpar devolve; carimbo
+  `dataEntradaDefinidaEm/Por`), `dataEntradaDoDocumento`. DECISÃO: o campo
+  `competencia` do documento É o de escrituração — é por ele que os ~50
+  `where('competencia')` do backend perguntam; mover a nota é mudar esse
+  campo. Digitação: `NotaDigitadaInput.dataEntrada`, os três `montar*` usam
+  `escrituracaoDigitada(i)`; formulário com o campo só na entrada e aviso do
+  mês. Capturada: `definirDataEntradaDaNota` (xmlFiscalService, setDoc
+  merge) + bloco "📅 Informar a data de entrada" no `XmlDocumentoDetalhe`
+  (só entrada, com limpar). SPED: C100 DT_E_S = `dataEntradaDoDocumento ||`
+  o de antes (contrib `dataEntradaSaida||dhEmi`; fiscal `dhSaiEnt||dhEmi`).
+  SAGE E200: `dEs` em DATA DE ENTRADA/SAÍDA e DATA DE LANÇAMENTO. Importer:
+  no reimport, `ex.dataEntrada` preserva data e competência. `types.ts`:
+  `dataEntrada`, `competenciaEmissao`, carimbos. Trava
+  `dataEntradaEscrituracao.test.ts` (13 casos). Novidade 29/09 +
+  `NOVIDADES_VERSAO`. FICA: a lista da Central filtra pelo `competencia` —
+  a nota movida some do mês da emissão e aparece no da entrada (é o
+  esperado; o detalhe diz "emitida em MM/AAAA").
+
 - **📗 ELS 3ª RODADA DO PVA (28/09, após o plano de contas: 1315 → 19 erros +
   50 avisos)**: 1 COD_MUN 0150 (Ovidio, produtor PF) · 8 COD_CTA em A170
   tomado (cadastro: falta a conta do uso servicos-tomados) · 9 VL_PIS + 1

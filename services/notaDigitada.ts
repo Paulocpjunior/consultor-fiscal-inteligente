@@ -76,6 +76,7 @@
  * app seria inventar o modelo de um documento fiscal — a família do `1405`.
  */
 import type { DocumentoFiscal } from '../types';
+import { conferirDataEntrada } from '../sefaz-backend/data-entrada-escrituracao.js';
 import { idDocumentoNfseSp } from '../sefaz-backend/nfse-identidade.js';
 import {
     camposDaRetencaoDigitada,
@@ -156,6 +157,12 @@ export interface NotaDigitadaInput {
     serie?: string;
     /** Data de emissão AAAA-MM-DD. */
     dhEmi: string;
+    /**
+     * Data de ENTRADA no estabelecimento (AAAA-MM-DD), só na entrada — a nota
+     * do fornecedor emitida em 30/07 e recebida em 01/08 é escriturada em
+     * agosto (29/09, print do SAGE). Vazio = mesma da emissão.
+     */
+    dataEntrada?: string;
     /** Chave de 44 dígitos, OPCIONAL — com ela, o XML futuro assume o lugar. */
     chave?: string;
     /** A contraparte: fornecedor na entrada, cliente na saída. */
@@ -176,6 +183,16 @@ export interface NotaDigitadaInput {
      * com print) — ou seja, a terceira porta nunca gravou nota nenhuma.
      */
     createdByUid?: string;
+}
+
+/**
+ * Competência de ESCRITURAÇÃO da nota digitada: a da entrada quando informada
+ * (só na entrada), senão a da emissão. A da emissão fica guardada.
+ */
+function escrituracaoDigitada(i: NotaDigitadaInput): { competencia: string; competenciaEmissao: string; dataEntrada: string } {
+    const competenciaEmissao = String(i.dhEmi).slice(0, 7);
+    const conf = conferirDataEntrada({ direcao: i.direcao, dhEmi: i.dhEmi, dataEntrada: i.dataEntrada });
+    return { competencia: conf.ok ? conf.competencia : competenciaEmissao, competenciaEmissao, dataEntrada: conf.ok ? conf.dataEntrada : '' };
 }
 
 /** Espécie efetiva — o padrão é mercadoria (como a porta nasceu). */
@@ -206,6 +223,9 @@ export function validarNotaDigitada(i: NotaDigitadaInput): string[] {
     if (!String(i.numero || '').trim()) erros.push('Informe o número da nota.');
     if (!/^\d{4}-\d{2}-\d{2}/.test(String(i.dhEmi || ''))) {
         erros.push('Informe a data de emissão (a competência sai dela).');
+    }
+    if (String(i.dataEntrada || '').trim()) {
+        erros.push(...conferirDataEntrada({ direcao: i.direcao, dhEmi: i.dhEmi, dataEntrada: i.dataEntrada }).erros);
     }
     if (i.valorTotal === null || i.valorTotal === undefined || !(Number(i.valorTotal) > 0)) {
         erros.push('Informe o valor total da nota (maior que zero). Valor não tem default.');
@@ -343,7 +363,7 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
     const chave = soDigitos(i.chave);
     const empresaCnpj = soDigitos(i.empresaCnpj);
     const partDoc = soDigitos(i.participanteDoc);
-    const competencia = String(i.dhEmi).slice(0, 7);
+    const { competencia, competenciaEmissao, dataEntrada } = escrituracaoDigitada(i);
     // Nota de ENTRADA emitida pela própria empresa não existe na digitação
     // comum; quem digita lança a nota do FORNECEDOR. Então na entrada o
     // emitente é a contraparte, na saída é a empresa — igual ao XML.
@@ -365,6 +385,8 @@ export function montarNotaDigitada(i: NotaDigitadaInput): DocumentoFiscal {
         tpNF: i.direcao === 'saida' ? '1' : null,
         dhEmi: i.dhEmi,
         competencia,
+        competenciaEmissao,
+        ...(dataEntrada ? { dataEntrada } : {}),
         direcao: i.direcao,
         // A pessoa afirma lançar de um documento em mãos (DANFE/nota impressa);
         // fica gravado QUEM afirmou — mesma régua do "sem movimento": o app não
@@ -423,7 +445,7 @@ function montarCteDigitado(i: NotaDigitadaInput): DocumentoFiscal {
     const chave = soDigitos(i.chave);
     const empresaCnpj = soDigitos(i.empresaCnpj);
     const partDoc = soDigitos(i.participanteDoc);
-    const competencia = String(i.dhEmi).slice(0, 7);
+    const { competencia, competenciaEmissao, dataEntrada } = escrituracaoDigitada(i);
     const t = i.transporte || ({} as TransporteDigitado);
 
     // AUSENTE ≠ ZERO — mesma régua do ISS: o que a pessoa não soube dizer fica
@@ -451,6 +473,8 @@ function montarCteDigitado(i: NotaDigitadaInput): DocumentoFiscal {
         numero: String(i.numero).trim(),
         dhEmi: i.dhEmi,
         competencia,
+        competenciaEmissao,
+        ...(dataEntrada ? { dataEntrada } : {}),
         direcao: i.direcao,
         status: 'autorizado',
         empresaId: i.empresaId,
@@ -512,7 +536,7 @@ function montarCteDigitado(i: NotaDigitadaInput): DocumentoFiscal {
 function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
     const empresaCnpj = soDigitos(i.empresaCnpj);
     const partDoc = soDigitos(i.participanteDoc);
-    const competencia = String(i.dhEmi).slice(0, 7);
+    const { competencia, competenciaEmissao, dataEntrada } = escrituracaoDigitada(i);
     const ehPrestador = i.direcao === 'saida';
     const prestadorCnpj = ehPrestador ? empresaCnpj : partDoc;
     const prestadorNome = ehPrestador ? i.empresaNome : i.participanteNome;
@@ -540,6 +564,8 @@ function montarNfseDigitada(i: NotaDigitadaInput): DocumentoFiscal {
         natOp: sv.codigoServico ? `Cód. serviço ${sv.codigoServico}` : 'Serviço NFS-e',
         dhEmi: i.dhEmi,
         competencia,
+        competenciaEmissao,
+        ...(dataEntrada ? { dataEntrada } : {}),
         direcao: i.direcao,
         status: 'autorizado',
         empresaId: i.empresaId,

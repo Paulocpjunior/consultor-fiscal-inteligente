@@ -18,6 +18,7 @@ import { cstDaAquisicao, cstGeraCredito, criarResumoDaCstDeEntrada, NAT_BC_CRED 
 // 📗 O COD_CTA do C170/A170/F100 sai do PLANO DE CONTAS do SPED (0500), uma conta
 // por uso (28/09, ELS: 1259 recusas). Sem conta para o uso, vazio e DITO.
 import { contaDoUso, criarSeletorDeConta } from './plano-contas-sped.js';
+import { dataEntradaDoDocumento } from './data-entrada-escrituracao.js';
 // 🚨 Cancelamento chega por EVENTO e o campo `status` fica 'autorizado'. Lendo
 // o campo cru, a nota cancelada era DECLARADA À RECEITA nos blocos C/D/F —
 // o pior desfecho da família de defeitos do MV LIDER 639 (11/08).
@@ -872,7 +873,9 @@ export function buildBlocoC_Contrib(dados) {
             fmt.sanitizeString(numeroDoDocumento(nota), 9),   // NUM_DOC — gravado, ou o da CHAVE (26-34)
             fmt.sanitizeString(chave, 44),
             fmt.formatDate(nota.dataEmissao || nota.dhEmi),
-            fmt.formatDate(nota.dataEntradaSaida || nota.dhEmi),
+            // DT_E_S: a data de ENTRADA declarada por quem escritura (29/09,
+            // SAGE: emissão 30/07, entrada 01/08) vem antes de qualquer outra.
+            fmt.formatDate(dataEntradaDoDocumento(nota) || nota.dataEntradaSaida || nota.dhEmi),
             // 🚨 VL_DOC É O VALOR TOTAL DO DOCUMENTO, e ele DESCONTA (Paulo,
             // 20/08). Aqui saía `Σ vProd`: a NF 7 da PWR ia com 18.741,24
             // enquanto a própria DANFE diz `V. TOTAL DA NOTA 18.179,00` —

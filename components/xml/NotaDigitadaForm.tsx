@@ -12,6 +12,7 @@
  * documento que tem XML.
  */
 import React, { useState, useEffect, useMemo } from 'react';
+import { conferirDataEntrada, brDe } from '../../sefaz-backend/data-entrada-escrituracao.js';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../services/firebaseConfig';
 import {
@@ -68,6 +69,11 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
     const [numero, setNumero] = useState('');
     const [serie, setSerie] = useState('1');
     const [dhEmi, setDhEmi] = useState('');
+    // 📅 Data de ENTRADA (só na entrada): a nota do fornecedor emitida em
+    // 30/07 e recebida em 01/08 é escriturada em AGOSTO (29/09, print do SAGE:
+    // "Emissão · Entrada"). Vazio = mesma da emissão.
+    const [dataEntrada, setDataEntrada] = useState('');
+    const confEntrada = useMemo(() => conferirDataEntrada({ direcao, dhEmi, dataEntrada }), [direcao, dhEmi, dataEntrada]);
     const [chave, setChave] = useState('');
     const [participanteNome, setParticipanteNome] = useState('');
     const [participanteDoc, setParticipanteDoc] = useState('');
@@ -165,6 +171,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
             empresaCnpj: empresa.cnpj,
             empresaNome: empresa.nome,
             direcao, numero, serie, dhEmi, chave,
+            dataEntrada: direcao === 'entrada' ? dataEntrada : '',
             participanteNome, participanteDoc, participanteUf,
             valorTotal: parseValorMoeda(valorTotal),
             itens: itens.map(({ vProdTexto, ...resto }) => ({ ...resto, vProd: parseValorMoeda(vProdTexto) })),
@@ -194,7 +201,7 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                 : `Nota nº ${numero} lançada. Ela já conta em livros, DIPAM e relatórios — e se o XML chegar depois, ele assume o lugar.`);
             onShowToast?.(`Nota nº ${numero} ${regravando ? 'regravada' : 'lançada'} para ${empresa.nome}.`);
             onImported?.();
-            setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]);
+            setNumero(''); setChave(''); setValorTotal(''); setItens([itemVazio()]); setDataEntrada('');
             setParticipanteNome(''); setParticipanteDoc(''); setParticipanteUf('');
             setServico({ discriminacao: '' }); setAliquotaTexto(''); setValorIssTexto('');
             setTransporte(t => ({ modelo: t.modelo, cfop: '' }));
@@ -284,6 +291,23 @@ const NotaDigitadaForm: React.FC<Props> = ({ currentUser, onShowToast, onImporte
                     <input type="date" value={dhEmi} onChange={e => setDhEmi(e.target.value)} className={campo} />
                 </div>
             </div>
+            {direcao === 'entrada' && (
+                <div className="grid grid-cols-1 md:grid-cols-[14rem_1fr] gap-3 items-end">
+                    <div>
+                        <label className={rotulo}>Data de entrada (escrituração)</label>
+                        <input type="date" value={dataEntrada} onChange={e => setDataEntrada(e.target.value)} className={campo} />
+                    </div>
+                    <p className={`text-[11px] ${confEntrada.erros.length ? 'text-red-600 dark:text-red-300 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>
+                        {confEntrada.erros.length
+                            ? confEntrada.erros.join(' ')
+                            : dataEntrada
+                                ? (confEntrada.mudaCompetencia
+                                    ? `Entra no estabelecimento em ${brDe(dataEntrada)}: a nota é escriturada na competência ${confEntrada.competencia.slice(5)}/${confEntrada.competencia.slice(0, 4)}, não na da emissão (${confEntrada.competenciaEmissao.slice(5)}/${confEntrada.competenciaEmissao.slice(0, 4)}). É o "Entrada" do SAGE: DT_E_S do C100 e data de lançamento.`
+                                    : `Entrada em ${brDe(dataEntrada)}, mesma competência da emissão.`)
+                                : 'Vazio = a nota entra na data da emissão. Preencha quando a nota do fornecedor foi emitida num mês e chegou no seguinte — ela passa a ser escriturada no mês da entrada (DT_E_S do C100, data de lançamento do SAGE).'}
+                    </p>
+                </div>
+            )}
             {/* 🚨 ESTES TRÊS CAMPOS SÃO A IDENTIDADE DO DOCUMENTO, e por isso a
                 promessa "relançar corrige a digitação" NÃO vale para eles: o id
                 é `digitada_{empresa}_{número}_{série}_{mês}`, então relançar com
