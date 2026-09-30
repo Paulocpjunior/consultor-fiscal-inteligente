@@ -59,14 +59,14 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^0.575.0",
     "motion": "^12.40.0",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "node-forge": "^1.4.0",
     "pdfjs-dist": "^4.10.38",
     "playwright": "^1.51.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
-    "undici": "^6.28.0",
+    "undici": "^6.29.0",
     "xlsx": "npm:@e965/xlsx@^0.20.3",
     "xml-crypto": "^6.1.2",
     "zod": "^4.4.3"
@@ -78,6 +78,6 @@
     "uuid": "^11.1.1",
     "dompurify": "^3.4.13",
     "websocket-driver": "^0.7.5",
-    "brace-expansion": "^5.0.9"
+    "brace-expansion": "^5.0.12"
   }
 }

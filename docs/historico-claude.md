@@ -5,6 +5,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔒 DEPLOY 1075 BARRADO PELA AUDITORIA (30/09)**: advisories novos do dia —
+  `brace-expansion` ≤5.0.11 (alta, DoS), `undici` ≤6.28.0 (alta), `multer`
+  ≤2.3.0 (moderada). Não era da entrega (#1326). Pisos subidos no
+  `package.json` (override `brace-expansion` ^5.0.12, `undici` ^6.29.0,
+  `multer` ^2.4.0) + `npm install`; `npm audit --omit=dev` = 0; 603 suítes
+  verdes.
+
 - **🧾 CRÉDITO DO SIMPLES (LC 123 art. 23) + 📡 COMUNICAÇÃO NO SIMPLES (30/09)**
   (Paulo: A CASTELLANO · NF 6565 da NATHYPEL, CSOSN 101, "permite o
   aproveitamento do crédito de ICMS no valor de R$ 52,73 … alíquota de 3,48%";
