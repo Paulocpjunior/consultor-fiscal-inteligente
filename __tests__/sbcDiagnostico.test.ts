@@ -466,6 +466,25 @@ describe('🚨 e ele é provado RODANDO, nas duas máquinas', () => {
             expect(saida).toMatch(/VARREDURA SIP/);
         });
 
+        // 🐛 30/09, 3ª rodada real: sob a origem da Meta (173.252.82.3) apareceu
+        // `sip:35.185.197.118:5060 … discou para 211` — o NOSSO INVITE para a
+        // HIT, transmitido logo depois do recebido, herdava a origem dele.
+        it('🐛 o INVITE que NÓS transmitimos (para a HIT) não é atribuído à origem da Meta', () => {
+            const saida = rodarCom(
+                invite('TLS:173.252.82.3:39104', 'sip:+5511999990000@wa.meta.vc;transport=tls', '2026-09-29 18:39:21')
+                + [
+                    '[2026-09-29 18:39:21] VERBOSE[2231] res_pjsip_logger.c: <--- Transmitting SIP request (900 bytes) to UDP:177.107.205.201:21694 --->',
+                    'INVITE sip:211@177.107.205.201:21694 SIP/2.0',
+                    'Contact: <sip:asterisk@35.185.197.118:5060>',
+                    '',
+                ].join('\n') + '\n',
+            );
+            expect(saida).toMatch(/UM candidato/);
+            expect(saida).toMatch(/sip:wa\.meta\.vc/);
+            expect(saida).not.toMatch(/35\.185\.197\.118/);
+            expect(saida).not.toMatch(/discou para: \+551131551554 211/);
+        });
+
         it('⚪ origem que não é TLS, mesmo com poucos nomes, NÃO é candidata — a Meta só fala pela 5061/TLS', () => {
             const saida = rodarCom(invite('UDP:9.9.9.9:5060', 'sip:221@9.9.9.9:5060'));
             expect(saida).toMatch(/não é TLS/);

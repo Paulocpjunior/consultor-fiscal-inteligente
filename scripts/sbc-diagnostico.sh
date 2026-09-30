@@ -393,7 +393,11 @@ if [ -f "$LOG_FULL" ]; then
             if (match($0, /^\[[^]]+\]/)) carimbo = substr($0, RSTART + 1, RLENGTH - 2)
             next
         }
-        /<--- / { invite = 0; next }
+        # 🐛 30/09: mensagem TRANSMITIDA (o nosso INVITE para a HIT) vinha logo
+        # depois da recebida e herdava a ORIGEM dela — o Contact NOSSO
+        # (35.185…:5060, "discou para 211") aparecia como candidato "da Meta".
+        # Qualquer outra mensagem zera a origem, não só o flag.
+        /<--- / { invite = 0; origem = ""; next }
         /^INVITE / {
             if (origem != "") invite = 1
             destino = "?"
