@@ -82,6 +82,17 @@ export function cfopDeComercializacaoOuIndustrializacao(cfop) {
     return c.length === 4 && /^[123]/.test(c) && SUFIXOS_COMERCIALIZACAO_INDUSTRIALIZACAO.has(c.slice(1));
 }
 
+/**
+ * Há crédito do Simples DECLARADO (no XML do item) ou INFORMADO (na nota)?
+ * O atalho de quem só quer saber se vale correlacionar o CFOP — mora aqui para
+ * não virar segunda leitura do `pCredSN` em cada leitor.
+ */
+export function temCreditoSimplesDeclarado(doc, item) {
+    if (doc?.creditoSimplesInformado) return true;
+    const p = numero(item?.pCredSN);
+    return p !== null && p > 0;
+}
+
 /** Valor líquido do item (base do crédito: o valor da operação). */
 function liquidoDoItem(item) {
     return r2((numero(item?.vProd ?? item?.valor) || 0) - (numero(item?.vDesc) || 0));

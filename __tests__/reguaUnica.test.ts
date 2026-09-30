@@ -67,9 +67,82 @@ interface Regua {
     assinaturas: RegExp[];
     /** Arquivos que podem conter a assinatura por motivo declarado. */
     permitido?: string[];
+    /**
+     * `true` quando a assinatura é a LEITURA de um campo que o DONO faz (e
+     * ninguém mais deve fazer) — então ela TEM de casar no dono, senão está
+     * morta. As assinaturas de "cópia errada" (a forma que só quem reimplementa
+     * escreve) não existem no dono de propósito e ficam fora dessa conferência.
+     */
+    assinaturaDoDono?: boolean;
 }
 
 const REGUAS_VIGIADAS: Regua[] = [
+    {
+        nome: 'O CRÉDITO DE ICMS do fornecedor do SIMPLES (LC 123 art. 23) — onde vale e quanto',
+        dono: 'sefaz-backend/credito-icms-simples.js',
+        comoUsar: "import { creditoSimplesDoItem, temCreditoSimplesDeclarado, cstDeEntradaDoCsosn } from 'sefaz-backend/credito-icms-simples.js'",
+        porque: '30/09, Paulo, A CASTELLANO · NF 6565 da NATHYPEL (CSOSN 101): o crédito de R$ 52,73 a 3,48% saía ZERO. '
+            + 'A regra tem três degraus (informado na nota > XML > nada) e uma condição da lei (só na compra para '
+            + 'comercialização/industrialização, art. 23 §1º). Ela é lida pelo C170/C190 do SPED E pelo Livro/Resumo/'
+            + 'SAGE: uma segunda leitura do `pCredSN` num leitor faria a tela creditar e o arquivo não (ou o contrário).',
+        assinaturas: [
+            // Leitura do campo do XML fora do dono (a CAPTURA escreve a chave `pCredSN:`, que não casa).
+            /\.pCredSN\b/,
+            /\.vCredICMSSN\b/,
+        ],
+        assinaturaDoDono: true,
+    },
+    {
+        nome: 'O PAPEL da empresa no CT-e — só o TOMADOR (e a transportadora) escritura o frete',
+        dono: 'sefaz-backend/cte-tomador.js',
+        comoUsar: "import { papelDaEmpresaNoCte, direcaoDoCte, cteEntraNaEscrituracao } from 'sefaz-backend/cte-tomador.js'",
+        porque: '29/09, Paulo, A CASTELLANO: *"o consultor está puxando o CT-e vinculado à nota fiscal, não deveria '
+            + 'aparecer na minha escrituração"* — 50 CT-e de terceiro como saída própria. Quem decide o papel lê o '
+            + 'tomador gravado; um `if` com o CNPJ do tomador em outro leitor faria o Livro esconder o frete que o '
+            + 'D100 escritura (ou o contrário).',
+        assinaturas: [/\.cnpjTomadorCte\b/],
+        assinaturaDoDono: true,
+        permitido: [
+            // Quem LÊ o XML e grava o tomador.
+            'sefaz-backend/cte-cabecalho.js',
+            'sefaz-backend/xml-importer.js',
+        ],
+    },
+    {
+        nome: 'COMUNICAÇÃO no Simples (LC 123 art. 18 §5º-E) — Anexo III sem ISS + ICMS do Anexo I, atividade 36',
+        dono: 'services/simplesComunicacao.ts',
+        comoUsar: "import { ehCnaeComunicacao, aliquotaEfetivaComunicacao, idAtividadeComunicacao } from 'services/simplesComunicacao'",
+        porque: '30/09, Paulo/Valeria, RADIO SB FM: *"é serviço de comunicação, está puxando como prestação de serviço '
+            + 'normal, ela é sujeita ao ICMS"*. A marcação é da EMPRESA por CNAE e é lida pelo cálculo do DAS da tela E '
+            + 'pelo PGDAS-D: ler a lista em outro lugar faria a tela calcular sem ISS e a declaração ir com ISS.',
+        assinaturas: [/\.cnaesComunicacao\b/],
+        assinaturaDoDono: true,
+        permitido: [
+            // A ficha do Simples GRAVA a lista (liga/desliga pelo dono `alternarCnaeComunicacao`).
+            'components/SimplesNacionalDetalhe.tsx',
+        ],
+    },
+    {
+        nome: 'A DATA DE ENTRADA e a competência de ESCRITURAÇÃO (a nota de 30/07 recebida em 01/08 é de agosto)',
+        dono: 'sefaz-backend/data-entrada-escrituracao.js',
+        comoUsar: "import { dataEntradaDoDocumento, competenciaDeEscrituracao, conferirDataEntrada } from 'sefaz-backend/data-entrada-escrituracao.js'",
+        porque: '29/09, Paulo, com o print do SAGE ("Emissão 30/07 · Entrada 01/08"): *"nota do mês anterior que foi '
+            + 'escriturada no 08, no consultor não temos essa opção"*. A data de entrada move a competência e sai no '
+            + 'C100 DT_E_S, no D100 DT_A_P e no E200 do SAGE: ler `dataEntrada` cru num leitor esquece a direção e o '
+            + 'formato, e o mesmo documento sai com duas datas.',
+        assinaturas: [/\.dataEntrada\b/],
+        assinaturaDoDono: true,
+        permitido: [
+            // O reimport PRESERVA a decisão (copia o campo do documento salvo).
+            'sefaz-backend/xml-importer.js',
+            // A digitação repassa o campo digitado ao dono (`conferirDataEntrada`).
+            'services/notaDigitada.ts',
+            // A gravação lê o patch que o dono devolveu, para a mensagem.
+            'services/xmlFiscalService.ts',
+            // A tela exibe e edita o valor gravado.
+            'components/xml/XmlDocumentoDetalhe.tsx',
+        ],
+    },
     {
         nome: 'O DIFAL de SAÍDA da EC 87/15 — o que a NF-e DECLARA, nunca uma conta nova',
         dono: 'sefaz-backend/difal-ec87-saida.js',
@@ -863,6 +936,19 @@ describe('MATA-BURRO: régua fiscal mora num lugar só', () => {
             expect(infratores).toEqual([]);
         },
     );
+
+    it('toda assinatura CASA no próprio dono — assinatura que não casa em lugar nenhum nunca acusaria a cópia', () => {
+        // Fixture tem de alcançar o ramo (CLAUDE.md): se a régua for renomeada e
+        // a assinatura ficar para trás, a varredura passa verde para sempre.
+        const mortas: string[] = [];
+        const doDono = REGUAS_VIGIADAS.filter((r) => r.assinaturaDoDono);
+        expect(doDono.length).toBeGreaterThanOrEqual(4);
+        for (const r of doDono) {
+            const dono = semComentarios(readFileSync(join(RAIZ, r.dono), 'utf8'));
+            if (!r.assinaturas.some((a) => a.test(dono))) mortas.push(`${r.dono} — nenhuma de ${r.assinaturas.join(', ')}`);
+        }
+        expect(mortas).toEqual([]);
+    });
 
     it('toda régua vigiada diz o DONO, o COMO USAR e o CASO que a justifica', () => {
         // Entrada sem "porque" vira burocracia: daqui a seis meses ninguém sabe

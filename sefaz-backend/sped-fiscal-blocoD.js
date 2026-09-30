@@ -36,6 +36,7 @@ import {
 } from './cte-escrituracao.js';
 import { icmsDoItemNoArquivo, cstDoItemNoArquivo, creditoIcmsDoItem } from './sped-fiscal-blocoC.js';
 import { regimeDaEmpresa } from './regime-tributario.js';
+import { dataEntradaDoDocumento } from './data-entrada-escrituracao.js';
 
 /** Valor do documento; 0 quando não há valor em forma nenhuma (o aviso é do chamador). */
 const valorDoDoc = (nota) => {
@@ -173,7 +174,8 @@ function buildD100(notaCrua, dados) {
         fmt.sanitizeString(numeroDoDocumento(nota), 9),
         fmt.sanitizeString(nota.chave || nota.chaveAcesso || '', 44),
         soCancelavel(fmt.formatDate(nota.dataEmissao || nota.dhEmi)),
-        soCancelavel(fmt.formatDate(nota.dataEntrada || nota.dataEmissao || nota.dhEmi)),
+        // DT_A_P: a data de ENTRADA pelo dono (29/09) — a mesma do C100 DT_E_S.
+        soCancelavel(fmt.formatDate(dataEntradaDoDocumento(nota) || nota.dataEmissao || nota.dhEmi)),
         soCancelavel(tpCte),
         soCancelavel(fmt.sanitizeString(nota.chaveCTeRef || '', 44)),
         // VL_DOC pela régua do VALOR: o CT-e capturado grava `valorTotal` na

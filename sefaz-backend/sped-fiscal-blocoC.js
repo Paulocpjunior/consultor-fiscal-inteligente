@@ -38,7 +38,7 @@ import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-m
 import { entradaGeraCreditoIcms, colunaDoCstInformado } from './credito-icms-entrada.js';
 // 🧾 Crédito do Simples (LC 123, art. 23) e o CST do declarante no lugar do
 // CSOSN — o mesmo dono lido pelo Livro/Resumo e pelo arquivo do SAGE.
-import { creditoSimplesDoItem, cstDeEntradaDoCsosn, avisosDoCreditoSimples } from './credito-icms-simples.js';
+import { creditoSimplesDoItem, cstDeEntradaDoCsosn, avisosDoCreditoSimples, temCreditoSimplesDeclarado } from './credito-icms-simples.js';
 import { regimeDaEmpresa } from './regime-tributario.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
@@ -110,7 +110,7 @@ export function creditoSimplesNoArquivo(item, nota) {
     const direcao = direcaoEfetivaDoc(nota);
     if (direcao !== 'entrada') return null;
     // Sem crédito declarado nem informado, nem se correlaciona o CFOP.
-    if (!nota?.creditoSimplesInformado && !(Number(item?.pCredSN) > 0)) return creditoSimplesDoItem(item, { doc: nota });
+    if (!temCreditoSimplesDeclarado(nota, item)) return creditoSimplesDoItem(item, { doc: nota });
     const cfopLancado = convertCfopParaEntrada(item?.cfop || item?.CFOP || '0000', direcao, nota?._dados, nota, item);
     return creditoSimplesDoItem(item, { doc: nota, cfopLancado });
 }

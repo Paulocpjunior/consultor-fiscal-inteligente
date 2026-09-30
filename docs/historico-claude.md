@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚧 MATA-BURRO DAS ENTREGAS DE 29–30/09** (Paulo, depois da apuração da A
+  CASTELLANO fechar: *"PERFEITO!!!! passa o mata burros"*). Quatro réguas novas
+  em `REGUAS_VIGIADAS` (`reguaUnica.test.ts`), com assinatura = LEITURA do campo
+  fora do dono: crédito do Simples (`\.pCredSN`/`\.vCredICMSSN` →
+  `credito-icms-simples.js`), papel no CT-e (`\.cnpjTomadorCte` →
+  `cte-tomador.js`), comunicação no Simples (`\.cnaesComunicacao` →
+  `simplesComunicacao.ts`), data de entrada (`\.dataEntrada` →
+  `data-entrada-escrituracao.js`); escritores/captura em `permitido` com motivo.
+  A varredura achou TRÊS resíduos, corrigidos para o dono: atalho `pCredSN` no
+  blocoC e no SAGE → `temCreditoSimplesDeclarado` (novo, no dono); D100
+  DT_A_P e E200 do SAGE liam `dataEntrada` cru → `dataEntradaDoDocumento`.
+  Trava da trava nova: régua com `assinaturaDoDono: true` tem de CASAR no
+  próprio dono (assinatura morta nunca acusaria); as antigas são de "forma da
+  cópia errada" e ficam fora dessa conferência (alcance = regra). Mordida
+  provada: as quatro assinaturas casam nas leituras cruas antigas e não na
+  captura (`pCredSN:`).
+
 - **🚚 E110/RAICMS SEM O ICMS DO CT-e (30/09, A CASTELLANO 08/2026)** (Paulo:
   *"não está pegando o ICMS do 1352 — CT-e"*; RAICMS 005 = 62.509,90 contra
   62.041,97 + 346,67 + 467,93 = 62.856,57 no Resumo por CFOP). Causa:
