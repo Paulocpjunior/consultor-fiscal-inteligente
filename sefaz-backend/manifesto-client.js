@@ -13,7 +13,7 @@
 //
 // Fluxo:
 //   1. Monta XML <infEvento>
-//   2. Assina <infEvento> com XMLDSIG (RSA-SHA1, exclusive C14N)
+//   2. Assina <infEvento> com XMLDSIG (RSA-SHA1, C14N INCLUSIVA — ver PERFIL_ASSINATURA_NFE)
 //   3. Embrulha em <envEvento> + envelope SOAP
 //   4. POST com mTLS (cert A1)
 //   5. Parseia retorno e classifica resultado
@@ -103,8 +103,28 @@ export function montarInfEvento({ chNFe, cnpjDestinatario, tipo, nSeqEvento = 1,
 }
 
 // ============================================================================
-// 2) Assina o <infEvento> com XMLDSIG (RSA-SHA1 + Exclusive C14N)
+// 2) Assina o <infEvento> com XMLDSIG (RSA-SHA1 + C14N INCLUSIVA)
 // ============================================================================
+// 🚨 C14N INCLUSIVA, NUNCA A EXCLUSIVA (30/09 — Paulo: "ainda estamos com
+// essa pendência na ciência das notas"). Com a exclusiva (`xml-exc-c14n#`)
+// TODA ciência voltava "lote 225: Rejeicao: Falha no Esquema XML do lote de
+// NF-e": o xmldsig-core-schema_v1.01.xsd da NF-e (PL_009_V4) FIXA
+//   · CanonicalizationMethod = http://www.w3.org/TR/2001/REC-xml-c14n-20010315
+//   · SignatureMethod        = http://www.w3.org/2000/09/xmldsig#rsa-sha1
+//   · Transforms: exatamente 2, enveloped-signature + REC-xml-c14n-20010315
+//   · DigestMethod           = http://www.w3.org/2000/09/xmldsig#sha1
+// e qualquer outro valor reprova o LOTE no esquema, antes de o evento ser
+// lido. O perfil mora em PERFIL_ASSINATURA_NFE e a trava
+// `manifestoAssinaturaEsquema.test.ts` confere o XML assinado contra ele.
+export const PERFIL_ASSINATURA_NFE = Object.freeze({
+  canonicalizacao: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  assinatura: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+  transforms: Object.freeze([
+    'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+    'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+  ]),
+  digest: 'http://www.w3.org/2000/09/xmldsig#sha1',
+});
 // certOverride: certificado da EMPRESA destinatária ({ pemKey, pemCert }).
 // SEFAZ rejeita evento cujo autor (CNPJ destinatário) tem raiz CNPJ diferente
 // do certificado assinante — por isso o cert do escritório NÃO serve pra
@@ -120,18 +140,15 @@ export async function assinarEvento(infEventoXml, idAttr, certOverride = null) {
   const sig = new SignedXml({
     privateKey: cert.pemKey,
     publicCert: cert.pemCert,
-    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
-    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
+    signatureAlgorithm: PERFIL_ASSINATURA_NFE.assinatura,
+    canonicalizationAlgorithm: PERFIL_ASSINATURA_NFE.canonicalizacao,
   });
 
   // Adiciona referência ao <infEvento> via seu atributo Id
   sig.addReference({
     xpath: `//*[@Id='${idAttr}']`,
-    transforms: [
-      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/2001/10/xml-exc-c14n#',
-    ],
-    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1',
+    transforms: [...PERFIL_ASSINATURA_NFE.transforms],
+    digestAlgorithm: PERFIL_ASSINATURA_NFE.digest,
   });
 
   // Envolve em <evento> pra dar contexto à assinatura
