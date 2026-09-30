@@ -15,6 +15,9 @@ import {
 import {
     mapPgdasPayload, avisosDoPayload, bloqueiosDoPayload, definirCodigoAtividadeIssFixo,
 } from '../services/pgdasMapper';
+import {
+    ehCnaeComunicacao, alternarCnaeComunicacao, cnaeSugereComunicacao,
+} from '../services/simplesComunicacao';
 import EmitirNfseModal from './NfseNacional/EmitirModal';
 import PrevisaoDasModal from './Das/PrevisaoModal';
 import PgdasConferirModal from './Pgdas/ConferirModal';
@@ -257,7 +260,9 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 isMonofasico: state.isMonofasico,
                 isImune: state.isImune,
                 isIsento: !!state.isIsento,
-                isExterior: state.isExterior
+                isExterior: state.isExterior,
+                // 📡 Configuração da EMPRESA por CNAE (§5º-E) — não é marcação do mês.
+                isComunicacao: ehCnaeComunicacao(empresa, cnaeCode),
             });
         });
 
@@ -346,6 +351,40 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                 [key]: { ...prev[key], [field]: ligando, ...(ligando ? { [oposto]: false } : {}) },
             };
         });
+    };
+
+    /**
+     * 📡 Liga/desliga "comunicação" para o CNAE — é configuração da EMPRESA
+     * (vale em toda competência), por isso grava na empresa e pede confirmação.
+     */
+    const alternarComunicacao = async (cnae: string) => {
+        const ligando = !ehCnaeComunicacao(empresa, cnae);
+        const ok = await confirm({
+            title: ligando ? '📡 Marcar este CNAE como COMUNICAÇÃO?' : 'Desmarcar COMUNICAÇÃO deste CNAE?',
+            message: ligando
+                ? `A receita do CNAE ${cnae} passa a ser tributada como comunicação (LC 123, art. 18, §5º-E): Anexo III SEM o ISS e COM a parcela do ICMS do Anexo I. `
+                    + 'No PGDAS-D ela vai como atividade 36 — "Comunicação sem substituição tributária de ICMS". Vale para esta empresa em todas as competências.'
+                : `A receita do CNAE ${cnae} volta a ser serviço comum do anexo cadastrado (com ISS). Vale para esta empresa em todas as competências.`,
+            confirmLabel: ligando ? 'Marcar comunicação' : 'Desmarcar',
+        });
+        if (!ok) return;
+        try {
+            // Comunicação não tem ISS: as marcações de ISS da linha caem junto.
+            if (ligando) {
+                setFaturamentoPorCnae((prev) => {
+                    const prox = { ...prev };
+                    for (const [k, s] of Object.entries(prox)) {
+                        const c = k.split('::')[2] || k;
+                        if (String(c).replace(/\D/g, '') === String(cnae).replace(/\D/g, '')) prox[k] = { ...s, issRetido: false, isSup: false };
+                    }
+                    return prox;
+                });
+            }
+            await onUpdateEmpresa(empresa.id, { cnaesComunicacao: alternarCnaeComunicacao(empresa.cnaesComunicacao, cnae) });
+            onShowToast(ligando ? `CNAE ${cnae} marcado como comunicação — Anexo III sem ISS + ICMS do Anexo I.` : `CNAE ${cnae} voltou a serviço comum.`);
+        } catch (e: any) {
+            onShowToast(`Falha ao gravar: ${e?.message || e}`);
+        }
     };
 
     const handleOptionToggle = (key: string, field: keyof CnaeInputState) => {
@@ -746,7 +785,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
         const competencia = `${mesApuracao.getFullYear()}-${String(mesApuracao.getMonth() + 1).padStart(2, '0')}`;
         // Natureza que o app ainda não sabe declarar: RECUSA em vez de mandar
         // errado pro Simples (Paulo, 03/08 — caso do ISS fixo da S&P).
-        const bloqueios = bloqueiosDoPayload(faturamentoPorCnae as Record<string, any>);
+        const bloqueios = bloqueiosDoPayload(faturamentoPorCnae as Record<string, any>, empresa);
         if (bloqueios.length > 0) {
             await confirm({
                 title: 'Não dá pra transmitir esta competência ainda',
@@ -764,7 +803,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
 
         // Marcações que reduzem o DAS aqui mas ainda não viajam na declaração —
         // aparecem ANTES de transmitir (a entrega ao PGDAS-D não se desfaz).
-        const avisos = avisosDoPayload(faturamentoPorCnae as Record<string, any>);
+        const avisos = avisosDoPayload(faturamentoPorCnae as Record<string, any>, empresa);
         const ok = await confirm({
             title: 'Emitir DAS Regular?',
             message: (
@@ -1313,7 +1352,22 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                                 <GlobeIcon className="w-3 h-3" /> Serviço no Exterior
                                             </label>
                                             
+                                            {/* 📡 COMUNICAÇÃO (LC 123 art. 18 §5º-E) — RADIO SB, 30/09:
+                                                "é serviço de comunicação, está puxando como prestação de
+                                                serviço normal, ela é sujeita ao ICMS". Configuração da
+                                                EMPRESA por CNAE: Anexo III sem ISS + ICMS do Anexo I, e
+                                                atividade 36 do PGDAS-D (value="…-36" do e-CAC). */}
                                             {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && (
+                                                <label
+                                                    title="Serviço de COMUNICAÇÃO (LC 123, art. 18, §5º-E): tributado pelo Anexo III sem a parcela do ISS e com a parcela do ICMS do Anexo I. No PGDAS-D vai como atividade 36 — 'Comunicação sem substituição tributária de ICMS'. Configuração da empresa: vale para este CNAE em todas as competências."
+                                                    className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${ehCnaeComunicacao(empresa, cnaeCode) ? 'bg-sky-100 text-sky-700 border-sky-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}
+                                                >
+                                                    <input type="checkbox" checked={ehCnaeComunicacao(empresa, cnaeCode)} onChange={() => alternarComunicacao(cnaeCode)} className="hidden" />
+                                                    📡 Comunicação (ICMS no lugar do ISS){!ehCnaeComunicacao(empresa, cnaeCode) && cnaeSugereComunicacao(cnaeCode) ? ' — o CNAE sugere' : ''}
+                                                </label>
+                                            )}
+
+                                            {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && !ehCnaeComunicacao(empresa, cnaeCode) && (
                                                 <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.issRetido ? 'bg-teal-100 text-teal-700 border-teal-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
                                                     <input type="checkbox" checked={state.issRetido} onChange={() => handleIssExclusivo(key, 'issRetido')} className="hidden" />
                                                     ISS Retido
@@ -1324,7 +1378,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                                 art. 18 §22-A). Sem esta marcação a equipe só tinha "ISS
                                                 Retido" pra tirar o ISS do DAS, e a declaração saía com a
                                                 natureza errada (caso S&P, 03/08/2026). */}
-                                            {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && (
+                                            {['III', 'IV', 'V', 'III_V'].includes(anexoCode) && !ehCnaeComunicacao(empresa, cnaeCode) && (
                                                 <label
                                                     title="Escritórios de serviços contábeis autorizados pela legislação municipal a pagar o ISS em valor fixo em guia do Município (LC 123, art. 18, §22-A). Usa o Anexo III sem o percentual do ISS."
                                                     className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isSup ? 'bg-violet-100 text-violet-700 border-violet-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}
@@ -1334,16 +1388,18 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                                                 </label>
                                             )}
 
-                                            {['I', 'II'].includes(anexoCode) && (
+                                            {(['I', 'II'].includes(anexoCode) || ehCnaeComunicacao(empresa, cnaeCode)) && (
                                                 <>
                                                     <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.icmsSt ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
                                                         <input type="checkbox" checked={state.icmsSt} onChange={() => handleOptionToggle(key, 'icmsSt')} className="hidden" />
                                                         ICMS ST
                                                     </label>
-                                                    <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isMonofasico ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
-                                                        <input type="checkbox" checked={state.isMonofasico} onChange={() => handleOptionToggle(key, 'isMonofasico')} className="hidden" />
-                                                        <TagIcon className="w-3 h-3" /> PIS/COFINS Monofásico
-                                                    </label>
+                                                    {['I', 'II'].includes(anexoCode) && (
+                                                        <label className={`cursor-pointer px-3 py-1 rounded text-xs font-bold border transition-colors flex items-center gap-2 select-none ${state.isMonofasico ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-600'}`}>
+                                                            <input type="checkbox" checked={state.isMonofasico} onChange={() => handleOptionToggle(key, 'isMonofasico')} className="hidden" />
+                                                            <TagIcon className="w-3 h-3" /> PIS/COFINS Monofásico
+                                                        </label>
+                                                    )}
                                                 </>
                                             )}
                                             

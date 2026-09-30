@@ -32,7 +32,7 @@ const DOC_ID = 'iss_fixo_contabil';
 export const IDS_RETENCAO_ISS = [12, 15, 18];
 
 /** Ids de atividade que o app já monta sozinho — cadastrar um deles é engano. */
-export const IDS_JA_MAPEADOS = [1, 2, 3, 4, 5, 6, 11, 12, 14, 15, 17, 18, 29, 30, 31];
+export const IDS_JA_MAPEADOS = [1, 2, 3, 4, 5, 6, 11, 12, 14, 15, 17, 18, 29, 30, 31, 36];
 
 export const ORIGENS_ACEITAS = ['declaracao', 'ecac'];
 

@@ -119,11 +119,15 @@ describe('a lista de campos é curta de propósito', () => {
         // SAÍDA (EC 87/15). O valor já vem calculado na nota que a própria
         // empresa emitiu, e nenhum dos dois parsers o lia: o arquivo saía sem
         // a apuração inteira, e o PVA ACEITA (ele não acusa registro ausente).
+        // 30/09 (A CASTELLANO): pCredSN/vCredICMSSN (crédito do Simples, LC 123
+        // art. 23) e orig entraram junto do consumidor — `creditoSimplesDoItem`
+        // e `cstDeEntradaDoCsosn`, lidos pelo C170/C190, Livro, Resumo e SAGE.
         expect(CAMPOS_RECUPERAVEIS).toEqual([
             'cstIpi', 'cEnqIpi', 'vBcIpi', 'cstPis', 'cstCofins',
             'vFrete', 'vSeg', 'vOutro', 'vFCPST',
             'vBCUFDest', 'vBCFCPUFDest', 'pFCPUFDest', 'pICMSUFDest',
             'pICMSInter', 'pICMSInterPart', 'vFCPUFDest', 'vICMSUFDest', 'vICMSUFRemet',
+            'pCredSN', 'vCredICMSSN', 'orig',
         ]);
     });
 

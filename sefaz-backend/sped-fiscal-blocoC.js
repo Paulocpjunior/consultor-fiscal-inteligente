@@ -36,6 +36,9 @@ import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-m
 // o C170/C190 copiavam o destaque do FORNECEDOR — o Livro do CFI já lia esta
 // régua desde 09/09 e o SPED não. Ver `creditoIcmsDoItem`.
 import { entradaGeraCreditoIcms, colunaDoCstInformado } from './credito-icms-entrada.js';
+// 🧾 Crédito do Simples (LC 123, art. 23) e o CST do declarante no lugar do
+// CSOSN — o mesmo dono lido pelo Livro/Resumo e pelo arquivo do SAGE.
+import { creditoSimplesDoItem, cstDeEntradaDoCsosn, avisosDoCreditoSimples } from './credito-icms-simples.js';
 import { regimeDaEmpresa } from './regime-tributario.js';
 // Régua ÚNICA do VL_OPR — o valor da OPERAÇÃO não é a soma dos vProd (Guia
 // 3.2.3, C190 campo 05). O gerador, o validador do editor e o autofix do C190
@@ -100,6 +103,37 @@ function regimeDoArquivo(dados) {
 }
 
 /**
+ * O crédito do Simples (LC 123, art. 23) deste item de ENTRADA, com o CFOP de
+ * lançamento que o C170/C190 usam — `null` na saída.
+ */
+export function creditoSimplesNoArquivo(item, nota) {
+    const direcao = direcaoEfetivaDoc(nota);
+    if (direcao !== 'entrada') return null;
+    // Sem crédito declarado nem informado, nem se correlaciona o CFOP.
+    if (!nota?.creditoSimplesInformado && !(Number(item?.pCredSN) > 0)) return creditoSimplesDoItem(item, { doc: nota });
+    const cfopLancado = convertCfopParaEntrada(item?.cfop || item?.CFOP || '0000', direcao, nota?._dados, nota, item);
+    return creditoSimplesDoItem(item, { doc: nota, cfopLancado });
+}
+
+/**
+ * Aviso da geração: quanto de crédito do Simples entrou e o que ficou de fora
+ * por destino (uso/consumo/ativo). Vazio quando não há fornecedor do Simples.
+ */
+export function avisosDoCreditoSimplesNoArquivo(notas, dados) {
+    const decisoes = [];
+    for (const nota of notas || []) {
+        if (docCancelado(nota)) continue;
+        const n = { ...nota, _dados: nota._dados || dados };
+        for (const item of (nota.itens || [])) {
+            const r = creditoSimplesNoArquivo(item, n);
+            if (!r || !r.tem) continue;
+            decisoes.push({ numero: String(nota.numero || nota.chave || '?'), r, credita: creditoIcmsDoItem(item, n).credita });
+        }
+    }
+    return avisosDoCreditoSimples(decisoes);
+}
+
+/**
  * "Este item de ENTRADA credita ICMS para quem escritura?"
  * @returns {{credita: boolean, por: 'informado'|'regime'|'documento'}}
  */
@@ -118,7 +152,13 @@ export function creditoIcmsDoItem(item, nota) {
  * do C100 leem daqui, um dono só.
  */
 export function icmsDoItemNoArquivo(item, nota) {
-    const bruto = {
+    // 🧾 Fornecedor do SIMPLES com crédito (LC 123, art. 23): o destaque do
+    // CSOSN é zero e o crédito vem em `pCredSN`/`vCredICMSSN` (ou informado na
+    // nota). Vale só na compra para comercialização/industrialização — quem diz
+    // é o dono (`creditoSimplesDoItem`). O REGIME de quem escritura continua
+    // mandando logo abaixo (optante não se credita).
+    const sn = creditoSimplesNoArquivo(item, nota);
+    const bruto = sn?.aplica ? { vBC: sn.vBC, vICMS: sn.vICMS, aliq: sn.aliq } : {
         vBC: parseFloat(item?.vBC || 0),
         vICMS: parseFloat(item?.vICMS || 0),
         aliq: item?.aliqIcms || (item?.vICMS && item?.vBC ? (item.vICMS / item.vBC * 100) : 0),
@@ -181,7 +221,13 @@ function somarTotaisDosItens(nota) {
  * converte, ele é o do fornecedor — que é o comportamento de sempre.
  */
 export function cstDoItemNoArquivo(item, cfopLancado, nota) {
-    const cru = getCstIcms(item);
+    // 🧾 CSOSN NÃO É CST (Guia 3.2.3, Tabela: "o CSOSN … não é utilizado no
+    // registro das mercadorias nas entradas"). Lido como CST, o "101" virava
+    // origem 1 (IMPORTADA) + tributação "01", que não existe. Na ENTRADA o CST
+    // do declarante sai da origem do item + a tributação do dono.
+    const sn = direcaoEfetivaDoc(nota) === 'entrada' ? creditoSimplesNoArquivo(item, nota) : null;
+    const doCsosn = sn ? cstDeEntradaDoCsosn(item, { creditoAplicado: !!sn.aplica }) : null;
+    const cru = doCsosn || getCstIcms(item);
     // O CST informado NAQUELA NOTA vence a régua — a precedência mora no DONO
     // (cstDoLancamento), nunca aqui, senão C170 e C190 divergiriam.
     // ✂️ POR ITEM vence POR NOTA (11/09, Sandra): a precedência mora no dono.
@@ -370,6 +416,7 @@ export function buildBlocoC(dados) {
     if (Array.isArray(dados.warnings)) {
         const aviso = avisoDeEntradaSemCredito(notas, dados);
         if (aviso) dados.warnings.push(aviso);
+        dados.warnings.push(...avisosDoCreditoSimplesNoArquivo(notas, dados));
     }
 
     // DIFAL de aquisicao: calculado UMA vez pro periodo, indexado por chave.

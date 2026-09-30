@@ -15,6 +15,7 @@ import { explicarRetirada, MIN_MOTIVO_RETIRADA } from '../../services/documentoR
 import { explicarCorrecao } from '../../services/documentoCorrecaoNumero';
 import {
     tirarDocumentoDaEmpresa, marcarNotaCancelada, desmarcarNotaCancelada, corrigirNumeroDaNota, definirDataEntradaDaNota,
+    definirCreditoSimplesDaNota,
 } from '../../services/xmlFiscalService';
 // 🚨 A PORTA PARA A NOTA QUE FOI CANCELADA DEPOIS DA CAPTURA (10/09, Paulo, JG
 // SOLUCOES · Barueri: *"essas duas notas são canceladas, importei as notas pelo
@@ -39,6 +40,7 @@ import { gravarCfopEscriturado, gravarEscrituracaoItem } from '../../services/cf
 import { gravarCstEscriturado } from '../../services/cstEscrituradoService';
 import { direcaoEfetivaDoc, origemDoCancelamento } from '../../sefaz-backend/xml-metadata-helper.js';
 import { conferirDataEntrada, brDe } from '../../sefaz-backend/data-entrada-escrituracao.js';
+import { creditoSimplesDoItem, creditoSimplesDoTexto, ehItemCsosn, conferirAliquotaCreditoSimples } from '../../sefaz-backend/credito-icms-simples.js';
 import { cfopsDistintosDaNota, cfopDoLancamento } from '../../sefaz-backend/cfop-correlacao.js';
 import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-documentos.js';
 import { cteEntraNaEscrituracao } from '../../sefaz-backend/cte-tomador.js';
@@ -98,6 +100,13 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
     const [erroNum, setErroNum] = useState<string | null>(null);
     // ── 📅 Data de ENTRADA (escrituração) desta nota de entrada (Paulo, 29/09,
     //    print do SAGE: emissão 30/07 · entrada 01/08 → escriturada em agosto) ──
+    // ── 🧾 Crédito do Simples (LC 123, art. 23) desta nota de entrada (Paulo,
+    //    30/09, A CASTELLANO · NF 6565: o crédito vem no XML/nas informações
+    //    adicionais e a escrituração saía com ICMS zero) ──
+    const [abrirSn, setAbrirSn] = useState(false);
+    const [snIn, setSnIn] = useState('');
+    const [gravandoSn, setGravandoSn] = useState(false);
+    const [erroSn, setErroSn] = useState<string | null>(null);
     const [abrirEntrada, setAbrirEntrada] = useState(false);
     const [entradaIn, setEntradaIn] = useState('');
     const [gravandoEntrada, setGravandoEntrada] = useState(false);
@@ -211,6 +220,21 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
             setErroEscr(e?.message || 'Falha ao gravar.');
         } finally {
             setGravandoEscr(false);
+        }
+    };
+
+    const gravarCreditoSimples = async (valor: string) => {
+        setGravandoSn(true); setErroSn(null);
+        try {
+            const r = await definirCreditoSimplesDaNota(d.id, valor, currentUser || null);
+            if (!r.ok) { setErroSn(r.mensagem); return; }
+            onShowToast?.(r.mensagem);
+            setAbrirSn(false);
+            onRetirado?.();
+        } catch (e: any) {
+            setErroSn(e?.message || 'Falha ao gravar o crédito do Simples.');
+        } finally {
+            setGravandoSn(false);
         }
     };
 
@@ -1027,6 +1051,96 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         </div>
                     )
                 )}
+
+                {/* ═══ 🧾 CRÉDITO DO SIMPLES (LC 123, art. 23) ════════════════════
+                    Paulo, 30/09, A CASTELLANO · NF 6565 da NATHYPEL (CSOSN 101):
+                    "as informações de valor de alíquota e base vêm no campo de
+                    informações adicionais … pode ter um campo aqui para ajustar".
+                    O XML traz o crédito em pCredSN/vCredICMSSN e o app passou a
+                    ler; este campo é a CORREÇÃO por nota (XML sem o grupo, ou
+                    errado). Só na entrada de mercadoria. */}
+                {direcaoDoDoc === 'entrada' && ehMercadoria && !jaRetirada && (() => {
+                    const itens: any[] = (d as any).itens || [];
+                    const temCsosn = itens.some((it) => ehItemCsosn(it));
+                    const informado = (d as any).creditoSimplesInformado as { aliq: number; por?: string } | null | undefined;
+                    const doTexto = creditoSimplesDoTexto((d as any).infAdic);
+                    if (!temCsosn && !informado && !doTexto) return null;
+                    const semInformado = { ...(d as any), creditoSimplesInformado: null };
+                    const doXml = itens.map((it) => creditoSimplesDoItem(it, { doc: semInformado })).filter((r) => r.tem);
+                    const vXml = doXml.reduce((s, r) => s + r.vICMS, 0);
+                    const aliqsXml = Array.from(new Set(doXml.map((r) => String(r.aliq).replace('.', ','))));
+                    const conf = conferirAliquotaCreditoSimples(snIn);
+                    return (
+                        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                🧾 <strong>Crédito de ICMS do Simples (LC 123, art. 23):</strong>{' '}
+                                {informado
+                                    ? <strong>informado nesta nota — {Number(informado.aliq) > 0 ? `${String(informado.aliq).replace('.', ',')}% sobre o valor de cada item` : 'SEM crédito (0%)'}{informado.por ? ` · por ${informado.por}` : ''}</strong>
+                                    : doXml.length
+                                        ? <span>o XML declara {aliqsXml.join(' / ')}% · {formatCurrency(vXml)} em {doXml.length} item(ns).</span>
+                                        : <span>o XML não traz o crédito (pCredSN){temCsosn ? ' — fornecedor do Simples' : ''}.</span>}
+                            </p>
+                            {doTexto && (
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                    As informações adicionais dizem: {doTexto.aliq !== null ? `alíquota ${String(doTexto.aliq).replace('.', ',')}%` : 'alíquota não lida'}{doTexto.valor !== null ? ` · ${formatCurrency(doTexto.valor)}` : ''}.
+                                </p>
+                            )}
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                Vale só na compra para comercialização ou industrialização (CFOP de lançamento 1101/1102/2101/2102…) e para quem não é do Simples: base = valor do item, alíquota = a do documento. Entra no Livro, no Resumo por CFOP, no arquivo do SAGE e no C170/C190 do SPED.
+                            </p>
+                            {!abrirSn ? (
+                                <button
+                                    onClick={() => {
+                                        const sugestao = informado ? String(informado.aliq) : (aliqsXml.length === 1 ? aliqsXml[0] : (doTexto?.aliq != null ? String(doTexto.aliq) : ''));
+                                        setSnIn(String(sugestao || '').replace('.', ','));
+                                        setErroSn(null);
+                                        setAbrirSn(true);
+                                    }}
+                                    className="mt-2 text-xs rounded-md border border-teal-300 text-teal-700 dark:text-teal-300 px-3 py-1.5 hover:bg-teal-50 dark:hover:bg-teal-900/20 btn-press whitespace-nowrap"
+                                    title="Informe ou corrija a alíquota do crédito do Simples desta nota. Vazio volta ao que o XML declara."
+                                >
+                                    🧾 {informado ? 'Alterar o crédito do Simples' : 'Informar / ajustar o crédito do Simples'}
+                                </button>
+                            ) : (
+                                <div className="mt-2 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-900/10 p-3">
+                                    <div className="flex flex-wrap items-end gap-2">
+                                        <label className="text-[11px] text-teal-900 dark:text-teal-300">
+                                            Alíquota do crédito (%)
+                                            <input
+                                                value={snIn}
+                                                onChange={(e) => setSnIn(e.target.value)}
+                                                className="mt-0.5 block w-28 rounded border border-teal-300 bg-white dark:bg-slate-800 p-1.5 text-xs"
+                                                placeholder="3,48"
+                                            />
+                                        </label>
+                                        {doTexto?.aliq != null && (
+                                            <button type="button" onClick={() => setSnIn(String(doTexto.aliq).replace('.', ','))}
+                                                className="text-[11px] underline text-teal-800 dark:text-teal-300 btn-press">usar a do texto ({String(doTexto.aliq).replace('.', ',')}%)</button>
+                                        )}
+                                        <span className={`text-[11px] ${conf.ok ? 'text-teal-900 dark:text-teal-300' : 'font-semibold text-red-700 dark:text-red-300'}`}>
+                                            {!conf.ok ? conf.motivo : conf.aliq === null ? 'Vazio = volta ao que o XML declara.' : conf.aliq === 0 ? 'Zero = esta nota não dá crédito.' : `Crédito estimado: ${formatCurrency(itens.reduce((s, it) => s + ((Number(it.vProd) || 0) - (Number(it.vDesc) || 0)) * (conf.aliq as number) / 100, 0))}.`}
+                                        </span>
+                                    </div>
+                                    {erroSn && <p className="mt-2 text-[11px] font-semibold text-red-700 dark:text-red-300">{erroSn}</p>}
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <button
+                                            onClick={() => gravarCreditoSimples(snIn)}
+                                            disabled={gravandoSn || !conf.ok}
+                                            className="text-xs rounded-md bg-teal-600 text-white px-3 py-1.5 font-semibold hover:bg-teal-700 disabled:opacity-50 btn-press whitespace-nowrap"
+                                        >{gravandoSn ? 'gravando…' : '🧾 Gravar'}</button>
+                                        {informado && (
+                                            <button onClick={() => gravarCreditoSimples('')} disabled={gravandoSn}
+                                                className="text-xs rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 btn-press whitespace-nowrap"
+                                                title="Limpa a alíquota informada; a nota volta a seguir o XML.">limpar (volta ao XML)</button>
+                                        )}
+                                        <button onClick={() => { setAbrirSn(false); setErroSn(null); }}
+                                            className="text-xs underline text-slate-500 btn-press">cancelar</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* ═══ 📅 DATA DE ENTRADA (ESCRITURAÇÃO) ═══════════════════════
                     Paulo, 29/09, com o print do SAGE ("Emissão 30/07/2026 · Entrada

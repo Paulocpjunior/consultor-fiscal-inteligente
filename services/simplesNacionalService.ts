@@ -10,6 +10,7 @@ import { db, isFirebaseConfigured, auth } from './firebaseConfig';
 import { fetchAllDocs, type FetchAllMeta } from './firestorePaginate';
 import { verificarCnpjDuplicado, mensagemCnpjDuplicado } from './empresaUniquenessService';
 import { validarCnpj } from './validadorDocumento';
+import { ehCnaeComunicacao, aliquotaEfetivaComunicacao } from './simplesComunicacao';
 import {
     collection, getDocs, doc, setDoc, getDoc,
     query, where, limit as fbLimit
@@ -691,16 +692,20 @@ export const calcularResumoEmpresa = (
                     const s = key.split('_');
                     if (s.length >= 2) { cnaeCode = s[0] || ''; anexoCode = s[1] || ''; }
                 }
+                // 📡 Comunicação é configuração da EMPRESA por CNAE (§5º-E) —
+                // vale também para o mês gravado antes de a marcação existir.
+                const isComunicacao = ehCnaeComunicacao(empresa, cnaeCode);
                 if (typeof value === 'object' && value !== null) {
                     const item = value as SimplesDetalheItem;
                     itensCalculo.push({ cnae: cnaeCode, anexo: anexoCode as SimplesNacionalAnexo,
                         valor: item.valor, issRetido: item.issRetido, icmsSt: item.icmsSt,
                         isSup: item.isSup, isMonofasico: item.isMonofasico,
-                        isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior });
+                        isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior,
+                        isComunicacao });
                 } else if (typeof value === 'number') {
                     itensCalculo.push({ cnae: cnaeCode, anexo: anexoCode as SimplesNacionalAnexo,
                         valor: value, issRetido: false, icmsSt: false, isSup: false,
-                        isMonofasico: false, isImune: false, isExterior: false });
+                        isMonofasico: false, isImune: false, isExterior: false, isComunicacao });
                 }
             });
         } else {
@@ -708,7 +713,8 @@ export const calcularResumoEmpresa = (
             if (faturamentoTotalMes > 0)
                 itensCalculo.push({ cnae: empresa.cnae, anexo: empresa.anexo,
                     valor: faturamentoTotalMes, issRetido: false, icmsSt: false,
-                    isSup: false, isMonofasico: false, isImune: false, isExterior: false });
+                    isSup: false, isMonofasico: false, isImune: false, isExterior: false,
+                    isComunicacao: ehCnaeComunicacao(empresa, empresa.cnae) });
         }
     }
 
@@ -725,6 +731,8 @@ export const calcularResumoEmpresa = (
         const anexoOriginal = item.anexo;
         if (anexoAplicado === 'V' && fator_r >= 0.28) anexoAplicado = 'III';
         else if (anexoAplicado === 'III_V') anexoAplicado = fator_r >= 0.28 ? 'III' : 'V';
+        // 📡 Comunicação é "tributada na forma do Anexo III" (§5º-E) — sem fator R.
+        if (item.isComunicacao) anexoAplicado = 'III';
 
         const tabela = ANEXOS_TABELAS[anexoAplicado as AnexoKey];
         if (!tabela) return;
@@ -784,7 +792,29 @@ export const calcularResumoEmpresa = (
             }
         }
 
-        const aliq_final   = Math.max(0, aliq_eff_item * (1 - percentualReducao / 100));
+        let aliq_final   = Math.max(0, aliq_eff_item * (1 - percentualReducao / 100));
+        // 📡 COMUNICAÇÃO (LC 123 art. 18 §5º-E): Anexo III DEDUZIDA a parcela do
+        // ISS e ACRESCIDA a parcela do ICMS do Anexo I — a efetiva do Anexo I na
+        // mesma RBT12 × o percentual de ICMS da faixa dele. As marcações de ISS
+        // (retido/SUP) não se aplicam: comunicação não tem ISS.
+        if (item.isComunicacao && reparticao) {
+            const tabI = ANEXOS_TABELAS.I;
+            let faixaI = tabI.findIndex((f) => rbtParaEnquadramento <= f.limite);
+            if (faixaI === -1 && rbtParaEnquadramento > 0) faixaI = tabI.length - 1;
+            if (rbtParaEnquadramento === 0) faixaI = 0;
+            const fI = tabI[faixaI];
+            const efetivaI = rbtParaEnquadramento > 0 && fI
+                ? (((rbtParaEnquadramento * fI.aliquota / 100) - fI.parcela) / rbtParaEnquadramento) * 100
+                : (tabI[0] ? tabI[0].aliquota : 0);
+            const faixaIClamped = Math.max(0, Math.min(faixaI, 5)) as FaixaIndex;
+            aliq_final = aliquotaEfetivaComunicacao({
+                efetivaIII: aliq_eff_item,
+                reparticaoIII: reparticao,
+                efetivaI,
+                percentualIcmsI: REPARTICAO_IMPOSTOS.I[faixaIClamped]?.ICMS || 0,
+                icmsSt: item.icmsSt, isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior,
+            });
+        }
         const valorDasItem = (item.valor * aliq_final) / 100;
         dasTotal += valorDasItem;
 
@@ -793,7 +823,8 @@ export const calcularResumoEmpresa = (
             anexoOriginal, faturamento: item.valor,
             aliquotaNominal: faixa?.aliquota ?? 0, aliquotaEfetiva: aliq_final,
             valorDas: valorDasItem, issRetido: item.issRetido, icmsSt: item.icmsSt,
-            isMonofasico: item.isMonofasico, isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior
+            isMonofasico: item.isMonofasico, isImune: item.isImune, isIsento: !!item.isIsento, isExterior: item.isExterior,
+            ...(item.isComunicacao ? { isComunicacao: true } : {}),
         });
     });
 
