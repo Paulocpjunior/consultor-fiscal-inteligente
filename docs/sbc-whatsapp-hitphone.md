@@ -697,6 +697,50 @@ codec_opus_open_source.so ... Running
 E o endpoint já declara `allow=opus,alaw,ulaw`. **Codec ausente está
 descartado** como causa.
 
+### 🔴 30/09 — O TRACE PROVOU: É DTLS-SRTP. A hipótese de 28/08 estava CERTA
+
+> ⚠️ **A seção "⚰️ SUPERADA" logo abaixo está ERRADA e fica como registro do
+> erro.** Ela dizia que a ligação de 23/09 tinha derrubado a hipótese do
+> transporte. Em 29/09 à tarde, com o trace SIP armado, cinco ligações do
+> Paulo (15:24–15:39, dentro da grade) chegaram da Meta e as cinco morreram
+> no mesmo ponto, **antes de discar a URA**:
+>
+> ```
+> INVITE sip:+551133371554@sip.spassessoriacontabil.com.br:5061;transport=tls
+> m=audio 3480 UDP/TLS/RTP/SAVPF 111 126
+> a=fingerprint:sha-256 82:4B:…
+> a=setup:actpass
+> SIP/2.0 100 Trying
+> ERROR res_pjsip_session.c: meta: Couldn't negotiate stream 0:audio-0:audio:sendrecv (nothing)
+> SIP/2.0 488 Not Acceptable Here
+> ```
+>
+> `UDP/TLS/RTP/SAVPF` + `a=fingerprint` + `a=setup:actpass` = **DTLS-SRTP com
+> AVPF**, codec 111 (opus). O endpoint estava em `media_encryption=sdes`, que
+> não casa com nada disso: o Asterisk recusa com 488 e o cliente vê "não
+> atendida". O Opus está carregado (`module show like opus` = Running); não é
+> codec.
+>
+> **Correção (setup, endpoints `[meta]` e `[meta-saida]`):** `media_encryption=dtls`,
+> `dtls_verify=fingerprint`, `dtls_setup=actpass`, `dtls_auto_generate_cert=yes`,
+> `use_avpf=yes`, `media_use_received_transport=yes`, `rtcp_mux=yes`,
+> `ice_support=yes`. A HIT continua em RTP puro. Trava em `sbcDialplan.test.ts`.
+>
+> O que a ligação de 23/09 foi, não dá para saber pelo log (o trace estava
+> desligado). O que dá para saber é o que o trace de 29/09 mostra — e é isso
+> que manda.
+
+### 🔴 30/09 — E A HIT PAROU DE RESPONDER AO SBC (problema INDEPENDENTE)
+
+`pjsip qualify hit` com o trace ligado: quatro OPTIONS transmitidos para
+`177.107.205.201:21694` (10:01:44–47 UTC), **nenhuma resposta**. O INVITE do
+click-to-call de 29/09 15:48 (`PJSIP/211@hit`) morreu do mesmo jeito: 32 s
+sem resposta ("Call Failure … maybe Circuit busy or down"). Em 23/09 a URA
+atendia. Não se resolve do nosso lado: chamado com a HIT pedindo para
+confirmar se o IP `35.185.197.118` continua liberado no tronco e se host/porta
+seguem os mesmos. **Sem a HIT, nenhuma ligação completa em nenhuma direção**,
+mesmo com o DTLS certo.
+
 ### ⚰️ SUPERADA EM 23/09 — a hipótese do transporte nunca precisou ser testada
 
 > 🚨 **NÃO EXECUTE O QUE ESTA SEÇÃO MANDA FAZER.** Ela está aqui como
