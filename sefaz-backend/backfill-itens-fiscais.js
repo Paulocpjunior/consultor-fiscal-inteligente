@@ -59,6 +59,14 @@ export const CAMPOS_RECUPERAVEIS = [
     'vFCPUFDest',
     'vICMSUFDest',
     'vICMSUFRemet',
+    // 30/09 (A CASTELLANO · NF 6565 da NATHYPEL): o crédito de ICMS da compra
+    // de fornecedor do Simples (LC 123, art. 23, § 2º) vem no grupo
+    // ICMSSN101/201/900 — `pCredSN` e `vCredICMSSN` — e nenhum parser o lia.
+    // Sem eles a entrada saía com base e ICMS ZERO no Livro, no SAGE e no SPED.
+    // `orig` vai junto: é ele que monta o CST do declarante no lugar do CSOSN.
+    'pCredSN',
+    'vCredICMSSN',
+    'orig',
 ];
 
 /** Vazio = ausente. `0` e `'0'` NÃO são vazios: zero é resposta. */

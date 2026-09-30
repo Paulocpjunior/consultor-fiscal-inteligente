@@ -21,6 +21,7 @@ import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
 import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
 import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
+import { creditoSimplesDoItem } from '../sefaz-backend/credito-icms-simples.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -621,6 +622,14 @@ export interface CtxAlocacaoIcms {
      * optante é a mesma afirmação falsa que a base e o ICMS faziam.
      */
     semCreditoIpi?: boolean;
+    /**
+     * 🧾 Crédito do Simples (LC 123, art. 23) POR ITEM — base, alíquota e ICMS
+     * que o item de fornecedor optante dá de crédito, já conferidos contra o
+     * CFOP de lançamento (comercialização/industrialização) pelo dono
+     * `creditoSimplesDoItem`. Chave = `chaveDoItem(it)`. O regime de quem
+     * escritura continua mandando (`semCreditoIcms`).
+     */
+    creditoSimplesItens?: Record<string, { vBC: number; vICMS: number; aliq: number }> | null;
 }
 
 /**
@@ -644,11 +653,25 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
             if (cst) porItem[String(Number(k))] = cst;
         }
     }
+    // 🧾 Crédito do Simples por item, com o CFOP de LANÇAMENTO (o mesmo do
+    // livro e do .FML) — só na entrada, e só quando há crédito declarado ou
+    // informado (sem ele nem se correlaciona o CFOP).
+    const snPorItem: Record<string, { vBC: number; vICMS: number; aliq: number }> = {};
+    if (direcao === 'entrada') {
+        const temInformado = !!d?.creditoSimplesInformado;
+        for (const it of (d?.itens || []) as any[]) {
+            if (!temInformado && !(Number(it?.pCredSN) > 0)) continue;
+            const cfopLancado = cfopParaEscriturar(it?.cfop, 'entrada', ctxEmpresa || undefined, d, it);
+            const r = creditoSimplesDoItem(it, { doc: d, cfopLancado });
+            if (r.aplica) snPorItem[chaveDoItem(it)] = { vBC: r.vBC, vICMS: r.vICMS, aliq: r.aliq };
+        }
+    }
     return {
         cstEscriturado: d?.cstEscriturado ?? null,
         cstEscrituradoItens: Object.keys(porItem).length ? porItem : null,
         semCreditoIcms: !credito.credita,
         semCreditoIpi: !creditoIpi.credita,
+        creditoSimplesItens: Object.keys(snPorItem).length ? snPorItem : null,
     };
 }
 
@@ -685,19 +708,24 @@ export function alocarTributacaoIcms(
         const colunaInformada = doItem ? colunaDoCstInformado(doItem) : colunaDaNota;
         ipi += it.vIPI || 0;
         st += (it as any).vICMSST || 0;
+        // 🧾 Fornecedor do Simples com crédito (art. 23): o destaque do CSOSN é
+        // zero, e base/ICMS do crédito vêm do dono — o resto da régua é a mesma.
+        const sn = ctx?.creditoSimplesItens?.[chaveDoItem(it)];
+        const vIcmsItem = sn ? sn.vICMS : (it.vICMS || 0);
+        const vBcItem = sn ? sn.vBC : (it.vBC || 0);
         // O que a PESSOA informou vence o XML; depois vem o regime de quem
         // escritura; só então o destaque do documento do fornecedor.
         if (colunaInformada === 'isentas') {
             isentos += valorItem;
-        } else if (colunaInformada === 'outras' || (semCredito && (it.vICMS || 0) > 0)) {
+        } else if (colunaInformada === 'outras' || (semCredito && vIcmsItem > 0)) {
             // ⚠️ O item vai INTEIRO para Outras — não se parte base e resto.
             // "Sem crédito" é sobre a operação toda, não sobre uma fatia dela.
             outras += valorItem;
-        } else if ((it.vICMS || 0) > 0) {
-            base += (it.vBC || 0) > 0 ? (it.vBC as number) : valorItem;
-            icms += it.vICMS || 0;
+        } else if (vIcmsItem > 0) {
+            base += vBcItem > 0 ? vBcItem : valorItem;
+            icms += vIcmsItem;
             // Base reduzida (CST 20/70): a parte fora da base é OUTRAS.
-            const foraDaBase = valorItem - ((it.vBC || 0) > 0 ? (it.vBC as number) : valorItem);
+            const foraDaBase = valorItem - (vBcItem > 0 ? vBcItem : valorItem);
             if (foraDaBase > 0.005) outras += foraDaBase;
         } else if (['40', '41', '50'].includes(cst)) {
             isentos += valorItem;

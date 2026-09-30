@@ -218,6 +218,12 @@ export function extrairItens(xml) {
       vFCPST: num(pickTag(icmsInner, 'vFCPST')),
       modBC: pickTag(icmsInner, 'modBC'),
       pRedBC: num(pickTag(icmsInner, 'pRedBC')),
+      // 🧾 CRÉDITO DO SIMPLES (LC 123, art. 23, § 2º) — o optante informa no
+      // grupo ICMSSN101/201/900 a alíquota (`pCredSN`) e o valor
+      // (`vCredICMSSN`) do crédito que o comprador pode aproveitar. Estava no
+      // XML e ninguém lia (30/09, A CASTELLANO · NF 6565). Ausente = null.
+      pCredSN: pickTag(icmsInner, 'pCredSN') ? num(pickTag(icmsInner, 'pCredSN')) : null,
+      vCredICMSSN: pickTag(icmsInner, 'vCredICMSSN') ? num(pickTag(icmsInner, 'vCredICMSSN')) : null,
       vIPI: num(pickTag(ipiTribInner, 'vIPI')),
       aliqIPI: num(pickTag(ipiTribInner, 'pIPI')),
       cstIpi,
@@ -1401,7 +1407,10 @@ export async function preencherEnderecoParticipantes({ limit = 200, empresaId = 
 // v3 (18/09): o grupo `<ICMSUFDest>` (DIFAL de SAÍDA da EC 87/15) entrou. Sem
 // subir a versão, a saída interestadual já capturada ficaria para sempre sem o
 // C101 e sem o E310 — é a fila inteira que precisa passar de novo.
-export const VERSAO_RELEITURA_ITENS = 3;
+// v4 (30/09): o crédito do Simples (`pCredSN`/`vCredICMSSN`, LC 123 art. 23) e a
+// `orig` do item entraram — a compra de optante escriturada antes ficaria sem
+// crédito e com o CSOSN lido como CST.
+export const VERSAO_RELEITURA_ITENS = 4;
 
 /**
  * BACKFILL — campos de ITEM que o extrator aprendeu depois (`cstIpi`,

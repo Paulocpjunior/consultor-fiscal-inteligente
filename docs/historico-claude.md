@@ -5,6 +5,46 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧾 CRÉDITO DO SIMPLES (LC 123 art. 23) + 📡 COMUNICAÇÃO NO SIMPLES (30/09)**
+  (Paulo: A CASTELLANO · NF 6565 da NATHYPEL, CSOSN 101, "permite o
+  aproveitamento do crédito de ICMS no valor de R$ 52,73 … alíquota de 3,48%";
+  e RADIO SB FM, pedido da Valeria de 09/09, "é serviço de comunicação … sujeita
+  ao ICMS"). (1) `credito-icms-simples.js` (puro, `.d.ts`):
+  `creditoSimplesDoItem(item,{doc,cfopLancado})` — precedência informado na nota
+  (`creditoSimplesInformado.aliq`, 0 = sem crédito) > XML (`pCredSN`/
+  `vCredICMSSN`) > nada; APLICA só com CFOP de lançamento de
+  comercialização/industrialização (`SUFIXOS_COMERCIALIZACAO_INDUSTRIALIZACAO`
+  x101/x102/x111/x113/x116/x117/x118/x120/x121/x122/x401/x403, art. 23 §1º);
+  base = vProd−vDesc. `cstDeEntradaDoCsosn` — CSOSN não é CST (Guia 3.2.3):
+  origem do `<orig>` + 00 com crédito (10 no 201) / 60 nos de ST / 90 sem
+  crédito (antes o "101" saía origem 1 + trib 01). DECISÃO: 00 (não 90) porque
+  no app 90 = coluna "Outras" = sem crédito, e a equipe já informava CST 00 na
+  NF 6565. `creditoSimplesDoTexto` só SUGERE na tela. Parsers (importer,
+  navegador, SharePoint) leem os dois campos (ausente = sem campo);
+  `CAMPOS_RECUPERAVEIS` + `orig`; `VERSAO_RELEITURA_ITENS` = 4. SPED fiscal:
+  `creditoSimplesNoArquivo` em `icmsDoItemNoArquivo` e `cstDoItemNoArquivo`
+  (regime Simples e CST informado sem crédito continuam mandando);
+  `avisosDoCreditoSimplesNoArquivo` (aproveitado / NÃO aproveitado por
+  destino). Front: `ctxAlocacaoDoDoc` monta `creditoSimplesItens` com
+  `cfopParaEscriturar`; `alocarTributacaoIcms` lê (Livro, Resumo, SAGE E201).
+  Tela: bloco "🧾 Informar / ajustar o crédito do Simples" no detalhe da nota
+  de entrada (XML declara · texto diz · alíquota da nota; limpar volta ao XML),
+  `definirCreditoSimplesDaNota`. EFD-Contribuições C170 (ICMS informativo)
+  não mudou. (2) `services/simplesComunicacao.ts`: `cnaesComunicacao` na
+  EMPRESA (por CNAE, vale em toda competência); `aliquotaEfetivaComunicacao`
+  = efetiva III × (1 − %ISS) + efetiva I × %ICMS da faixa (§5º-E), ICMS fora
+  com ST/imune/isento/exterior; sem fator R (força III). PGDAS-D:
+  `ID_ATIVIDADE_COMUNICACAO_SEM_ST` = 36 (fonte: input escondido do e-CAC
+  `value="07147345000111-36"`, igual ao código 9 do ISS fixo); com ST ou
+  exterior → `_bloqueios` (id não veio; backend recusa); aviso de conferir o
+  extrato. 36 entrou em `IDS_ATIVIDADE_CONHECIDOS`/`IDS_JA_MAPEADOS`. Tela:
+  chip "📡 Comunicação" (confirma, grava na empresa, derruba ISS retido/SUP da
+  linha; mostra ICMS ST; "o CNAE sugere" nas divisões 60/61). Travas
+  `creditoIcmsSimples.test.ts` (20) e `simplesComunicacao.test.ts` (9, contas
+  conferidas contra as tabelas da LC na faixa 4). FICA: número da atividade de
+  comunicação COM ST / exterior; Paulo marcar a RADIO SB; ♻️ Reler itens na A
+  CASTELLANO.
+
 - **🔴 SBC 30/09: A META FALA DTLS-SRTP (a hipótese de 28/08 estava certa) E A
   HIT PAROU DE RESPONDER** (Paulo, manhã de 30/09, três comandos na VM). Trace
   de 29/09 15:24–15:39 (ligações do próprio Paulo, dentro da grade): 5 INVITEs

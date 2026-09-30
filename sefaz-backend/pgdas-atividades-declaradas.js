@@ -242,7 +242,9 @@ export function interpretarConsultaAtividades(resposta) {
  * aqui é justamente o que estamos procurando — a atividade que a empresa usa
  * e o app ainda não mapeia.
  */
-export const IDS_ATIVIDADE_CONHECIDOS = [1, 2, 3, 4, 5, 6, 11, 12, 14, 15, 17, 18, 29, 30, 31];
+// 36 (30/09): "Comunicação sem substituição tributária de ICMS" — do input do
+// e-CAC colado pela Valeria (RADIO SB): value="07147345000111-36".
+export const IDS_ATIVIDADE_CONHECIDOS = [1, 2, 3, 4, 5, 6, 11, 12, 14, 15, 17, 18, 29, 30, 31, 36];
 
 export const ROTULO_ATIVIDADE_CONHECIDA = {
     1: 'Comércio (Anexo I)',
@@ -260,6 +262,7 @@ export const ROTULO_ATIVIDADE_CONHECIDA = {
     29: 'Serviços Anexo V para o exterior',
     30: 'Serviços Anexo III para o exterior',
     31: 'Serviços Anexo IV para o exterior',
+    36: 'Comunicação sem ST de ICMS (Anexo III sem ISS + ICMS do Anexo I)',
 };
 
 /**

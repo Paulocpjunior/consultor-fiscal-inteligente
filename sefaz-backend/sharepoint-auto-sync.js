@@ -123,11 +123,17 @@ function parseXmlServer(xmlText) {
 
         let cst = '', vICMS = 0, vBC = 0, aliqIcms = 0;
         let vBCST = 0, aliqST = 0, vICMSST = 0, pRedBC = 0, orig = '';
+        // 🧾 Crédito do Simples (LC 123 art. 23 §2º) — paridade com o xml-importer.
+        let pCredSN = null, vCredICMSSN = null;
         if (icms && icms.childNodes) {
             for (let j = 0; j < icms.childNodes.length; j++) {
                 const inner = icms.childNodes[j];
                 if (inner.nodeType === 1) {
                     cst = getTextContent(inner, 'CST') || getTextContent(inner, 'CSOSN');
+                    const pCred = getTextContent(inner, 'pCredSN');
+                    const vCred = getTextContent(inner, 'vCredICMSSN');
+                    pCredSN = pCred ? num(pCred) : null;
+                    vCredICMSSN = vCred ? num(vCred) : null;
                     vICMS = num(getTextContent(inner, 'vICMS'));
                     vBC = num(getTextContent(inner, 'vBC'));
                     aliqIcms = num(getTextContent(inner, 'pICMS'));
@@ -187,6 +193,8 @@ function parseXmlServer(xmlText) {
             vProd: num(getTextContent(prod, 'vProd')),
             vDesc: num(getTextContent(prod, 'vDesc')) || undefined,
             vBC, aliqIcms, vICMS, vBCST, aliqST, vICMSST, pRedBC,
+            ...(pCredSN !== null ? { pCredSN } : {}),
+            ...(vCredICMSSN !== null ? { vCredICMSSN } : {}),
             vIPI, aliqIPI, vPIS, aliqPIS, vCOFINS, aliqCOFINS, cst, orig,
         });
     }

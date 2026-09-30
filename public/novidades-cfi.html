@@ -68,14 +68,14 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 29/09/2026 · leitura de 30 minutos</p>
+            <p>Departamento Fiscal · atualizado em 30/09/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (29/09) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (30/09) — leia esta parte primeiro</h2>
 
     <h3>⏰ <strong>SP Connect: agendar mensagem e follow-up</strong></h3>
     <p>No compositor da conversa, o botão ⏰ (ao lado do 📎) agenda o texto escrito para uma data e hora, ou como
@@ -109,6 +109,38 @@
     na própria carteira, não só para admin. Se ainda aparecer ✖, o motivo na tela é o que a SEFAZ respondeu: mande o
     print.</p>
     <p><strong>Onde:</strong> Rotina do mês → etapa 2 → nota "📨 Sem ciência" → 📨 Manifestar ciência · Central de XMLs → Captura → Diagnóstico → manifestação por chave.</p>
+
+    <h3>🧾 <strong>Compra de fornecedor do SIMPLES: o crédito de ICMS do art. 23 passou a entrar na escrituração (Livro, Resumo por CFOP, SAGE e SPED), com campo para ajustar por nota</strong></h3>
+    <p>Paulo, na A CASTELLANO, NF 6565 da NATHYPEL: "compra de fornecedor do SIMPLES nacional, onde as informações de
+    valor de alíquota e base vêm no campo de informações adicionais … pensando nas empresas que compram muito não dá".
+    A nota diz "permite o aproveitamento do crédito de ICMS no valor de R$ 52,73 correspondente à alíquota de 3,48%", e o
+    app escriturava base e ICMS zero. O mesmo crédito está no próprio XML (o grupo ICMSSN101 traz a alíquota e o valor),
+    e o app não o lia.</p>
+    <p>Agora a captura lê o crédito do XML e ele entra sozinho: <strong>base = valor do item, alíquota = a do documento,
+    ICMS = o crédito declarado</strong>, no Livro de Entradas, no Resumo por CFOP, no arquivo do SAGE e no C170/C190 do
+    SPED. Vale como a lei manda (LC 123, art. 23, § 1º): só para quem <strong>não</strong> é do Simples e só na compra
+    para <strong>comercialização ou industrialização</strong> (CFOP de lançamento 1101/1102/2101/2102…). Lançada como uso,
+    consumo ou ativo, fica sem crédito e o aviso da geração diz quais. No SPED, o CSOSN do fornecedor deixa de ir como se
+    fosse CST: sai o CST do declarante com a origem do item (000 com o crédito, 090 sem). <strong>Para ajustar uma
+    nota</strong> (XML sem o grupo, ou valor diferente), o detalhe da nota de entrada ganhou "🧾 Informar / ajustar o
+    crédito do Simples": mostra o que o XML declara e o que o texto da nota diz, e grava a alíquota da nota (vazio volta ao
+    XML, zero tira o crédito). Notas capturadas antes: rode "♻️ Reler itens dos XMLs" para buscar o crédito no XML guardado.</p>
+    <p><strong>Onde:</strong> Central de XMLs → abrir a nota de entrada → "🧾 Informar / ajustar o crédito do Simples" · Relatórios → Livro de Entradas e Resumo por CFOP · Exportar SAGE · SPED Fiscal → avisos da geração.</p>
+
+    <h3>📡 <strong>Simples Nacional: empresa de COMUNICAÇÃO passa a ser apurada como a lei manda — Anexo III sem ISS e com o ICMS do Anexo I, atividade 36 no PGDAS-D</strong></h3>
+    <p>Pedido da Valeria para a RADIO SB FM (Porto Alegre/RS), retomado pelo Paulo: "ela é serviço de comunicação, está
+    puxando como prestação de serviço normal, ela é sujeita ao ICMS". A LC 123, art. 18, § 5º-E, manda tributar a
+    comunicação pelo Anexo III <strong>deduzida a parcela do ISS e acrescida a parcela do ICMS do Anexo I</strong>. O app
+    cobrava ISS, que a rádio não paga, e não cobrava o ICMS, que ela paga.</p>
+    <p>Na ficha do Simples, cada receita de serviço ganhou a marcação "📡 Comunicação (ICMS no lugar do ISS)". Ela é da
+    <strong>empresa</strong>, por CNAE: marca uma vez e vale em toda competência (os meses já gravados também passam a
+    seguir). Marcada, o DAS sai pelo Anexo III sem a parcela do ISS, somada à parcela de ICMS do Anexo I na mesma faixa de
+    receita, sem fator R. As marcações de ISS somem da linha e aparece a de ICMS ST. No PGDAS-D a receita vai como
+    <strong>atividade 36, "Comunicação sem substituição tributária de ICMS"</strong>, número lido do próprio formulário do
+    e-CAC que a Valeria colou. Comunicação com ST ou para o exterior tem outro número, que ainda não veio: nesses casos a
+    transmissão pelo app é bloqueada e a mensagem diz como mandar o número. O CNAE de rádio, TV e telecomunicações mostra
+    "o CNAE sugere", mas quem marca é a pessoa. Na primeira entrega, confira no extrato que saiu ICMS e não saiu ISS.</p>
+    <p><strong>Onde:</strong> Simples Nacional → abrir a RADIO SB → receita do CNAE → "📡 Comunicação (ICMS no lugar do ISS)".</p>
 
     <h3>🚚 <strong>CT-e: só o TOMADOR do frete (e a transportadora) escritura o conhecimento; o CT-e em que a empresa é só remetente ou destinatária da carga sai do Livro, do Resumo por CFOP e dos dois SPEDs</strong></h3>
     <p>Paulo, testando na A CASTELLANO: "o consultor está puxando o CT-e vinculado à nota fiscal, não deveria aparecer na

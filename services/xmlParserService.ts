@@ -239,10 +239,18 @@ export function parseNFeXml(xmlText: string): ParsedXml {
         // FCP-ST do item — entra no VL_OPR do C190 junto do ICMS-ST (Guia
         // 3.2.3, campo 05). Paridade com o xml-importer.js (regra da casa).
         let vFCPST = 0;
+        // 🧾 Crédito do Simples (LC 123 art. 23 §2º) — ICMSSN101/201/900.
+        // Paridade com o xml-importer.js; ausente = undefined, nunca 0.
+        let pCredSN: number | undefined;
+        let vCredICMSSN: number | undefined;
         if (icms) {
             const icmsInner = icms.children[0];
             if (icmsInner) {
                 vFCPST = num(getTextContent(icmsInner, 'vFCPST'));
+                const pCred = getTextContent(icmsInner, 'pCredSN');
+                const vCred = getTextContent(icmsInner, 'vCredICMSSN');
+                pCredSN = pCred ? num(pCred) : undefined;
+                vCredICMSSN = vCred ? num(vCred) : undefined;
                 cst = getTextContent(icmsInner, 'CST') || getTextContent(icmsInner, 'CSOSN');
                 vICMS = num(getTextContent(icmsInner, 'vICMS'));
                 vBC = num(getTextContent(icmsInner, 'vBC'));
@@ -348,6 +356,8 @@ export function parseNFeXml(xmlText: string): ParsedXml {
             vICMSST,
             modBC,
             pRedBC,
+            ...(pCredSN !== undefined ? { pCredSN } : {}),
+            ...(vCredICMSSN !== undefined ? { vCredICMSSN } : {}),
             vIPI,
             aliqIPI,
             cstIpi,

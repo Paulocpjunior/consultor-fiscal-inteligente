@@ -259,6 +259,13 @@ export interface SimplesNacionalEmpresa {
     /** Regime de apuracao Simples Nacional. Default 'competencia'. */
     regimeApuracao?: 'competencia' | 'caixa';
     faturamentoMensalDetalhado?: Record<string, any>; // Key: MM-YYYY, Value: Record<string (cnae_anexo), number | SimplesDetalheItem>
+    /**
+     * 📡 CNAEs (só dígitos) cuja receita é COMUNICAÇÃO (LC 123, art. 18, §5º-E):
+     * Anexo III sem o ISS e com a parcela do ICMS do Anexo I; atividade 36 do
+     * PGDAS-D. Configuração da EMPRESA — vale em toda competência. Quem lê é
+     * `services/simplesComunicacao.ts`.
+     */
+    cnaesComunicacao?: string[];
     historicoCalculos?: SimplesHistoricoCalculo[];
     nomeFantasia?: string;
     createdBy?: string;
@@ -324,6 +331,8 @@ export interface DetalhamentoAnexo {
      */
     isIsento?: boolean;
     isExterior: boolean;
+    /** 📡 Receita de comunicação (§5º-E): Anexo III sem ISS + parcela do ICMS do Anexo I. */
+    isComunicacao?: boolean;
 }
 
 export interface SimplesNacionalResumo {
@@ -421,6 +430,8 @@ export interface SimplesItemCalculo {
      */
     isIsento?: boolean;
     isExterior: boolean;
+    /** 📡 Receita de comunicação (LC 123 art. 18 §5º-E) — derivada de `empresa.cnaesComunicacao`. */
+    isComunicacao?: boolean;
 }
 
 export interface SimplesDetalheItem {
@@ -1737,6 +1748,10 @@ export interface DocumentoFiscalItem {
     modBC?: string;
     /** Percentual de redução da BC do ICMS em % (CST 20/70). */
     pRedBC?: number;
+    /** Alíquota do crédito do Simples (ICMSSN101/201/900 · LC 123 art. 23 §2º). Ausente = sem crédito declarado. */
+    pCredSN?: number;
+    /** Valor do crédito de ICMS do Simples declarado pelo optante (`vCredICMSSN`). */
+    vCredICMSSN?: number;
     vICMS: number;
     /** Base de cálculo do ICMS-ST. */
     vBCST?: number;
@@ -1887,6 +1902,12 @@ export interface DocumentoFiscal {
     competencia: string;
     /** Data de ENTRADA no estabelecimento (AAAA-MM-DD), decisão de quem escritura. Só na entrada. */
     dataEntrada?: string;
+    /**
+     * 🧾 Alíquota do crédito do Simples INFORMADA nesta nota (LC 123, art. 23) —
+     * vence o `pCredSN` do XML; 0 = "esta nota não dá crédito"; ausente/null =
+     * segue o XML. Quem decide onde vale é `creditoSimplesDoItem`.
+     */
+    creditoSimplesInformado?: { aliq: number; em?: string; por?: string } | null;
     /** Competência da EMISSÃO, guardada quando a escrituração foi movida pela data de entrada. */
     competenciaEmissao?: string;
     dataEntradaDefinidaEm?: string;

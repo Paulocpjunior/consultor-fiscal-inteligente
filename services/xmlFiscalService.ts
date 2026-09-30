@@ -53,6 +53,7 @@ import { retirarDocumentoDaEmpresa } from './documentoRetirada';
 // cria um SEGUNDO documento e a mesma venda conta duas vezes.
 import { corrigirNumeroDaNotaDigitada, idComOutroNumero } from './documentoCorrecaoNumero';
 import { patchDataEntrada, brDe } from '../sefaz-backend/data-entrada-escrituracao.js';
+import { conferirAliquotaCreditoSimples } from '../sefaz-backend/credito-icms-simples.js';
 import { declararNotaCancelada, removerCancelamentoDeclarado } from './cancelamentoDeclarado';
 import { soZerosComoVazio } from './empresaDadosFiscaisSanitize';
 // A direção EFETIVA — nunca o campo cru. A nota PRÓPRIA de entrada (art. 136)
@@ -1163,6 +1164,42 @@ export async function corrigirNumeroDaNota(
     );
     await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), decisao.patchAntigo!, { merge: true });
     return { ok: true, mensagem: decisao.avisoDepois, idNovo: decisao.idNovo };
+}
+
+/**
+ * 🧾 ALÍQUOTA DO CRÉDITO DO SIMPLES informada numa nota de ENTRADA (LC 123,
+ * art. 23) — para quando o XML não traz o `pCredSN` ou traz errado (30/09,
+ * A CASTELLANO · NF 6565). Vazio limpa (volta ao XML); 0 = sem crédito.
+ * Quem confere o número e decide onde vale é o dono puro
+ * `credito-icms-simples.js`; aqui é só o I/O.
+ */
+export async function definirCreditoSimplesDaNota(
+    id: string,
+    aliqTexto: string,
+    user: { id?: string; email?: string } | null,
+): Promise<{ ok: boolean; mensagem: string }> {
+    if (!isFirebaseConfigured || !db) return { ok: false, mensagem: 'Firebase não configurado.' };
+    const existing = await getDocumento(id);
+    if (!existing) return { ok: false, mensagem: 'Nota não encontrada — recarregue a lista.' };
+    if (direcaoEfetivaDoc(existing as any) !== 'entrada') {
+        return { ok: false, mensagem: 'Crédito do Simples só existe na ENTRADA — é o comprador que se credita.' };
+    }
+    const c = conferirAliquotaCreditoSimples(aliqTexto);
+    if (!c.ok) return { ok: false, mensagem: c.motivo || 'Alíquota recusada.' };
+    const creditoSimplesInformado = c.aliq === null ? null : {
+        aliq: c.aliq,
+        em: new Date().toISOString(),
+        por: user?.email || auth?.currentUser?.email || 'desconhecido',
+    };
+    await setDoc(doc(db, COLLECTIONS.DOCUMENTOS, id), { creditoSimplesInformado }, { merge: true });
+    return {
+        ok: true,
+        mensagem: c.aliq === null
+            ? 'Alíquota informada limpa — a nota volta a seguir o crédito que o XML declara (pCredSN).'
+            : c.aliq === 0
+                ? 'Gravado: esta nota NÃO dá crédito do Simples.'
+                : `Gravado: crédito do Simples de ${String(c.aliq).replace('.', ',')}% sobre o valor de cada item — vale na compra para comercialização ou industrialização.`,
+    };
 }
 
 /**

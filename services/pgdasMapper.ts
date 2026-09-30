@@ -17,6 +17,13 @@
  * - tipoDeclaracao e setado pelo backend apos consultar se ja existe declaracao.
  */
 import type { SimplesNacionalEmpresa, SimplesNacionalResumo } from '../types';
+import { ehCnaeComunicacao, idAtividadeComunicacao, ID_ATIVIDADE_COMUNICACAO_SEM_ST } from './simplesComunicacao';
+
+/** O CNAE da chave de receita (`principal::0::CNAE::ANEXO`). */
+function cnaeFromKey(key: string): string {
+    const parts = String(key || '').split('::');
+    return parts.length >= 3 ? (parts[2] ?? '') : '';
+}
 
 interface CnaeInputState {
     valor: string;
@@ -480,9 +487,16 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         const valor = round2(parseValorBr(state.valor));
         if (valor <= 0) return;
         const anexo = anexoFromKey(key, empresa.anexo);
-        const idAtividade = idAtividadePgdas(anexo, state, resumo.fator_r || 0);
-        if (anexoExigeFolhaSalario(anexo)) exigeFolhaSalario = true;
-        addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(state, valor, idAtividade));
+        // 📡 COMUNICAÇÃO (LC 123 art. 18 §5º-E): atividade 36 do PGDAS-D, sem ISS
+        // e sem fator R. Variante sem número confirmado (ST/exterior) vai para
+        // os BLOQUEIOS — a entrega não sai (o backend recusa por `_bloqueios`).
+        const comunicacao = ehCnaeComunicacao(empresa, cnaeFromKey(key));
+        const stateEfetivo = comunicacao ? { ...state, issRetido: false, isSup: false } : state;
+        const idAtividade = comunicacao
+            ? (idAtividadeComunicacao(state) ?? idAtividadePgdas(anexo, stateEfetivo, resumo.fator_r || 0))
+            : idAtividadePgdas(anexo, state, resumo.fator_r || 0);
+        if (!comunicacao && anexoExigeFolhaSalario(anexo)) exigeFolhaSalario = true;
+        addAtividade(grupos, idAtividade, valor, montarReceitaAtividade(stateEfetivo, valor, idAtividade));
         if (state.isExterior) totalExterno = round2(totalExterno + valor);
         else totalInterno = round2(totalInterno + valor);
     });
@@ -587,8 +601,8 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
         declaracao,
         _competencia: competencia,
         _cnpjLimpo: cnpjLimpo,
-        _avisos: avisosDoPayload(faturamentoPorCnae),
-        _bloqueios: bloqueiosDoPayload(faturamentoPorCnae),
+        _avisos: avisosDoPayload(faturamentoPorCnae, empresa),
+        _bloqueios: bloqueiosDoPayload(faturamentoPorCnae, empresa),
         // O backend revalida a trava do SUP contra o banco — não confia na
         // lista de bloqueios que veio do navegador (pode estar desatualizada).
         _temSup: Object.values(faturamentoPorCnae || {})
@@ -609,10 +623,27 @@ export function mapPgdasPayload(input: PgdasMapperInput): PgdasPayload {
  * entrega ao PGDAS-D não se desfaz, e declarar natureza errada é pior do que
  * não declarar pelo app (Paulo, 03/08: "leva errado pro SIMPLES").
  */
-export function bloqueiosDoPayload(faturamentoPorCnae: Record<string, CnaeInputState>): string[] {
+export function bloqueiosDoPayload(
+    faturamentoPorCnae: Record<string, CnaeInputState>,
+    empresa?: Pick<SimplesNacionalEmpresa, 'cnaesComunicacao'> | null,
+): string[] {
     const bloqueios: string[] = [];
     const comValor = Object.values(faturamentoPorCnae || {})
         .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
+
+    // 📡 Comunicação COM ST ou PARA O EXTERIOR: o número da atividade não veio
+    // do formulário do e-CAC (só o 36, "sem ST", veio). Não se chuta id.
+    const comunicacaoSemId = Object.entries(faturamentoPorCnae || {})
+        .filter(([k, s]) => s && round2(parseValorBr(s.valor)) > 0
+            && ehCnaeComunicacao(empresa, cnaeFromKey(k)) && idAtividadeComunicacao(s) === null);
+    if (comunicacaoSemId.length) {
+        bloqueios.push(
+            'Receita de COMUNICAÇÃO marcada com ICMS ST ou como exterior: o app só conhece o número da atividade '
+            + `"Comunicação sem substituição tributária de ICMS" (${ID_ATIVIDADE_COMUNICACAO_SEM_ST}, lido do formulário do e-CAC). `
+            + 'As variantes com ST e para o exterior têm outro número, que ainda não foi informado. Entregue esta competência '
+            + 'direto no e-CAC e mande o "Inspecionar" da opção usada (o value="CNPJ-número" do input) para cadastrar.',
+        );
+    }
 
     if (comValor.some((s) => s.isSup) && idAtividadeIssFixoCadastrado === null) {
         bloqueios.push(
@@ -628,10 +659,24 @@ export function bloqueiosDoPayload(faturamentoPorCnae: Record<string, CnaeInputS
     return bloqueios;
 }
 
-export function avisosDoPayload(faturamentoPorCnae: Record<string, CnaeInputState>): string[] {
+export function avisosDoPayload(
+    faturamentoPorCnae: Record<string, CnaeInputState>,
+    empresa?: Pick<SimplesNacionalEmpresa, 'cnaesComunicacao'> | null,
+): string[] {
     const avisos: string[] = [];
     const comValor = Object.values(faturamentoPorCnae || {})
         .filter((s) => s && round2(parseValorBr(s.valor)) > 0);
+
+    const temComunicacao = Object.entries(faturamentoPorCnae || {})
+        .some(([k, s]) => s && round2(parseValorBr(s.valor)) > 0 && ehCnaeComunicacao(empresa, cnaeFromKey(k)));
+    if (temComunicacao) {
+        // PRIMEIRA vez que a atividade 36 sai pelo app: o extrato é a prova.
+        avisos.push(
+            `Há receita de COMUNICAÇÃO: vai como atividade ${ID_ATIVIDADE_COMUNICACAO_SEM_ST} ("Comunicação sem substituição `
+            + 'tributária de ICMS", LC 123 art. 18 §5º-E) — Anexo III sem o ISS e com a parcela do ICMS do Anexo I. Confira no '
+            + 'extrato que saiu ICMS e NÃO saiu ISS, e que o DAS bate com o valor desta tela.',
+        );
+    }
 
 
     if (comValor.some((s) => s.isImune)) {
