@@ -296,6 +296,36 @@ function buildD190PorNota(nota, dados) {
 }
 
 /**
+ * Σ do ICMS que o BLOCO D escritura numa direção — a parte do CT-e no E110.
+ *
+ * 📖 Guia 3.2.3, E110 campo 06 (VL_TOT_CREDITOS): *"soma do campo VL_ICMS dos
+ * registros (C190, C590, D190, D590, D730 …) para CFOP iniciado por 1, 2, 3"*;
+ * campo 02 (VL_TOT_DEBITOS), o mesmo para 5, 6, 7. O E110 somava SÓ o bloco C
+ * (30/09, A CASTELLANO · 08/2026: o frete 1352 com R$ 346,67 de ICMS aparecia
+ * no Resumo por CFOP e não entrava na apuração — 62.509,90 contra 62.856,57).
+ *
+ * A MESMA seleção e o MESMO dono do D190 (`buildBlocoD`/`buildD190PorNota`):
+ * só o CT-e da empresa (tomadora ou transportadora), com CFOP legível, não
+ * cancelado/denegado/inutilizado; o ICMS é `icmsDoItemNoArquivo` do item
+ * sintético — o CST informado 90 e o regime Simples zeram aqui como lá.
+ *
+ * @param {object[]} notas
+ * @param {'entrada'|'saida'} direcao
+ * @param {object} dados  contexto do arquivo (empresa/regime) — obrigatório.
+ */
+export function somarIcmsDoBlocoD(notas, direcao, dados) {
+    const sel = selecionarCtesBlocoDComAvisos(notas, dados?.empresa?.cnpj);
+    let total = 0;
+    for (const nota of sel.notas) {
+        if (direcaoEfetivaDoc(nota) !== direcao) continue;
+        if (!cfopDoCte(nota)) continue;
+        if (docCancelado(nota) || ['denegado', 'inutilizado'].includes(String(nota.status || ''))) continue;
+        total += Number(icmsDoItemNoArquivo(itemSinteticoDoCte(nota), { ...nota, _dados: dados }).vICMS) || 0;
+    }
+    return total;
+}
+
+/**
  * Monta o Bloco D completo a partir de dados.notas filtradas por modelo 57.
  */
 export function buildBlocoD(dados) {

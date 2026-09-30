@@ -130,7 +130,11 @@ describe('🚨 E110 c.06 = Σ VL_ICMS dos C190 de entrada — pela MESMA régua,
 describe('🚦 trava na FONTE — um dono para o ICMS do E110', () => {
     it('o bloco E delega ao dono do bloco C e não soma vICMS cru para o ICMS', () => {
         const src = ler('sefaz-backend/sped-fiscal-blocoE.js').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-        expect(src).toMatch(/return somarIcmsNoArquivo\(notas, direcao, dados\);/);
+        // O FATO é delegar ao dono do bloco C com o contexto — e, desde 30/09
+        // (A CASTELLANO, frete 1352 fora da apuração), somar o D190 pelo dono
+        // do bloco D, como manda o Guia (E110 c.02/06: C190 + D190 …).
+        expect(src).toMatch(/somarIcmsNoArquivo\(notas, direcao, dados\)/);
+        expect(src).toMatch(/somarIcmsDoBlocoD\(notas, direcao, dados\)/);
         expect(src).not.toMatch(/somarImpostoPorDirecao\(notas, direcao, 'vICMS', 'vICMS'\)/);
         // 📒 14/09 (HYPE CAFÉ): a apuração do E110 mudou de casa — mora em
         // `apuracao-icms-raicms.js`, lida pelo bloco E E pelo Registro de
