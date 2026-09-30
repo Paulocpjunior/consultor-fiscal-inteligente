@@ -26,7 +26,9 @@ export function montarMovimentoNfeContabil({ cnpjEmpresa, competencia, movimento
         if (chaves.has(chave)) { fail('Chave NF-e repetida no CFI'); continue; }
         chaves.add(chave);
         if (!Array.isArray(d.itens) || !d.itens.length) { fail('Sem itens/CFOP: captura contém apenas resumo ou XML incompleto'); continue; }
-        if (digits(d.empresaCnpj) !== cnpj || ![digits(d.cnpjEmit), digits(d.cnpjDest)].includes(cnpj)) { fail('CNPJ da nota não corresponde à empresa consultada'); continue; }
+        const emitente = digits(d.cnpjEmit || d.emitente?.cnpjCpf || d.emitente?.cnpj || d.emitente?.cpf);
+        const destinatario = digits(d.cnpjDest || d.destinatario?.cnpjCpf || d.destinatario?.cnpj || d.destinatario?.cpf);
+        if (digits(d.empresaCnpj) !== cnpj || !(movimento === 'saida' ? emitente === cnpj && chave.slice(6,20) === cnpj : destinatario === cnpj)) { fail('CNPJ da nota não corresponde à empresa consultada'); continue; }
         const data = dataDeclaradaDoDocumento(d.dhEmi || d.dataEmissao);
         if (!data || data.slice(0,7) !== competencia) { fail('Data de emissão ausente ou fora da competência'); continue; }
         const total = cents(valorDoDocumento(d));
