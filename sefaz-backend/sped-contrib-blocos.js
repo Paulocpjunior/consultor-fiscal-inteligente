@@ -100,6 +100,11 @@ function getAliquotas(regimeApuracao) {
     return ALIQUOTAS[regimeApuracao] || ALIQUOTAS['2'];
 }
 
+/** Alíquotas (frações) do regime — as mesmas do M210/M610. Lida pelo 🧪 relatório de monofásicos. */
+export function aliquotasDoRegime(regimeApuracao) {
+    return getAliquotas(regimeApuracao);
+}
+
 /**
  * Determina CST PIS/COFINS de um item com base no regime e direcao.
  *
@@ -685,6 +690,39 @@ export function buildBlocoA(dados) {
 // BLOCO C — Mercadorias (NF-e modelo 55/65)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * 🔒 O PIS/COFINS DE CADA ITEM DE UMA NOTA DO BLOCO C — dono único (30/09).
+ *
+ * Extraído do laço do C170 quando nasceu o 🧪 relatório de monofásicos ×
+ * tributados (Paulo, UNIKE 08/2026: *"preciso de um relatório gerencial para
+ * identificar os produtos monofásicos e não monofásicos"*). O relatório tem de
+ * ler EXATAMENTE a base, o CST e o valor que o arquivo declara — uma segunda
+ * conta "de relatório" divergiria do M210 no primeiro ajuste de base.
+ * Os porquês de cada peça (rateio do desconto, frete na base, régua da
+ * entrada com participante/NCM) estão comentados no laço do C170.
+ *
+ * @param {object} nota    já normalizada (`normalizarParticipantesDoc`)
+ * @param {'entrada'|'saida'} direcao  `direcaoEfetivaDoc(nota)`
+ * @param {object} dados   o mesmo `dados` do gerador (regime, catálogo de NCM)
+ */
+export function lerPisCofinsDosItens(nota, direcao, dados) {
+    const regimeApuracao = dados.regimeApuracao || '2';
+    const aliq = getAliquotas(regimeApuracao);
+    const liquidosDosItens = valoresLiquidosDosItens(nota);
+    const descontosPorItem = descontosDosItens(nota);
+    const fretesPorItem = fretesDosItens(nota);
+    const codPartDoDoc = codPartDoDocumento(nota, dados.empresa?.cnpj);
+    const dataRefDoc = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
+    const pisCofinsDosItens = (nota.itens || []).map((item, k) => pisCofinsDoItemC170(
+        item, direcao, regimeApuracao, aliq, liquidosDosItens[k] || 0, fretesPorItem[k] || 0,
+        direcao !== 'saida' ? {
+            codPart: codPartDoDoc, ncm: item.ncm || item.NCM || '', catalogo: dados.cadastroNcm || null,
+            dataRef: dataRefDoc, uf: nota.destinatario?.uf || nota.ufDest || '',
+        } : null,
+    ));
+    return { liquidosDosItens, descontosPorItem, fretesPorItem, pisCofinsDosItens, aliquotas: aliq };
+}
+
 export function buildBlocoC_Contrib(dados) {
     const linhas = [];
     const selecaoC = selecionarNotasBlocoC(dados.notas, dados.empresa?.cnpj);
@@ -786,29 +824,22 @@ export function buildBlocoC_Contrib(dados) {
         // 📌 O rateio continua servindo ao VL_DESC: quando o desconto vem só no
         // TOTAL do documento, cada item precisa levar a parte dele, senão o PVA
         // não tem de onde reduzir a base daquele item.
-        const liquidosDosItens = valoresLiquidosDosItens(nota);
-        const descontosPorItem = descontosDosItens(nota);
         // 🚨 O FRETE COBRADO DO ADQUIRENTE É BASE (Guia 1.35, C100 campo 18):
         // ele vem do ITEM quando o XML o traz por item, e do TOTAL do documento
         // rateado quando não — as DUAS formas, porque ler uma só é a ausência
         // plausível de sempre. Só a BASE o recebe; o VL_ITEM continua sendo
         // *"somente o valor das mercadorias"*.
-        const fretesPorItem = fretesDosItens(nota);
         // 📗 O PIS/COFINS de cada item é decidido AQUI, antes do C100 (28/09,
         // ELS: 15 recusas "VL_PIS do C100 menor que a soma dos C170"). O
         // cabeçalho copiava o vPIS do XML enquanto os itens saíam calculados
         // pela régua — o mesmo documento com dois números. Agora o C100 é a
         // SOMA dos C170, que é a validação do Guia. A régua da ENTRADA recebe
         // o participante (pessoa física), o NCM e o cadastro (`ctx`).
-        const codPartDoDoc = codPartDoDocumento(nota, dados.empresa?.cnpj);
-        const dataRefDoc = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
-        const pisCofinsDosItens = (nota.itens || []).map((item, k) => pisCofinsDoItemC170(
-            item, direcao, regimeApuracao, aliq, liquidosDosItens[k] || 0, fretesPorItem[k] || 0,
-            direcao !== 'saida' ? {
-                codPart: codPartDoDoc, ncm: item.ncm || item.NCM || '', catalogo: dados.cadastroNcm || null,
-                dataRef: dataRefDoc, uf: nota.destinatario?.uf || nota.ufDest || '',
-            } : null,
-        ));
+        // 🔒 Quem decide é o DONO (`lerPisCofinsDosItens`) — o mesmo que o 🧪
+        // relatório de monofásicos × tributados lê (30/09, UNIKE).
+        const {
+            liquidosDosItens, descontosPorItem, fretesPorItem, pisCofinsDosItens,
+        } = lerPisCofinsDosItens(nota, direcao, dados);
         // O C100 declara o MAIOR entre o destacado no documento (o arquivo ACEITO
         // da PWR 03/2026 traz 127,27 no C100 com 104,36 nos C170) e a soma dos
         // C170 — o PVA valida "VL_PIS ≥ soma dos itens", e na ELS o XML da compra

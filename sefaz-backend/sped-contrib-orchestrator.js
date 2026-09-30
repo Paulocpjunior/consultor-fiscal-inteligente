@@ -579,10 +579,19 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
 }
 
 /**
+ * Frete cobrado do adquirente relido do XML guardado — é BASE do PIS/COFINS
+ * (Guia 1.35, C100 campo 18). Um passo só, usado pelo arquivo e pelo 🧪
+ * relatório de monofásicos: sem ele a base do relatório não bateria com o C170.
+ */
+export async function completarFreteDoPeriodo(dados) {
+    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+}
+
+/**
  * Monta o arquivo .txt completo do SPED Contribuicoes.
  */
 export async function montarBlocosContribuicoes({ dados }) {
-    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+    await completarFreteDoPeriodo(dados);
     // ♻️ COD_MUN do 0150 relido do XML guardado quando o documento veio sem
     // (28/09, ELS: produtor rural PF). Só na memória; o que faltar segue dito.
     const relMun = await completarMunicipioDosParticipantes({
