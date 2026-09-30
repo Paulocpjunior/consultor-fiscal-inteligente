@@ -197,8 +197,10 @@ export function montarCallFile({ ramal, numero, pedidoId, nomeContato = null }) 
     return [
         `Channel: PJSIP/${r.ramal}@${ENDPOINT_HIT}`,
         `CallerID: "${rotulo}" <${numero}>`,
+        // 🐛 30/09: 'RetryTime: 0' fazia o pbx_spool avisar "Invalid retrytime"
+        // (ele exige > 0). Com MaxRetries 0 não há segunda tentativa, então a
+        // linha simplesmente não existe.
         'MaxRetries: 0',
-        'RetryTime: 0',
         `WaitTime: ${ESPERA_RAMAL_S}`,
         `Context: ${CONTEXTO_SAIDA}`,
         `Extension: ${numero}`,
