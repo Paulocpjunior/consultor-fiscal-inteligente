@@ -5,6 +5,26 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🧪 RELATÓRIO PIS/COFINS MONOFÁSICO × TRIBUTADO (30/09, UNIKE 08/2026)**
+  (Paulo, com o EFD do CFI e o que ele acertou no PVA: M220 15,35 / M620 70,85
+  *"preenchidos manualmente"* para as devoluções). Espelho provado: 2.361,61
+  de devolução 1411 de NCM que a UNIKE VENDE com CST 01 (rolamentos 8482) ×
+  0,65%/3%; o resto (4.333,33, 8708) ela vende CST 04. Nasce
+  `sefaz-backend/relatorio-monofasico.js` (`linhasDoPeriodo`,
+  `montarRelatorioMonofasico`, `csvDoRelatorio`, `ehCfopDevolucaoDeVenda` pela
+  descrição OFICIAL, `classeDoCstDeSaida`). A saída lê o CST/base do C170 pelo
+  dono novo `lerPisCofinsDosItens` (extraído do laço do C170 de
+  sped-contrib-blocos; `aliquotasDoRegime` exportado) e o frete pelo
+  `completarFreteDoPeriodo` (orquestrador, usado pelo arquivo e pelo
+  relatório). A devolução herda a classe da VENDA do NCM no mês; NCM ambíguo ou
+  sem venda = PENDENTE, fora do ajuste. Rota GET
+  `/api/admin/sped-contrib/relatorio-monofasico` (devolve resumo + devoluções +
+  CSV); aba Relatórios → Gerencial → 🧪. Trava `relatorioMonofasico.test.ts`
+  (15,35/70,85 exatos + apurado = C170). ⚠️ O EFD do CFI tem 28 notas de
+  devolução em 08 (19.526,43) e o CSV do outro sistema 13 (6.694,94): conferir
+  a competência de escrituração (📅 data de entrada) antes do M220/M620.
+  PRÓXIMO (oferecido): o gerador emitir M220/M620 sozinho com esse ajuste.
+
 - **📨 CIÊNCIA "LOTE 225 — FALHA NO ESQUEMA XML" (30/09)** (Paulo: *"ainda
   estamos com essa pendência na ciência das notas"*, GIRARDELLIS nº 3057). Com
   o desfecho honesto de 28/09 a tela passou a DIZER o que a SEFAZ respondia: o

@@ -15,6 +15,12 @@ export function valorDoDocumentoServico(nota: any): number;
 
 export function buildBlocoA(dados: any): string[];
 export function buildBlocoC_Contrib(dados: any): string[];
+export function aliquotasDoRegime(regimeApuracao: string): { pis: number; cofins: number };
+export function lerPisCofinsDosItens(nota: any, direcao: string, dados: any): {
+    liquidosDosItens: number[]; descontosPorItem: number[]; fretesPorItem: number[];
+    pisCofinsDosItens: Array<{ cstPis: string; cstCofins: string; basePis: number; baseCofins: number; aliqPis: number; aliqCofins: number; vlPis: number; vlCofins: number }>;
+    aliquotas: { pis: number; cofins: number };
+};
 export function buildBlocoD_Contrib(dados: any): string[];
 export function buildBlocoF(dados?: any): string[];
 export function buildBlocoM(dados: any): string[];

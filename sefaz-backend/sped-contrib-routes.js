@@ -6,7 +6,9 @@
 // ============================================================================
 
 import express from 'express';
-import { coletarDadosContribuicoes, montarBlocosContribuicoes } from './sped-contrib-orchestrator.js';
+import { coletarDadosContribuicoes, montarBlocosContribuicoes, completarFreteDoPeriodo } from './sped-contrib-orchestrator.js';
+import { linhasDoPeriodo, montarRelatorioMonofasico, csvDoRelatorio } from './relatorio-monofasico.js';
+import { aliquotasDoRegime } from './sped-contrib-blocos.js';
 import { conferirSituacaoEspecial } from './sped-contrib-situacao-especial.js';
 import { conferirTipoEscrituracao } from './sped-contrib-escrituracao.js';
 import {
@@ -51,6 +53,43 @@ router.get('/preview', requireAdmin, async (req, res) => {
                 unidades: dados.unidades.length,
             },
             warnings: dados.warnings,
+        });
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+/**
+ * GET /relatorio-monofasico?empresaId=X&competencia=YYYY-MM
+ * 🧪 Receitas PIS/COFINS monofásico × tributado, com as devoluções de venda
+ * classificadas e o ajuste de redução sugerido (M220/M620). Lê os MESMOS dados
+ * e a MESMA régua do arquivo (30/09, UNIKE).
+ */
+router.get('/relatorio-monofasico', requireAdmin, async (req, res) => {
+    try {
+        const { empresaId } = req.query;
+        const comp = competenciaParaGerarArquivo(req.query.competencia);
+        if (!comp.ok) return res.status(400).json({ error: comp.erro });
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+
+        const dados = await coletarDadosContribuicoes({ empresaId, competencia: comp.competencia });
+        await completarFreteDoPeriodo(dados);
+        const rel = montarRelatorioMonofasico(linhasDoPeriodo(dados), { aliquotas: aliquotasDoRegime(dados.regimeApuracao) });
+        const { linhas, ...resumo } = rel;
+        return res.json({
+            ok: true,
+            empresaId,
+            empresaNome: dados.empresa.nome,
+            empresaCnpj: dados.empresa.cnpj || '',
+            competencia: comp.competencia,
+            regimeApuracao: dados.regimeApuracao,
+            ...resumo,
+            // A tela lista as DEVOLUÇÕES (é nelas que mora a decisão); o item a
+            // item completo viaja no CSV, pronto para baixar.
+            devolucoesLinhas: linhas.filter((l) => l.tipo === 'devolucao'),
+            totalLinhas: linhas.length,
+            csv: csvDoRelatorio(rel),
+            avisosDaColeta: dados.warnings || [],
         });
     } catch (e) {
         return tratarErro(e, res);

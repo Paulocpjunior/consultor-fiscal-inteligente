@@ -62,6 +62,7 @@ import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFi
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 // 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 — a tela não calcula.
 import { carregarApuracaoIcms, type ApuracaoIcmsResposta } from '../../services/apuracaoIcmsService';
+import { carregarRelatorioMonofasico, baixarCsvMonofasico, type RelatorioMonofasicoResposta } from '../../services/relatorioMonofasicoService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
 import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, parseValorMoeda, type MesDeclaracao } from '../../services/declaracaoFaturamento';
 import { montarApuracaoTrimestre, trimestresDisponiveis } from '../../services/apuracaoTrimestral';
@@ -89,7 +90,7 @@ export type AbaId =
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
-    | 'apuracao-icms' | 'difal-ec87';
+    | 'apuracao-icms' | 'difal-ec87' | 'monofasico';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -153,6 +154,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
             { id: 'trimestre', label: '🧮 Apuração trimestral (Presumido)' },
             { id: 'apuracao-icms', label: '📒 Apuração do ICMS (RAICMS)' },
+            { id: 'monofasico', label: '🧪 PIS/COFINS monofásico × tributado' },
         ],
     },
 ];
@@ -438,6 +440,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
             {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
             {aba === 'apuracao-icms' && <AbaApuracaoIcms currentUser={currentUser} competencia={competencia} />}
+            {aba === 'monofasico' && <AbaMonofasico currentUser={currentUser} competencia={competencia} />}
         </div>
     );
 };
@@ -2948,6 +2951,237 @@ const AbaImpostosEnviados: React.FC<{ competencia: string }> = ({ competencia })
 };
 
 // ─── 10. DIPAM/FUNRURAL ─────────────────────────────────────────────────────
+
+/**
+ * 🧪 PIS/COFINS MONOFÁSICO × TRIBUTADO, COM AS DEVOLUÇÕES (30/09, UNIKE 08/2026).
+ *
+ * Paulo: *"tem as devoluções que não foram reconhecidas no arquivo … os blocos
+ * M220 e M620 foram preenchidos manualmente no PVA … preciso de um relatório
+ * gerencial para identificar os produtos monofásicos e não monofásicos, e
+ * separar as receitas tributadas das não tributadas"*.
+ *
+ * ⚠️ NENHUMA CONTA MORA AQUI: a classificação, o ajuste e o CSV vêm do backend
+ * (`relatorio-monofasico.js`), que lê o MESMO CST/base do C170 do arquivo.
+ */
+const AbaMonofasico: React.FC<{ currentUser: User; competencia: string }> = ({ currentUser, competencia }) => {
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
+    const [loadingLista, setLoadingLista] = useState(false);
+    const [dados, setDados] = useState<RelatorioMonofasicoResposta | null>(null);
+    const [erro, setErro] = useState<string | null>(null);
+    const [carregando, setCarregando] = useState(false);
+    const [verColeta, setVerColeta] = useState(false);
+    const [verTodosNcm, setVerTodosNcm] = useState(false);
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoadingLista(true);
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
+            .finally(() => { if (alive) setLoadingLista(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId || !competencia) { setDados(null); setErro(null); return; }
+        setCarregando(true);
+        setErro(null);
+        carregarRelatorioMonofasico(empresaId, competencia)
+            .then(r => {
+                if (!alive) return;
+                if (!r.ok) { setErro(r.error || 'Falha ao montar o relatório.'); setDados(null); return; }
+                setDados(r);
+            })
+            .catch(e => { if (alive) { setErro(`Falha ao montar o relatório: ${e?.message || e}`); setDados(null); } })
+            .finally(() => { if (alive) setCarregando(false); });
+        return () => { alive = false; };
+    }, [empresaId, competencia]);
+
+    const LIMITE_NCM = 30;
+    const ncmVisiveis = dados ? (verTodosNcm ? dados.porNcm : dados.porNcm.slice(0, LIMITE_NCM)) : [];
+    const rotuloClasse: Record<string, string> = {
+        tributada: 'Tributada', monofasica: 'Monofásica', 'nao-tributada': 'Não tributada', outras: 'Outras (não receita)',
+    };
+    const linhaResumo = (rotulo: string, t: { itens: number; valor: number; base: number; pis: number; cofins: number }, destaque = false) => (
+        <tr className={`border-t border-slate-100 dark:border-slate-700 ${destaque ? 'font-semibold' : ''}`}>
+            <td className="py-1 pr-2">{rotulo}</td>
+            <td className="py-1 pr-2 text-right font-mono">{t.itens}</td>
+            <td className="py-1 pr-2 text-right font-mono">{fmtBRL(t.valor)}</td>
+            <td className="py-1 pr-2 text-right font-mono">{fmtBRL(t.base)}</td>
+            <td className="py-1 pr-2 text-right font-mono">{fmtBRL(t.pis)}</td>
+            <td className="py-1 text-right font-mono">{fmtBRL(t.cofins)}</td>
+        </tr>
+    );
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loadingLista ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
+                </div>
+                <button
+                    onClick={() => dados && baixarCsvMonofasico(dados)}
+                    disabled={!dados}
+                    className="text-xs px-3 py-2 rounded bg-sky-700 text-white hover:bg-sky-800 disabled:opacity-50"
+                >
+                    ⬇️ Baixar CSV ({dados?.totalLinhas ?? 0} itens)
+                </button>
+            </div>
+            <p className="text-xs text-slate-500">
+                Competência {fmtComp(competencia)} (a do topo). Saídas classificadas pelo <strong>CST do próprio arquivo</strong> (a
+                mesma leitura do C170 do EFD-Contribuições) e <strong>devoluções de venda</strong> classificadas pelo NCM, com a
+                classe com que a empresa vendeu aquele NCM no mês. A devolução tributada vira o <strong>ajuste de redução do
+                M220 (PIS) e do M620 (COFINS)</strong>.
+            </p>
+            {carregando && <p className="text-sm text-slate-500">Montando o relatório…</p>}
+            {erro && <p className="text-sm text-red-700 dark:text-red-300 font-semibold">⛔ {erro}</p>}
+            {!empresaId && !erro && <p className="text-sm text-slate-500">Escolha uma empresa do Lucro.</p>}
+            {dados && (
+                <>
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                        <strong>{dados.empresaNome}</strong> · {fmtCnpj(dados.empresaCnpj)} · regime {dados.regimeApuracao === '1' ? 'não cumulativo' : 'cumulativo'}
+                        {' '}· alíquotas {(dados.aliquotas.pis * 100).toFixed(2).replace('.', ',')}% / {(dados.aliquotas.cofins * 100).toFixed(2).replace('.', ',')}%
+                    </div>
+                    {dados.avisos.length > 0 && (
+                        <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc pl-5 space-y-1">
+                            {dados.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                        </ul>
+                    )}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <th className="text-left py-1 pr-2">Receitas (saídas)</th>
+                                    <th className="text-right py-1 pr-2">Itens</th>
+                                    <th className="text-right py-1 pr-2">Valor líquido</th>
+                                    <th className="text-right py-1 pr-2">Base PIS/COFINS</th>
+                                    <th className="text-right py-1 pr-2">PIS</th>
+                                    <th className="text-right py-1">COFINS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {linhaResumo('Tributada (CST 01/02/03/05)', dados.receitas.tributada, true)}
+                                {linhaResumo('Monofásica (CST 04)', dados.receitas.monofasica)}
+                                {linhaResumo('Não tributada (CST 06/07/08/09)', dados.receitas['nao-tributada'])}
+                                {linhaResumo('Outras saídas — não é receita (CST 49/99…)', dados.receitas.outras)}
+                                <tr><td colSpan={6} className="pt-3 text-[10px] uppercase font-bold text-slate-500">(−) Devoluções de venda</td></tr>
+                                {linhaResumo('Devolução tributada', dados.devolucoes.tributada, true)}
+                                {linhaResumo('Devolução monofásica', dados.devolucoes.monofasica)}
+                                {linhaResumo('Devolução não tributada', dados.devolucoes['nao-tributada'])}
+                                {dados.pendentes.itens > 0 && linhaResumo('⚠️ Devolução PENDENTE (classifique)', dados.pendentes, true)}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-lg p-3 bg-slate-50 dark:bg-slate-800">
+                            <div className="text-[10px] uppercase text-slate-500 font-bold">Receita líquida tributada</div>
+                            <div className="font-mono font-semibold">{fmtBRL(dados.receitaLiquidaTributada)}</div>
+                            <div className="text-[10px] uppercase text-slate-500 font-bold mt-1">Receita líquida monofásica</div>
+                            <div className="font-mono">{fmtBRL(dados.receitaLiquidaMonofasica)}</div>
+                        </div>
+                        <div className="rounded-lg p-3 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                            <div className="text-[10px] uppercase font-bold">Ajuste de redução sugerido</div>
+                            <div>M220 (PIS): <span className="font-mono font-semibold">{fmtBRL(dados.ajusteReducao.pis)}</span></div>
+                            <div>M620 (COFINS): <span className="font-mono font-semibold">{fmtBRL(dados.ajusteReducao.cofins)}</span></div>
+                            <div className="text-[11px] mt-1">sobre {fmtBRL(dados.ajusteReducao.base)} de devolução tributada</div>
+                        </div>
+                        <div className="rounded-lg p-3 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
+                            <div className="text-[10px] uppercase font-bold">Apurado no arquivo → a recolher</div>
+                            <div>PIS: <span className="font-mono">{fmtBRL(dados.apurado.pis)}</span> → <span className="font-mono font-semibold">{fmtBRL(dados.aRecolher.pis)}</span></div>
+                            <div>COFINS: <span className="font-mono">{fmtBRL(dados.apurado.cofins)}</span> → <span className="font-mono font-semibold">{fmtBRL(dados.aRecolher.cofins)}</span></div>
+                        </div>
+                    </div>
+
+                    {dados.devolucoesLinhas.length > 0 && (
+                        <div className="overflow-x-auto">
+                            <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Devoluções de venda ({dados.devolucoesLinhas.length} itens)</div>
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                        <th className="text-left py-1 pr-2">NF</th>
+                                        <th className="text-left py-1 pr-2">Cliente</th>
+                                        <th className="text-left py-1 pr-2">CFOP</th>
+                                        <th className="text-left py-1 pr-2">Produto</th>
+                                        <th className="text-left py-1 pr-2">NCM</th>
+                                        <th className="text-right py-1 pr-2">Valor líquido</th>
+                                        <th className="text-left py-1">Classe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dados.devolucoesLinhas.map((l, i) => (
+                                        <tr key={i} className={`border-t border-slate-100 dark:border-slate-700 ${l.classe ? '' : 'bg-amber-50 dark:bg-amber-900/20'}`}>
+                                            <td className="py-1 pr-2 font-mono">{l.numero}</td>
+                                            <td className="py-1 pr-2">{l.nomeParticipante}</td>
+                                            <td className="py-1 pr-2 font-mono">{l.cfop}</td>
+                                            <td className="py-1 pr-2">{l.codigo} · {l.descricao}</td>
+                                            <td className="py-1 pr-2 font-mono">{l.ncm}</td>
+                                            <td className="py-1 pr-2 text-right font-mono">{fmtBRL(l.liquido)}</td>
+                                            <td className="py-1" title={l.origemClasse}>{l.classe ? rotuloClasse[l.classe] : `⚠️ ${l.origemClasse}`}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <div className="overflow-x-auto">
+                        <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                            Por NCM — mostrando {ncmVisiveis.length} de {dados.porNcm.length}
+                            {dados.porNcm.length > LIMITE_NCM && (
+                                <button type="button" className="ml-2 underline normal-case" onClick={() => setVerTodosNcm(v => !v)}>
+                                    {verTodosNcm ? 'mostrar menos' : 'mostrar todos'}
+                                </button>
+                            )}
+                        </div>
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <th className="text-left py-1 pr-2">NCM</th>
+                                    <th className="text-left py-1 pr-2">Classe na venda</th>
+                                    <th className="text-left py-1 pr-2">Exemplo de produto</th>
+                                    <th className="text-right py-1 pr-2">Saídas</th>
+                                    <th className="text-right py-1">Devoluções</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {ncmVisiveis.map((n) => (
+                                    <tr key={n.ncm} className="border-t border-slate-100 dark:border-slate-700">
+                                        <td className="py-1 pr-2 font-mono">{n.ncm}</td>
+                                        <td className="py-1 pr-2">{n.classes.length ? n.classes.map(c => rotuloClasse[c] || c).join(' + ') : '—'}{n.classes.length > 1 ? ' ⚠️' : ''}</td>
+                                        <td className="py-1 pr-2">{n.descricao}</td>
+                                        <td className="py-1 pr-2 text-right font-mono">{fmtBRL(n.saidas)}</td>
+                                        <td className="py-1 text-right font-mono">{fmtBRL(n.devolucoes)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {dados.avisosDaColeta.length > 0 && (
+                        <div className="text-xs text-slate-500">
+                            <button type="button" className="underline" onClick={() => setVerColeta(v => !v)}>
+                                {verColeta ? 'Ocultar' : 'Ver'} os {dados.avisosDaColeta.length} aviso(s) da coleta (os mesmos da geração do EFD-Contribuições)
+                            </button>
+                            {verColeta && (
+                                <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {dados.avisosDaColeta.map((a, i) => <li key={i}>{a}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </Card>
+    );
+};
 
 const AbaDipam: React.FC<{ competencia: string }> = ({ competencia }) => {
     const [dados, setDados] = useState<any>(null);
