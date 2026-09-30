@@ -95,7 +95,6 @@ def montar_call_file(ramal, numero, pedido_id, nome):
         "Channel: PJSIP/%s@%s" % (ramal, ENDPOINT_HIT),
         'CallerID: "%s" <%s>' % (rotulo, numero),
         "MaxRetries: 0",
-        "RetryTime: 0",
         "WaitTime: %d" % ESPERA_RAMAL_S,
         "Context: %s" % CONTEXTO_SAIDA,
         "Extension: %s" % numero,
