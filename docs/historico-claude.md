@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📨 CIÊNCIA "LOTE 225 — FALHA NO ESQUEMA XML" (30/09)** (Paulo: *"ainda
+  estamos com essa pendência na ciência das notas"*, GIRARDELLIS nº 3057). Com
+  o desfecho honesto de 28/09 a tela passou a DIZER o que a SEFAZ respondia: o
+  lote reprovava no esquema. Causa: `assinarEvento` (manifesto-client.js)
+  assinava com C14N EXCLUSIVA (`xml-exc-c14n#`) — o xmldsig-core-schema_v1.01
+  da NF-e (PL_009_V4, conferido no xsd) FIXA C14N inclusiva
+  (REC-xml-c14n-20010315), rsa-sha1, sha1 e exatamente 2 Transforms
+  (enveloped + C14N inclusiva). Nasce `PERFIL_ASSINATURA_NFE`; trava
+  `manifestoAssinaturaEsquema.test.ts` assina um evento real e confere o XML
+  (algoritmos, ordem infEvento→Signature, X509, Reference, checkSignature).
+  VALIDAR: próxima ciência deve voltar 135 (ou 573 se já existia).
+
 - **🏛️ ISS RETIDO PRESO NA ETAPA 5 (30/09, SILVIO FREIRE LANCHONETE e outras)**.
   Paulo: *"já foi enviado por fora, já fiz rito também, mas essa pendência não
   sai da tela"*. Dois defeitos: (1) o registro por fora é texto livre e a Rotina
