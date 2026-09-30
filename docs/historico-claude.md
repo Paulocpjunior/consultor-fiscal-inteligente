@@ -5,6 +5,21 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏛️ ISS RETIDO PRESO NA ETAPA 5 (30/09, SILVIO FREIRE LANCHONETE e outras)**.
+  Paulo: *"já foi enviado por fora, já fiz rito também, mas essa pendência não
+  sai da tela"*. Dois defeitos: (1) o registro por fora é texto livre e a Rotina
+  só lia retido com `/retid/i` — "ISS" numa empresa que só deve o RETIDO fechava
+  o PRÓPRIO (que ela nem devia); (2) `obrigacaoDoTipo` mandava todo ISS atrás da
+  tarefa `ISS` (ISS SP do prestador, só gerada com `requireISS`) e o retido,
+  que não tem tarefa em empresa nenhuma, gravava `sem-tarefa` — pendência sem
+  saída. Dono novo `sefaz-backend/guia-iss.js` (`ehTipoIss`, `ehTipoIssRetido`,
+  `guiaIssDoEnvio(envio, {aRecolher, tomado})`): texto RETID/RETENC/TOMAD →
+  retido; "ISS" com UMA guia devida → essa; com as duas → próprio, e a ação
+  diz "com o tipo ISS RETIDO". `obrigacaoDoTipo(retido)` = null (sem-obrigacao);
+  `pendenciaBaixa` solta o `sem-tarefa` já gravado quando o envio é o retido
+  (texto ou carimbo `guiaIss` que a Rotina põe via `carimbarGuiaIss`). Datalist
+  de sugestões no campo Guia do FimDeMesBloco. Trava `guiaIss.test.ts`.
+
 - **🚧 MATA-BURRO DAS ENTREGAS DE 29–30/09** (Paulo, depois da apuração da A
   CASTELLANO fechar: *"PERFEITO!!!! passa o mata burros"*). Quatro réguas novas
   em `REGUAS_VIGIADAS` (`reguaUnica.test.ts`), com assinatura = LEITURA do campo

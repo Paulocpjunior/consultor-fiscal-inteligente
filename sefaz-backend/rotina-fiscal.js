@@ -34,6 +34,7 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+import { guiaIssDoEnvio } from './guia-iss.js';
 import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
@@ -679,6 +680,11 @@ export function montarRotinaFiscal({
     // PAGOU. Os outros dois são o MESMO DAS indo de novo, e na segunda vez a
     // baixa não acha tarefa PENDENTE — a primeira já concluiu. Quem responde
     // pelo conjunto é `conferirRitoDosEnvios`.
+    // 🏛️ QUAL GUIA DE ISS cada envio é — o dono responde (`guia-iss.js`),
+    // sabendo o que a empresa deve. O carimbo `guiaIss` é o que deixa o rito
+    // ler "ISS" digitado numa empresa que só deve o RETIDO como o retido,
+    // que não tem tarefa a baixar (30/09, SILVIO FREIRE).
+    envios = carimbarGuiaIss(envios, iss);
     const rito = conferirRitoDosEnvios(envios);
     const enviosOk = rito.filter((r) => r.completo).length;
     const reenvios = rito.filter((r) => r.baixaJaFeitaNaObrigacao).length;
@@ -864,9 +870,10 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
     // Prova de envio: registro no rito (#293) com o tipo dizendo ISS. Guia
     // própria e guia de retido fecham SEPARADAS — conflatar as duas é o erro
     // que a carteira já cometeu somando uma na outra.
-    const tiposIss = (envios || []).map((e) => String(e?.tipo || '')).filter((t) => /iss/i.test(t));
-    const proprioEnviado = tiposIss.some((t) => !/retid/i.test(t));
-    const retidoEnviado = tiposIss.some((t) => /retid/i.test(t));
+    // Qual guia cada envio é: `guia-iss.js` (dono único, 30/09).
+    const guiasIss = (envios || []).map((e) => guiaIssDoEnvio(e, { aRecolher, tomado }));
+    const proprioEnviado = guiasIss.includes('proprio');
+    const retidoEnviado = guiasIss.includes('retido');
 
     // — 1. captura —
     let eCaptura = captura;
@@ -897,10 +904,15 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
         pendentes.push(`ISS RETIDO de ${tomadoNotas} prestador(es) ${fmtBRL(tomado)}`);
     }
     if (pendentes.length) {
+        // A guia do retido fecha pelo TIPO do registro: com as duas devidas,
+        // "ISS" sozinho é o próprio — e a frase diz como registrar o retido.
+        const comoRegistrar = tomado > 0 && !retidoEnviado
+            ? 'Registre o envio pelo rito (ou em "Já enviei esta guia por fora") com o tipo ISS RETIDO para esta etapa fechar.'
+            : 'Registre o envio pelo rito para esta etapa fechar.';
         eGuias = piorar(guias,
             `${pendentes.join(' · ')} — guia(s) do município, fora do DAS/DARF.`,
             'Apure em Central de XMLs → 🏛️ ISS SP e emita no portal da PMSP (vence dia 10 do mês seguinte). '
-            + 'Registre o envio pelo rito para esta etapa fechar.');
+            + comoRegistrar);
     }
 
     return {
@@ -921,6 +933,19 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
             pendencias: pendentes,
         },
     };
+}
+
+/**
+ * Carimba `guiaIss: 'retido'` no envio que É a guia do retido — inclusive o
+ * digitado só "ISS" numa empresa que não deve ISS próprio. Quem lê o carimbo é
+ * `pendenciaBaixa`: a guia do retido não tem tarefa em Vencimentos, e o
+ * `sem-tarefa` dela não é o cron que faltou.
+ */
+function carimbarGuiaIss(envios, iss) {
+    const lista = Array.isArray(envios) ? envios : [];
+    if (!iss || iss.aplicavel !== true) return lista;
+    const devido = { aRecolher: Number(iss.aRecolher || 0), tomado: Number(iss.tomadoRetido || 0) };
+    return lista.map((e) => (guiaIssDoEnvio(e, devido) === 'retido' ? { ...e, guiaIss: 'retido' } : e));
 }
 
 /** Agrava uma etapa sem apagar o que ela já dizia. Verde nunca sobrevive. */

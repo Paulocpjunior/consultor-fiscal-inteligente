@@ -25,6 +25,7 @@
 
 import admin from 'firebase-admin';
 import { normalizarCompetencia, competenciaTarefa } from './competencia.js';
+import { ehTipoIssRetido } from './guia-iss.js';
 // 🚨 O caminho MUDOU em 02/09 (medido na árvore real): não há nível de GRUPO,
 // a empresa vem ANTES do departamento e o nome da pasta dela é HUMANO — tem de
 // ser ACHADO pelo código. A régua é única; ver caminho-sharepoint.js.
@@ -95,6 +96,10 @@ export function obrigacaoDoTipo(tipo) {
     if (/\bINSS\b|\bCPP\b|\bGPS\b|\bFGTS\b/.test(t)) return null;
     if (/\bIRPJ\b/.test(t)) return 'IRPJ_TRIM';
     if (/\bCSLL\b/.test(t)) return 'CSLL_TRIM';
+    // ISS RETIDO como tomadora NÃO é a tarefa `ISS` (ISS SP do prestador) e
+    // não tem tarefa em Vencimentos em empresa nenhuma (30/09, SILVIO FREIRE):
+    // mandá-lo atrás dela gravava `sem-tarefa` — pendência sem saída.
+    if (ehTipoIssRetido(t)) return null;
     if (/\bISS(QN)?\b/.test(t)) return 'ISS';
     if (/\bEFD[\s_-]*CONTRIB/.test(t)) return 'EFD_CONTRIB';
     if (/\bSPED\b|\bEFD\b/.test(t)) return 'SPED';

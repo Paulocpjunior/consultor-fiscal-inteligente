@@ -31,6 +31,7 @@
 // mesmo que o card "Conexão SharePoint" usa. Segunda cópia divergiria no
 // primeiro código de erro novo, que é exatamente o que aconteceu em 31/08.
 import { pendenciaDeGravacaoSharePoint } from './sharepoint-erro-credencial.js';
+import { ehTipoIssRetido } from './guia-iss.js';
 
 const semRegistroSharePoint = (e) => !e?.sharePoint?.status;
 const semRegistroBaixa = (e) => !e?.baixa?.status;
@@ -79,6 +80,11 @@ export function pendenciaBaixa(e) {
     // Tipo que não nomeia obrigação do catálogo (DARE de ICMS…): não há
     // tarefa a baixar — desfecho legítimo, dito no motivo (22/09).
     if (st === 'sem-obrigacao') return null;
+    // 🏛️ ISS RETIDO como tomadora não tem tarefa em Vencimentos (30/09,
+    // SILVIO FREIRE): o registro gravado antes da régua caiu em `sem-tarefa`
+    // procurando a tarefa do ISS próprio. A Rotina, que sabe o que a empresa
+    // deve, carimba `guiaIss: 'retido'` também no envio digitado só "ISS".
+    if (st === 'sem-tarefa' && (e?.guiaIss === 'retido' || ehTipoIssRetido(e?.tipo))) return null;
     if (st === 'sem-tarefa') {
         return {
             causa: 'Sem obrigação correspondente na aba Vencimentos',

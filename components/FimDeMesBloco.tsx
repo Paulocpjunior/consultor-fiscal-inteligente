@@ -402,11 +402,23 @@ const DeclararEnvio: React.FC<{
                 <span className="font-semibold">sem prova de entrega</span>.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {/* Sugestões, não régua: o tipo segue livre e quem decide qual
+                    guia de ISS ele é continua sendo o backend (`guia-iss.js`).
+                    "ISS RETIDO" na lista evita digitar só "ISS" e ver a
+                    pendência do retido ficar de pé (30/09, SILVIO FREIRE). */}
                 <input
                     value={tipo} onChange={(e) => setTipo(e.target.value)}
-                    placeholder="Guia (DAS, DARF, DARE…)"
+                    placeholder="Guia (DAS, DARF, DARE, ISS RETIDO…)"
+                    list="tipos-guia-fora-do-app"
                     className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                 />
+                <datalist id="tipos-guia-fora-do-app">
+                    <option value="DAS" />
+                    <option value="DARF" />
+                    <option value="DARE" />
+                    <option value="ISS RETIDO" />
+                    <option value="ISS PRÓPRIO" />
+                </datalist>
                 <select
                     value={meio} onChange={(e) => setMeio(e.target.value)}
                     className="text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
