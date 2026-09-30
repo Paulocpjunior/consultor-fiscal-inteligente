@@ -106,6 +106,15 @@ export const CAMPOS_PROVADOS_POR_RECIBO = {
             + 'Valor Esperado 37 · Conteúdo do Campo 23" (23 ocorrências). Corroborado pelo '
             + 'EFD-Contribuições ACEITO da mesma empresa (03/2026), que traz os 37.',
     },
+    M220: {
+        campos: 7,
+        fonte: 'EFD-Contribuições da UNIKE 31633553000105 · 08/2026, acertado e aceito no PVA pelo Paulo '
+            + '(30/09): |M220|0|15,35|06|||30082026| — REG · IND_AJ · VL_AJ · COD_AJ · NUM_DOC · DESCR_AJ · DT_REF.',
+    },
+    M620: {
+        campos: 7,
+        fonte: 'EFD-Contribuições da UNIKE 31633553000105 · 08/2026 (PVA, 30/09): |M620|0|70,85|06|||30082026|.',
+    },
     M205: {
         campos: 4,
         fonte: 'EFD-Contribuições ACEITO da PWR 31947349000169 · 03/2026 (e-Fiscal, assinado): '
@@ -1223,7 +1232,8 @@ export function conferirM205ComValorZero(linhas) {
  * Quatro por registro, dois registros. O gerador os deixava vazios por uma
  * DEDUÇÃO minha ("campo de valor não recebe default") que a regra de 06/08
  * nunca autorizou: ela diz que **zero só entra quando zero É a resposta**, e
- * aqui é — o app não gera M220/M620, então não há ajuste, e isso é fato.
+ * aqui é — sem M220/M620 emitido não há ajuste, e isso é fato (o valor do
+ * campo 13, quando há devolução tributada, é a soma dos M220/M620 — 30/09).
  *
  * ⚠️ SÓ ESTES QUATRO. `QUANT_BC`/`ALIQ_QUANT` (a alternativa por quantidade) e
  * `VL_CONT_DIFER`/`VL_CONT_DIFER_ANT` (diferimento) NÃO foram acusados, e

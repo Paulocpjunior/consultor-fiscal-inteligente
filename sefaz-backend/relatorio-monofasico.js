@@ -42,7 +42,7 @@ import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 import { normalizarParticipantesDoc } from './dipam-produtor-rural.js';
 import { participanteDoDocumento } from './participante-doc-helper.js';
 import { convertCfopParaEntrada } from './sped-fiscal-blocoC.js';
-import { lerPisCofinsDosItens } from './sped-contrib-blocos.js';
+import { lerPisCofinsDosItens, aliquotasDoRegime } from './sped-contrib-blocos.js';
 
 /** As classes de receita, na ordem em que o relatório as mostra. */
 export const CLASSES_RECEITA = Object.freeze({
@@ -253,4 +253,26 @@ export function csvDoRelatorio(rel) {
         ].join(';'));
     }
     return linhas.join('\r\n') + '\r\n';
+}
+
+/**
+ * 📗 O AJUSTE DE REDUÇÃO DO M220/M620 que o GERADOR emite (Paulo, 30/09:
+ * *"sim, faz a EFD já sair com M220/M620"*). É o MESMO número do relatório —
+ * uma leitura só —, e só no regime CUMULATIVO: no não-cumulativo a devolução
+ * de venda tributada é CRÉDITO (natureza 12 do M105), não ajuste de débito, e
+ * emitir M220 ali declararia a devolução duas vezes.
+ *
+ * @param {object} dados o `dados` do gerador (já com o frete completado)
+ * @returns {{base: number, pis: number, cofins: number, itens: number,
+ *   pendentes: {itens: number, valor: number}} | null} null = não se aplica
+ */
+export function ajusteDasDevolucoesDeVenda(dados) {
+    const regime = String(dados?.regimeApuracao || '2');
+    if (regime !== '2') return null;
+    const rel = montarRelatorioMonofasico(linhasDoPeriodo(dados), { aliquotas: aliquotasDoRegime(regime) });
+    return {
+        ...rel.ajusteReducao,
+        itens: rel.devolucoes.tributada.itens,
+        pendentes: { itens: rel.pendentes.itens, valor: rel.pendentes.valor },
+    };
 }

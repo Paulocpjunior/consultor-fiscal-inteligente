@@ -11,7 +11,10 @@
 import {
     linhasDoPeriodo, montarRelatorioMonofasico, csvDoRelatorio, ehCfopDevolucaoDeVenda, classeDoCstDeSaida,
 } from '../sefaz-backend/relatorio-monofasico.js';
-import { buildBlocoC_Contrib, aliquotasDoRegime } from '../sefaz-backend/sped-contrib-blocos.js';
+import { buildBlocoC_Contrib, buildBlocoM, aliquotasDoRegime } from '../sefaz-backend/sped-contrib-blocos.js';
+import { ajusteDasDevolucoesDeVenda } from '../sefaz-backend/relatorio-monofasico.js';
+// @ts-expect-error — módulo .js puro
+import { conferirContagemDeCampos } from '../sefaz-backend/sped-contrib-campos.js';
 
 const UNIKE = '31633553000105';
 const CLIENTE = '69233583000105';
@@ -127,5 +130,92 @@ describe('alerta, nunca contorno', () => {
         expect(rel.pendentes).toMatchObject({ itens: 2, valor: 80 });
         expect(rel.ajusteReducao).toEqual({ base: 0, pis: 0, cofins: 0 });
         expect(rel.avisos.join(' ')).toMatch(/PENDENTE/);
+    });
+});
+
+/**
+ * 📗 O EFD JÁ SAI COM O M220/M620 (Paulo, 30/09: *"sim, faz a EFD já sair com
+ * M220/M620"*). O espelho é o arquivo que ele acertou no PVA:
+ *   |M210|51|…|2881,61|0|15,35|0|0|2866,26|  +  |M220|0|15,35|06|||30082026|
+ *   |M610|51|…|13299,75|0|70,85|0|0|13228,9| +  |M620|0|70,85|06|||30082026|
+ *   |M200|…|2866,26|…|  ·  |M205|12|810902|2866,26|
+ */
+describe('o bloco M sai com o ajuste da devolução tributada', () => {
+    const num = (s: string) => Number(String(s).replace(',', '.'));
+    // Receita tributada de verdade (a UNIKE vende 443 mil tributados): com os
+    // 1.400 da fixture base a redução passaria do apurado — esse caso tem
+    // teste próprio abaixo.
+    const vendaGrande = () => venda([item({ codigo: 'IR10212', descricao: 'ROLAMENTO', ncm: '84821010', cfop: '5405', vProd: 100000, cstPis: '01', cstCofins: '01' })]);
+    const gerar = (regime = '2', comAjuste = true, grande = true) => {
+        const base = dados();
+        if (grande) base.notas.push(vendaGrande());
+        const d: any = { ...base, regimeApuracao: regime, competencia: '2026-08' };
+        if (comAjuste) d.ajusteDevolucoesVenda = ajusteDasDevolucoesDeVenda(d);
+        const linhas: string[] = buildBlocoM(d);
+        const reg = (r: string) => linhas.filter((l) => l.startsWith(`|${r}|`)).map((l) => l.trim().split('|'));
+        return { d, linhas, reg };
+    };
+
+    it('M220 e M620 com o leiaute do espelho: redução, valor, código 06, último dia da competência', () => {
+        const { reg } = gerar();
+        const [m220] = reg('M220');
+        const [m620] = reg('M620');
+        expect([m220[2], m220[3], m220[4], m220[5], m220[7]]).toEqual(['0', '15,35', '06', '', '31082026']);
+        expect([m620[2], m620[3], m620[4], m620[7]]).toEqual(['0', '70,85', '06', '31082026']);
+        expect(m220[6]).toMatch(/DEVOLUCOES DE VENDAS TRIBUTADAS/);
+    });
+
+    it('o M210/M610 declara a redução no campo 13 e a contribuição líquida no 16', () => {
+        const { reg } = gerar();
+        const [m210] = reg('M210');
+        const [m610] = reg('M610');
+        expect(num(m210[13])).toBeCloseTo(15.35, 2);
+        expect(num(m210[16])).toBeCloseTo(num(m210[11]) - 15.35, 2);
+        expect(num(m610[13])).toBeCloseTo(70.85, 2);
+        expect(num(m610[16])).toBeCloseTo(num(m610[11]) - 70.85, 2);
+    });
+
+    it('o M200/M600 e o M205/M605 já saem líquidos do ajuste', () => {
+        const { reg } = gerar();
+        const [m210] = reg('M210');
+        const [m200] = reg('M200');
+        const [m205] = reg('M205');
+        expect(num(m200[9])).toBeCloseTo(num(m210[16]), 2);   // VL_TOT_CONT_CUM_PER
+        expect(num(m200[13])).toBeCloseTo(num(m210[16]), 2);  // VL_TOT_CONT_REC
+        expect(num(m205[4])).toBeCloseTo(num(m210[16]), 2);
+    });
+
+    it('cada M220/M620 fica logo abaixo do seu M210/M610 e com a contagem de campos do leiaute', () => {
+        const { linhas } = gerar();
+        const i210 = linhas.findIndex((l) => l.startsWith('|M210|'));
+        const i610 = linhas.findIndex((l) => l.startsWith('|M610|'));
+        expect(linhas[i210 + 1]).toMatch(/^\|M220\|/);
+        expect(linhas[i610 + 1]).toMatch(/^\|M620\|/);
+        const conf = conferirContagemDeCampos(linhas);
+        expect(conf.erros.filter((e: any) => /^M[26][12]0$/.test(e.registro))).toEqual([]);
+        expect(conf.naoConferidos).not.toContain('M220');
+        expect(conf.naoConferidos).not.toContain('M620');
+    });
+
+    it('sem devolução tributada (ou sem o ajuste calculado) nada muda: campo 13 zero e nenhum M220', () => {
+        const { reg } = gerar('2', false);
+        expect(reg('M220')).toHaveLength(0);
+        expect(num(reg('M210')[0][13])).toBe(0);
+        expect(reg('M210')[0][16]).toBe(reg('M210')[0][11]);
+    });
+
+    it('redução maior que o apurado sai LIMITADA ao apurado e DITA — nunca contribuição negativa', () => {
+        const { reg, d } = gerar('2', true, false);
+        const [m210] = reg('M210');
+        expect(num(m210[13])).toBeCloseTo(num(m210[11]), 2);
+        expect(num(m210[16])).toBe(0);
+        expect(d.warnings.join(' ')).toMatch(/LIMITADO ao apurado/);
+    });
+
+    it('no NÃO cumulativo não há M220: a devolução ali é crédito, não ajuste de débito', () => {
+        expect(ajusteDasDevolucoesDeVenda({ ...dados(), regimeApuracao: '1' })).toBeNull();
+        const { reg } = gerar('1');
+        expect(reg('M220')).toHaveLength(0);
+        expect(reg('M620')).toHaveLength(0);
     });
 });

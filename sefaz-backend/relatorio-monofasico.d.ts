@@ -39,3 +39,7 @@ export function montarRelatorioMonofasico(
     opts?: { aliquotas?: { pis: number; cofins: number } },
 ): RelatorioMonofasico;
 export function csvDoRelatorio(rel: { linhas: LinhaMonofasico[] }): string;
+export function ajusteDasDevolucoesDeVenda(dados: any): {
+    base: number; pis: number; cofins: number; itens: number;
+    pendentes: { itens: number; valor: number };
+} | null;

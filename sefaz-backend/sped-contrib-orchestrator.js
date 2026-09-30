@@ -9,6 +9,7 @@
 // ============================================================================
 
 import admin from 'firebase-admin';
+import { ajusteDasDevolucoesDeVenda } from './relatorio-monofasico.js';
 import { completarFreteDasNotas } from './nfe-frete-xml.js';
 import { completarMunicipioDosParticipantes } from './participantes-municipio-xml.js';
 import { selecionarNotasBlocoC as selecionarNotasBlocoCFrete } from './sped-selecao-documentos.js';
@@ -592,6 +593,9 @@ export async function completarFreteDoPeriodo(dados) {
  */
 export async function montarBlocosContribuicoes({ dados }) {
     await completarFreteDoPeriodo(dados);
+    // 📗 Devolução de venda TRIBUTADA vira o M220/M620 (30/09, UNIKE — o Paulo
+    // lançava à mão no PVA). Mesmo número do 🧪 relatório; só no cumulativo.
+    dados.ajusteDevolucoesVenda = ajusteDasDevolucoesDeVenda(dados);
     // ♻️ COD_MUN do 0150 relido do XML guardado quando o documento veio sem
     // (28/09, ELS: produtor rural PF). Só na memória; o que faltar segue dito.
     const relMun = await completarMunicipioDosParticipantes({
