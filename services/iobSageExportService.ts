@@ -21,7 +21,8 @@ import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
 import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
 import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
-import { creditoSimplesDoItem } from '../sefaz-backend/credito-icms-simples.js';
+import { creditoSimplesDoItem, temCreditoSimplesDeclarado } from '../sefaz-backend/credito-icms-simples.js';
+import { dataEntradaDoDocumento } from '../sefaz-backend/data-entrada-escrituracao.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
@@ -658,9 +659,8 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
     // informado (sem ele nem se correlaciona o CFOP).
     const snPorItem: Record<string, { vBC: number; vICMS: number; aliq: number }> = {};
     if (direcao === 'entrada') {
-        const temInformado = !!d?.creditoSimplesInformado;
         for (const it of (d?.itens || []) as any[]) {
-            if (!temInformado && !(Number(it?.pCredSN) > 0)) continue;
+            if (!temCreditoSimplesDeclarado(d, it)) continue;
             const cfopLancado = cfopParaEscriturar(it?.cfop, 'entrada', ctxEmpresa || undefined, d, it);
             const r = creditoSimplesDoItem(it, { doc: d, cfopLancado });
             if (r.aplica) snPorItem[chaveDoItem(it)] = { vBC: r.vBC, vICMS: r.vICMS, aliq: r.aliq };
@@ -794,7 +794,7 @@ function commonNF(d: DocumentoFiscal, codigos?: Record<string, string>, codConsu
     // 📅 Na ENTRADA a data de entrada/saída e a de lançamento são a data de
     // ENTRADA declarada por quem escritura (29/09, print do SAGE: emissão
     // 30/07, entrada 01/08); sem ela, a emissão, como sempre foi.
-    const dEs = (direcaoDoDoc(d) === 'entrada' && dataDeclaradaAAAAMMDD((d as any).dataEntrada)) || dEmi;
+    const dEs = (direcaoDoDoc(d) === 'entrada' && dataDeclaradaAAAAMMDD(dataEntradaDoDocumento(d))) || dEmi;
     if (!dEmi) {
         throw new Error(
             `nota ${d.numero || d.chave}: sem data de emissão legível. Sem ela o E200 sairia com a data de `
