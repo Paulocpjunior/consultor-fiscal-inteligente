@@ -319,6 +319,29 @@ describe('o script da VM é GERADO e conferido, não suposto', () => {
         expect(script).toMatch(/não é IPv4 nem CIDR/);
     });
 
+    // 🔴 30/09 — O TRACE DE 29/09 (5 INVITEs da Meta, 5× 488) mostrou a oferta
+    // real: `m=audio … UDP/TLS/RTP/SAVPF 111 126`, `a=fingerprint`,
+    // `a=setup:actpass`. É DTLS-SRTP com AVPF; `media_encryption=sdes` não
+    // casa nada e o Asterisk recusa antes de discar a URA. O documento dizia
+    // "superada em 23/09" — estava errado, e a trava garante que o perfil
+    // não volta para sdes por engano.
+    it('🔴 os endpoints da Meta (entrada e saída) falam DTLS-SRTP com AVPF — o que o trace mostrou', () => {
+        const blocoMeta = gerado.slice(gerado.indexOf('[meta]'), gerado.indexOf('[meta-identify]'));
+        // Linha de CONFIG (início de linha), não o comentário que explica a troca.
+        expect(blocoMeta).toMatch(/^media_encryption=dtls/m);
+        expect(blocoMeta).toMatch(/^use_avpf=yes/m);
+        expect(blocoMeta).toMatch(/^dtls_setup=actpass/m);
+        expect(blocoMeta).toMatch(/^dtls_auto_generate_cert=yes/m);
+        expect(blocoMeta).not.toMatch(/^media_encryption=sdes/m);
+        // O tronco de SAÍDA usa o MESMO perfil (o script local monta o bloco).
+        const saida = script.slice(script.indexOf('BLOCO_META_SAIDA="[meta-saida]'), script.indexOf('[meta-saida-aor]'));
+        expect(saida).toMatch(/^media_encryption=dtls/m);
+        expect(saida).toMatch(/^use_avpf=yes/m);
+        // A HIT continua em RTP puro (alaw/ulaw) — ela não fala SRTP.
+        const blocoHit = gerado.slice(gerado.indexOf('[hit]'), gerado.indexOf('[hit-aor]'));
+        expect(blocoHit).not.toMatch(/media_encryption/);
+    });
+
     it('nenhuma CRASE no heredoc externo (ela vira comando no shell LOCAL)', () => {
         const i = script.indexOf('STARTUP=$(mktemp "${TMPDIR:-/tmp}/cfi-sbc-startup.XXXXXX")');
         const j = script.indexOf('\nEOF\n', i);

@@ -21,6 +21,8 @@
 # ── Arquivo / SharePoint ────────────────────────────────────────────────────
 #   sharepoint-auto-sync            0 8 * * 1-5        Importa XMLs das pastas SharePoint
 #   cofre-sharepoint-arquivo-cron   20 8-20 * * 1-6    Arquiva no SharePoint TODAS as capturas (backfill progressivo)
+# ── SP Connect ──────────────────────────────────────────────────────────────
+#   connect-agenda-tick             */5 * * * *        Mensagens agendadas/follow-ups e lotes de campanha (29/09)
 # ── Tarefas / vencimentos / obrigações ──────────────────────────────────────
 #   tarefas-cron-mensal             20 3 1 * *         Gera obrigações mensais (dia 1)
 #   vencimentos-cron-diario         0 8 * * 1-5        Avisa tarefas vencendo (email + in-app)
@@ -249,6 +251,15 @@ upsert_job \
     "0 9,18 * * 1-5" \
     "/api/admin/sefaz/xml-email-ingest/alerta-cron" \
     "Alertas do cofre CFI (erros, pendencias, clientes inativos)"
+
+# ⏰📣 SP Connect (29/09): mensagens agendadas, follow-ups e lotes de campanha.
+# A cada 5 min; sem este job nada sai sozinho — a ⚙️ → 📣 mostra "tick parado"
+# e o botão "rodar agora" (admin) faz o mesmo que o cron.
+upsert_job \
+    "connect-agenda-tick" \
+    "*/5 * * * *" \
+    "/api/admin/whatsapp/agenda/tick" \
+    "SP Connect: envia mensagens agendadas/follow-ups vencidos e o proximo lote das campanhas"
 
 # Arquivo automatico no SharePoint dos XMLs do cofre (Fase 3). Roda deslocado
 # da leitura da caixa pra nao competir. So sobe o que ainda nao foi arquivado.

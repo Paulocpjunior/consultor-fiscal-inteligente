@@ -45,6 +45,62 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
   comunicação COM ST / exterior; Paulo marcar a RADIO SB; ♻️ Reler itens na A
   CASTELLANO.
 
+- **🔴 SBC 30/09: A META FALA DTLS-SRTP (a hipótese de 28/08 estava certa) E A
+  HIT PAROU DE RESPONDER** (Paulo, manhã de 30/09, três comandos na VM). Trace
+  de 29/09 15:24–15:39 (ligações do próprio Paulo, dentro da grade): 5 INVITEs
+  da Meta (`173.252.82.x`, `66.220.149.7`, Contact `sip:wa.meta.vc`, discando
+  `+551133371554`) com `m=audio … UDP/TLS/RTP/SAVPF 111 126`, `a=fingerprint`,
+  `a=setup:actpass` → `Couldn't negotiate stream (nothing)` → **488** em todos,
+  antes de discar a URA. `media_encryption=sdes` não casa DTLS. O documento
+  dizia "⚰️ superada em 23/09" — estava errado e ficou como registro do erro.
+  Setup: `[meta]` e `[meta-saida]` passam a `media_encryption=dtls`,
+  `dtls_verify=fingerprint`, `dtls_setup=actpass`, `dtls_auto_generate_cert=yes`,
+  `use_avpf=yes`, `media_use_received_transport=yes`, `rtcp_mux=yes`,
+  `ice_support=yes` (trava em sbcDialplan cobra a LINHA de config, não o
+  comentário — a 1ª versão da trava acusou o próprio comentário que explica a
+  troca). Opus carregado (não é codec). SEGUNDO problema, independente: `pjsip
+  qualify hit` com trace ligado = 4 OPTIONS para `177.107.205.201:21694` sem
+  resposta; o click-to-call de 29/09 15:48 morreu igual (32 s, "Circuit busy
+  or down"). Chamado com a HIT (IP `35.185.197.118` liberado? host/porta?).
+  Também: o Asterisk reiniciou sozinho em 30/09 03:36 BRT (systemd stop/start,
+  provável atualização automática) e o `pjsip set logger` some no reinício;
+  7b corrigida (INVITE transmitido para a HIT herdava a origem da Meta);
+  call file sem `RetryTime: 0` (pbx_spool avisava). Valores para o setup
+  quando a HIT voltar: `META_SIP_DESTINO='wa.meta.vc;transport=tls'`,
+  `META_SIP_ORIGENS` = faixas do AS32934 (RADB) ou, no mínimo,
+  `173.252.64.0/18,66.220.144.0/20`. ⚠️ Não provado: se a Meta exige `+` no
+  user do INVITE de saída.
+- **⏰📝📣 CONNECT: AGENDA, RESUMO POR IA E CAMPANHAS** (29/09, Paulo, depois
+  de eu comparar com o Clerk Chat: *"Concordo com você vamos implementar 1, 2 e
+  três"*). Núcleos puros + rotas + tela + travas, IDÊNTICOS nos dois repos
+  (os arquivos do Connect ainda são iguais; conferido com `diff` antes).
+  ⏰ `whatsapp-agenda.js`: `validarAgendamento` (mensagem em data/hora até 60 d;
+  follow-up em 1..336 h), `decidirAgendamento` (esperar/enviar/dispensar/
+  falhar — follow-up cai se o cliente respondeu depois do pedido ou a conversa
+  encerrou; texto livre com janela de 24h fechada FALHA nomeado, nunca vira
+  template por dedução), notas internas na conversa; rotas
+  `/conversas/:n/agendamentos` (guarda de condução), `DELETE …/:id`,
+  `POST /agenda/tick` (x-cron-secret OU admin) que envia os vencidos e empurra
+  campanhas; `GET /agenda/estado` (tick no ar? ≤15 min). 📝
+  `whatsapp-resumo-ia.js`: fatia sem nota interna, prompt JSON (resumo,
+  pendências, assuntos, tom), leitura tolerante; `POST /conversas/:n/resumo`
+  grava `conversa.resumoIa` com `ateMensagemEm` (a tela avisa "desatualizado").
+  A IA só lê. 📣 `whatsapp-campanhas.js`: `validarCampanha` (template APROVADO
+  na Meta, contagem de {{n}} dela; MARKETING só para etiqueta com base de
+  consentimento), `montarPublico` (regime = contatos VINCULADOS a
+  simples_/lucro_empresas; etiqueta com `podeEnviarPorEtiqueta`; lista; opt-out
+  e número torto ficam de fora NOMEADOS; teto 2000), `{empresa}`/`{nome}` por
+  destinatário, lote de 25 por tick, cada envio vira mensagem de template na
+  conversa + `whatsapp_envios`. Webhook: PARAR/SAIR/CANCELAR/STOP carimba
+  `optOutCampanhas` e deixa nota. Tela: ⏰ no compositor (datetime-local ou
+  horas), painel "⏰ Agendados", bloco "📝 Resumo por IA", aba ⚙️ → 📣 (admin)
+  com estado do tick e "▶ rodar agora"; confirmação pela caixa do app (trava
+  confirmacaoNoTeams pegou um `window.confirm` meu). Trava
+  `direcaoEfetivaNosLeitores` pediu exceção "direção de MENSAGEM" para os dois
+  módulos que leem `m.direcao` (a 3ª que declarei era órfã e a trava acusou).
+  ⚠️ PENDENTE DO PAULO: rodar `./scripts/setup-cloud-schedulers.sh` para criar
+  o job `connect-agenda-tick` (a cada 5 min); sem ele a ⚙️ → 📣 diz "tick NUNCA
+  rodou" e só o botão "rodar agora" envia. Novidade na página + Sobre 15/16/17.
 - **🚚 QUEM ESCRITURA O CT-e É O TOMADOR (29/09, A CASTELLANO)** (Paulo, Resumo
   por CFOP: *"o consultor está puxando o CT-e vinculado à nota fiscal, não
   deveria aparecer na minha escrituração"* — 50 CT-e com CFOP 5351/5353/6352/
