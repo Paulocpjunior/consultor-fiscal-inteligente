@@ -33,8 +33,12 @@ const raiz = (...p: string[]) => path.resolve(__dirname, '..', ...p);
 
 describe('🚨 o Guia cobre o que o recibo não alcançava', () => {
     it('a tabela conferida é MUITO maior que as onze provadas', () => {
-        expect(Object.keys(CAMPOS_PROVADOS_POR_RECIBO)).toHaveLength(11);
+        // O fato é a PROPORÇÃO (o Guia cobre muito além do provado), não o
+        // número exato de provados — ele cresce a cada espelho aceito (M220/M620, 30/09).
+        const provados = Object.keys(CAMPOS_PROVADOS_POR_RECIBO).length;
+        expect(provados).toBeGreaterThanOrEqual(11);
         expect(Object.keys(CAMPOS_POR_REGISTRO).length).toBeGreaterThan(150);
+        expect(Object.keys(CAMPOS_POR_REGISTRO).length).toBeGreaterThan(provados * 10);
     });
 
     // 🚨 A PRECEDÊNCIA É O CORAÇÃO DISTO. O 0500 é o caso vivo: o Guia extraído

@@ -408,8 +408,11 @@ describe('🔒 a contribuição do período tem um cálculo só', () => {
     ).split('\n').filter((l: string) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 
     it('a expressão da contribuição aparece UMA vez para cada tributo', () => {
-        const pis = src.match(/totalPisSaida \+ \(finM \? finM\.pis : 0\)/g) || [];
-        const cofins = src.match(/totalCofinsSaida \+ \(finM \? finM\.cofins : 0\)/g) || [];
+        // O FATO, não a forma da linha (30/09: o ajuste do M220 entrou no meio
+        // da expressão e a trava antiga acusou código certo): uma linha só
+        // junta a apuração das saídas com a da receita financeira.
+        const pis = src.match(/totalPisSaida\b[^;\n]*finM\.pis\b/g) || [];
+        const cofins = src.match(/totalCofinsSaida\b[^;\n]*finM\.cofins\b/g) || [];
         expect(pis).toHaveLength(1);
         expect(cofins).toHaveLength(1);
     });

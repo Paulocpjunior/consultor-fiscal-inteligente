@@ -1573,12 +1573,33 @@ export function buildBlocoF(dados) {
 /**
  * "NÃO HOUVE AJUSTE" — o zero que é RESPOSTA, não default.
  *
- * O PVA recusa os quatro campos de ajuste do M210/M610 em branco (DGB, 28/08),
- * e o app não gera M220/M620: quando não há registro de ajuste, o valor
- * ajustado é zero, e isso é FATO. É a exceção que a própria regra de 06/08
+ * O PVA recusa os quatro campos de ajuste do M210/M610 em branco (DGB, 28/08).
+ * Quando não há registro de ajuste (o único que o app emite é o M220/M620 da
+ * devolução de venda tributada, desde 30/09), o valor ajustado é zero, e isso
+ * é FATO. É a exceção que a própria regra de 06/08
  * escreve — *"zero só entra quando zero É a resposta"*.
  */
 const SEM_AJUSTE = fmt.formatValue(0);
+
+/**
+ * 📗 M220/M620 — AJUSTE DE REDUÇÃO pela devolução de venda tributada.
+ *
+ * Leiaute pelo ESPELHO aceito no PVA (UNIKE 31633553000105 · 08/2026, o
+ * arquivo que o Paulo acertou à mão em 30/09):
+ *   |M220|0|15,35|06|||30082026|   ·   |M620|0|70,85|06|||30082026|
+ * REG · IND_AJ (0 = redução) · VL_AJ · COD_AJ (Tabela 4.3.8 — o 06 é o que
+ * ele declarou e o PVA aceitou) · NUM_DOC · DESCR_AJ · DT_REF (ddmmaaaa).
+ * A data é o último dia da competência; a descrição diz de onde o valor vem.
+ */
+function linhaAjusteDevolucao(reg, valor, ajuste, competencia) {
+    const m = /^(\d{4})-(\d{2})/.exec(String(competencia || ''));
+    const dtRef = m ? `${String(new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate()).padStart(2, '0')}${m[2]}${m[1]}` : '';
+    return [
+        reg, '0', fmt.formatValue(valor), '06', '',
+        fmt.sanitizeString(`DEVOLUCOES DE VENDAS TRIBUTADAS NO PERIODO (${ajuste?.itens || 0} ITENS, BASE ${fmt.formatValue(ajuste?.base || 0)})`, 255),
+        dtRef,
+    ];
+}
 
 export function buildBlocoM(dados) {
     const linhas = [];
@@ -1987,8 +2008,28 @@ export function buildBlocoM(dados) {
     // divergem na primeira correção que tocar só uma delas. Foi isso que o
     // comentário do M100 já dizia, e a primeira versão desta correção repetiu
     // a conta mesmo assim.
-    const vlContribPis = totalPisSaida + (finM ? finM.pis : 0);
-    const vlContribCofins = totalCofinsSaida + (finM ? finM.cofins : 0);
+    // 📗 AJUSTE DE REDUÇÃO DAS DEVOLUÇÕES DE VENDA TRIBUTADAS — M220/M620
+    // (30/09, UNIKE 08/2026: o Paulo lançava à mão no PVA, 15,35 e 70,85). O
+    // número vem PRONTO do dono (`ajusteDasDevolucoesDeVenda`, o mesmo do 🧪
+    // relatório) e só no cumulativo. Nunca reduz abaixo de zero: o excesso sai
+    // DITO em vez de virar contribuição negativa.
+    const ajDev = !isNaoCumulativo ? dados.ajusteDevolucoesVenda : null;
+    const ajPis = ajDev && totalPisSaida > 0 ? Math.min(Number(ajDev.pis) || 0, totalPisSaida) : 0;
+    const ajCofins = ajDev && totalCofinsSaida > 0 ? Math.min(Number(ajDev.cofins) || 0, totalCofinsSaida) : 0;
+    if (ajDev && Array.isArray(dados.warnings)) {
+        if ((Number(ajDev.pis) || 0) > ajPis + 0.005 || (Number(ajDev.cofins) || 0) > ajCofins + 0.005) {
+            dados.warnings.push(`M220/M620: a devolução tributada (PIS ${fmt.formatValue(ajDev.pis)} · COFINS ${fmt.formatValue(ajDev.cofins)}) `
+                + 'passa da contribuição apurada no mês — o ajuste saiu LIMITADO ao apurado. Confira a competência das devoluções '
+                + '(📅 data de entrada) antes de transmitir.');
+        }
+        if (ajDev.pendentes && ajDev.pendentes.itens > 0) {
+            dados.warnings.push(`M220/M620: ${ajDev.pendentes.itens} item(ns) de devolução de venda PENDENTE(S) `
+                + `(R$ ${fmt.formatValue(ajDev.pendentes.valor)}) — NCM sem venda no mês ou vendido com duas classes. Ficaram FORA do `
+                + 'ajuste: classifique em Relatórios → Gerencial → 🧪 PIS/COFINS monofásico × tributado e acerte no PVA.');
+        }
+    }
+    const vlContribPis = totalPisSaida - ajPis + (finM ? finM.pis : 0);
+    const vlContribCofins = totalCofinsSaida - ajCofins + (finM ? finM.cofins : 0);
 
     // M100 — Credito PIS (nao-cumulativo)
     //
@@ -2142,8 +2183,8 @@ export function buildBlocoM(dados) {
     // O comentário que estava aqui dizia o contrário — *"campo de ajuste sai
     // VAZIO, nunca 0,00 inventado"* —, e essa era uma DEDUÇÃO minha. A regra
     // de 06/08 nunca proibiu isto: ela diz que **zero só entra quando zero É a
-    // resposta**, e é exatamente o caso — a empresa NÃO TEM ajuste, e o app
-    // não gera M220/M620, então o zero é fato, não "não sabemos".
+    // resposta**, e é exatamente o caso — sem M220/M620 emitido (o app só
+    // emite o da devolução de venda tributada, 30/09), o zero é fato.
     //
     // ⚠️ E SÓ ESTES QUATRO. O PVA listou 8 erros — quatro por registro — e
     // deixou de fora `QUANT_BC` / `ALIQ_QUANT` (a alternativa por QUANTIDADE,
@@ -2218,10 +2259,12 @@ export function buildBlocoM(dados) {
             fmt.formatValue(aliq.pis * 100, 4), // ALIQ_PIS
             '', '',                             // QUANT_BC_PIS · ALIQ_PIS_QUANT (por quantidade)
             fmt.formatValue(totalPisSaida),     // VL_CONT_APUR
-            SEM_AJUSTE, SEM_AJUSTE,             // 12-13 ajustes da contribuição — obrigatórios
+            SEM_AJUSTE,                         // 12 VL_AJUS_ACRES — obrigatório
+            fmt.formatValue(ajPis),             // 13 VL_AJUS_REDUC — Σ dos M220 (0 sem ajuste: é fato)
             '', '',                             // diferimento (período e anterior) — opcionais
-            fmt.formatValue(totalPisSaida),     // VL_CONT_PER
+            fmt.formatValue(totalPisSaida - ajPis), // VL_CONT_PER = apurado − redução
         ]));
+        if (!zeroNoArquivo(ajPis)) linhas.push(fmt.buildLine(linhaAjusteDevolucao('M220', ajPis, ajDev, dados.competencia)));
     }
 
     // 🚨 A RECEITA FINANCEIRA É UMA LINHA SEPARADA — COD_CONT 02 (alíquota
@@ -2347,10 +2390,12 @@ export function buildBlocoM(dados) {
             fmt.formatValue(aliq.cofins * 100, 4), // ALIQ_COFINS
             '', '',                                // QUANT_BC · ALIQ_QUANT (por quantidade)
             fmt.formatValue(totalCofinsSaida),     // VL_CONT_APUR
-            SEM_AJUSTE, SEM_AJUSTE,                // 12-13 ajustes da contribuição
+            SEM_AJUSTE,                            // 12 VL_AJUS_ACRES
+            fmt.formatValue(ajCofins),             // 13 VL_AJUS_REDUC — Σ dos M620
             '', '',                                // diferimento — opcionais
-            fmt.formatValue(totalCofinsSaida),     // VL_CONT_PER
+            fmt.formatValue(totalCofinsSaida - ajCofins), // VL_CONT_PER
         ]));
+        if (!zeroNoArquivo(ajCofins)) linhas.push(fmt.buildLine(linhaAjusteDevolucao('M620', ajCofins, ajDev, dados.competencia)));
     }
 
     // A linha de COFINS da receita financeira — espelho do M210 acima, com a

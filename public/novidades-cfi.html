@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (30/09) — leia esta parte primeiro</h2>
 
+    <h3>📗 <strong>EFD-Contribuições: o M220/M620 das devoluções já sai no arquivo</strong></h3>
+    <p>No Lucro Presumido (cumulativo), a devolução de venda de produto <strong>tributado</strong> agora sai no arquivo
+    como ajuste de redução: <strong>M220</strong> (PIS) e <strong>M620</strong> (COFINS), código 06, com o M210/M610
+    trazendo a redução no campo 13 e a contribuição já líquida. O M200/M600 e o M205/M605 também já saem líquidos.
+    Acaba o lançamento à mão no PVA. O valor é o mesmo do relatório 🧪 PIS/COFINS monofásico × tributado. Devolução
+    PENDENTE (NCM sem venda no mês ou vendido nas duas classes) fica fora do ajuste e sai como aviso na geração. Se a
+    redução passar do apurado no mês, ela sai limitada ao apurado e o aviso pede para conferir a competência das
+    devoluções. No Lucro Real (não cumulativo) nada muda: ali a devolução é crédito, não ajuste.</p>
+    <p><strong>Onde:</strong> SPED → EFD-Contribuições → Gerar (confira os avisos da geração).</p>
+
     <h3>🧪 <strong>Relatórios → PIS/COFINS monofásico × tributado (com as devoluções)</strong></h3>
     <p>Novo relatório gerencial para o Lucro Presumido/Real: separa a receita <strong>tributada</strong> (CST 01/02/03/05),
     a <strong>monofásica</strong> (CST 04), a <strong>não tributada</strong> (06 a 09) e as saídas que não são receita

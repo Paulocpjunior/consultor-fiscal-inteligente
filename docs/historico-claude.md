@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 EFD-CONTRIBUIÇÕES SAI COM M220/M620 (30/09, UNIKE)** (Paulo: *"sim, faz
+  a EFD já sair com M220/M620"*). `ajusteDasDevolucoesDeVenda(dados)`
+  (relatorio-monofasico.js, só regime '2') é calculado em
+  `montarBlocosContribuicoes` → `dados.ajusteDevolucoesVenda`; `buildBlocoM`
+  põe a redução no campo 13 do M210/M610, VL_CONT_PER líquido, filho
+  M220/M620 logo abaixo (`linhaAjusteDevolucao`: IND_AJ 0 · COD_AJ 06 do
+  espelho aceito · DESCR_AJ com itens/base · DT_REF = último dia da
+  competência) e M200/M600/M205/M605 líquidos. Redução > apurado = limitada +
+  aviso; pendentes = aviso. M220/M620 entram em CAMPOS_POR_REGISTRO (7, fonte
+  UNIKE). Travas no `relatorioMonofasico.test.ts` (leiaute, campo 13/16,
+  M200/M205 líquidos, ordem pai→filho, contagem, sem ajuste, cap, não
+  cumulativo). ⚠️ Na UNIKE 08 o CFI tem 28 notas de devolução, o CSV do outro
+  sistema 13: o ajuste gerado pode passar do 15,35/70,85 manual.
+
 - **🧪 RELATÓRIO PIS/COFINS MONOFÁSICO × TRIBUTADO (30/09, UNIKE 08/2026)**
   (Paulo, com o EFD do CFI e o que ele acertou no PVA: M220 15,35 / M620 70,85
   *"preenchidos manualmente"* para as devoluções). Espelho provado: 2.361,61
