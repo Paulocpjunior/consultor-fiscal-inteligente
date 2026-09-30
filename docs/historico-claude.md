@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚚 E110/RAICMS SEM O ICMS DO CT-e (30/09, A CASTELLANO 08/2026)** (Paulo:
+  *"não está pegando o ICMS do 1352 — CT-e"*; RAICMS 005 = 62.509,90 contra
+  62.041,97 + 346,67 + 467,93 = 62.856,57 no Resumo por CFOP). Causa:
+  `somarIcmsNoArquivo` (dono do E110) só soma o bloco C; o Guia 3.2.3 (E110
+  c.02/06) manda C190 + C590 + D190 + D590 + D730. Novo
+  `somarIcmsDoBlocoD(notas, direcao, dados)` em `sped-fiscal-blocoD.js`, com a
+  MESMA seleção e dono do D190 (`selecionarCtesBlocoDComAvisos` = só tomador/
+  transportadora, CFOP legível, não cancelado; `icmsDoItemNoArquivo` do item
+  sintético — CST 90 informado e regime Simples zeram). Somado em
+  `apurarIcmsProprio` (RAICMS + E110) e em `somarIcmsPorDirecao` (painel de
+  crédito acumulado/cronologia). Pré-validação R7 (`e110-creditos`) passou a
+  somar C190 + D190 (senão acusaria o arquivo certo). Trava
+  `apuracaoIcmsComFrete.test.ts`. Novidade 30/09.
+
 - **🔒 DEPLOY 1075 BARRADO PELA AUDITORIA (30/09)**: advisories novos do dia —
   `brace-expansion` ≤5.0.11 (alta, DoS), `undici` ≤6.28.0 (alta), `multer`
   ≤2.3.0 (moderada). Não era da entrega (#1326). Pisos subidos no

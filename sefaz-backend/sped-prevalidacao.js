@@ -382,18 +382,23 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
 
     // ── R7. E110 campo 6 = Σ VL_ICMS dos C190 de ENTRADA ────────────────────
     // Regra LITERAL do PVA, com a exceção do 1605 e a inclusão do 5605.
-    const c190Entrada = c190s.filter((l) => {
+    const ehCfopDeCredito = (l) => {
         const cfop = soDigitos(campos(l)[3]);
         return (/^[123]/.test(cfop) && cfop !== '1605') || cfop === '5605';
-    });
-    const somaCreditos = c190Entrada.reduce((s, l) => s + num(campos(l)[7]), 0);
+    };
+    const c190Entrada = c190s.filter(ehCfopDeCredito);
+    // 🚚 O D190 ENTRA NA SOMA (30/09, A CASTELLANO): a regra do PVA lista C190
+    // E D190, e o E110 passou a somar o frete — conferir só o C190 acusaria o
+    // arquivo certo. D190 tem o VL_ICMS na mesma posição (campo 07).
+    const d190Entrada = doReg('D190').filter(ehCfopDeCredito);
+    const somaCreditos = [...c190Entrada, ...d190Entrada].reduce((s, l) => s + num(campos(l)[7]), 0);
     for (const l of doReg('E110')) {
         const declarado = num(campos(l)[6]);
         if (centavos(declarado) !== centavos(somaCreditos)) {
             add(erros, {
                 regra: 'e110-creditos', registro: 'E110', campo: '6 - VL_TOT_CREDITOS',
                 valor: declarado.toFixed(2), esperado: somaCreditos.toFixed(2), linha: l,
-                mensagem: `O E110 declara ${declarado.toFixed(2)} de crédito e os C190 de entrada somam ${somaCreditos.toFixed(2)}.`,
+                mensagem: `O E110 declara ${declarado.toFixed(2)} de crédito e os C190/D190 de entrada somam ${somaCreditos.toFixed(2)}.`,
                 acao: 'Quase sempre é nota de entrada que ficou FORA do bloco C (só resumo na base, ou sem itens) '
                     + 'enquanto o valor dela entrou na apuração. Veja os avisos da geração.',
                 fonte: 'PVA: "O valor deve ser igual à soma do campo VL_ICMS dos registros (C190, C590, D190, '

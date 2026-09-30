@@ -35,6 +35,8 @@
 
 import { classificarAjustes, aplicarAjustesApuracao } from './sped-ajustes-apuracao.js';
 import { somarIcmsNoArquivo } from './sped-fiscal-blocoC.js';
+// 🚚 O E110 soma C190 E D190 (Guia 3.2.3, campos 02 e 06) — 30/09, A CASTELLANO.
+import { somarIcmsDoBlocoD } from './sped-fiscal-blocoD.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -64,8 +66,9 @@ export function apurarIcmsProprio(dados) {
         ap = aplicarAjustesApuracao({
             // O contexto (`dados`) é OBRIGATÓRIO: é ele que zera o crédito que
             // o C190 zera (regime/CST informado) — registro `consumidoresMedidos`.
-            vlTotDebitos: somarIcmsNoArquivo(dados.notas, 'saida', dados),
-            vlTotCreditos: somarIcmsNoArquivo(dados.notas, 'entrada', dados),
+            // 🚚 C190 + D190: o frete (CT-e) entra na apuração como no arquivo.
+            vlTotDebitos: somarIcmsNoArquivo(dados.notas, 'saida', dados) + somarIcmsDoBlocoD(dados.notas, 'saida', dados),
+            vlTotCreditos: somarIcmsNoArquivo(dados.notas, 'entrada', dados) + somarIcmsDoBlocoD(dados.notas, 'entrada', dados),
             vlSldCredorAnt: parseFloat(dados.saldoCredorIcmsAnterior || 0),
         }, cls);
     }

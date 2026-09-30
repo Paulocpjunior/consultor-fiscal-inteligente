@@ -46,6 +46,7 @@ import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // `somarIcmsNoArquivo` (11/09, LEGACY: E110 c.06 com 4.569,96 sobre C190
 // zerados). Somar `vICMS` cru aqui de novo é a segunda leitura do mesmo item.
 import { convertCfopParaEntrada, somarIcmsNoArquivo } from './sped-fiscal-blocoC.js';
+import { somarIcmsDoBlocoD } from './sped-fiscal-blocoD.js';
 
 const ZERO = '0,00';
 
@@ -114,7 +115,8 @@ export function somarImpostoPorDirecao(notas, direcao, campoItem, campoTotais) {
  *   OBRIGATÓRIO — registro `consumidoresMedidos`.
  */
 export function somarIcmsPorDirecao(notas, direcao, dados) {
-    return somarIcmsNoArquivo(notas, direcao, dados);
+    // 🚚 C190 + D190 (Guia 3.2.3, E110 campos 02/06) — o mesmo número da apuração.
+    return somarIcmsNoArquivo(notas, direcao, dados) + somarIcmsDoBlocoD(notas, direcao, dados);
 }
 
 function calcularDataVencimento(competenciaFim, diaVencimento) {
