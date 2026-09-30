@@ -175,8 +175,20 @@ disallow=all
 allow=opus
 allow=alaw
 allow=ulaw
-media_encryption=sdes
-media_encryption_optimistic=yes
+; 🔴 30/09 — O TRACE PROVOU: a Meta oferece DTLS-SRTP (UDP/TLS/RTP/SAVPF com
+; a=fingerprint e a=setup:actpass, codec 111=opus). Com media_encryption=sdes
+; o Asterisk respondia 488 Not Acceptable Here em TODO INVITE (erro Couldn t
+; negotiate stream … nothing) — 5 de 5 na tarde de 29/09. A hipótese de
+; 28/08 estava certa; o superada-em-23/09 do documento estava errado.
+media_encryption=dtls
+dtls_verify=fingerprint
+dtls_setup=actpass
+dtls_auto_generate_cert=yes
+dtls_rekey=0
+use_avpf=yes
+media_use_received_transport=yes
+rtcp_mux=yes
+ice_support=yes
 direct_media=no
 rtp_symmetric=yes
 force_rport=yes
@@ -300,8 +312,20 @@ disallow=all
 allow=opus
 allow=alaw
 allow=ulaw
-media_encryption=sdes
-media_encryption_optimistic=yes
+; 🔴 30/09 — O TRACE PROVOU: a Meta oferece DTLS-SRTP (UDP/TLS/RTP/SAVPF com
+; a=fingerprint e a=setup:actpass, codec 111=opus). Com media_encryption=sdes
+; o Asterisk respondia 488 Not Acceptable Here em TODO INVITE (erro Couldn t
+; negotiate stream … nothing) — 5 de 5 na tarde de 29/09. A hipótese de
+; 28/08 estava certa; o superada-em-23/09 do documento estava errado.
+media_encryption=dtls
+dtls_verify=fingerprint
+dtls_setup=actpass
+dtls_auto_generate_cert=yes
+dtls_rekey=0
+use_avpf=yes
+media_use_received_transport=yes
+rtcp_mux=yes
+ice_support=yes
 direct_media=no
 rtp_symmetric=yes
 force_rport=yes

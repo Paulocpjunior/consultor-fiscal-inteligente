@@ -5,6 +5,31 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔴 SBC 30/09: A META FALA DTLS-SRTP (a hipótese de 28/08 estava certa) E A
+  HIT PAROU DE RESPONDER** (Paulo, manhã de 30/09, três comandos na VM). Trace
+  de 29/09 15:24–15:39 (ligações do próprio Paulo, dentro da grade): 5 INVITEs
+  da Meta (`173.252.82.x`, `66.220.149.7`, Contact `sip:wa.meta.vc`, discando
+  `+551133371554`) com `m=audio … UDP/TLS/RTP/SAVPF 111 126`, `a=fingerprint`,
+  `a=setup:actpass` → `Couldn't negotiate stream (nothing)` → **488** em todos,
+  antes de discar a URA. `media_encryption=sdes` não casa DTLS. O documento
+  dizia "⚰️ superada em 23/09" — estava errado e ficou como registro do erro.
+  Setup: `[meta]` e `[meta-saida]` passam a `media_encryption=dtls`,
+  `dtls_verify=fingerprint`, `dtls_setup=actpass`, `dtls_auto_generate_cert=yes`,
+  `use_avpf=yes`, `media_use_received_transport=yes`, `rtcp_mux=yes`,
+  `ice_support=yes` (trava em sbcDialplan cobra a LINHA de config, não o
+  comentário — a 1ª versão da trava acusou o próprio comentário que explica a
+  troca). Opus carregado (não é codec). SEGUNDO problema, independente: `pjsip
+  qualify hit` com trace ligado = 4 OPTIONS para `177.107.205.201:21694` sem
+  resposta; o click-to-call de 29/09 15:48 morreu igual (32 s, "Circuit busy
+  or down"). Chamado com a HIT (IP `35.185.197.118` liberado? host/porta?).
+  Também: o Asterisk reiniciou sozinho em 30/09 03:36 BRT (systemd stop/start,
+  provável atualização automática) e o `pjsip set logger` some no reinício;
+  7b corrigida (INVITE transmitido para a HIT herdava a origem da Meta);
+  call file sem `RetryTime: 0` (pbx_spool avisava). Valores para o setup
+  quando a HIT voltar: `META_SIP_DESTINO='wa.meta.vc;transport=tls'`,
+  `META_SIP_ORIGENS` = faixas do AS32934 (RADB) ou, no mínimo,
+  `173.252.64.0/18,66.220.144.0/20`. ⚠️ Não provado: se a Meta exige `+` no
+  user do INVITE de saída.
 - **⏰📝📣 CONNECT: AGENDA, RESUMO POR IA E CAMPANHAS** (29/09, Paulo, depois
   de eu comparar com o Clerk Chat: *"Concordo com você vamos implementar 1, 2 e
   três"*). Núcleos puros + rotas + tela + travas, IDÊNTICOS nos dois repos
