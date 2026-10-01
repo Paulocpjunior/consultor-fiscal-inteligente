@@ -64,6 +64,13 @@ export interface LinhaGuia {
     fechado: boolean;
     /** Peso de ordenação — quanto menor, mais urgente. */
     peso: number;
+    /**
+     * 📨 Chaves que pedem CIÊNCIA (resumo da SEFAZ ou completa sem o registro do
+     * destinatário), lidas da etapa 2 — o botão "manifestar todas" do guia (01/10).
+     * A etapa lista até 20; `cienciaCortadas` diz quantas ficaram de fora.
+     */
+    cienciaChaves: string[];
+    cienciaCortadas: number;
 }
 
 export interface ResumoGuia {
@@ -126,6 +133,10 @@ export function montarLinhaGuia(r: RotinaEmpresa): LinhaGuia {
     // A pendência de ISS é frase própria: são guias do MUNICÍPIO, que não
     // fecham no DAS nem no DARF, e some no meio das etapas se não aparecer.
     const pendenciasIss = r.iss?.pendencias || [];
+    const validacao: any = etapaDe(r, 'validacao');
+    const cienciaChaves = ((validacao?.notas || []) as Array<{ chave?: string | null; motivo?: string }>)
+        .filter((n) => (n.motivo === 'sem-ciencia' || n.motivo === 'resumo') && String(n.chave || '').replace(/\D/g, '').length === 44)
+        .map((n) => String(n.chave).replace(/\D/g, ''));
 
     return {
         empresaId: r.empresa?.id || '',
@@ -144,6 +155,8 @@ export function montarLinhaGuia(r: RotinaEmpresa): LinhaGuia {
         etapas: (r.etapas || []).map((e) => ({ id: e.id, nome: e.nome, status: e.status })),
         fechado: r.farol === 'fechado',
         peso: PESO_COR[cor],
+        cienciaChaves,
+        cienciaCortadas: cienciaChaves.length ? Number(validacao?.notasCortadas || 0) : 0,
     };
 }
 

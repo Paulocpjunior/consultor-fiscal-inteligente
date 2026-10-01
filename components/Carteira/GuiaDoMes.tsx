@@ -21,6 +21,7 @@ import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFi
 import { montarGuiaDoMes, guiaParaPdf, type LinhaGuia, type CorGuia } from '../../services/guiaDoMes';
 import { carregarObservacoes, salvarObservacao, type ObservacaoCliente } from '../../services/carteiraObservacoesService';
 import { gerarRelatorioPdf } from '../../services/relatorioPdf';
+import { manifestarUmaChave, manifestacaoGravada, manifestacaoComPrazoEncerrado } from '../../services/manifestoService';
 
 interface Props {
     currentUser: User;
@@ -82,6 +83,12 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, d
     // '' = carteira inteira · 'sem' = sem responsável · uid = a carteira de um.
     const [deQuem, setDeQuem] = useState('');
     const podeEscolherDono = !!colaboradores?.length && !!donosPorEmpresa;
+    // 📨 Ciência em lote por empresa (01/10, Paulo: "essas empresas já foram
+    // todas manifestadas na SEFAZ, porém não consigo prosseguir com o
+    // fechamento"). O CFI não sabe de manifestação feita fora dele: reenviar
+    // a ciência faz a SEFAZ responder "já existia" (573) e o evento é gravado;
+    // fora do prazo (596) o fato do prazo é gravado. Os dois fecham a etapa 2.
+    const [cienciaLote, setCienciaLote] = useState<Record<string, string>>({});
 
     const carregar = useCallback(async (comp: string) => {
         setCarregando(true);
@@ -95,6 +102,33 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, d
     }, []);
 
     useEffect(() => { carregar(competencia); }, [carregar, competencia]);
+
+    const manifestarTodas = async (l: LinhaGuia) => {
+        if (!l.cienciaChaves.length) return;
+        const n = { gravadas: 0, jaExistiam: 0, prazo: 0, recusadas: 0 };
+        let ultimoMotivo = '';
+        for (let i = 0; i < l.cienciaChaves.length; i++) {
+            setCienciaLote((m) => ({ ...m, [l.empresaId]: `Manifestando ${i + 1} de ${l.cienciaChaves.length}…` }));
+            try {
+                const r = await manifestarUmaChave({ chNFe: l.cienciaChaves[i], cnpjDestinatario: l.cnpj, tipo: 'ciencia', empresaId: l.empresaId });
+                if (manifestacaoGravada(r)) {
+                    if (r.desfecho?.situacao === 'ja-existia') n.jaExistiam++; else n.gravadas++;
+                } else if (manifestacaoComPrazoEncerrado(r)) n.prazo++;
+                else { n.recusadas++; ultimoMotivo = r?.desfecho?.frase || r?.erro || ''; }
+            } catch (e: any) {
+                n.recusadas++; ultimoMotivo = e?.message || String(e);
+            }
+        }
+        const partes = [
+            n.gravadas ? `${n.gravadas} manifestada(s) agora` : '',
+            n.jaExistiam ? `${n.jaExistiam} já estavam na SEFAZ (evento gravado)` : '',
+            n.prazo ? `${n.prazo} com prazo encerrado (596 — nada a fazer)` : '',
+            n.recusadas ? `${n.recusadas} não gravaram${ultimoMotivo ? ` — ${ultimoMotivo}` : ''}` : '',
+        ].filter(Boolean).join(' · ');
+        setCienciaLote((m) => ({ ...m, [l.empresaId]: partes || 'Nada a manifestar.' }));
+        onShowToast?.(`${l.nome}: ${partes || 'nada a manifestar'}.`);
+        await carregar(competencia);
+    };
 
     const guia = useMemo(() => montarGuiaDoMes(painel?.rotinas), [painel]);
     const visiveis = useMemo(() => {
@@ -306,6 +340,21 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, d
                                         <p className="text-[11px] text-amber-700 dark:text-amber-400">🏛️ ISS: {l.iss}</p>
                                     )}
 
+                                    {l.cienciaChaves.length > 0 && (
+                                        <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                            <button
+                                                type="button"
+                                                disabled={String(cienciaLote[l.empresaId] || '').startsWith('Manifestando')}
+                                                onClick={() => void manifestarTodas(l)}
+                                                className="px-2 py-1 rounded bg-blue-700 hover:bg-blue-800 text-white font-semibold disabled:opacity-40"
+                                                title="Envia a ciência de cada nota pendente desta empresa. Se ela já foi manifestada fora do CFI, a SEFAZ responde 'já existia' e o evento é gravado; fora do prazo de 10 dias o fato do prazo é gravado. Nos três casos a etapa 2 fecha."
+                                            >
+                                                📨 Manifestar ciência de todas ({l.cienciaChaves.length}{l.cienciaCortadas ? `+${l.cienciaCortadas}` : ''})
+                                            </button>
+                                            {cienciaLote[l.empresaId] && <span className="text-slate-600 dark:text-slate-300">{cienciaLote[l.empresaId]}</span>}
+                                            {l.cienciaCortadas > 0 && <span className="text-slate-500">mostrando {l.cienciaChaves.length} de {l.cienciaChaves.length + l.cienciaCortadas} — clique de novo depois para as demais</span>}
+                                        </div>
+                                    )}
                                     {l.proximoPasso ? (
                                         <p className="text-[11px] text-blue-700 dark:text-blue-300">
                                             → <strong>{l.proximoPasso}</strong>{l.onde ? ` (${l.onde})` : ''}

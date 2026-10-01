@@ -136,6 +136,24 @@ describe('manifestação — skipRedownload (anti cStat 656)', () => {
         expect(consultaNFePorChaveMock).toHaveBeenCalledTimes(1);
     }, 15000);
 
+    // 01/10: nota manifestada FORA do CFI volta 573 ("já existia") e nota fora
+    // do prazo volta 596 — desfechos, não falhas. Carimbar falha nelas punha a
+    // chave em cooldown/poison com o problema resolvido.
+    it.each([
+        ['573', 'Rejeicao: Duplicidade de evento', 'jaExistiam'],
+        ['596', 'Rejeicao: Evento apresentado apos o prazo permitido para o evento: [10 dias]', 'prazoEncerrado'],
+    ])('lote: cStat %s é desfecho, não falha — sem carimbo de falha', async (cStat, xMotivo, campo) => {
+        manifestarNFeMock.mockResolvedValue({
+            idAttr: 'ID210210',
+            retorno: { cStatLote: '128', xMotivoLote: 'Lote processado', eventos: [{ tpEvento: '210210', cStat, xMotivo }] },
+        });
+        const r = await manifestarPendentes({ limit: 10, tipo: 'ciencia' });
+        expect(r.falhas).toBe(0);
+        expect((r as any)[campo]).toBe(1);
+        const carimbos = updateDocMock.mock.calls.filter(([patch]) => patch && 'ultimaFalhaManifestacaoMs' in patch);
+        expect(carimbos).toHaveLength(0);
+    }, 15000);
+
     it('manifestarPendentes (lote) usa skipRedownload por padrão — zero consChNFe', async () => {
         const r = await manifestarPendentes({ limit: 10, tipo: 'ciencia' });
         expect(r.total).toBe(1);
