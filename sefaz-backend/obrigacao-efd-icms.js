@@ -46,3 +46,20 @@ export function decidirEfdIcmsIpi(empresa) {
     }
     return { obrigada: false, via: 'sem-ie', motivo: 'Sem inscrição estadual nos Dados Fiscais — não entrega SPED Fiscal. Se a empresa tem IE, cadastre-a em Dados Fiscais.' };
 }
+
+/**
+ * 🧹 A tarefa de SPED deve ser cancelada? (Paulo, 01/10: *"sim, faz a limpeza
+ * automática das tarefas"*). Só a ABERTA e AUTOMÁTICA de empresa que o dono
+ * diz não entregar — concluída, cancelada e MANUAL não se tocam (manual é
+ * decisão de alguém, e a regra não a desfaz).
+ *
+ * @param {{obrigacao?: string, status?: string, origem?: string}} t
+ * @param {object|null} empresa o doc da empresa (com `dadosFiscais`)
+ */
+export function tarefaSpedParaCancelar(t, empresa) {
+    if (!t || String(t.obrigacao || '') !== 'SPED') return false;
+    if (t.status === 'concluida' || t.status === 'cancelada') return false;
+    if (String(t.origem || 'automatica') !== 'automatica') return false;
+    if (!empresa) return false; // empresa não lida: não se cancela no escuro
+    return !decidirEfdIcmsIpi(empresa).obrigada;
+}

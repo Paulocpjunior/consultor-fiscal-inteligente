@@ -5,6 +5,23 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🖨️ DECLARAÇÃO DE FATURAMENTO SEM OBSERVAÇÃO INTERNA NO PAPEL (01/10)**
+  (Paulo, com o PDF: *"são apenas observações internas do sistema! não podem
+  sair nas impressões aos clientes"*). `gerarDeclaracaoFaturamentoPdf` perde
+  `observacoes`, o " *" do mês ajustado, a nota "* valor ajustado…" e o
+  "— conferir antes de assinar" do rodapé; `avisosDaDeclaracao` fica só na
+  tela, com "(aviso interno — não sai no PDF)". Trava
+  `declaracaoPdfSemObservacoesInternas.test.ts` (jsPDF de mentira anota os
+  textos).
+- **🧹 LIMPEZA DAS TAREFAS DE SPED DE QUEM NÃO ENTREGA (01/10)** (Paulo: *"sim,
+  faz a limpeza automática das tarefas"*). `tarefaSpedParaCancelar` (dono
+  obrigacao-efd-icms.js: aberta + automática + empresa não entrega; empresa
+  não lida não cancela) e `cancelarSpedDeQuemNaoEntrega` (tarefas-orchestrator:
+  relê a empresa, cancela em lote com motivo, loga em tarefas_cron_logs).
+  Roda SOZINHA no fim de `executarCronMensal` (inclusive gerar 1 empresa) e
+  pelo botão admin 🧹 em Tarefas (`POST /api/admin/tarefas/cancelar-sped-sem-ie`,
+  competência opcional). Trava em `obrigacaoEfdIcms.test.ts`.
+
 - **📗 SPED FISCAL SÓ PARA QUEM ENTREGA (01/10)** (Paulo, com os Dados Fiscais
   da A CASTELLANO cód. 25, IE 103.460.625.111, e da CLINICA MANTOAN cód. 40,
   ISENTO: *"existe = LP/LR com I.E cadastrada (particularidade: Brasília entrega
