@@ -99,6 +99,15 @@ export function marcaDoPrazoEncerrado({ desfecho, tipo, capturadoPor = null, ago
     };
 }
 
+/**
+ * Os campos do documento que a pergunta "a ciência ainda é pendência?" lê
+ * (`ehCompletaSemCiencia` / `ehCienciaComPrazoEncerrado` da Rotina). Projeção
+ * sem um deles CEGA a régua — 01/10, KJM: o 596 estava gravado na nota e a
+ * Rotina seguia cobrando, porque `manifestacaoPrazoEncerrado` não vinha no
+ * `.select(...)`. A trava `projecaoNaoCegaARegua` cobra esta lista.
+ */
+export const CAMPOS_PARA_CIENCIA_DO_DOCUMENTO = Object.freeze(['eventos', '_completadoEm', 'manifestacaoPrazoEncerrado']);
+
 /** O prazo DESTE tipo de evento já foi declarado encerrado pela SEFAZ neste documento? */
 export function prazoDaManifestacaoEncerrado(doc, tipo = 'ciencia') {
     const m = doc?.manifestacaoPrazoEncerrado;

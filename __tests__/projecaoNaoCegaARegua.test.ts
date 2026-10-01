@@ -19,6 +19,8 @@
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import { CAMPOS_PARA_DOC_CANCELADO, CAMPOS_PARA_ISS_DO_DOCUMENTO } from '../sefaz-backend/xml-metadata-helper.js';
+// @ts-expect-error — módulo .js puro
+import { CAMPOS_PARA_CIENCIA_DO_DOCUMENTO } from '../sefaz-backend/manifestacao-desfecho.js';
 
 const RAIZ = join(__dirname, '..');
 
@@ -220,5 +222,21 @@ describe('🚨 projeção que alimenta docCancelado carrega o que ela lê', () =
         for (const [rel, motivo] of Object.entries(SEM_PERGUNTA_DE_CANCELAMENTO)) {
             expect({ rel, ok: motivo.trim().length >= 10 }).toEqual({ rel, ok: true });
         }
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⏱ A QUARTA IRMÃ (01/10, KJM): o botão gravou o 596 na nota ("1 com prazo
+// encerrado") e o card da Rotina não mudou — `manifestacaoPrazoEncerrado`
+// não vinha na projeção, e a régua da ciência respondeu "pendente". O dono
+// declara os campos que lê; a projeção da Rotina tem de trazer todos.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('⏱ a projeção da Rotina carrega o que a régua da ciência lê', () => {
+    it('todos os campos declarados pelo dono estão no .select da Rotina', () => {
+        const src = readFileSync(join(RAIZ, 'sefaz-backend/rotina-fiscal-routes.js'), 'utf8');
+        const proj = projecoes(src).find((p) => p.campos.has('_completadoEm'));
+        expect(proj).toBeDefined();
+        const faltam = [...CAMPOS_PARA_CIENCIA_DO_DOCUMENTO].filter((c: string) => !proj!.campos.has(c));
+        expect(faltam).toEqual([]);
     });
 });
