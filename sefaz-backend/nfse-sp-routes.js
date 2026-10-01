@@ -24,7 +24,7 @@ import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
-import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
+import { saudeNfseSp, empresaComFalhaNaCaptura, zeroConfiavelParaCompetencia } from './nfse-sp-saude.js';
 import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
 import { getEmpresaIdsDaCarteira } from './carteira-auth.js';
 import { fetchAllDocs } from './firestore-paginate.js';
@@ -774,7 +774,17 @@ router.get('/iss-carteira', authUser, async (req, res) => {
             console.warn('[iss-carteira] saúde da captura indisponível:', e.message);
         }
         // Sem saúde legível, NENHUM zero é confiável — silêncio não é sucesso.
-        const zeroConfiavelPara = (cnpj) => !!saude?.zeroConfiavel && !empresaComFalhaNaCaptura(logs, cnpj);
+        // 🔒 Por EMPRESA (01/10, ALMEIDA/BRISKA): uma empresa que falha na rodada
+        // não pode anular o zero das outras que o portal respondeu sem erro.
+        // Sem o estado legível, a régua cai no que a rodada prova — nunca no "ok".
+        const estados = new Map();
+        try {
+            const es = await db.collection('nfsesp_portal_state').get();
+            es.forEach((d) => estados.set(String(d.id).replace(/\D/g, ''), d.data() || {}));
+        } catch (e) {
+            console.warn('[iss-carteira] nfsesp_portal_state indisponível:', e.message);
+        }
+        const zeroConfiavelPara = zeroConfiavelParaCompetencia({ saude, logs, estados, competencia });
 
         const painel = montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara });
         return res.json({

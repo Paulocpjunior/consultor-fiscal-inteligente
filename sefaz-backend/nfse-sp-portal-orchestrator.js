@@ -25,6 +25,7 @@ import { registrarRunEmAndamento, concluirRunEmAndamento } from './cron-heartbea
 import { parseCsvNfseSp } from './nfse-sp-csv-parser.js';
 import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { ccmSpDaEmpresa } from './ccm-sp.js';
+import { periodoCobreMesInteiro } from './nfse-sp-saude.js';
 
 const LOCK_TTL_MS = 60 * 60 * 1000;
 const THROTTLE_MS = 1500; // 1.5s entre prestadores (anti-WAF do portal SP)
@@ -228,6 +229,23 @@ async function sincronizarPrestador({ session, prestador, empresa, periodo }) {
                 tomadasUlt: resultado.tomador?.totalNotas ?? null,
                 erroPrestadas: resultado.prestador?.erro || null,
                 erroTomadas: resultado.tomador?.erro || null,
+                // 🔒 Registro POR MÊS (01/10): o "último" acima é sobrescrito
+                // pelo mês corrente na mesma rodada, e o zero do mês fechado
+                // precisa de prova própria (`zeroConfiavelDaEmpresa`).
+                // Período de backfill sem `anoMes` não grava: chave inventada
+                // seria prova de um mês que ninguém sabe qual é.
+                ...(periodo?.anoMes ? { porPeriodo: {
+                    [periodo.anoMes]: {
+                        em: new Date().toISOString(),
+                        dataInicio: periodo.dataInicio || null,
+                        dataFim: periodo.dataFim || null,
+                        mesInteiro: periodoCobreMesInteiro(periodo),
+                        prestadas: resultado.prestador?.totalNotas ?? null,
+                        tomadas: resultado.tomador?.totalNotas ?? null,
+                        erroPrestadas: resultado.prestador?.erro || null,
+                        erroTomadas: resultado.tomador?.erro || null,
+                    },
+                } } : {}),
             }, { merge: true });
         } catch (e) {
             console.warn(`[nfsesp-portal] state save falhou ${empresa.cnpj}:`, e.message);
