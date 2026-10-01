@@ -5,6 +5,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📗 SPED FISCAL SÓ PARA QUEM ENTREGA (01/10)** (Paulo, com os Dados Fiscais
+  da A CASTELLANO cód. 25, IE 103.460.625.111, e da CLINICA MANTOAN cód. 40,
+  ISENTO: *"existe = LP/LR com I.E cadastrada (particularidade: Brasília entrega
+  SPED) · não existe = sem I.E"*). Dono novo `obrigacao-efd-icms.js`
+  (`decidirEfdIcmsIpi`: DF → sim; IE com dígitos → sim; ISENTO → não; vazia →
+  não, com motivo). `mesDoCliente` tira o SPED quando o chamador INFORMA a IE e
+  ela não obriga (chamador sem IE = comportamento antigo) e devolve `efdIcms`;
+  IE passa a viajar da Rotina (`empresaDaRotina`, `coberturaDoCliente`), do cron
+  (tarefas-orchestrator, 2 lugares) e de `obrigacoesDoCliente`.
+  `entregaEfdIcms` (migração) pergunta ao mesmo dono — `contribuinteIcms` segue
+  sendo "apura ICMS?", outra pergunta. Trava `obrigacaoEfdIcms.test.ts`.
+  Tarefa de SPED já gerada para empresa sem IE fica em Vencimentos (cancelar).
+
 - **📅 E316 DO DIFAL POR OPERAÇÃO = DATA DE EMISSÃO (01/10)** (Paulo, com o
   PVA: E316 de BA em 05/05, 11/05, 27/05, todos 100102 — *"os vencimentos são
   lançados conforme emissão do documento, segue a legislação … e as empresas

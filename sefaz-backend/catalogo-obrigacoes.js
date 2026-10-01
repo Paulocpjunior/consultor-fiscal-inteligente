@@ -81,6 +81,7 @@ import { regimeDaEmpresa, rotuloRegime } from './regime-tributario.js';
 // único, lido também pela triagem da carteira. Reimplementar aqui seria a
 // segunda cópia que faz o mês e a fila discordarem sobre a mesma empresa.
 import { decidirDereNoCadastro } from './dere-regimes.js';
+import { decidirEfdIcmsIpi } from './obrigacao-efd-icms.js';
 
 /** Regimes que o mês entende. INDEFINIDO é um estado real, não um erro. */
 export const REGIMES = ['SIMPLES', 'LUCRO_PRESUMIDO', 'LUCRO_REAL', 'IMUNE', 'ISENTA', 'INDEFINIDO'];
@@ -566,7 +567,7 @@ export function normalizarRegimeCatalogo(regime) {
  * exatamente o que aconteceu com o cron.
  */
 export function obrigacoesDoCliente(regime, competencia, {
-    uf = '', codMunIBGE = '', prazosMunicipais = [], cnae = '', regimeEspecificoIbsCbs = '',
+    uf = '', codMunIBGE = '', prazosMunicipais = [], cnae = '', regimeEspecificoIbsCbs = '', inscricaoEstadual,
 } = {}) {
     const { regime: chave, reconhecido } = normalizarRegimeCatalogo(regime);
     const mes = mesDoCliente({
@@ -580,6 +581,8 @@ export function obrigacoesDoCliente(regime, competencia, {
         // a lista comum do Lucro, que é justamente o defeito corrigido.
         regimeTributario: (chave === 'IMUNE' || chave === 'ISENTA') ? chave : undefined,
         uf, codMunIBGE, prazosMunicipais,
+        // 📗 Só viaja quando o chamador a tem — ausente mantém o SPED como antes.
+        ...(inscricaoEstadual !== undefined ? { inscricaoEstadual } : {}),
     }, competencia);
     return { ...mes, regimeReconhecido: reconhecido, regimeInformado: regime };
 }
@@ -622,8 +625,14 @@ export function alcanceDaObrigacao(regra, { uf } = {}) {
  */
 export function mesDoCliente(empresa, competencia) {
     const { regime, motivo } = resolverRegime(empresa);
-    const ativas = obrigacoesAplicaveis(regime, competencia);
-    const todas = obrigacoesAplicaveis(regime, competencia, { incluirPropostas: true });
+    // 📗 SPED FISCAL SÓ PARA QUEM ENTREGA (01/10, Paulo): IE cadastrada, ou DF.
+    // Só decide quando o chamador INFORMOU a IE — chamador que não a passa
+    // mantém o comportamento antigo em vez de sumir com a obrigação calado.
+    const informouIe = !!empresa && Object.prototype.hasOwnProperty.call(empresa, 'inscricaoEstadual');
+    const efdIcms = informouIe ? decidirEfdIcmsIpi(empresa) : null;
+    const tiraSped = (lista) => (efdIcms && !efdIcms.obrigada ? lista.filter((r) => r.obrigacao !== 'SPED') : lista);
+    const ativas = tiraSped(obrigacoesAplicaveis(regime, competencia));
+    const todas = tiraSped(obrigacoesAplicaveis(regime, competencia, { incluirPropostas: true }));
     const propostas = todas.filter((r) => r.status !== 'ativa');
 
     // ── ABRANGÊNCIA: o prazo é DAQUELE cliente? ─────────────────────────────
@@ -871,6 +880,8 @@ export function mesDoCliente(empresa, competencia) {
          *  existir — inclusive `nao-se-aplica`/`sem-sinal`, que não acendem
          *  nada mas ficam DITOS. */
         dere: dere.veredicto,
+        /** 📗 SPED Fiscal: entrega ou não, e por quê (null = IE não informada). */
+        efdIcms: efdIcms && obrigacoesAplicaveis(regime, competencia).some((r) => r.obrigacao === 'SPED') ? efdIcms : null,
         alertas,
         /** true quando o catálogo NÃO cobre o cliente — a etapa 4 não pode dar
          *  verde nesse caso (trava T1 do escopo). */

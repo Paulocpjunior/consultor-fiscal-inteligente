@@ -58,6 +58,8 @@ function coberturaDoCliente(e, competencia, prazosMunicipais = []) {
         // (hoje só o de SP) vale para este cliente.
         return mesDoCliente({
             colecao: e.colecao, regimePadrao: e.regimePadrao, uf: e.uf,
+            // 📗 Decide se o SPED Fiscal entra no mês (IE cadastrada ou DF, 01/10).
+            inscricaoEstadual: e.inscricaoEstadual ?? '',
             // Município + calendários: é o que transforma o ISS de pendência
             // nomeada em obrigação com data — para quem tem o calendário.
             codMunIBGE: e.codMunIBGE, prazosMunicipais,

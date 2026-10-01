@@ -73,6 +73,8 @@ export interface MesDoCliente {
     coberturaIncompleta: boolean;
     /** 🏦 DeRE: null antes da vigência ou fora do regime que a tem. */
     dere: VeredictoDereDoMes | null;
+    /** 📗 SPED Fiscal: entrega ou não, e por quê (null = IE não informada pelo chamador). */
+    efdIcms: { obrigada: boolean; via: 'df' | 'ie' | 'isento' | 'sem-ie'; motivo: string } | null;
 }
 
 export interface PendenciaConfirmacao {
@@ -141,6 +143,8 @@ export function mesDoCliente(
         regimeEspecificoIbsCbs?: string | null;
         cnae?: string | null;
         dadosFiscais?: Record<string, any> | null;
+        /** 📗 Informada = decide o SPED Fiscal (IE ou DF); ausente = comportamento antigo. */
+        inscricaoEstadual?: string;
     } | null | undefined,
     competencia: string,
 ): MesDoCliente;
@@ -175,7 +179,7 @@ export function normalizarRegimeCatalogo(regime: string): { regime: string; reco
 export function obrigacoesDoCliente(
     regime: string,
     competencia: string,
-    ctx?: { uf?: string; codMunIBGE?: string; prazosMunicipais?: any[]; cnae?: string; regimeEspecificoIbsCbs?: string },
+    ctx?: { uf?: string; codMunIBGE?: string; prazosMunicipais?: any[]; cnae?: string; regimeEspecificoIbsCbs?: string; inscricaoEstadual?: string },
 ): {
     regime: string;
     obrigacoes: any[];

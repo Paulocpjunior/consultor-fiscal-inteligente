@@ -14,6 +14,7 @@
 // O painel diz o período olhado e nunca chama a lista de "definitiva".
 // ============================================================================
 
+import { decidirEfdIcmsIpi } from './obrigacao-efd-icms.js';
 import { cnpjEmitente, ufEmitente, modeloDoDoc } from './participante-doc-helper.js';
 
 const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'inutilizado']);
@@ -95,7 +96,10 @@ export function entregaEfdIcms(empresa) {
     // Simples Nacional NÃO entrega EFD ICMS/IPI (a escrituração dele é o
     // PGDAS-D). Sinal de bloco do SPED Fiscal em empresa do Simples é RUÍDO:
     // aparece como atenção informativa, nunca como bloqueio de piloto.
-    return contribuinteIcms(empresa) && empresa?.regime === 'lucro';
+    // 📗 01/10: quem responde "entrega o arquivo?" é o DONO (IE cadastrada ou
+    // DF) — o mesmo que decide a tarefa do catálogo. `contribuinteIcms` segue
+    // respondendo outra pergunta: se ela APURA ICMS.
+    return empresa?.regime === 'lucro' && decidirEfdIcmsIpi(empresa).obrigada;
 }
 
 /**
