@@ -69,11 +69,13 @@ export const totalDeclaracao = (meses: MesDeclaracao[]): number =>
     Math.round(meses.reduce((t, m) => t + (Number(m.valor) || 0), 0) * 100) / 100;
 
 /**
- * Avisos que PRECISAM sair no documento e na tela.
+ * Avisos para quem CONFERE a declaração — na TELA, nunca no papel.
  *
- * Farol honesto num papel assinado: mês zerado pode ser "não faturou" ou
- * "não capturamos" — e a diferença importa muito quando o documento vai a um
- * banco. O app não sabe distinguir, então DIZ que não sabe.
+ * Farol honesto: mês zerado pode ser "não faturou" ou "não capturamos" — e a
+ * diferença importa muito quando o documento vai a um banco. O app não sabe
+ * distinguir, então DIZ que não sabe a quem assina. 🚫 01/10, Paulo: *"são
+ * apenas observações internas do sistema! não podem sair nas impressões aos
+ * clientes"* — o PDF não as recebe mais.
  */
 export function avisosDaDeclaracao(meses: MesDeclaracao[]): string[] {
     const avisos: string[] = [];

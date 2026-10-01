@@ -29,6 +29,7 @@ import admin from 'firebase-admin';
 import { resolverRegime, obrigacoesAplicaveis, calcularVencimento, assertCompetencia, mesDoCliente, OBRIGACOES_DO_DP, OBRIGACOES_DO_CONTABIL, OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao, tarefaDeOutroDepartamentoParaCancelar } from './catalogo-obrigacoes.js';
 import { carregarPrazosMunicipais } from './prazos-municipais-routes.js';
 import { decidirReaplicacao } from './reaplicar-prazos.js';
+import { decidirEfdIcmsIpi, tarefaSpedParaCancelar } from './obrigacao-efd-icms.js';
 
 function fa() {
     if (!admin.apps.length) {
@@ -235,6 +236,19 @@ export async function executarCronMensal(competencia, opts = {}) {
                 log.erros.push(`Empresa ${empresaId} (${empresaCnpj}): ${e.message}`);
             }
         }
+    }
+
+    // 🧹 LIMPEZA AUTOMÁTICA (01/10): a tarefa de SPED que nasceu antes da régua
+    // "IE cadastrada ou DF" (ou de empresa que perdeu a IE) é cancelada aqui,
+    // toda vez que o gerador roda — o mês não fica cobrando arquivo que a
+    // empresa não entrega. Falha aqui não derruba a geração: sai no log.
+    try {
+        const limpeza = await cancelarSpedDeQuemNaoEntrega({
+            competencia: comp, empresaIdEspecifica: opts.empresaIdEspecifica, quem: 'gerador-mensal',
+        });
+        log.spedCancelados = limpeza.canceladas;
+    } catch (e) {
+        log.erros.push(`Limpeza do SPED de quem não entrega: ${e.message}`);
     }
 
     const fim = new Date();
@@ -444,6 +458,82 @@ export async function cancelarTarefasDeOutroDepartamento(opts = {}) {
         await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
     } catch (e) {
         console.warn('[tarefas/cancelar-dp] falha ao gravar log:', e.message);
+    }
+    return log;
+}
+
+/**
+ * 🧹 CANCELA as tarefas de SPED Fiscal ABERTAS e AUTOMÁTICAS de empresa que NÃO
+ * entrega EFD ICMS/IPI (sem IE / ISENTO, fora do DF — régua de 01/10, dono
+ * `obrigacao-efd-icms.js`). Roda sozinha ao fim de cada geração de tarefas e
+ * pelo botão do admin (sem competência = todas). A empresa é RELIDA: a decisão
+ * é a do cadastro de hoje, e empresa não encontrada não é cancelada no escuro.
+ *
+ * @param {object} opts { competencia?: 'MM/AAAA', empresaIdEspecifica?, quem? }
+ */
+export async function cancelarSpedDeQuemNaoEntrega(opts = {}) {
+    fa();
+    const db = admin.firestore();
+    const comp = opts.competencia ? assertCompetencia(opts.competencia) : null;
+    const log = {
+        tipo: 'cancelar-sped-sem-ie', competencia: comp, quem: opts.quem || null,
+        iniciadoEm: new Date().toISOString(),
+        tarefasLidas: 0, canceladas: 0, mantidas: 0, jaFechadas: 0, manuais: 0, empresasNaoLidas: 0,
+        canceladasPorCompetencia: {}, exemplos: [], erros: [],
+    };
+    let q = db.collection('tarefas').where('obrigacao', '==', 'SPED');
+    if (comp) q = q.where('competencia', '==', comp);
+    if (opts.empresaIdEspecifica) q = q.where('empresaId', '==', String(opts.empresaIdEspecifica));
+    const snap = await q.get();
+    log.tarefasLidas = snap.size;
+
+    const empresas = new Map();
+    const lerEmpresa = async (id) => {
+        if (!id) return null;
+        if (empresas.has(id)) return empresas.get(id);
+        let emp = null;
+        for (const col of ['lucro_empresas', 'simples_empresas']) {
+            const d = await db.collection(col).doc(String(id)).get();
+            if (d.exists) { emp = d.data() || {}; break; }
+        }
+        empresas.set(id, emp);
+        return emp;
+    };
+
+    const lote = [];
+    for (const d of snap.docs) {
+        const t = { id: d.id, ...(d.data() || {}) };
+        if (t.status === 'concluida' || t.status === 'cancelada') { log.jaFechadas++; continue; }
+        if (String(t.origem || 'automatica') !== 'automatica') { log.manuais++; continue; }
+        let emp = null;
+        try { emp = await lerEmpresa(t.empresaId); } catch (e) { log.erros.push(`${t.empresaId}: ${e.message}`); }
+        if (!emp) { log.empresasNaoLidas++; continue; }
+        if (!tarefaSpedParaCancelar(t, emp)) { log.mantidas++; continue; }
+        lote.push({ ref: d.ref, motivo: decidirEfdIcmsIpi(emp).motivo });
+        log.canceladas++;
+        const c = String(t.competencia || '?');
+        log.canceladasPorCompetencia[c] = (log.canceladasPorCompetencia[c] || 0) + 1;
+        if (log.exemplos.length < 8) log.exemplos.push(`SPED ${c} · ${t.empresaNome || t.empresaId || ''}`);
+    }
+    for (let i = 0; i < lote.length; i += 400) {
+        const b = db.batch();
+        for (const { ref, motivo } of lote.slice(i, i + 400)) {
+            b.update(ref, {
+                status: 'cancelada',
+                canceladaEm: admin.firestore.FieldValue.serverTimestamp(),
+                canceladaPorEmail: opts.quem || null,
+                cancelamentoMotivo: `Empresa não entrega SPED Fiscal (régua de 01/10: IE cadastrada ou DF). ${motivo}`,
+            });
+        }
+        await b.commit();
+    }
+    log.finalizadoEm = new Date().toISOString();
+    if (log.canceladas > 0 || opts.quem !== 'gerador-mensal') {
+        try {
+            await db.collection('tarefas_cron_logs').add({ ...log, criadoEm: admin.firestore.FieldValue.serverTimestamp() });
+        } catch (e) {
+            console.warn('[tarefas/cancelar-sped-sem-ie] falha ao gravar log:', e.message);
+        }
     }
     return log;
 }

@@ -3277,6 +3277,29 @@ app.post('/api/admin/tarefas/cancelar-outro-departamento', requireAdmin, express
     }
 });
 
+// POST /api/admin/tarefas/cancelar-sped-sem-ie
+//   🧹 01/10: cancela as tarefas de SPED ABERTAS e automáticas de empresa que não
+//   entrega EFD ICMS/IPI (sem IE / ISENTO, fora do DF). Body: { competencia?: "MM/AAAA",
+//   empresaId? } — sem competência = todas. O gerador mensal já roda isto sozinho.
+app.post('/api/admin/tarefas/cancelar-sped-sem-ie', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { competencia, empresaId } = req.body || {};
+        if (competencia && !/^\d{2}\/\d{4}$/.test(String(competencia))) {
+            return res.status(400).json({ ok: false, error: 'competencia, se informada, é MM/AAAA' });
+        }
+        const { cancelarSpedDeQuemNaoEntrega } = await import('./sefaz-backend/tarefas-orchestrator.js');
+        const r = await cancelarSpedDeQuemNaoEntrega({
+            competencia: competencia ? String(competencia) : undefined,
+            empresaIdEspecifica: empresaId ? String(empresaId) : undefined,
+            quem: req.user?.email || null,
+        });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[tarefas/cancelar-sped-sem-ie]', err);
+        return respondeErro(res, err, undefined, { formatoOk: true });
+    }
+});
+
 // POST /api/tarefas/aplicar-carteira
 //   Atribui retroativamente as tarefas sem dono ao titular da Carteira.
 //   Idempotente. Protegida por X-Cron-Secret.

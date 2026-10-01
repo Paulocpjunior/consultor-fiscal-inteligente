@@ -53,6 +53,7 @@ const PERMITIDO: Record<string, string> = {
     'components/Tarefas.tsx': 'status de TAREFA, outro domínio',
     'sefaz-backend/tarefas-orchestrator.js': 'status de TAREFA, outro domínio',
     'sefaz-backend/catalogo-obrigacoes.js': 'status de TAREFA (tarefaDoDpParaCancelar, 22/09), outro domínio',
+    'sefaz-backend/obrigacao-efd-icms.js': 'status de TAREFA (tarefaSpedParaCancelar, 01/10), outro domínio',
     'sefaz-backend/envio-imposto.js': 'status de TAREFA (baixa da obrigação), outro domínio',
     'sefaz-backend/prazos-municipais-routes.js': 'status de TAREFA, outro domínio',
 

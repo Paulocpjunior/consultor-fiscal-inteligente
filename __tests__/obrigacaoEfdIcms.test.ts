@@ -6,7 +6,7 @@
  * SPED) · quando não existe = quando não houver I.E cadastrada"* — A CASTELLANO
  * (cód. 25, IE 103.460.625.111) entrega; CLINICA MANTOAN (cód. 40, ISENTO), não.
  */
-import { decidirEfdIcmsIpi } from '../sefaz-backend/obrigacao-efd-icms.js';
+import { decidirEfdIcmsIpi, tarefaSpedParaCancelar } from '../sefaz-backend/obrigacao-efd-icms.js';
 import { mesDoCliente } from '../sefaz-backend/catalogo-obrigacoes.js';
 // @ts-expect-error — módulo .js puro
 import { entregaEfdIcms } from '../sefaz-backend/migracao-prontidao.js';
@@ -61,5 +61,25 @@ describe('a migração pergunta ao MESMO dono', () => {
         expect(entregaEfdIcms({ regime: 'lucro', dadosFiscais: { uf: 'DF', contribuinteIcms: 'nao', inscricaoEstadual: '' } })).toBe(true);
         expect(entregaEfdIcms({ regime: 'lucro', dadosFiscais: { uf: 'SP', inscricaoEstadual: 'ISENTO' } })).toBe(false);
         expect(entregaEfdIcms({ regime: 'simples', dadosFiscais: { uf: 'SP', inscricaoEstadual: '123456789' } })).toBe(false);
+    });
+});
+
+describe('🧹 limpeza das tarefas de SPED de quem não entrega (01/10)', () => {
+    const tarefa = (over: any = {}) => ({ obrigacao: 'SPED', status: 'a_fazer', origem: 'automatica', ...over });
+    const mantoan = { dadosFiscais: { uf: 'SP', inscricaoEstadual: 'ISENTO' } };
+    const castellano = { dadosFiscais: { uf: 'SP', inscricaoEstadual: '103460625111' } };
+
+    it('cancela a aberta e automática de quem não entrega; mantém quem entrega e o DF', () => {
+        expect(tarefaSpedParaCancelar(tarefa(), mantoan)).toBe(true);
+        expect(tarefaSpedParaCancelar(tarefa(), castellano)).toBe(false);
+        expect(tarefaSpedParaCancelar(tarefa(), { dadosFiscais: { uf: 'DF', inscricaoEstadual: '' } })).toBe(false);
+    });
+
+    it('não toca concluída, cancelada, manual, outra obrigação nem empresa não lida', () => {
+        expect(tarefaSpedParaCancelar(tarefa({ status: 'concluida' }), mantoan)).toBe(false);
+        expect(tarefaSpedParaCancelar(tarefa({ status: 'cancelada' }), mantoan)).toBe(false);
+        expect(tarefaSpedParaCancelar(tarefa({ origem: 'manual' }), mantoan)).toBe(false);
+        expect(tarefaSpedParaCancelar(tarefa({ obrigacao: 'EFD_CONTRIB' }), mantoan)).toBe(false);
+        expect(tarefaSpedParaCancelar(tarefa(), null)).toBe(false);
     });
 });

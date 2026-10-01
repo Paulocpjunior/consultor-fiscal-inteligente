@@ -3635,7 +3635,8 @@ const AbaDeclaracao: React.FC<{
         meses: (meses || []).map(m => ({ competencia: m.competencia, valor: m.valor, ajustado: m.ajustado })),
         localAssinatura: cidade.trim() || null,
         identificacao: montarIdentificacao(dadosFiscais),
-        observacoes: avisos,
+        // 🚫 Os avisos (mês sem documento, valor ajustado) são INTERNOS: ficam
+        // na tela para quem confere e não vão ao papel do cliente (01/10).
         fileName: `declaracao-faturamento-${(empresa?.cnpj || '').replace(/\D/g, '')}-${de}_${ate}.pdf`,
     }));
 
@@ -3735,7 +3736,7 @@ const AbaDeclaracao: React.FC<{
                     </div>
 
                     {avisos.map((a, i) => (
-                        <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a}</p>
+                        <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {a} <span className="text-slate-500">(aviso interno — não sai no PDF)</span></p>
                     ))}
                     <p className="text-[11px] text-slate-500">
                         O valor apurado é a soma das saídas autorizadas da competência (NF-e, NFC-e e NFS-e) — a mesma

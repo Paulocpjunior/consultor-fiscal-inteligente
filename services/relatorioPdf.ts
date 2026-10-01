@@ -324,7 +324,7 @@ export interface MesFaturamento {
     /** 'AAAA-MM' */
     competencia: string;
     valor: number;
-    /** true quando o colaborador ajustou o valor proposto pelo app. */
+    /** true quando o colaborador ajustou o valor proposto pelo app — fato INTERNO: não vai ao papel (01/10). */
     ajustado?: boolean;
 }
 
@@ -340,7 +340,10 @@ export interface DeclaracaoFaturamentoParams {
     /** Cidade da assinatura (padrão: a cidade da empresa ou São Paulo). */
     localAssinatura?: string | null;
     identificacao?: IdentificacaoPdf;
-    observacoes?: string[];
+    // 🚫 SEM `observacoes` (01/10, Paulo: *"essas informações são apenas
+    // observações internas do sistema! não podem sair nas impressões aos
+    // clientes"*). Mês sem documento capturado e valor ajustado à mão são
+    // avisos para quem CONFERE — ficam na tela; o papel vai ao banco/cliente.
     fileName: string;
 }
 
@@ -439,7 +442,7 @@ export async function gerarDeclaracaoFaturamentoPdf(p: DeclaracaoFaturamentoPara
         if (y > H - 60) { pdf.addPage(); y = 24; }
         total += Number(m.valor) || 0;
         pdf.setFontSize(8.5);
-        pdf.text(fmtMesExtenso(m.competencia) + (m.ajustado ? ' *' : ''), M + 2, y);
+        pdf.text(fmtMesExtenso(m.competencia), M + 2, y);
         pdf.text(brl(Number(m.valor) || 0), M + larguraTabela - 2, y, { align: 'right' });
         pdf.setDrawColor(...BORDA).setLineWidth(0.1);
         pdf.line(M, y + 1.6, M + larguraTabela, y + 1.6);
@@ -452,13 +455,6 @@ export async function gerarDeclaracaoFaturamentoPdf(p: DeclaracaoFaturamentoPara
     pdf.text(brl(total), M + larguraTabela - 2, y, { align: 'right' });
     pdf.setFont('helvetica', 'normal');
     y += 12;
-
-    if (p.meses.some((m) => m.ajustado)) {
-        pdf.setFontSize(6.8).setTextColor(...CINZA);
-        pdf.text('* valor ajustado pelo responsável em relação ao apurado nos registros fiscais.', M, y);
-        pdf.setTextColor(...TINTA);
-        y += 6;
-    }
 
     // ── Local, data e assinaturas ───────────────────────────────────────────
     if (y > H - 55) { pdf.addPage(); y = 30; }
@@ -486,13 +482,7 @@ export async function gerarDeclaracaoFaturamentoPdf(p: DeclaracaoFaturamentoPara
     pdf.text('Representante da empresa', M, Math.max(y, yCont) + 2);
     pdf.text('Contador responsável', colDir, Math.max(y, yCont) + 2);
 
-    if (p.observacoes?.length) {
-        let yo = Math.max(y, yCont) + 10;
-        pdf.setFontSize(6.8);
-        for (const obs of p.observacoes) { pdf.text(`• ${obs}`, M, yo); yo += 3.6; }
-    }
-
     pdf.setFontSize(6.5).setTextColor(...CINZA);
-    pdf.text('Gerado pelo Consultor Fiscal Inteligente — conferir antes de assinar.', M, H - 8);
+    pdf.text('Gerado pelo Consultor Fiscal Inteligente.', M, H - 8);
     pdf.save(p.fileName);
 }
