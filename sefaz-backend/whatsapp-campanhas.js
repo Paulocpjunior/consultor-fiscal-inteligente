@@ -96,7 +96,7 @@ export function validarCampanha(p = {}) {
  * empresaId → { nome, regime }. Saída: quem recebe e quem fica de fora,
  * cada um com o motivo.
  */
-export function montarPublico({ campanha, contatos = [], catalogoEtiquetas = [], empresas = new Map() } = {}) {
+export function montarPublico({ campanha, contatos = [], catalogoEtiquetas = [], empresas = new Map(), bloqueados = new Set() } = {}) {
     const pub = campanha?.publico || {};
     const categoria = campanha?.template?.categoria || 'UTILITY';
     const destinatarios = [];
@@ -109,6 +109,8 @@ export function montarPublico({ campanha, contatos = [], catalogoEtiquetas = [],
         if (!numero) { pulados.push({ numero: String(c.numero || '?'), motivo: 'numero-invalido' }); return; }
         if (vistos.has(numero)) return;                      // repetido: nem conta como pulado
         vistos.add(numero);
+        // 🚫 Lista negra (01/10): bloqueado não recebe NADA, nem em lote.
+        if (bloqueados.has(numero)) { pulados.push({ numero, motivo: 'bloqueado' }); return; }
         if (c.optOutCampanhas?.em) { pulados.push({ numero, motivo: 'opt-out', em: c.optOutCampanhas.em }); return; }
         if (pub.tipo === 'etiqueta') {
             const p = podeEnviarPorEtiqueta(c, pub.etiqueta, catalogoEtiquetas);

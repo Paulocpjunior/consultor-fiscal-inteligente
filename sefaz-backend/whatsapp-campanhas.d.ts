@@ -43,6 +43,7 @@ export function montarPublico(p: {
     contatos?: Array<Record<string, any>>;
     catalogoEtiquetas?: Array<{ id: string; baseLegal?: string; rotulo?: string }>;
     empresas?: Map<string, { nome: string | null; regime: string }>;
+    bloqueados?: Set<string>;
 }): { destinatarios: Destinatario[]; pulados: Pulado[]; truncado: boolean; limite: number };
 export function variaveisDoDestinatario(variaveis: string[], dest: Partial<Destinatario>): { ok: true; variaveis: string[] } | { ok: false; motivo: string };
 export function proximoLote(destinatarios: Destinatario[], tamanho?: number): number[];

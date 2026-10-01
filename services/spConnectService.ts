@@ -770,3 +770,17 @@ export const criarCampanha = (p: {
 export const iniciarCampanha = (id: string) =>
     post<{ lote: { enviados: number; falhas: number; pulados: number; restantes: number; concluida: boolean }; campanha: CampanhaResumo }>(`/api/admin/whatsapp/campanhas/${encodeURIComponent(id)}/iniciar`);
 export const pausarCampanha = (id: string) => post<Record<string, never>>(`/api/admin/whatsapp/campanhas/${encodeURIComponent(id)}/pausar`);
+
+// ─── 🚫 Lista negra (01/10, admin) ──────────────────────────────────────────
+export interface BloqueioResumo {
+    numero: string; motivo: string; motivoRotulo: string; observacao: string | null; ativo: boolean;
+    bloqueadoPor: string | null; bloqueadoEm: string | null; desbloqueadoPor: string | null; desbloqueadoEm: string | null;
+    descartadas: number; ultimaTentativaEm: string | null; ultimoTexto: string | null;
+    meta: { ok: boolean; erro: string | null; em: string; acao?: string } | null; nomePerfil: string | null;
+}
+export const listarBloqueios = () =>
+    req<{ ativos: BloqueioResumo[]; historico: BloqueioResumo[]; motivos: { id: string; rotulo: string }[]; truncado: boolean }>('/api/admin/whatsapp/bloqueios');
+export const bloquearNumero = (p: { numero: string; motivo: string; observacao?: string; naMeta?: boolean }) =>
+    post<{ bloqueio: BloqueioResumo }>('/api/admin/whatsapp/bloqueios', p);
+export const desbloquearNumero = (numero: string, naMeta = true) =>
+    post<{ meta: BloqueioResumo['meta'] }>(`/api/admin/whatsapp/bloqueios/${encodeURIComponent(numero)}?naMeta=${naMeta ? 'true' : 'false'}`, undefined, 'DELETE');
