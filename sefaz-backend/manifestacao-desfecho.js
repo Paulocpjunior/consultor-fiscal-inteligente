@@ -13,16 +13,23 @@
  *   135/136 → ACEITA (evento registrado agora)
  *   573     → JÁ EXISTIA ("Duplicidade de Evento": a ciência já estava
  *             registrada na SEFAZ — o fato é o mesmo, o app só não sabia)
+ *   596     → PRAZO ENCERRADO ("Evento apresentado após o prazo permitido
+ *             para o evento: [10 dias]" — 01/10, ALMEIDA COMERCIO nº 187).
+ *             Recusa DEFINITIVA: nenhum reenvio muda a resposta. Não grava
+ *             evento (não houve ciência), grava o FATO do prazo, para a Rotina
+ *             parar de cobrar o que não tem mais saída e o lote parar de
+ *             reenviar — e a contagem continua DITA no resumo.
  *   outro   → RECUSADA, com cStat e xMotivo ditos
  *   nenhum evento no retorno → SEM RESPOSTA (o lote falhou: cStatLote/xMotivoLote)
  */
 
 export const CSTAT_ACEITO = Object.freeze(['135', '136']);
 export const CSTAT_JA_EXISTIA = '573';
+export const CSTAT_PRAZO_ENCERRADO = '596';
 
 /**
  * @param {{cStatLote?:string|null, xMotivoLote?:string|null, eventos?:Array<{cStat?:string|null, xMotivo?:string|null}>}|null|undefined} retorno
- * @returns {{situacao:'aceita'|'ja-existia'|'recusada'|'sem-resposta', cStat:string|null, xMotivo:string|null, registraEvento:boolean, frase:string}}
+ * @returns {{situacao:'aceita'|'ja-existia'|'prazo-encerrado'|'recusada'|'sem-resposta', cStat:string|null, xMotivo:string|null, registraEvento:boolean, registraPrazoEncerrado?:boolean, frase:string}}
  */
 export function desfechoDaManifestacao(retorno) {
     const eventos = Array.isArray(retorno?.eventos) ? retorno.eventos : [];
@@ -33,6 +40,14 @@ export function desfechoDaManifestacao(retorno) {
     const jaExistia = eventos.find((e) => String(e?.cStat ?? '') === CSTAT_JA_EXISTIA);
     if (jaExistia) {
         return { situacao: 'ja-existia', cStat: CSTAT_JA_EXISTIA, xMotivo: jaExistia.xMotivo || null, registraEvento: true, frase: 'a ciência já estava registrada na SEFAZ' };
+    }
+    const prazo = eventos.find((e) => String(e?.cStat ?? '') === CSTAT_PRAZO_ENCERRADO);
+    if (prazo) {
+        return {
+            situacao: 'prazo-encerrado', cStat: CSTAT_PRAZO_ENCERRADO, xMotivo: prazo.xMotivo || null,
+            registraEvento: false, registraPrazoEncerrado: true,
+            frase: `prazo da SEFAZ encerrado (596${prazo.xMotivo ? `: ${prazo.xMotivo}` : ''}) — não há mais como manifestar este evento`,
+        };
     }
     if (eventos.length) {
         const e = eventos[0];
@@ -68,4 +83,24 @@ export function eventoDaManifestacao({ evt, tipo, capturadoPor = null, jaExistia
         ...(jaExistia ? { jaExistiaNaSefaz: true } : {}),
         importadoPor: capturadoPor?.email || 'manifesto-auto',
     };
+}
+
+/**
+ * O FATO do prazo encerrado que vai para o documento (`manifestacaoPrazoEncerrado`).
+ * Sem `undefined` (o Firestore recusa): ausente sai null.
+ */
+export function marcaDoPrazoEncerrado({ desfecho, tipo, capturadoPor = null, agoraIso = new Date().toISOString() }) {
+    return {
+        tipo: String(tipo || 'ciencia'),
+        cStat: desfecho?.cStat || CSTAT_PRAZO_ENCERRADO,
+        xMotivo: desfecho?.xMotivo || null,
+        em: agoraIso,
+        por: capturadoPor?.email || 'manifesto-auto',
+    };
+}
+
+/** O prazo DESTE tipo de evento já foi declarado encerrado pela SEFAZ neste documento? */
+export function prazoDaManifestacaoEncerrado(doc, tipo = 'ciencia') {
+    const m = doc?.manifestacaoPrazoEncerrado;
+    return !!m && String(m.tipo || 'ciencia') === String(tipo);
 }

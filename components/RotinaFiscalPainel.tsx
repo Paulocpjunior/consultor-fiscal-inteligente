@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CredencialEmailFaixa from './CredencialEmailFaixa';
 import RotinaParametrosBloco from './RotinaParametrosBloco';
-import { manifestarUmaChave, manifestacaoGravada, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
+import { manifestarUmaChave, manifestacaoGravada, manifestacaoComPrazoEncerrado, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
 import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
@@ -120,7 +120,7 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
     const [etapaFiltro, setEtapaFiltro] = useState<string | null>(null);
     const [busca, setBusca] = useState('');
     // 📨 Manifestação de ciência disparada da própria Rotina (28/09): chave → estado.
-    const [manifestando, setManifestando] = useState<Record<string, 'enviando' | 'ok' | string>>({});
+    const [manifestando, setManifestando] = useState<Record<string, 'enviando' | 'ok' | 'prazo-encerrado' | string>>({});
 
     const manifestarCiencia = useCallback(async (chNFe: string, cnpjDestinatario: string, comp: string, empresaId?: string | null) => {
         setManifestando((m) => ({ ...m, [chNFe]: 'enviando' }));
@@ -128,6 +128,13 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
         // 🚨 SUCESSO É FATO GRAVADO (28/09, Paulo: "marco como ciente e, quando
         // atualizo, volta sem ciência"). HTTP 200 com recusa da SEFAZ não é ✔ —
         // o desfecho diz se o evento entrou (aceita ou já existia) ou por que não.
+        // ⏱ 596 (01/10): prazo da ciência encerrado — definitivo, gravado na
+        // nota; o painel recarrega e a pendência sai, contada no resumo.
+        if (manifestacaoComPrazoEncerrado(r)) {
+            setManifestando((m) => ({ ...m, [chNFe]: 'prazo-encerrado' }));
+            carregarRef.current?.(comp);
+            return;
+        }
         if (!manifestacaoGravada(r)) {
             setManifestando((m) => ({ ...m, [chNFe]: `erro: ${motivoDaManifestacaoNaoGravada(r)}` }));
             return;
@@ -448,6 +455,8 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                                     <span className="block mt-0.5">
                                                                         {manifestando[n.chave] === 'ok' ? (
                                                                             <span className="text-emerald-700 dark:text-emerald-400">✔ ciência manifestada (SEFAZ aceitou)</span>
+                                                                        ) : manifestando[n.chave] === 'prazo-encerrado' ? (
+                                                                            <span className="text-amber-700 dark:text-amber-300">⏱ prazo da ciência encerrado na SEFAZ (10 dias) — a nota já está completa no CFI, nada a fazer</span>
                                                                         ) : manifestando[n.chave] === 'ja-existia' ? (
                                                                             <span className="text-emerald-700 dark:text-emerald-400">✔ a ciência já estava registrada na SEFAZ — evento gravado</span>
                                                                         ) : String(manifestando[n.chave] || '').startsWith('erro') ? (

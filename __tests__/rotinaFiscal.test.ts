@@ -757,6 +757,33 @@ describe('🚨 o FATO vence o rótulo: resumo completado à mão deixa de ser re
     });
 });
 
+describe('⏱ ciência com o prazo encerrado na SEFAZ (596) não é pendência — e sai DITA (01/10, ALMEIDA nº 187)', () => {
+    const completada = (over: any = {}) => doc({ _completadoEm: '2026-09-24T10:00:00Z', origem: 'manual', eventos: [], ...over });
+    const saida = () => doc({ direcao: 'saida', chave: CHAVE_55.replace(/1$/, '2') });
+    const prazo = { tipo: 'ciencia', cStat: '596', xMotivo: 'Rejeicao: Evento apresentado apos o prazo permitido para o evento: [10 dias]', em: '2026-10-01T12:00:00Z', por: 'x@sp.com' };
+
+    it('com o 596 gravado a etapa 2 fecha e o resumo conta a nota', () => {
+        const r = completo({ documentos: [completada({ manifestacaoPrazoEncerrado: prazo }), saida()] });
+        const e = etapaDe(r, 'validacao');
+        expect(e.status).toBe('concluida');
+        expect(e.semCiencia).toBe(0);
+        expect(e.prazoCienciaEncerrado).toBe(1);
+        expect(e.resumo).toMatch(/prazo da ciência encerrado na SEFAZ \(596\)/);
+    });
+
+    it('sem o 596 continua pendência (o caso de antes, intacto)', () => {
+        const e = etapaDe(completo({ documentos: [completada(), saida()] }), 'validacao');
+        expect(e.status).toBe('atencao');
+        expect(e.semCiencia).toBe(1);
+    });
+
+    it('o prazo de OUTRO evento (confirmação) não dispensa a ciência', () => {
+        const e = etapaDe(completo({ documentos: [completada({ manifestacaoPrazoEncerrado: { ...prazo, tipo: 'confirmacao' } }), saida()] }), 'validacao');
+        expect(e.status).toBe('atencao');
+        expect(e.semCiencia).toBe(1);
+    });
+});
+
 describe('📨 ciência após a completa importada à mão é PARÂMETRO do escritório (28/09, B & T)', () => {
     // Era resumo da SEFAZ, foi completada à mão (carimbo), nenhum evento de manifestação.
     const completadaSemCiencia = (over: any = {}) => doc({ _completadoEm: '2026-09-24T10:00:00Z', origem: 'manual', eventos: [], ...over });

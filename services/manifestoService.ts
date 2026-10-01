@@ -185,10 +185,12 @@ export async function listarElegiveisManifestacao(
 
 /** O desfecho lido pelo backend (`manifestacao-desfecho.js`): só 'aceita' e 'ja-existia' gravam o evento. */
 export interface DesfechoManifestacao {
-    situacao: 'aceita' | 'ja-existia' | 'recusada' | 'sem-resposta';
+    situacao: 'aceita' | 'ja-existia' | 'prazo-encerrado' | 'recusada' | 'sem-resposta';
     cStat: string | null;
     xMotivo: string | null;
     registraEvento: boolean;
+    /** 596: o prazo do evento acabou na SEFAZ — o fato foi gravado no documento (01/10). */
+    registraPrazoEncerrado?: boolean;
     frase: string;
 }
 
@@ -205,6 +207,15 @@ export interface ManifestarUmaResult {
 /** Sucesso é FATO gravado (aceita agora ou já existia na SEFAZ) — nunca "HTTP 200". */
 export function manifestacaoGravada(r: ManifestarUmaResult | null | undefined): boolean {
     return !!r && !r.erro && !!r.desfecho && r.desfecho.registraEvento === true;
+}
+
+/**
+ * ⏱ A SEFAZ respondeu 596 — prazo do evento encerrado (01/10, ALMEIDA nº 187).
+ * Não é ✔ (não houve ciência) nem ✖ "tente de novo": é DEFINITIVO, e o fato
+ * foi gravado na nota para a Rotina parar de cobrar.
+ */
+export function manifestacaoComPrazoEncerrado(r: ManifestarUmaResult | null | undefined): boolean {
+    return !!r && !r.erro && r.desfecho?.situacao === 'prazo-encerrado';
 }
 
 /** A frase que a tela mostra quando NÃO gravou. */

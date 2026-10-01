@@ -5,6 +5,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **⏱ CIÊNCIA FORA DO PRAZO — SEFAZ 596 (01/10, ALMEIDA COMERCIO nº 187)**
+  (Paulo: *"ainda sobre ciência de NFs, como fica?"*). A assinatura C14N
+  inclusiva FUNCIONOU: a SEFAZ passou a ler o evento e respondeu *"596 —
+  Evento apresentado apos o prazo permitido para o evento: [10 dias]"*.
+  Recusa DEFINITIVA. `manifestacao-desfecho.js`: desfecho `prazo-encerrado`
+  (`CSTAT_PRAZO_ENCERRADO`, `registraPrazoEncerrado`), `marcaDoPrazoEncerrado`
+  e `prazoDaManifestacaoEncerrado(doc, tipo)`. `manifestarUma` grava
+  `manifestacaoPrazoEncerrado` nos dois lados da chave; `ehElegivel` tira a
+  nota do lote. Rotina: `ehCompletaSemCiencia` exclui; `ehCienciaComPrazoEncerrado`
+  conta no resumo da etapa 2 ("N com o prazo da ciência encerrado na SEFAZ
+  (596)"). Tela: `manifestacaoComPrazoEncerrado` (⏱ âmbar, recarrega). Notas
+  que levaram 596 ANTES desta versão: clicar 1× mais (a SEFAZ repete o 596).
+  ⚠️ `IDADE_MAX_DIAS_POR_TIPO.ciencia = 180` no orquestrador não bate com os
+  10 dias que a SEFAZ declarou — não mexi (o 596 agora fecha o caso); RESUMO
+  com mais de 10 dias só sai completo pelo XML do cliente ou por Confirmação.
+
 - **📗 EFD-CONTRIBUIÇÕES SAI COM M220/M620 (30/09, UNIKE)** (Paulo: *"sim, faz
   a EFD já sair com M220/M620"*). `ajusteDasDevolucoesDeVenda(dados)`
   (relatorio-monofasico.js, só regime '2') é calculado em

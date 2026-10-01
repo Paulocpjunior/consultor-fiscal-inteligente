@@ -10,9 +10,11 @@
  * grava e DIZ que já existia; outro cStat não grava e nomeia o motivo; lote
  * sem evento não grava e nomeia o lote; a tela só mostra ✔ quando gravou.
  */
+import {
+    desfechoDaManifestacao, eventoDaManifestacao, CSTAT_JA_EXISTIA, marcaDoPrazoEncerrado, prazoDaManifestacaoEncerrado,
 // @ts-expect-error módulo .js puro sem tipos
-import { desfechoDaManifestacao, eventoDaManifestacao, CSTAT_JA_EXISTIA } from '../sefaz-backend/manifestacao-desfecho.js';
-import { manifestacaoGravada, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
+} from '../sefaz-backend/manifestacao-desfecho.js';
+import { manifestacaoGravada, manifestacaoComPrazoEncerrado, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -74,5 +76,38 @@ describe('a tela só mostra ✔ quando GRAVOU', () => {
             expect(src).toMatch(/manifestacaoGravada\(/);
             expect(src).not.toMatch(/r\.erro \? `✕/);
         }
+    });
+});
+
+/**
+ * ⏱ 596 — PRAZO ENCERRADO (01/10, ALMEIDA COMERCIO nº 187: "Rejeicao: Evento
+ * apresentado apos o prazo permitido para o evento: [10 dias]"). Definitivo:
+ * não grava evento (não houve ciência), grava o FATO na nota.
+ */
+describe('596 — prazo do evento encerrado na SEFAZ', () => {
+    const retorno = { cStatLote: '128', eventos: [{ cStat: '596', xMotivo: 'Rejeicao: Evento apresentado apos o prazo permitido para o evento: [10 dias]' }] };
+
+    it('é desfecho próprio: não registra evento, registra o prazo', () => {
+        const d = desfechoDaManifestacao(retorno);
+        expect(d.situacao).toBe('prazo-encerrado');
+        expect(d.registraEvento).toBe(false);
+        expect(d.registraPrazoEncerrado).toBe(true);
+        expect(d.frase).toMatch(/prazo da SEFAZ encerrado \(596/);
+    });
+
+    it('a marca vai para a nota sem undefined e vale só para o tipo do evento', () => {
+        const marca = marcaDoPrazoEncerrado({ desfecho: desfechoDaManifestacao(retorno), tipo: 'ciencia', agoraIso: '2026-10-01T12:00:00Z' });
+        expect(Object.values(marca).every((v) => v !== undefined)).toBe(true);
+        expect(marca).toMatchObject({ tipo: 'ciencia', cStat: '596', por: 'manifesto-auto' });
+        expect(prazoDaManifestacaoEncerrado({ manifestacaoPrazoEncerrado: marca }, 'ciencia')).toBe(true);
+        expect(prazoDaManifestacaoEncerrado({ manifestacaoPrazoEncerrado: marca }, 'confirmacao')).toBe(false);
+        expect(prazoDaManifestacaoEncerrado({}, 'ciencia')).toBe(false);
+    });
+
+    it('a tela não chama de ✔ nem de ✖ — chama de prazo encerrado', () => {
+        const r = { ok: false, desfecho: desfechoDaManifestacao(retorno) };
+        expect(manifestacaoGravada(r)).toBe(false);
+        expect(manifestacaoComPrazoEncerrado(r)).toBe(true);
+        expect(manifestacaoComPrazoEncerrado({ ok: false, desfecho: desfechoDaManifestacao({ eventos: [{ cStat: '215' }] }) })).toBe(false);
     });
 });
