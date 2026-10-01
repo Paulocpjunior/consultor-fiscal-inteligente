@@ -232,9 +232,23 @@ export function agruparDifalPorUf(notas, ufEmpresa) {
 
         const atual = porUf.get(uf) || {
             uf, difal: 0, fcp: 0, parteRemetente: 0, documentos: 0, extemporaneos: 0,
+            porData: {}, semData: [],
         };
         atual.difal = r2(atual.difal + d.vIcmsUfDest);
         atual.fcp = r2(atual.fcp + d.vFcpUfDest);
+        // 📅 POR DATA DE EMISSÃO — é o vencimento da GNRE "por operação"
+        // (Convênio ICMS 236/21: recolhimento a cada operação, na saída). A data
+        // passa pelo DONO; ilegível vai NOMEADA e impede o E316 por operação.
+        const dataIso = String(dataDeclaradaDoDocumento(nota?.dhEmi || nota?.dataEmissao) || '').slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataIso)) {
+            const dia = atual.porData[dataIso] || { difal: 0, fcp: 0, documentos: 0 };
+            dia.difal = r2(dia.difal + d.vIcmsUfDest);
+            dia.fcp = r2(dia.fcp + d.vFcpUfDest);
+            dia.documentos += 1;
+            atual.porData[dataIso] = dia;
+        } else {
+            atual.semData.push(rotulo);
+        }
         atual.parteRemetente = r2(atual.parteRemetente + d.vIcmsUfRemet);
         atual.documentos += 1;
         if (codSit === '01' || codSit === '07') atual.extemporaneos += 1;
@@ -430,6 +444,65 @@ export const CODIGOS_RECEITA_GNRE_EC87 = Object.freeze([
 ]);
 
 /**
+ * 📅 O CÓDIGO DE RECEITA É "POR OPERAÇÃO"? (01/10, Paulo: *"os vencimentos são
+ * lançados conforme emissão do documento, segue a legislação"* — Convênio
+ * ICMS 236/21: sem inscrição na UF de destino, a GNRE é recolhida a cada
+ * operação, por ocasião da saída; com inscrição, até o dia 15 do mês seguinte).
+ *
+ * A forma de recolher já está DITA no código que a pessoa escolhe (é a própria
+ * descrição da tabela nacional da GNRE), então o app não deduz nada: código
+ * por operação ⇒ o E316 sai por DATA DE EMISSÃO, com DT_VCTO = a data, sem
+ * vencimento cadastrado. Código por apuração (ou estado fora da GNRE) ⇒
+ * continua pedindo o vencimento.
+ */
+export function codigoReceitaPorOperacao(codigo) {
+    const c = String(codigo || '').trim();
+    const item = CODIGOS_RECEITA_GNRE_EC87.find((x) => x.codigo === c);
+    return !!item && /por opera[çc][ãa]o/i.test(item.descricao);
+}
+
+/**
+ * O que falta para a obrigação de UMA UF virar E316 — a MESMA régua na tela
+ * (aviso e gravação) e no gerador. Vencimento só é exigido do tributo cujo
+ * código NÃO é por operação.
+ *
+ * @param {{uf?: string, dtVcto?: string, codRec?: string, codRecFcp?: string}} o
+ * @param {{temFcp?: boolean}} [ctx] a UF tem FCP nas notas (quando se sabe)
+ * @returns {string[]} faltas nomeadas (vazio = completa)
+ */
+export function faltasDaObrigacaoDifal(o, { temFcp = false } = {}) {
+    const faltas = [];
+    const uf = String(o?.uf ?? 'XX').trim();
+    if (uf.length !== 2) faltas.push('UF');
+    const codRec = String(o?.codRec || '').trim();
+    const codRecFcp = String(o?.codRecFcp || '').trim();
+    if (!codRec) faltas.push('código do DIFAL');
+    if (temFcp && !codRecFcp) faltas.push('código do FCP');
+    const precisaVencimento = (codRec && !codigoReceitaPorOperacao(codRec))
+        || (temFcp && codRecFcp && !codigoReceitaPorOperacao(codRecFcp));
+    if (precisaVencimento && String(o?.dtVcto || '').replace(/\D/g, '').length !== 8) faltas.push('vencimento');
+    return faltas;
+}
+
+/**
+ * As linhas do E316 POR OPERAÇÃO — uma por data de emissão, DT_VCTO = a data.
+ * Devolve null quando não dá para afirmar: nota com data ilegível, ou a soma
+ * por dia não fecha com o que o E310 manda recolher (saldo/ajuste no meio).
+ */
+function e316PorOperacao(g, campo, valorARecolher, codigo, mesRef) {
+    if ((g.semData || []).length) return null;
+    const dias = Object.entries(g.porData || {})
+        .filter(([, v]) => v[campo] > 0)
+        .sort(([a], [b]) => a.localeCompare(b));
+    const soma = r2(dias.reduce((t, [, v]) => t + v[campo], 0));
+    if (!dias.length || Math.abs(soma - r2(valorARecolher)) > 0.004) return null;
+    return dias.map(([iso, v]) => {
+        const [aaaa, mm, dd] = iso.split('-');
+        return ['E316', COD_OR_DIFAL_NORMAL, dec(v[campo]), `${dd}${mm}${aaaa}`, codigo, '', '', '', '', mesRef];
+    });
+}
+
+/**
  * Monta as linhas do DIFAL EC 87/15 no bloco E — E300 + E310 (+ E316).
  *
  * Devolve ARRAYS de campos (o `buildLine` forma a linha) e os avisos.
@@ -568,20 +641,29 @@ export function montarLinhasDifalBlocoE({
             const codRec = String(o.codRec || '').trim();
             const codRecFcp = String(o.codRecFcp || '').trim();
             const faltas = [];
-            if (ap.aRecolherDifal > 0) {
-                if (dtVcto.length === 8 && codRec) {
-                    linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(ap.aRecolherDifal), dtVcto, codRec, '', '', '', '', mesRef]);
-                } else {
-                    faltas.push(`DIFAL R$ ${dec(ap.aRecolherDifal)}`);
+            // 📅 Código POR OPERAÇÃO ⇒ uma linha por data de emissão (01/10).
+            // Sem como afirmar por dia (data ilegível, soma que não fecha), cai
+            // no vencimento cadastrado — e, sem ele, a falta vai DITA.
+            const emitir = (valor, campo, codigo, rotulo) => {
+                if (!(valor > 0)) return;
+                if (codigo && codigoReceitaPorOperacao(codigo)) {
+                    const porDia = e316PorOperacao(g, campo, valor, codigo, mesRef);
+                    if (porDia) { linhas.push(...porDia); return; }
+                    if (dtVcto.length !== 8) {
+                        faltas.push(`${rotulo} R$ ${dec(valor)} — por operação, mas ${(g.semData || []).length
+                            ? `${g.semData.length} nota(s) sem data de emissão legível (nº ${g.semData.slice(0, 5).join(', ')})`
+                            : 'a soma por dia não fecha com o valor a recolher'}; informe o vencimento`);
+                        return;
+                    }
                 }
-            }
-            if (ap.aRecolherFcp > 0) {
-                if (dtVcto.length === 8 && codRecFcp) {
-                    linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(ap.aRecolherFcp), dtVcto, codRecFcp, '', '', '', '', mesRef]);
+                if (dtVcto.length === 8 && codigo) {
+                    linhas.push(['E316', COD_OR_DIFAL_NORMAL, dec(valor), dtVcto, codigo, '', '', '', '', mesRef]);
                 } else {
-                    faltas.push(`FCP R$ ${dec(ap.aRecolherFcp)}`);
+                    faltas.push(`${rotulo} R$ ${dec(valor)}`);
                 }
-            }
+            };
+            emitir(ap.aRecolherDifal, 'difal', codRec, 'DIFAL');
+            emitir(ap.aRecolherFcp, 'fcp', codRecFcp, 'FCP');
             if (faltas.length) semObrigacao.push(`${g.uf} (${faltas.join(' · ')})`);
         }
     }
@@ -622,8 +704,10 @@ export function montarLinhasDifalBlocoE({
             + 'de receita daquele tributo. O PVA recusa com "A soma dos campos VL_RECOL_DIFAL, DEB_ESP_DIFAL, '
             + 'VL_RECOL_FCP e DEB_ESP_FCP deve ser igual à soma do campo VL_OR dos Registros filhos E316". '
             + 'Cadastre em SPED Fiscal → Ajustes E111 → "DIFAL EC 87/15 a recolher por UF de destino": o '
-            + 'vencimento, o código do DIFAL e, quando há FCP, o código do FCP (na GNRE: 100102/100110 para o '
-            + 'DIFAL e 100129/100137 para o FCP, por operação/por apuração). O app não escolhe a forma de recolher.',
+            + 'código do DIFAL e, quando há FCP, o código do FCP (na GNRE: 100102/100110 para o DIFAL e '
+            + '100129/100137 para o FCP, por operação/por apuração). Com código POR OPERAÇÃO o vencimento é a data '
+            + 'de emissão de cada nota e não precisa ser cadastrado; por apuração, informe o vencimento. O app não '
+            + 'escolhe a forma de recolher.',
         );
     }
 

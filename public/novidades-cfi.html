@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (01/10) — leia esta parte primeiro</h2>
 
+    <h3>📅 <strong>DIFAL EC 87/15: com código por operação, o vencimento é a data de cada nota</strong></h3>
+    <p>No cadastro do E316 por UF de destino, com código de receita <strong>por operação</strong> (GNRE 100102 do
+    DIFAL e 100129 do FCP), não é mais preciso digitar vencimento. O SPED sai com <strong>uma linha do E316 por data de
+    emissão</strong>, com o vencimento igual à data da nota e o valor do dia, como manda o Convênio ICMS 236/21 (sem
+    inscrição na UF de destino, a guia é recolhida a cada operação). Com código <strong>por apuração</strong> (100110 /
+    100137, empresa inscrita no destino) o vencimento continua sendo pedido. Se alguma nota estiver sem data de emissão
+    legível, o vencimento digitado vale como reserva; sem ele, a geração diz qual nota impediu.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → Ajustes E111 → DIFAL EC 87/15 a recolher por UF de destino → 📥 Puxar UFs →
+    código 100102 (e 100129 onde há FCP) → ↧ Aplicar a todas → 💾 Salvar ajustes.</p>
+
     <h3>⏱ <strong>Ciência fora do prazo (SEFAZ 596): a pendência sai e o fato fica dito</strong></h3>
     <p>Com a assinatura corrigida, a SEFAZ passou a responder de verdade, e em nota antiga a resposta é
     <em>"596 — Evento apresentado após o prazo permitido para o evento: [10 dias]"</em>. A ciência da operação só pode
