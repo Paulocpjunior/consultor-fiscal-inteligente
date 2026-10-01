@@ -260,6 +260,10 @@ export async function montarRotinasDaCompetencia(db, empresas, competencia) {
                 // 📨 Carimbo da completa importada à mão (28/09): é o que separa
                 // "completada sem ciência" de "veio inteira da SEFAZ".
                 '_completadoEm',
+                // ⏱ O 596 gravado na nota (01/10): sem ele na projeção a Rotina
+                // não via o prazo encerrado e seguia cobrando a ciência (KJM —
+                // o botão disse "1 com prazo encerrado" e o card não mudou).
+                'manifestacaoPrazoEncerrado',
                 // 🚨 AS FORMAS DO VALOR QUE `valorDoDocumento` LÊ (23/09, RADIO E TV
                 // IBIRAPUERA): o import pelo navegador grava só `totais.vNF` — sem
                 // estes campos na projeção, a nota chegava "sem valor" à etapa 2

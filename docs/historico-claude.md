@@ -5,6 +5,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **⏱ PROJEÇÃO CEGAVA O 596 NA ROTINA (01/10, KJM)** (Paulo: *"fiz como o passo
+  a passo, porém não mudou o status"* — toast "1 com prazo encerrado (596)").
+  O `.select(...)` de rotina-fiscal-routes não trazia `manifestacaoPrazoEncerrado`;
+  o fato estava gravado e a régua respondia "pendente". Campo incluído; o dono
+  (manifestacao-desfecho.js) declara `CAMPOS_PARA_CIENCIA_DO_DOCUMENTO` e a
+  `projecaoNaoCegaARegua` cobra a projeção da Rotina (4ª irmã).
+
 - **📨 CIÊNCIA EM LOTE NO GUIA DO MÊS (01/10)** (Paulo, print de ALMEIDA,
   BRISKA, COMAC, KJM: *"já foram todas manifestadas na SEFAZ, porém não
   consigo prosseguir com o fechamento"*). Manifestação feita fora do CFI não
