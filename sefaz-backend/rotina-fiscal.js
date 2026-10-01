@@ -34,6 +34,7 @@ import { competenciaFechada } from './fim-de-mes.js';
 // a saída?". A etapa 5 reimplementava a primeira e ignorava a segunda.
 import { conferirRitoDosEnvios, canalComprovaEnvio } from './envio-imposto-painel.js';
 import { CANAL_FORA_DO_APP } from './envio-fora-do-app.js';
+import { prazoDaManifestacaoEncerrado } from './manifestacao-desfecho.js';
 import { guiaIssDoEnvio } from './guia-iss.js';
 import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-obrigacoes.js';
 // 📋 A entrega DECLARADA da obrigação que o catálogo não cobre (28/08, MANTOAN):
@@ -186,7 +187,18 @@ export function ehCompletaSemCiencia(d) {
     if (String(d.chave || '').slice(20, 22) !== '55') return false;
     if (!d._completadoEm) return false;
     if (ehResumoSemCompleta(d)) return false;
-    return !temManifestacaoDestinatario(d);
+    if (temManifestacaoDestinatario(d)) return false;
+    // ⏱ A SEFAZ já respondeu 596 (prazo da ciência encerrado): não há mais
+    // ação possível, então não é pendência — sai contada à parte (01/10).
+    return !prazoDaManifestacaoEncerrado(d, 'ciencia');
+}
+
+/** Completa importada à mão cuja ciência a SEFAZ recusou por PRAZO (596). Fato dito, não pendência. */
+export function ehCienciaComPrazoEncerrado(d) {
+    if (!d || cancelado(d)) return false;
+    if (direcaoEfetivaDoc(d) !== 'entrada') return false;
+    if (temManifestacaoDestinatario(d)) return false;
+    return prazoDaManifestacaoEncerrado(d, 'ciencia');
 }
 
 /** NFS-e não tem "resumo da SEFAZ": sem valor legível é outro defeito, com outra ação. */
@@ -348,6 +360,10 @@ export function montarRotinaFiscal({
     // 📨 Completa importada à mão sem ciência manifestada (28/09): fato
     // separado do "sem valor". Se cobra ou não, é o PARÂMETRO que diz.
     const semCiencia = docs.filter(ehCompletaSemCiencia);
+    const prazoCienciaEncerrado = docs.filter(ehCienciaComPrazoEncerrado).length;
+    const frasePrazo = prazoCienciaEncerrado > 0
+        ? ` · ${prazoCienciaEncerrado} com o prazo da ciência encerrado na SEFAZ (596) — nota completa no CFI, nada a manifestar`
+        : '';
     const exigeCiencia = param.cienciaAposCompletaManual === 'exigir';
     const cienciaPendentes = exigeCiencia ? semCiencia : [];
     const canceladas = docs.filter(cancelado).length;
@@ -395,16 +411,16 @@ export function montarRotinaFiscal({
         // Só a ciência pendente NÃO faz a apuração sair a menor — a frase diz isso.
         const rodape = semValor.length > 0 ? ' Sem isso a apuração sai a menor.' : '';
         eValidacao = etapa('validacao', 'atencao',
-            `${partes.join(' · ')}.`,
+            `${partes.join(' · ')}${frasePrazo}.`,
             `${acoes.join(' ')}${rodape}`,
             { resumos, nfseSemValor, semCiencia: semCiencia.length, cienciaAposCompletaManual: param.cienciaAposCompletaManual,
-              canceladas, cce, notas, notasCortadas: Math.max(0, travam.length - notas.length) });
+              canceladas, cce, notas, notasCortadas: Math.max(0, travam.length - notas.length), prazoCienciaEncerrado });
     } else {
         // Ciência dispensada por parâmetro sai DITA — nunca some em silêncio.
         const dispensadas = semCiencia.length > 0 ? ` · ${semCiencia.length} sem ciência manifestada (dispensada por parâmetro do escritório)` : '';
         eValidacao = etapa('validacao', 'concluida',
-            `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}${dispensadas}.`,
-            null, { resumos, semCiencia: semCiencia.length, cienciaAposCompletaManual: param.cienciaAposCompletaManual, canceladas, cce });
+            `${docs.length} nota(s) com valor${canceladas ? ` · ${canceladas} cancelada(s) fora do cálculo` : ''}${dispensadas}${frasePrazo}.`,
+            null, { resumos, semCiencia: semCiencia.length, cienciaAposCompletaManual: param.cienciaAposCompletaManual, canceladas, cce, prazoCienciaEncerrado });
     }
 
     // CC-e que pede conferência trava a validação: o livro sai do XML ORIGINAL,

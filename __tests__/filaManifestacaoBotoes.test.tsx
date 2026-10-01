@@ -25,6 +25,7 @@ jest.mock('../services/manifestoService', () => ({
     resetarFalhasInfraManifestacao: (...a: unknown[]) => resetInfra(...a),
     // As réguas PURAS do desfecho (28/09) entram de verdade: o card decide o ✓/✕ por elas.
     manifestacaoGravada: jest.requireActual('../services/manifestoService').manifestacaoGravada,
+    manifestacaoComPrazoEncerrado: jest.requireActual('../services/manifestoService').manifestacaoComPrazoEncerrado,
     motivoDaManifestacaoNaoGravada: jest.requireActual('../services/manifestoService').motivoDaManifestacaoNaoGravada,
 }));
 

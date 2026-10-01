@@ -7,7 +7,9 @@ import admin from 'firebase-admin';
 import { refsDaChave } from './documento-lado-io.js';
 import { manifestarNFe, TIPOS_MANIFESTACAO, TIPOS_EVENTO } from './manifesto-client.js';
 // 🚨 O desfecho (aceita / já existia / recusada / sem resposta) é lido pelo dono (28/09).
-import { desfechoDaManifestacao, eventoDaManifestacao } from './manifestacao-desfecho.js';
+import {
+  desfechoDaManifestacao, eventoDaManifestacao, marcaDoPrazoEncerrado, prazoDaManifestacaoEncerrado,
+} from './manifestacao-desfecho.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { loadCertEmpresa, loadCertEmpresaPorCnpjBase } from './cert-storage.js';
 import { loadCertificate, extrairPem } from './secret-loader.js';
@@ -55,6 +57,9 @@ function ehElegivel(doc, tipoPretendido = 'ciencia') {
   if (doc.direcao !== 'entrada') return { ok: false, motivo: 'Não é entrada' };
   if (STATUS_QUE_BLOQUEIAM.has(doc.status)) return { ok: false, motivo: `status=${doc.status}` };
   if (temManifestacao(doc)) return { ok: false, motivo: 'Já manifestada' };
+  // ⏱ A SEFAZ já disse 596 (prazo encerrado) para ESTE evento: reenviar só
+  // coleciona a mesma recusa e ocupa o lote (01/10, ALMEIDA nº 187).
+  if (prazoDaManifestacaoEncerrado(doc, tipoPretendido)) return { ok: false, motivo: 'Prazo da SEFAZ encerrado (596)' };
   if (doc.dhEmi) {
     const idadeDias = (Date.now() - new Date(doc.dhEmi).getTime()) / (1000 * 3600 * 24);
     const idadeMax = IDADE_MAX_DIAS_POR_TIPO[tipoPretendido] ?? IDADE_MAX_PADRAO;
@@ -364,6 +369,17 @@ export async function manifestarUma({ chNFe, cnpjDestinatario, tipo = 'ciencia',
               empresaId, uf, certOverride, capturadoPor,
             });
       }
+    }
+  }
+
+  // ⏱ 596 — PRAZO ENCERRADO (01/10): o fato vai para o documento, nos dois
+  // lados da chave, para a Rotina parar de cobrar e o lote parar de reenviar.
+  if (!dryRun && result.desfecho?.registraPrazoEncerrado) {
+    const { refs } = await refsDaChave(db, chNFe);
+    const marca = marcaDoPrazoEncerrado({ desfecho: result.desfecho, tipo, capturadoPor });
+    for (const ref of refs) {
+      const s = await ref.get();
+      if (s.exists) await ref.update({ manifestacaoPrazoEncerrado: marca });
     }
   }
 
