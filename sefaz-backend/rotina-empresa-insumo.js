@@ -71,6 +71,8 @@ export function empresaDaRotina(id, colecao, d) {
         colecao,
         regimePadrao: dados.regimePadrao || df.regimePadrao || '',
         uf: df.uf || dados.uf || '',
+        // 📗 SPED Fiscal só para quem entrega (IE cadastrada, ou DF — 01/10).
+        inscricaoEstadual: String(df.inscricaoEstadual ?? dados.inscricaoEstadual ?? '').trim(),
         // 🏦 DeRE (02/09): o regime ESPECÍFICO de IBS/CBS marcado no cadastro
         // e o CNAE (sinal de candidata) — sem eles o catálogo responderia
         // `sem-sinal` para todo cliente e a obrigação nunca entraria no mês de

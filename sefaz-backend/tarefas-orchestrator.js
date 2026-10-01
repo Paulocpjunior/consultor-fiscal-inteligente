@@ -210,6 +210,8 @@ export async function executarCronMensal(competencia, opts = {}) {
                     cnae: emp.cnae || emp.dadosFiscais?.cnae || '',
                     uf: emp.dadosFiscais?.uf || emp.uf || '',
                     codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
+                    // 📗 SPED Fiscal só nasce para quem entrega (IE ou DF, 01/10).
+                    inscricaoEstadual: String(emp.dadosFiscais?.inscricaoEstadual ?? emp.inscricaoEstadual ?? '').trim(),
                     prazosMunicipais,
                 }, comp);
                 const regras = mes.obrigacoes;
@@ -322,6 +324,7 @@ export async function reaplicarPrazosDoCatalogo(competencia, opts = {}) {
                 cnae: emp.cnae || emp.dadosFiscais?.cnae || '',
                 uf: emp.dadosFiscais?.uf || emp.uf || '',
                 codMunIBGE: String(emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '').trim(),
+                inscricaoEstadual: String(emp.dadosFiscais?.inscricaoEstadual ?? emp.inscricaoEstadual ?? '').trim(),
                 prazosMunicipais,
             }, comp);
             regras = mes.obrigacoes || [];
