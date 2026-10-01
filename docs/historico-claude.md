@@ -5,6 +5,20 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 E316 DO DIFAL POR OPERAÇÃO = DATA DE EMISSÃO (01/10)** (Paulo, com o
+  PVA: E316 de BA em 05/05, 11/05, 27/05, todos 100102 — *"os vencimentos são
+  lançados conforme emissão do documento, segue a legislação … e as empresas
+  com grande movimento, ex. WALDESA"*, Convênio ICMS 236/21: sem inscrição no
+  destino, GNRE a cada operação; inscrito, até o dia 15 do mês seguinte).
+  difal-ec87-saida.js: `agruparDifalPorUf` acumula `porData`/`semData` (data
+  pelo dono `dataDeclaradaDoDocumento`); `codigoReceitaPorOperacao` (pela
+  descrição da tabela GNRE); `faltasDaObrigacaoDifal` (régua da TELA);
+  `e316PorOperacao` → uma linha por dia, DT_VCTO = a data, só se a soma por
+  dia fechar com o a recolher e não houver data ilegível (senão reserva no
+  vencimento cadastrado, ou falta dita). AjustesE111 usa o dono no aviso e na
+  gravação (por operação grava com dtVcto ''). Teste antigo que esperava o
+  vencimento cadastrado com 100102 atualizado; 5 travas novas (TZ variado ok).
+
 - **⏱ CIÊNCIA FORA DO PRAZO — SEFAZ 596 (01/10, ALMEIDA COMERCIO nº 187)**
   (Paulo: *"ainda sobre ciência de NFs, como fica?"*). A assinatura C14N
   inclusiva FUNCIONOU: a SEFAZ passou a ler o evento e respondeu *"596 —

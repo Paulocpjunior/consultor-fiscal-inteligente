@@ -27,6 +27,7 @@ import {
     montarLinhasDifalBlocoE,
     avisoDifalNaoCapturado,
     CODIGOS_RECEITA_GNRE_EC87, detalharDifalPorUf,
+    codigoReceitaPorOperacao, faltasDaObrigacaoDifal,
 } from '../sefaz-backend/difal-ec87-saida.js';
 // @ts-expect-error — módulo .js do backend (sem tipos)
 import { buildBlocoC } from '../sefaz-backend/sped-fiscal-blocoC.js';
@@ -337,7 +338,9 @@ describe('o bloco E emite E300/E310/E316 por UF de DESTINO', () => {
         const difal = e316[0].split('|');
         expect(difal[2]).toBe('000');        // COD_OR
         expect(difal[3]).toBe('323,29');     // VL_OR = VL_RECOL_DIFAL
-        expect(difal[4]).toBe('15092026');   // DT_VCTO
+        // DT_VCTO: 100102 é POR OPERAÇÃO ⇒ a data de emissão da nota (14/08),
+        // não o vencimento cadastrado (01/10, Convênio ICMS 236/21).
+        expect(difal[4]).toBe('14082026');
         expect(difal[5]).toBe('100102');     // COD_REC do DIFAL
         expect(difal[10]).toBe('082026');    // MES_REF
         const fcp = e316[1].split('|');
@@ -508,5 +511,74 @@ describe('detalharDifalPorUf — nota a nota, por UF, com a MESMA seleção do E
 
     it('sem nada: vazio, e não zero disfarçado de UF', () => {
         expect(detalharDifalPorUf([], 'SP', CNPJ_EMPRESA)).toEqual({ grupos: [], totais: { difal: 0, fcp: 0, documentos: 0 }, semUf: [], mesmaUf: [] });
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📅 E316 POR OPERAÇÃO — o vencimento é a data de emissão (01/10, Paulo, com o
+// PVA da empresa: E316 de BA em 05/05, 11/05 e 27/05, todos 100102 — *"os
+// vencimentos são lançados conforme emissão do documento, segue a
+// legislação"*; Convênio ICMS 236/21: sem inscrição na UF de destino, a GNRE é
+// recolhida a cada operação, na saída; com inscrição, até o dia 15 do mês
+// seguinte). A forma de recolher está DITA no código escolhido.
+// ════════════════════════════════════════════════════════════════════════════
+describe('📅 E316 do DIFAL por operação sai por data de emissão', () => {
+    const emitida = (numero: string, dhEmi: string, icmsUfDest: number, fcp = 0) =>
+        ({ ...venda({ numero, uf: 'BA', icmsUfDest, fcp }), dhEmi });
+    const notas = () => [
+        emitida('101', '2026-05-05T09:00:00-03:00', 63.66),
+        emitida('102', '2026-05-11T09:00:00-03:00', 200),
+        emitida('103', '2026-05-11T15:00:00-03:00', 146.49),
+        emitida('104', '2026-05-27T09:00:00-03:00', 103.57, 10),
+    ];
+    const gerar = (obrig: any, lista = notas()) => montarLinhasDifalBlocoE({
+        notas: lista, ufEmpresa: 'SP', dtIni: '01052026', dtFin: '31052026', mesRef: '052026',
+        obrigacoesPorUf: { BA: obrig },
+    });
+    const e316 = (r: any) => r.linhas.filter((l: any[]) => l[0] === 'E316');
+
+    it('a régua do código: 100102/100129 são por operação; 100110/100137 por apuração', () => {
+        expect(codigoReceitaPorOperacao('100102')).toBe(true);
+        expect(codigoReceitaPorOperacao('100129')).toBe(true);
+        expect(codigoReceitaPorOperacao('100110')).toBe(false);
+        expect(codigoReceitaPorOperacao('100137')).toBe(false);
+        expect(codigoReceitaPorOperacao('999999')).toBe(false);
+    });
+
+    it('sem vencimento cadastrado: uma linha por DIA, DT_VCTO = a data, e a soma fecha com o E310 (o espelho do PVA)', () => {
+        const r = gerar({ dtVcto: '', codRec: '100102', codRecFcp: '100129' });
+        const difal = e316(r).filter((l: any[]) => l[4] === '100102');
+        expect(difal.map((l: any[]) => [l[3], l[2]])).toEqual([
+            ['05052026', '63,66'], ['11052026', '346,49'], ['27052026', '103,57'],
+        ]);
+        const fcp = e316(r).filter((l: any[]) => l[4] === '100129');
+        expect(fcp.map((l: any[]) => [l[3], l[2]])).toEqual([['27052026', '10,00']]);
+        const ap = r.apuracoes.find((a: any) => a.uf === 'BA');
+        const soma = e316(r).reduce((t: number, l: any[]) => t + Number(String(l[2]).replace(',', '.')), 0);
+        expect(ap).toBeDefined();
+        expect(soma).toBeCloseTo(ap?.aRecolher ?? NaN, 2);
+        expect(r.avisos.join(' ')).not.toMatch(/E316 NÃO saiu/);
+    });
+
+    it('código POR APURAÇÃO continua pedindo o vencimento — e com ele sai uma linha só', () => {
+        expect(e316(gerar({ dtVcto: '', codRec: '100110' }))).toHaveLength(0);
+        const r = gerar({ dtVcto: '15062026', codRec: '100110', codRecFcp: '100137' });
+        expect(e316(r).map((l: any[]) => [l[3], l[4]])).toEqual([['15062026', '100110'], ['15062026', '100137']]);
+    });
+
+    it('nota sem data de emissão legível: não inventa o dia — usa o vencimento de reserva, ou diz o que falta', () => {
+        const lista = [...notas(), { ...emitida('105', '', 50), dhEmi: '' }];
+        const semReserva = gerar({ dtVcto: '', codRec: '100102' }, lista);
+        expect(e316(semReserva).filter((l: any[]) => l[4] === '100102')).toHaveLength(0);
+        expect(semReserva.avisos.join(' ')).toMatch(/sem data de emissão legível \(nº 105\)/);
+        const comReserva = gerar({ dtVcto: '31052026', codRec: '100102' }, lista);
+        expect(e316(comReserva).filter((l: any[]) => l[4] === '100102').map((l: any[]) => l[3])).toEqual(['31052026']);
+    });
+
+    it('a régua do que falta (a da tela de cadastro)', () => {
+        expect(faltasDaObrigacaoDifal({ uf: 'BA', dtVcto: '', codRec: '100102' })).toEqual([]);
+        expect(faltasDaObrigacaoDifal({ uf: 'BA', dtVcto: '', codRec: '100110' })).toEqual(['vencimento']);
+        expect(faltasDaObrigacaoDifal({ uf: 'BA', dtVcto: '', codRec: '100102' }, { temFcp: true })).toEqual(['código do FCP']);
+        expect(faltasDaObrigacaoDifal({ uf: 'BA', dtVcto: '', codRec: '100102', codRecFcp: '100137' }, { temFcp: true })).toEqual(['vencimento']);
     });
 });

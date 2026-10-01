@@ -21,6 +21,10 @@ export interface GrupoDifalUf {
     parteRemetente: number;
     documentos: number;
     extemporaneos: number;
+    /** DIFAL/FCP por data de emissão (AAAA-MM-DD) — o E316 por operação. */
+    porData: Record<string, { difal: number; fcp: number; documentos: number }>;
+    /** Notas sem data de emissão legível (impedem o E316 por operação). */
+    semData: string[];
 }
 
 export interface ApuracaoDifalUf {
@@ -135,3 +139,9 @@ export declare function montarLinhasDifalBlocoE(p: {
 };
 
 export declare function avisoDifalNaoCapturado(notas: any[], ufEmpresa: string): string | null;
+
+export function codigoReceitaPorOperacao(codigo: unknown): boolean;
+export function faltasDaObrigacaoDifal(
+    o: { uf?: string; dtVcto?: string; codRec?: string; codRecFcp?: string },
+    ctx?: { temFcp?: boolean },
+): string[];

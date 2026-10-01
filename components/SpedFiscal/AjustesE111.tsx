@@ -22,7 +22,7 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 // códigos estaduais que ele precisa — é onde a pessoa já vem lançar o E111.
 import DifalArt117 from './DifalArt117';
 // A tabela de receitas da GNRE para a EC 87/15 — sugestão no cadastro, nunca default.
-import { CODIGOS_RECEITA_GNRE_EC87 } from '../../sefaz-backend/difal-ec87-saida.js';
+import { CODIGOS_RECEITA_GNRE_EC87, faltasDaObrigacaoDifal, codigoReceitaPorOperacao } from '../../sefaz-backend/difal-ec87-saida.js';
 import { auth } from '../../services/firebaseConfig';
 
 interface Props {
@@ -108,14 +108,14 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
     // sem vencimento; a gravação descartava as 8 linhas incompletas EM
     // SILÊNCIO e o toast dizia "Ajustes salvos (0)" — contando os E111, não o
     // E316. O que falta em cada UF sai DITO, antes e depois de salvar.
+    // 📅 A régua é do DONO (`faltasDaObrigacaoDifal`, 01/10): com código POR
+    // OPERAÇÃO (100102/100129) o vencimento é a data de emissão de cada nota e
+    // não é cobrado aqui — o gerador monta um E316 por dia.
     const faltasDifalPorUf = useMemo(() => obrigacoesDifal.map(o => {
         const u = o.uf.trim().toUpperCase();
-        const faltas: string[] = [];
-        if (u.length !== 2) faltas.push('UF');
-        if (o.dtVcto.replace(/\D/g, '').length !== 8) faltas.push('vencimento');
-        if (!o.codRec.trim()) faltas.push('código do DIFAL');
         const info = infoUf(u);
-        if (info && info.fcp > 0 && !String(o.codRecFcp || '').trim()) faltas.push(`código do FCP (${fmtBRL(info.fcp)})`);
+        const faltas = faltasDaObrigacaoDifal({ ...o, uf: u }, { temFcp: !!(info && info.fcp > 0) })
+            .map(f => (f === 'código do FCP' && info ? `código do FCP (${fmtBRL(info.fcp)})` : f));
         return { uf: u || '(sem UF)', faltas };
     }).filter(x => x.faltas.length), [obrigacoesDifal, ufsDaCompetencia]); // eslint-disable-line react-hooks/exhaustive-deps
     const fraseFaltasDifal = (lista: Array<{ uf: string; faltas: string[] }>) =>
@@ -125,7 +125,7 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
         const cod = aplicar.codRec.trim();
         const codFcp = aplicar.codRecFcp.trim();
         if (!dt && !cod && !codFcp) { onShowToast?.('Preencha ao menos um campo para aplicar.'); return; }
-        if (!dt && obrigacoesDifal.some(o => o.dtVcto.replace(/\D/g, '').length !== 8)) {
+        if (!dt && !codigoReceitaPorOperacao(cod) && obrigacoesDifal.some(o => o.dtVcto.replace(/\D/g, '').length !== 8 && !codigoReceitaPorOperacao(o.codRec))) {
             onShowToast?.('⚠️ Aplicado sem VENCIMENTO: UF sem vencimento não vira E316 e não é gravada. Informe o vencimento (DDMMAAAA) e aplique de novo, ou preencha linha a linha.');
         }
         setObrigacoesDifal(prev => prev.map(o => {
@@ -212,8 +212,10 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                 // O FCP tem receita própria (21/09): vai só quando informado —
                 // o Firestore rejeita `undefined`, por isso o spread condicional.
                 const codFcp = String(o.codRecFcp || '').trim();
-                if (u.length === 2 && dt.length === 8 && cod) {
-                    difalMap[u] = { dtVcto: dt, codRec: cod, ...(codFcp ? { codRecFcp: codFcp } : {}) };
+                // Vencimento só é exigido de código POR APURAÇÃO (dono, 01/10);
+                // por operação grava sem ele ('' — o Firestore recusa undefined).
+                if (faltasDaObrigacaoDifal({ ...o, uf: u }).length === 0) {
+                    difalMap[u] = { dtVcto: dt.length === 8 ? dt : '', codRec: cod, ...(codFcp ? { codRecFcp: codFcp } : {}) };
                 }
             }
             await salvarAjustes({
@@ -502,7 +504,8 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                                     value={o.dtVcto}
                                     onChange={e => setObrigacoesDifal(prev => prev.map((x, k) => k === i
                                         ? { ...x, dtVcto: e.target.value.replace(/\D/g, '').slice(0, 8) } : x))}
-                                    placeholder="Vencimento DDMMAAAA"
+                                    placeholder={codigoReceitaPorOperacao(o.codRec) ? 'Por operação: data de cada nota' : 'Vencimento DDMMAAAA'}
+                                    title={codigoReceitaPorOperacao(o.codRec) ? 'Código por operação: o E316 sai uma linha por data de emissão, com o vencimento = a data da nota (Convênio ICMS 236/21). O vencimento digitado aqui só é usado de reserva, se alguma nota estiver sem data de emissão legível.' : 'Vencimento da guia por apuração (DDMMAAAA).'}
                                     className="w-[190px] px-3 py-2 text-sm rounded-lg"
                                     style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                                 />
