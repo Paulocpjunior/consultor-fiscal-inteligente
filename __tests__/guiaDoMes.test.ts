@@ -241,3 +241,38 @@ describe('PDF', () => {
         expect(linha[7]).toBe('Mês fechado');
     });
 });
+
+/**
+ * 📨 CIÊNCIA EM LOTE NO GUIA (01/10, Paulo: "essas empresas já foram todas
+ * manifestadas na SEFAZ, porém não consigo prosseguir com o fechamento"). A
+ * linha leva as chaves que a etapa 2 nomeia — resumo e completa sem ciência —
+ * para o botão "manifestar todas"; NFS-e sem valor e chave torta ficam fora.
+ */
+describe('as chaves que pedem ciência viajam da etapa 2 para a linha', () => {
+    const CH = (n: string) => `3526${n.padStart(40, '0')}`;
+    it('resumo e sem-ciência entram; NFS-e sem valor e chave inválida não; cortadas ditas', () => {
+        const l = montarLinhaGuia(rotina({
+            farol: 'atencao',
+            etapas: [
+                etapa('captura', 'concluida'),
+                etapa('validacao', 'atencao', {
+                    notas: [
+                        { chave: CH('1'), motivo: 'sem-ciencia' },
+                        { chave: CH('2'), motivo: 'resumo' },
+                        { chave: CH('3'), motivo: 'nfse-sem-valor' },
+                        { chave: '123', motivo: 'sem-ciencia' },
+                    ],
+                    notasCortadas: 7,
+                }),
+            ],
+        }));
+        expect(l.cienciaChaves).toEqual([CH('1'), CH('2')]);
+        expect(l.cienciaCortadas).toBe(7);
+    });
+
+    it('mês sem nota pendente: nada para manifestar', () => {
+        const l = montarLinhaGuia(rotina());
+        expect(l.cienciaChaves).toEqual([]);
+        expect(l.cienciaCortadas).toBe(0);
+    });
+});

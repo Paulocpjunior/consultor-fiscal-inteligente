@@ -485,7 +485,7 @@ export async function liberarPoisonManifestacao({ empresaId, dryRun = false } = 
 export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun = false, tipo = 'ciencia', capturadoPor = null, skipRedownload = true } = {}) {
   const db = fa().firestore();
   const elegiveis = await listarElegiveis({ empresaId, limit, tipo });
-  const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, puladas656: 0, detalhes: [] };
+  const resultado = { total: elegiveis.length, sucessos: 0, falhas: 0, puladas656: 0, jaExistiam: 0, prazoEncerrado: 0, detalhes: [] };
   // Circuit-breaker por RAIZ: primeiro 656 numa raiz → pula os demais docs da
   // mesma raiz NESTE run (insistir só re-arma o bloqueio; a raiz volta na
   // próxima janela do cron). O resto do lote (outras raízes) segue normal.
@@ -534,8 +534,16 @@ export async function manifestarPendentes({ empresaId = null, limit = 50, dryRun
       const cStat = r.retorno?.eventos?.[0]?.cStat;
       const xMotivo = r.retorno?.eventos?.[0]?.xMotivo;
       const aceito = ['135', '136'].includes(cStat);
+      // 01/10: "já existia" (573) e "prazo encerrado" (596) são DESFECHOS — o
+      // evento (ou o fato do prazo) foi gravado pelo `manifestarUma`. Contá-los
+      // como falha carimbava cooldown/poison em nota resolvida.
+      const situacao = r.desfecho?.situacao;
       if (aceito || dryRun) {
         resultado.sucessos++;
+      } else if (situacao === 'ja-existia') {
+        resultado.jaExistiam++;
+      } else if (situacao === 'prazo-encerrado') {
+        resultado.prazoEncerrado++;
       } else {
         resultado.falhas++;
         await carimbarFalha(doc, `cStat ${cStat}: ${xMotivo || ''}`);

@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📨 CIÊNCIA EM LOTE NO GUIA DO MÊS (01/10)** (Paulo, print de ALMEIDA,
+  BRISKA, COMAC, KJM: *"já foram todas manifestadas na SEFAZ, porém não
+  consigo prosseguir com o fechamento"*). Manifestação feita fora do CFI não
+  deixa evento no documento; antes do C14N (#1335) toda tentativa do lote
+  falhava (225) e o poison (8 falhas) tirou as notas do cron. `LinhaGuia`
+  ganha `cienciaChaves`/`cienciaCortadas` (da etapa 2: resumo + sem-ciência);
+  GuiaDoMes ganha "📨 Manifestar ciência de todas (N)" (manifest-one por chave;
+  aceita/573/596 fecham; resultado dito; recarrega). `manifestarPendentes`
+  conta `jaExistiam`/`prazoEncerrado` sem carimbar falha. Travas em
+  guiaDoMes.test.ts e manifestoSkipRedownload.test.ts.
+
 - **🖨️ DECLARAÇÃO DE FATURAMENTO SEM OBSERVAÇÃO INTERNA NO PAPEL (01/10)**
   (Paulo, com o PDF: *"são apenas observações internas do sistema! não podem
   sair nas impressões aos clientes"*). `gerarDeclaracaoFaturamentoPdf` perde
