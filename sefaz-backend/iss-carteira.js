@@ -145,7 +145,9 @@ const PESO = Object.fromEntries(SITUACOES.map((s, i) => [s, i]));
  * @param {object} p
  * @param {Array}  p.empresas   [{empresaId, nome, cnpj, ccm, issFixoSup, codMunIBGE}]
  * @param {Array}  p.apuracoes  [{empresaId, notas, issDevido, issRetido, aRecolher, semValorGravado}]
- * @param {(cnpj:string)=>boolean} [p.zeroConfiavelPara] captura daquele CNPJ é confiável?
+ * @param {(cnpj:string)=>(boolean|{confiavel:boolean, motivo?:string|null})} [p.zeroConfiavelPara]
+ *   captura daquele CNPJ é confiável? (o objeto traz o PORQUÊ do "não sei" —
+ *   `zeroConfiavelDaEmpresa`, 01/10)
  */
 export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara } = {}) {
     const porEmpresa = new Map();
@@ -180,7 +182,9 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
         const divergencia = divergenciaRegimePelaNota(e.regime, a.saidas || []);
         // A captura só é "confiável" pra quem tem CCM: sem ele a varredura do
         // portal nem tenta a empresa, então o zero dela não vale nada.
-        const zeroConfiavel = temCcm && (zeroConfiavelPara ? !!zeroConfiavelPara(e.cnpj) : false);
+        const respZero = temCcm && zeroConfiavelPara ? zeroConfiavelPara(e.cnpj) : false;
+        const zeroConfiavel = temCcm && (respZero && typeof respZero === 'object' ? !!respZero.confiavel : !!respZero);
+        const motivoZeroIncerto = respZero && typeof respZero === 'object' ? (respZero.motivo || null) : null;
 
         let situacao;
         let acao = null;
@@ -195,7 +199,9 @@ export function montarPainelIssCarteira({ empresas, apuracoes, zeroConfiavelPara
             acao = `${semValorGravado} nota(s) sem o ISS gravado — ausência NÃO é zero. Reimporte a competência antes de emitir a guia.`;
         } else if (notas === 0 && !zeroConfiavel) {
             situacao = 'captura-incerta';
-            acao = 'Zero notas E a captura do mês não teve sucesso — não dá pra afirmar que o cliente não emitiu. Rode a captura antes de dizer que não há guia.';
+            acao = motivoZeroIncerto
+                ? `Zero notas emitidas no mês e a captura desta empresa não está provada: ${motivoZeroIncerto}`
+                : 'Zero notas E a captura do mês não teve sucesso — não dá pra afirmar que o cliente não emitiu. Rode a captura antes de dizer que não há guia.';
         } else if (regimeSimples && aRecolher > 0) {
             situacao = 'iss-no-das';
             acao = 'Optante do Simples: este ISS já é recolhido DENTRO do DAS — não há guia do município. '

@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏛️ ZERO DE NFS-e SP DECIDIDO POR EMPRESA (01/10, ALMEIDA/BRISKA)** (Paulo:
+  *"agora diz que está incerto as notas da prefeitura de SP, porém consta as
+  notas de serviços tomados da BRISKA"*). `saudeNfseSp` dá `zeroConfiavel:false`
+  para TODOS quando uma empresa falha na rodada. Dono novo
+  `zeroConfiavelDaEmpresa` (nfse-sp-saude.js): erro da empresa ⇒ incerto com o
+  erro; `nfsesp_portal_state.porPeriodo[AAAA-MM]` (gravado pelo cron a partir de
+  01/10) mês inteiro sem erro ⇒ confiável; rodada geral limpa ⇒ confiável; senão
+  a última rodada concluída precisa cobrir o mês inteiro, ter visitado a empresa
+  (`ultimaSync` ≥ início) e lista de erros completa (<10) sem ela. Rotina e aba
+  ISS SP usam `zeroConfiavelParaCompetencia`; a ação do "captura incerta" diz o
+  porquê. Trava `zeroConfiavelDaEmpresa.test.ts` (inclui varredura dos chamadores).
+
 - **⏱ PROJEÇÃO CEGAVA O 596 NA ROTINA (01/10, KJM)** (Paulo: *"fiz como o passo
   a passo, porém não mudou o status"* — toast "1 com prazo encerrado (596)").
   O `.select(...)` de rotina-fiscal-routes não trazia `manifestacaoPrazoEncerrado`;

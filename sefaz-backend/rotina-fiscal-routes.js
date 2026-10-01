@@ -77,7 +77,7 @@ import { identificarNaturezaFornecedor } from './dipam-produtor-rural.js';
 import { ehNotaPropriaDeEntrada } from './xml-metadata-helper.js';
 import { ladoDaContraparte } from './participante-doc-helper.js';
 import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
-import { saudeNfseSp, empresaComFalhaNaCaptura } from './nfse-sp-saude.js';
+import { saudeNfseSp, zeroConfiavelParaCompetencia } from './nfse-sp-saude.js';
 
 /** SP capital. Fora da praça o ISS é de outra prefeitura, com outro portal. */
 const COD_MUN_SP_CAPITAL = '3550308';
@@ -200,7 +200,17 @@ async function montarIssDaCarteira(db, empresas, documentos, porCnpjToId, compet
     } catch (e) {
         console.warn('[rotina-fiscal] saúde da NFS-e SP indisponível:', e.message);
     }
-    const zeroConfiavelPara = (cnpj) => !!saude?.zeroConfiavel && !empresaComFalhaNaCaptura(logs, cnpj);
+    // 🔒 Por EMPRESA (01/10, ALMEIDA/BRISKA): uma empresa que falha na rodada
+    // não pode anular o zero das outras que o portal respondeu sem erro.
+    // Sem o estado legível, a régua cai no que a rodada prova — nunca no "ok".
+    const estados = new Map();
+    try {
+        const es = await db.collection('nfsesp_portal_state').get();
+        es.forEach((d) => estados.set(String(d.id).replace(/\D/g, ''), d.data() || {}));
+    } catch (e) {
+        console.warn('[rotina-fiscal] nfsesp_portal_state indisponível:', e.message);
+    }
+    const zeroConfiavelPara = zeroConfiavelParaCompetencia({ saude, logs, estados, competencia });
 
     const painel = montarPainelIssCarteira({
         empresas: spCapital.map((e) => ({

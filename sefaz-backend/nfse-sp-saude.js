@@ -158,3 +158,150 @@ export function empresaComFalhaNaCaptura(logs, cnpj) {
     }
     return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔒 O ZERO É CONFIÁVEL PARA ESTA EMPRESA? (dono único, 01/10)
+//
+// Paulo, 01/10, na ALMEIDA e na BRISKA: *"agora diz que está incerto as notas
+// da prefeitura de SP, porém consultei na prefeitura e no consultor e consta
+// as notas de serviços tomados da BRISKA"*.
+//
+// A régua antiga era `saude.zeroConfiavel && !empresaComFalhaNaCaptura(...)`
+// — e `saudeNfseSp` devolve `zeroConfiavel:false` para TODO MUNDO quando UMA
+// empresa falha na rodada. Numa carteira de ~200 sempre há uma: o zero da
+// empresa que o portal respondeu sem erro virava "captura incerta", e o fim do
+// mês travava sem nada que o colaborador pudesse corrigir.
+//
+// O que prova a captura DESTA empresa, nesta ordem:
+//  1. ela está no resumo de erros da última rodada ⇒ NÃO confiável, com o erro;
+//  2. o registro POR MÊS da empresa (`nfsesp_portal_state.porPeriodo[AAAA-MM]`,
+//     gravado a partir de 01/10): mês inteiro baixado, sem erro ⇒ confiável;
+//     com erro ⇒ não, com o erro;
+//  3. rodada geral sem falha nenhuma (a régua antiga) ⇒ confiável;
+//  4. a última rodada CONCLUÍDA cobriu o mês inteiro, VISITOU a empresa
+//     (`ultimaSync` depois do início dela, sem erro gravado) e a lista de erros
+//     dela está COMPLETA (o cron guarda só 10) sem esta empresa ⇒ confiável.
+//
+// ⚠️ Farol honesto: lista de erros cortada, rodada que não cobriu o mês, ou
+// empresa que a rodada não visitou (CCM que não casa, lock) continuam "não
+// sei" — e a frase diz QUAL dos casos, porque a parada é outra em cada um.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** O cron guarda no máximo 10 erros por rodada (`log.errosResumo`). */
+export const LIMITE_ERROS_RESUMO = 10;
+
+const ultimoDiaDoMes = (anoMes) => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(anoMes || ''));
+    if (!m) return null;
+    const ano = Number(m[1]);
+    const mes = Number(m[2]);
+    const dia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    return `${String(dia).padStart(2, '0')}/${m[2]}/${m[1]}`;
+};
+
+/**
+ * O período baixado cobre o mês INTEIRO? Download feito no meio do mês não
+ * prova nada sobre os dias que ainda não tinham acontecido.
+ * @param {{anoMes?: string, dataInicio?: string, dataFim?: string}} periodo
+ */
+export function periodoCobreMesInteiro(periodo) {
+    const fim = ultimoDiaDoMes(periodo?.anoMes);
+    if (!fim) return false;
+    const ini = `01/${String(periodo.anoMes).slice(5, 7)}/${String(periodo.anoMes).slice(0, 4)}`;
+    return String(periodo?.dataInicio || '') === ini && String(periodo?.dataFim || '') === fim;
+}
+
+/**
+ * @param {object} p
+ * @param {object|null} p.saude      saída de `saudeNfseSp`
+ * @param {Array} p.logs             docs de nfsesp_portal_cron_logs (mais recente primeiro)
+ * @param {object|null} p.state      doc `nfsesp_portal_state/{cnpj}`
+ * @param {string} p.cnpj
+ * @param {string} p.competencia     'AAAA-MM'
+ * @returns {{confiavel: boolean, via: string, motivo: string|null}}
+ */
+export function zeroConfiavelDaEmpresa({ saude = null, logs = [], state = null, cnpj, competencia } = {}) {
+    const falha = empresaComFalhaNaCaptura(logs, cnpj);
+    if (falha) {
+        return {
+            confiavel: false, via: 'falhou-na-rodada',
+            motivo: `A captura DESTA empresa falhou na última rodada do portal de SP: ${falha.erro}. `
+                + 'Rode a captura de novo antes de dizer que não há guia.',
+        };
+    }
+
+    const per = state?.porPeriodo?.[competencia];
+    if (per) {
+        const erro = per.erroPrestadas || per.erroTomadas;
+        if (erro) {
+            return {
+                confiavel: false, via: 'periodo-com-erro',
+                motivo: `O download de ${competencia} desta empresa no portal de SP falhou: ${erro}. Rode a captura de novo.`,
+            };
+        }
+        if (per.mesInteiro === true) {
+            return { confiavel: true, via: 'periodo-da-empresa', motivo: null };
+        }
+    }
+
+    if (saude?.zeroConfiavel) return { confiavel: true, via: 'rodada-geral', motivo: null };
+
+    const lista = (logs || []).map((l) => ({ ...l, _ts: ms(l.iniciadoEm || l.executadoEm) }))
+        .sort((a, b) => b._ts - a._ts);
+    const rodada = lista.find((l) => l.status === 'sucesso' && !l.erroFatal && Number(l.sucessos || 0) > 0);
+    const naoSei = (motivo) => ({ confiavel: false, via: 'sem-prova', motivo });
+    if (!rodada) {
+        return naoSei(saude?.motivo
+            ? `${saude.motivo} Rode a captura antes de dizer que não há guia.`
+            : 'Nenhuma rodada da captura de NFS-e SP concluiu com sucesso — rode a captura antes de dizer que não há guia.');
+    }
+    const cobriu = (rodada.periodos || []).some((p) => p?.anoMes === competencia && periodoCobreMesInteiro(p));
+    if (!cobriu) {
+        return naoSei(`A última rodada concluída do portal de SP não baixou ${competencia} inteiro — `
+            + 'rode a captura deste mês antes de dizer que não há guia.');
+    }
+    const erros = rodada.errosResumo || [];
+    const alvo = String(cnpj || '').replace(/\D/g, '');
+    const nela = erros.find((e) => String(e?.cnpj || '').replace(/\D/g, '') === alvo);
+    if (nela) {
+        return {
+            confiavel: false, via: 'falhou-na-rodada',
+            motivo: `A captura DESTA empresa falhou na rodada do portal de SP: ${nela.erroPrestador || nela.erroTomador || nela.motivo || 'falha não detalhada'}. Rode a captura de novo.`,
+        };
+    }
+    if (erros.length >= LIMITE_ERROS_RESUMO) {
+        return naoSei(`A rodada do portal de SP teve ${Number(rodada.falhas || erros.length)} falha(s) e só as ${LIMITE_ERROS_RESUMO} primeiras ficam gravadas — `
+            + 'não dá para afirmar que esta empresa não está entre elas. Rode a captura de novo.');
+    }
+    const visitadaEm = ms(state?.ultimaSync);
+    if (!visitadaEm || visitadaEm < rodada._ts) {
+        return naoSei('A última rodada do portal de SP não chegou a esta empresa (CCM que não casa com o portal, '
+            + 'autorização do escritório pendente ou lock ativo). Confira o CCM em Dados Fiscais e rode a captura.');
+    }
+    if (state?.erroPrestadas || state?.erroTomadas) {
+        return {
+            confiavel: false, via: 'falhou-na-rodada',
+            motivo: `O último download desta empresa no portal de SP falhou: ${state.erroPrestadas || state.erroTomadas}. Rode a captura de novo.`,
+        };
+    }
+    return { confiavel: true, via: 'rodada-cobriu-a-empresa', motivo: null };
+}
+
+/**
+ * A pergunta "o zero deste CNPJ é confiável?" já com a competência e o estado
+ * de cada empresa na mão — é o que as DUAS telas (Rotina e aba 🏛️ ISS SP)
+ * passam a `montarPainelIssCarteira`. Uma montagem só: tela com régua própria
+ * diverge sozinha.
+ *
+ * @param {object} p
+ * @param {object|null} p.saude
+ * @param {Array} p.logs
+ * @param {Map<string, object>} [p.estados] `nfsesp_portal_state` por CNPJ (só dígitos)
+ * @param {string} p.competencia
+ */
+export function zeroConfiavelParaCompetencia({ saude = null, logs = [], estados = new Map(), competencia } = {}) {
+    return (cnpj) => zeroConfiavelDaEmpresa({
+        saude, logs, competencia, cnpj,
+        state: estados?.get?.(String(cnpj || '').replace(/\D/g, '')) || null,
+    });
+}
