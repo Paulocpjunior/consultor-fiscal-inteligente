@@ -142,7 +142,7 @@ describe('🚨 fiação — campanha que não registra na conversa e não respei
         expect(rotas).toMatch(/router\.post\('\/campanhas\/:id\/pausar', requireAdmin/);
         const criar = rotas.slice(rotas.indexOf("router.post('/campanhas', requireAdmin"), rotas.indexOf("router.post('/campanhas/:id/iniciar'"));
         expect(criar).toMatch(/listarTemplatesAprovados\(\)/);
-        expect(criar).toMatch(/montarPublico\(\{ campanha: v\.campanha, contatos, catalogoEtiquetas: catalogo, empresas \}\)/);
+        expect(criar).toMatch(/montarPublico\(\{ campanha: v\.campanha, contatos, catalogoEtiquetas: catalogo, empresas, bloqueados \}\)/);
         expect(criar).toMatch(/status: 'rascunho'/);
         // Template com documento não sai em campanha (cada guia é um PDF).
         expect(criar).toMatch(/temDocumento/);

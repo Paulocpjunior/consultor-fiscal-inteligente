@@ -49,6 +49,22 @@ import {
     COLECAO_TRIAGEM_IA_LOG, registroDeTriagem,
 } from './whatsapp-triagem-ia.js';
 import { ehPedidoDeOptOut } from './whatsapp-campanhas.js';
+import { COLECAO_BLOQUEIOS, CACHE_BLOQUEIOS_MS, conjuntoDeBloqueados, separarBloqueadas, patchDeDescarte } from './whatsapp-bloqueios.js';
+
+// 🚫 Lista negra (01/10): o webhook lê a lista no máximo a cada 30 s. Número
+// bloqueado é descartado ANTES de gravar, acordar o bot ou avisar alguém —
+// só o contador no registro do bloqueio anda.
+let cacheBloqueados = { em: 0, conjunto: new Set() };
+async function lerBloqueados(db) {
+    if (Date.now() - cacheBloqueados.em < CACHE_BLOQUEIOS_MS) return cacheBloqueados.conjunto;
+    try {
+        const snap = await db.collection(COLECAO_BLOQUEIOS).where('ativo', '==', true).limit(5000).get();
+        cacheBloqueados = { em: Date.now(), conjunto: conjuntoDeBloqueados(snap.docs) };
+    } catch (e) {
+        console.warn('[whatsapp/bloqueios] lista não lida, valendo a anterior:', e.message);
+    }
+    return cacheBloqueados.conjunto;
+}
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
@@ -845,6 +861,16 @@ router.post('/webhook', async (req, res) => {
             return res.sendStatus(200); // assinado pela Meta, mas não é da WABA — nada a fazer
         }
         const catalogo = await catalogoDeCanais(db);
+        // 🚫 Bloqueados saem AQUI, antes de tudo: nem banco, nem bot, nem aviso.
+        const bloqueados = await lerBloqueados(db);
+        const sep = separarBloqueadas(ev.mensagens, bloqueados);
+        for (const msg of sep.bloqueadas) {
+            await db.collection(COLECAO_BLOQUEIOS).doc(String(msg.de)).set({
+                descartadas: admin.firestore.FieldValue.increment(1), ...patchDeDescarte(msg, new Date()),
+            }, { merge: true });
+        }
+        if (sep.bloqueadas.length) console.log(`[whatsapp/bloqueios] ${sep.bloqueadas.length} mensagem(ns) descartada(s) de número bloqueado`);
+        ev.mensagens = sep.livres;
         for (const msg of ev.mensagens) await gravarMensagemRecebida(db, msg, catalogo);
         for (const st of ev.statuses) await gravarStatus(db, st);
         // 📣 OPT-OUT DE CAMPANHA (29/09): "PARAR" / "SAIR" carimba o contato e
@@ -866,6 +892,7 @@ router.post('/webhook', async (req, res) => {
         const ch = extrairEventosChamada(req.body);
         const chamadasGravadas = [];
         for (const c of ch.chamadas) {
+            if (bloqueados.has(String(c.conversaId))) continue;   // 🚫 ligação de bloqueado não entra
             const g = await gravarEventoChamada(db, c);
             chamadasGravadas.push({ c, ...g });
         }
@@ -885,7 +912,9 @@ router.post('/webhook', async (req, res) => {
         // e o cru (já gravado no passo 1) é a régua para a próxima versão.
         if (naturezaDoEventoCru(req.body) === 'pedido-de-retorno') {
             const pr = lerPedidoDeRetorno(req.body);
-            if (pr.numero) {
+            if (pr.numero && bloqueados.has(pr.numero)) {
+                console.log(`[whatsapp/bloqueios] pedido de retorno de ${pr.numero} descartado (bloqueado)`);
+            } else if (pr.numero) {
                 const ref = db.collection('whatsapp_mensagens').doc(`retorno_${hash}`);
                 const jaExiste = (await ref.get()).exists;
                 await ref.set({

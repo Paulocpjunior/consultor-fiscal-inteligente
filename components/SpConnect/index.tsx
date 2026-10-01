@@ -36,6 +36,7 @@ import {
     agendarMensagem, listarAgendamentos, cancelarAgendamento, AgendamentoResumo, estadoDaAgenda, rodarAgendaAgora, EstadoDaAgenda,
     resumirConversa,
     listarCampanhas, lerCampanha, criarCampanha, iniciarCampanha, pausarCampanha, CampanhaResumo, CampanhaPulado, CampanhaDestinatario,
+    listarBloqueios, bloquearNumero, desbloquearNumero, BloqueioResumo,
 } from '../../services/spConnectService';
 import { listarTemplates, listarTemplatesDaMeta, WhatsappTemplate, TemplateDaMeta } from '../../services/whatsappTemplatesService';
 import {
@@ -677,6 +678,65 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (r.ok) setCfg(r.config);
         else setCfgErro(r.error || 'Falha ao carregar a configuração.');
     };
+    // ── 🚫 LISTA NEGRA (01/10, Paulo: "modal disponível somente para admins,
+    // para black list de usuários indesejados, spam, anúncio"). Bloqueio tem
+    // efeito real: nada entra (nem bot, nem aviso), nada sai, e a Meta é
+    // avisada por melhor esforço (resposta gravada). Só admin vê o modal.
+    const [bloqAberto, setBloqAberto] = useState(false);
+    const [bloqueios, setBloqueios] = useState<BloqueioResumo[]>([]);
+    const [bloqHistorico, setBloqHistorico] = useState<BloqueioResumo[]>([]);
+    const [bloqMotivos, setBloqMotivos] = useState<{ id: string; rotulo: string }[]>([]);
+    const [bloqErro, setBloqErro] = useState<string | null>(null);
+    const [bloqOcupado, setBloqOcupado] = useState(false);
+    const [bloqNumero, setBloqNumero] = useState('');
+    const [bloqMotivo, setBloqMotivo] = useState('spam');
+    const [bloqObs, setBloqObs] = useState('');
+    const [bloqNaMeta, setBloqNaMeta] = useState(true);
+    const [bloqAviso, setBloqAviso] = useState<string | null>(null);
+    const lerBloqueios = async () => {
+        const r = await listarBloqueios();
+        if (!r.ok) { setBloqErro(r.error || 'Não consegui ler a lista negra.'); return; }
+        setBloqueios(r.ativos || []); setBloqHistorico(r.historico || []); setBloqMotivos(r.motivos || []); setBloqErro(null);
+    };
+    const abrirBloqueios = (numeroPre = '') => {
+        setBloqNumero(numeroPre); setBloqMotivo('spam'); setBloqObs(''); setBloqNaMeta(true); setBloqAviso(null); setBloqErro(null);
+        setBloqAberto(true);
+        void lerBloqueios();
+    };
+    const acaoBloquear = async () => {
+        if (bloqOcupado || !bloqNumero.trim()) return;
+        const ok = await pedirConfirmacao(
+            `Bloquear ${bloqNumero.trim()}? Nada deste número vai entrar (nem bot, nem aviso) nem sair, e a conversa some do inbox. Dá para desbloquear depois.`,
+            'Bloquear',
+        );
+        if (!ok) return;
+        setBloqOcupado(true); setBloqErro(null); setBloqAviso(null);
+        try {
+            const r = await bloquearNumero({ numero: bloqNumero.trim(), motivo: bloqMotivo, observacao: bloqObs.trim() || undefined, naMeta: bloqNaMeta });
+            if (!r.ok) { setBloqErro(r.error || 'Não consegui bloquear.'); return; }
+            const b = r.bloqueio;
+            setBloqAviso(b.meta ? (b.meta.ok ? `✅ ${b.numero} bloqueado aqui e na Meta.` : `✅ ${b.numero} bloqueado aqui. ⚠️ A Meta não confirmou: ${b.meta.erro} (o bloqueio local vale mesmo assim).`) : `✅ ${b.numero} bloqueado aqui (Meta não avisada).`);
+            // A conversa sai do inbox na hora.
+            setConversas((lst) => lst.filter((c) => c.numero !== b.numero));
+            if (sel?.numero === b.numero) setSel(null);
+            setBloqNumero(''); setBloqObs('');
+            await lerBloqueios();
+        } finally { setBloqOcupado(false); }
+    };
+    const acaoDesbloquear = async (numero: string) => {
+        if (bloqOcupado) return;
+        const ok = await pedirConfirmacao(`Desbloquear ${numero}? Ele volta a entrar no inbox e a receber mensagens.`, 'Desbloquear');
+        if (!ok) return;
+        setBloqOcupado(true); setBloqErro(null); setBloqAviso(null);
+        try {
+            const r = await desbloquearNumero(numero, true);
+            if (!r.ok) { setBloqErro(r.error || 'Não consegui desbloquear.'); return; }
+            setBloqAviso(r.meta && !r.meta.ok ? `✅ ${numero} desbloqueado aqui. ⚠️ A Meta não confirmou: ${r.meta.erro}.` : `✅ ${numero} desbloqueado.`);
+            await lerBloqueios();
+            void recarregar(true);
+        } finally { setBloqOcupado(false); }
+    };
+
     const salvarCfg = async () => {
         if (!cfg || cfgSalvando) return;
         setCfgSalvando(true);
@@ -868,6 +928,11 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
         if (cfgAberta && cfgAba === 'chamadas') void lerAgenteSbc();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [cfgAberta, cfgAba]);
+    // 🚫 O contador do botão da lista negra carrega uma vez para o admin.
+    useEffect(() => {
+        if (ehAdmin) void lerBloqueios();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ehAdmin]);
     // 📊 O painel da IA de triagem (aba 🤖): "a IA está pegando?" com número.
     // Lido ao abrir a aba; o botão 🔄 relê. Zero com a IA ligada não é
     // "tudo certo" — a tela diz o que zero significa.
@@ -2652,6 +2717,72 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             )}
 
             {/* ── Modal ⚙️ Config do atendimento (admin) ─────────────────────── */}
+            {bloqAberto && ehAdmin && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setBloqAberto(false)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">🚫 Lista negra — números bloqueados</h3>
+                            <button onClick={() => setBloqAberto(false)} className="text-slate-400 hover:text-slate-600 px-1">✕</button>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                            Spam, anúncio, golpe. Número bloqueado: <strong>nada entra</strong> (a mensagem é descartada antes do bot e dos avisos; só o contador anda),
+                            <strong> nada sai</strong> (responder, agendar, campanha e guia recusam) e a conversa some do inbox. A Meta também é avisada
+                            (<em>block users</em>), por melhor esforço: a resposta dela fica gravada ao lado. Só admin vê e mexe aqui. Tudo tem quem, quando e por quê.
+                        </p>
+                        {bloqErro && <p className="text-[11px] text-red-600 dark:text-red-400">{bloqErro}</p>}
+                        {bloqAviso && <p className="text-[11px] text-emerald-700 dark:text-emerald-300">{bloqAviso}</p>}
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-2">
+                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">✚ Bloquear um número</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <label className="block text-[10px] text-slate-400">Número (DDI+DDD+número)
+                                    <input value={bloqNumero} onChange={(e) => setBloqNumero(e.target.value)} placeholder="5511999990000" className={CAMPO} />
+                                </label>
+                                <label className="block text-[10px] text-slate-400">Motivo
+                                    <select value={bloqMotivo} onChange={(e) => setBloqMotivo(e.target.value)} className={CAMPO}>
+                                        {(bloqMotivos.length ? bloqMotivos : [{ id: 'spam', rotulo: 'Spam' }, { id: 'anuncio', rotulo: 'Anúncio / propaganda' }, { id: 'golpe', rotulo: 'Golpe / phishing' }, { id: 'abuso', rotulo: 'Abuso / ofensa' }, { id: 'outro', rotulo: 'Outro' }]).map((m) => <option key={m.id} value={m.id}>{m.rotulo}</option>)}
+                                    </select>
+                                </label>
+                                <label className="block text-[10px] text-slate-400">Observação {bloqMotivo === 'outro' ? '(obrigatória)' : '(opcional)'}
+                                    <input value={bloqObs} onChange={(e) => setBloqObs(e.target.value)} maxLength={300} className={CAMPO} />
+                                </label>
+                            </div>
+                            <label className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                                <input type="checkbox" checked={bloqNaMeta} onChange={(e) => setBloqNaMeta(e.target.checked)} /> Avisar a Meta também (a mensagem nem chega ao SP Connect)
+                            </label>
+                            <button onClick={acaoBloquear} disabled={bloqOcupado || !bloqNumero.trim() || (bloqMotivo === 'outro' && !bloqObs.trim())}
+                                className="text-[11px] font-bold px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-50">
+                                {bloqOcupado ? '…' : '🚫 Bloquear'}
+                            </button>
+                        </div>
+                        <div className="space-y-1.5">
+                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">Bloqueados ({bloqueios.length})</p>
+                            {bloqueios.length === 0 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Nenhum número bloqueado.</p>}
+                            {bloqueios.map((b) => (
+                                <div key={b.numero} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 text-[11px] text-slate-600 dark:text-slate-300 flex items-start justify-between gap-2">
+                                    <span className="min-w-0">
+                                        <strong>{formatarNumeroBr(b.numero)}</strong>{b.nomePerfil ? ` · ${b.nomePerfil}` : ''} · <span className="text-red-700 dark:text-red-300">{b.motivoRotulo}</span>{b.observacao ? ` — ${b.observacao}` : ''}
+                                        <br />
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            por {b.bloqueadoPor ? b.bloqueadoPor.split('@')[0] : '?'} em {dataHoraSp(b.bloqueadoEm)}
+                                            {' · '}{b.descartadas} descartada(s){b.ultimaTentativaEm ? ` (última ${dataHoraSp(b.ultimaTentativaEm)}${b.ultimoTexto ? `: "${b.ultimoTexto}"` : ''})` : ''}
+                                            {' · Meta: '}{b.meta ? (b.meta.ok ? '✅' : `⚠️ ${b.meta.erro}`) : 'não avisada'}
+                                        </span>
+                                    </span>
+                                    <button onClick={() => acaoDesbloquear(b.numero)} disabled={bloqOcupado} className="shrink-0 text-[10px] px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50">Desbloquear</button>
+                                </div>
+                            ))}
+                            {bloqHistorico.length > 0 && (
+                                <details className="text-[10px] text-slate-500 dark:text-slate-400">
+                                    <summary className="cursor-pointer">Desbloqueados recentes ({bloqHistorico.length})</summary>
+                                    {bloqHistorico.map((b) => (
+                                        <p key={`${b.numero}-${b.desbloqueadoEm}`}>{formatarNumeroBr(b.numero)} · {b.motivoRotulo} · bloqueado por {b.bloqueadoPor ? b.bloqueadoPor.split('@')[0] : '?'} em {dataHoraSp(b.bloqueadoEm)} · desbloqueado por {b.desbloqueadoPor ? b.desbloqueadoPor.split('@')[0] : '?'} em {dataHoraSp(b.desbloqueadoEm)}</p>
+                                    ))}
+                                </details>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             {cfgAberta && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-start justify-center p-4 overflow-y-auto" onClick={() => setCfgAberta(false)}>
                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl my-8 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
@@ -4604,6 +4735,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         ⚙️
                                     </button>
                                 )}
+                                {ehAdmin && (
+                                    <button onClick={() => abrirBloqueios('')} title="Lista negra: números bloqueados (spam, anúncio, golpe) — só admin"
+                                        className={`text-[10px] px-2 py-0.5 rounded ${bloqueios.length ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'} hover:bg-slate-200 dark:hover:bg-slate-600`}>
+                                        🚫{bloqueios.length ? ` ${bloqueios.length}` : ''}
+                                    </button>
+                                )}
                                 <button onClick={() => recarregar()} disabled={carregando} title="Atualizar agora (a lista também se atualiza sozinha a cada 30s)"
                                     className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50">
                                     {carregando ? '…' : '🔄'}
@@ -5293,6 +5430,13 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                         className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
                                         {sel.atribuidoA === meuEmail ? '↩️ Liberar a conversa' : '🙋 Assumir pra mim'}
                                     </button>
+                                    {ehAdmin && sel.canal !== 'instagram' && (
+                                        <button onClick={() => abrirBloqueios(sel.numero)}
+                                            title="Lista negra (admin): spam, anúncio, golpe. Nada deste número entra ou sai."
+                                            className="w-full text-left text-[11px] px-2 py-1 rounded bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30">
+                                            🚫 Bloquear este número…
+                                        </button>
+                                    )}
                                     <label className="block text-[10px] text-slate-400">
                                         ↪️ Transferir de fila
                                         <select value={transFila} onChange={(e) => { setTransFila(e.target.value); setTransAviso(null); }} className={CAMPO}>

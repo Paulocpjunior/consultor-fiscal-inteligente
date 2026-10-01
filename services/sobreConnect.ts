@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-09-29';
+export const SOBRE_VERSAO = '2026-10-01';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -284,6 +284,15 @@ export const MANUAL: PassoManual[] = [
         ],
     },
     {
+        titulo: '18. Lista negra: bloquear spam, anúncio e golpe (🚫, admin)',
+        passos: [
+            'No topo do inbox, o botão 🚫 (só admin) abre a lista negra. Na conversa, "🚫 Bloquear este número…" abre a mesma tela com o número preenchido.',
+            'Informe o número (DDI+DDD+número), o motivo (spam, anúncio, golpe, abuso, outro — "outro" pede observação) e confirme. Marque "Avisar a Meta também" para o bloqueio valer já na Meta; se ela recusar, o motivo aparece ao lado e o bloqueio local vale mesmo assim.',
+            'Efeito: nada deste número entra (a mensagem é descartada antes do bot e dos avisos; a lista mostra quantas foram descartadas e o começo da última), nada sai (responder, agendar, campanha e guia recusam) e a conversa some do inbox, com nota interna dizendo quem bloqueou e por quê.',
+            '"Desbloquear" reabre a conversa e deixa nota. Quem bloqueou e quem desbloqueou ficam registrados — bloquear cliente por engano tem caminho de volta e rastro.',
+        ],
+    },
+    {
         titulo: '17. Campanha em lote por template (📣, admin)',
         passos: [
             '⚙️ → 📣 Campanhas. Dê um nome ("DAS 10/2026 — vence 20/10"), escolha o template APROVADO na Meta e preencha as variáveis. Nas variáveis, {empresa} e {nome} viram o dado de cada destinatário.',
@@ -308,6 +317,12 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    {
+        data: '2026-10-01',
+        itens: [
+            '🚫 LISTA NEGRA (admin): botão 🚫 no topo do inbox e "🚫 Bloquear este número…" no painel da conversa. Número bloqueado: nada entra (a mensagem é descartada antes do bot e dos avisos; só o contador anda), nada sai (responder, agendar, campanha e guia recusam) e a conversa some do inbox. A Meta também é avisada (block users), por melhor esforço — a resposta dela fica gravada ao lado. Tudo com quem, quando e por quê; desbloquear reabre a conversa.',
+        ],
+    },
     {
         data: '2026-09-29',
         itens: [

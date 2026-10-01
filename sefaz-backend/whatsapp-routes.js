@@ -89,6 +89,24 @@ import {
 import {
     selecionarMensagensParaResumo, montarPromptResumo, interpretarResumo, estadoDoResumo, TEMPO_MAX_RESUMO_MS,
 } from './whatsapp-resumo-ia.js';
+import {
+    COLECAO_BLOQUEIOS, MOTIVOS_BLOQUEIO, validarBloqueio, numeroDeBloqueio, conjuntoDeBloqueados, resumoDoBloqueio,
+    notaDeBloqueio, notaDeDesbloqueio, bloquearNaMeta, desbloquearNaMeta,
+} from './whatsapp-bloqueios.js';
+
+// 🚫 Lista negra (01/10): "está bloqueado?" é UMA pergunta, com UM dono. Toda
+// porta de SAÍDA pergunta aqui antes de mandar qualquer coisa.
+async function estaBloqueado(db, numero) {
+    const n = numeroDeBloqueio(numero);
+    if (!n) return false;
+    const doc = await db.collection(COLECAO_BLOQUEIOS).doc(n).get();
+    return doc.exists && doc.data()?.ativo !== false;
+}
+async function lerConjuntoBloqueados(db) {
+    const snap = await db.collection(COLECAO_BLOQUEIOS).where('ativo', '==', true).limit(5000).get();
+    return conjuntoDeBloqueados(snap.docs);
+}
+const RECUSA_BLOQUEADO = { ok: false, error: 'Este número está na lista negra (🚫 Bloqueios) — nada sai para ele.', acao: 'Se foi engano, um admin desbloqueia em 🚫 Bloqueios.', bloqueado: true };
 
 const router = Router();
 const COLECAO = 'whatsapp_templates';
@@ -256,6 +274,7 @@ router.post('/enviar', autorizar, async (req, res) => {
             return res.status(400).json({ ok: false, error: `departamento inválido (use ${[...DEPARTAMENTOS_WHATSAPP].join(', ')})` });
         }
         if (!p.para) return res.status(400).json({ ok: false, error: 'para (WhatsApp do destinatário) é obrigatório' });
+        if (await estaBloqueado(getDb(), normalizarNumeroBr(p.para))) return res.status(422).json(RECUSA_BLOQUEADO);
 
         const cadastro = await lerCadastro(departamento);
         const resol = resolverTemplate(cadastro, { departamento, templateNome: p.template });
@@ -612,6 +631,8 @@ router.get('/conversas', requireAuth, async (req, res) => {
                 if (pagina.docs.length < PAGINA_CONVERSAS) break;
             }
         }
+        // 🚫 Conversa de número bloqueado não aparece no inbox (a lista vive em 🚫 Bloqueios).
+        docsConversas = docsConversas.filter((d) => !(d.data() || {}).bloqueada);
         const conversas = await montarResumosDeConversas(db, docsConversas);
         // 🚨 ORDENA PELO QUE MOSTRA (24/08, Paulo: "as conversas estão fora de
         // ordem"). A leitura ordenava por `atualizadoEm` — qualquer atividade,
@@ -890,6 +911,7 @@ router.post('/conversas/iniciar', autorizar, async (req, res) => {
         // mesma thread do cliente — a saída certa é falar com quem conduz
         // (nota interna) ou pedir a transferência. Recusa DIZ o estado.
         const numeroAlvo = normalizarNumeroBr(p.para);
+        if (await estaBloqueado(getDb(), numeroAlvo)) return res.status(422).json(RECUSA_BLOQUEADO);
         if (numeroAlvo) {
             const convExistente = await getDb().collection('whatsapp_conversas').doc(numeroAlvo).get();
             const cx = convExistente.exists ? (convExistente.data() || {}) : null;
@@ -1041,6 +1063,7 @@ router.post('/conversas/:numero/responder', requireAuth, async (req, res) => {
         if (texto.length > 4096) return res.status(400).json({ ok: false, error: 'Mensagem longa demais (máx. 4096 caracteres).' });
 
         const db = getDb();
+        if (await estaBloqueado(db, numero)) return res.status(422).json(RECUSA_BLOQUEADO);
         const conv = await db.collection('whatsapp_conversas').doc(numero).get();
         const ehIg = ehConversaInstagram(numero) || conv.data()?.canal === 'instagram';
         // 📷 Instagram é por USUÁRIO — quem está fora da lista não responde
@@ -3712,6 +3735,7 @@ router.post('/conversas/:numero/agendamentos', requireAuth, async (req, res) => 
         const db = getDb();
         const { ok: podeLer, conversa } = await podeVerConversa(db, req.user, numero);
         if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
+        if (await estaBloqueado(db, numero)) return res.status(422).json(RECUSA_BLOQUEADO);
         if (ehConversaInstagram(numero) || conversa?.canal === 'instagram') {
             return res.status(422).json({ ok: false, error: 'Agendamento é do WhatsApp — no Instagram a janela fecha e não há template para reabrir.' });
         }
@@ -4012,7 +4036,8 @@ router.post('/campanhas', requireAdmin, async (req, res) => {
         if (!v.ok) return res.status(400).json({ ok: false, error: v.erro, acao: v.acao });
         const [contatosDocs, catalogo, empresas] = await Promise.all([lerTodosContatos(db), lerCatalogoEtiquetas(db), lerEmpresasPorId(db)]);
         const contatos = contatosDocs.map((d) => ({ numero: d.id, ...(d.data() || {}) }));
-        const publico = montarPublico({ campanha: v.campanha, contatos, catalogoEtiquetas: catalogo, empresas });
+        const bloqueados = await lerConjuntoBloqueados(db);
+        const publico = montarPublico({ campanha: v.campanha, contatos, catalogoEtiquetas: catalogo, empresas, bloqueados });
         if (!publico.destinatarios.length) {
             return res.status(422).json({ ok: false, error: 'Ninguém entra neste público.', pulados: publico.pulados.slice(0, 20), acao: 'Confira a etiqueta/regime/vínculo dos contatos — ou os motivos dos pulados.' });
         }
@@ -4098,6 +4123,75 @@ router.post('/conversas/:numero/resumo', requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[whatsapp/resumo]', e);
         return res.status(e.message === 'tempo esgotado' ? 504 : 500).json({ ok: false, error: e.message === 'tempo esgotado' ? 'A IA demorou demais (15 s). Tente de novo.' : e.message });
+    }
+});
+
+// ═══ 🚫 LISTA NEGRA (01/10) — admin ═══════════════════════════════════════
+router.get('/bloqueios', requireAdmin, async (_req, res) => {
+    try {
+        const snap = await getDb().collection(COLECAO_BLOQUEIOS).orderBy('bloqueadoEm', 'desc').limit(500).get();
+        const todos = snap.docs.map((d) => resumoDoBloqueio({ numero: d.id, ...(d.data() || {}) }));
+        return res.json({ ok: true, ativos: todos.filter((b) => b.ativo), historico: todos.filter((b) => !b.ativo).slice(0, 50), motivos: MOTIVOS_BLOQUEIO, truncado: snap.size >= 500 });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.post('/bloqueios', requireAdmin, async (req, res) => {
+    try {
+        const p = req.body || {};
+        const eu = req.user?.email || null;
+        const v = validarBloqueio({ numero: p.numero, motivo: p.motivo, observacao: p.observacao, por: eu, agora: new Date() });
+        if (!v.ok) return res.status(400).json({ ok: false, error: v.erro });
+        const db = getDb();
+        const b = v.bloqueio;
+        const ref = db.collection(COLECAO_BLOQUEIOS).doc(b.numero);
+        const antes = (await ref.get()).data() || null;
+        if (antes?.ativo !== false && antes) return res.status(409).json({ ok: false, error: `O ${b.numero} já está bloqueado (${antes.motivo}, por ${antes.bloqueadoPor || '?'}).` });
+        const contato = (await db.collection('whatsapp_contatos').doc(b.numero).get()).data() || {};
+        // Meta: melhor esforço, resposta GRAVADA. Só se o admin pediu (naMeta !== false).
+        let meta = null;
+        if (p.naMeta !== false) {
+            const r = await bloquearNaMeta([b.numero]);
+            meta = { ok: Boolean(r.ok), erro: r.ok ? null : (r.erro || 'a Meta não confirmou'), em: b.bloqueadoEm };
+        }
+        await ref.set({ ...b, nomePerfil: contato.nomePerfil || null, meta, ...(antes ? { bloqueiosAnteriores: admin.firestore.FieldValue.increment(1) } : {}) }, { merge: false });
+        // A conversa fecha e some do inbox; a nota diz quem e por quê.
+        const convRef = db.collection('whatsapp_conversas').doc(b.numero);
+        if ((await convRef.get()).exists) {
+            await convRef.set({ bloqueada: true, bloqueio: { motivo: b.motivo, em: b.bloqueadoEm, por: eu }, status: 'resolvida', resolvidaPor: eu, fila: null, atribuidoA: null, naoLidas: 0, atualizadoEm: b.bloqueadoEm }, { merge: true });
+            await notaInterna(db, b.numero, notaDeBloqueio({ motivo: b.motivo, por: eu, observacao: b.observacao }), eu);
+        }
+        return res.json({ ok: true, bloqueio: resumoDoBloqueio({ ...b, nomePerfil: contato.nomePerfil || null, meta }) });
+    } catch (e) {
+        console.error('[whatsapp/bloqueios]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+router.delete('/bloqueios/:numero', requireAdmin, async (req, res) => {
+    try {
+        const numero = numeroDeBloqueio(req.params.numero);
+        if (!numero) return res.status(400).json({ ok: false, error: 'número inválido' });
+        const db = getDb();
+        const ref = db.collection(COLECAO_BLOQUEIOS).doc(numero);
+        const doc = await ref.get();
+        if (!doc.exists || doc.data().ativo === false) return res.status(404).json({ ok: false, error: 'Este número não está bloqueado.' });
+        const eu = req.user?.email || null;
+        const agora = new Date().toISOString();
+        let meta = doc.data().meta || null;
+        if (String(req.query.naMeta || 'true') !== 'false') {
+            const r = await desbloquearNaMeta([numero]);
+            meta = { ok: Boolean(r.ok), erro: r.ok ? null : (r.erro || 'a Meta não confirmou'), em: agora, acao: 'desbloqueio' };
+        }
+        await ref.set({ ativo: false, desbloqueadoPor: eu, desbloqueadoEm: agora, meta }, { merge: true });
+        const convRef = db.collection('whatsapp_conversas').doc(numero);
+        if ((await convRef.get()).exists) {
+            await convRef.set({ bloqueada: false, atualizadoEm: agora }, { merge: true });
+            await notaInterna(db, numero, notaDeDesbloqueio({ por: eu }), eu);
+        }
+        return res.json({ ok: true, meta });
+    } catch (e) {
+        console.error('[whatsapp/bloqueios/desbloquear]', e);
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 

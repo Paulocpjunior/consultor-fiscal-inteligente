@@ -5,6 +5,24 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚫 LISTA NEGRA DO CONNECT** (01/10, Paulo: *"modal disponível somente para
+  admins, para black list de usuários indesejados, spam, anúncio entre
+  outros"*). `whatsapp-bloqueios.js` (puro): `validarBloqueio` (wa_id 8–15
+  dígitos, sem normalizar BR — spam vem de fora; motivos spam/anuncio/golpe/
+  abuso/outro, "outro" exige observação), `conjuntoDeBloqueados`,
+  `separarBloqueadas`, `patchDeDescarte`, payload/leitura do `block_users` da
+  Cloud API (POST/DELETE `/{pnid}/block_users`; leiaute lido com tolerância, a
+  lista LOCAL manda). Três portas: ENTRADA — webhook lê a lista (cache 30 s) e
+  descarta ANTES de gravar/bot/aviso, só o contador anda (ligação e pedido de
+  retorno idem); SAÍDA — `estaBloqueado()` em /enviar, /conversas/iniciar,
+  responder, agendamentos; campanha pula com motivo 'bloqueado'; INBOX —
+  conversa `bloqueada:true` some da lista, fecha (resolvida, sem fila/dono) e
+  ganha nota; desbloquear reabre com nota. Rotas admin GET/POST/DELETE
+  /bloqueios; modal 🚫 (só admin) no topo + "🚫 Bloquear este número…" no
+  painel; confirmação pela caixa do app. Resposta da Meta gravada e mostrada
+  ("a Meta não confirmou: …"). Catálogo `whatsapp_bloqueios`; Sobre 18 + rev
+  01/10; novidade 01/10. Trava `whatsappBloqueios.test.ts` cobra as três
+  portas e o "só admin". Cópia idêntica no sp-connect.
 - **🏛️ ZERO DE NFS-e SP DECIDIDO POR EMPRESA (01/10, ALMEIDA/BRISKA)** (Paulo:
   *"agora diz que está incerto as notas da prefeitura de SP, porém consta as
   notas de serviços tomados da BRISKA"*). `saudeNfseSp` dá `zeroConfiavel:false`
