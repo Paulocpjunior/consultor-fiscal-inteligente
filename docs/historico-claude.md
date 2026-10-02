@@ -5,6 +5,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 VENCIMENTO DA GUIA DE ISS PELO CALENDÁRIO (02/10, RÁDIO E TV IBIRAPUERA)**
+  (Paulo: *"eu achava que o vencimento no template mudava conforme o
+  calendário"*). IssSpPanel usava `vencimentoIssSp` (dia 10 fixo) — 10/10/2026
+  é sábado (política: antecipa → 09/10). Dono novo `vencimento-da-guia.js`
+  (`resolverPrazoMunicipal` + `calcularVencimento`, a régua dos Vencimentos);
+  rota `GET /api/admin/prazos-municipais/vencimento`; sem calendário o envio
+  trava com o motivo. `montarEmailGuia` formata o selo AAAA-MM-DD → DD/MM/AAAA.
+  Trava `vencimentoDaGuiaPeloCalendario.test.ts`.
+
 - **↩ ISS RETIDO SEM BOTÃO DE ENVIO (02/10, BOLA N'AGUA)** (colaborador:
   *"o consultor está habilitado somente para ISS PRESTADOS"*). IssSpPanel tinha
   um botão só, com `apuracao.apta` (exige ISS próprio > 0). Agora o bloco do

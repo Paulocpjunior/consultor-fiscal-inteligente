@@ -25,6 +25,8 @@ import {
 } from './prazo-municipal-consulta.js';
 
 const router = Router();
+import { vencimentoMunicipalDaGuia } from './vencimento-da-guia.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 const COL = 'prazos_municipais';
 
 function getDb() {
@@ -290,6 +292,35 @@ router.post('/informar', requireAuth, express.json(), async (req, res) => {
 // e devolve a proposta com as fontes. Quem grava é o POST de cadastro, que
 // exige base legal e guarda quem confirmou.
 // ============================================================================
+// GET /vencimento?empresaId=&competencia=AAAA-MM&obrigacao=ISS
+// 📅 02/10 (RÁDIO E TV IBIRAPUERA): o vencimento que vai no e-mail da guia é o
+// do CALENDÁRIO do município da empresa — a mesma régua dos Vencimentos —, não
+// um "dia 10" fixo. Sem calendário, `achou:false` com o motivo: data não se chuta.
+router.get('/vencimento', requireAuth, async (req, res) => {
+    try {
+        const empresaId = String(req.query.empresaId || '').trim();
+        const competencia = String(req.query.competencia || '').trim();
+        const obrigacao = String(req.query.obrigacao || 'ISS').trim().toUpperCase();
+        if (!empresaId) return res.status(400).json({ ok: false, erro: 'Informe a empresa.' });
+        if (req.user?.role !== 'admin') {
+            const check = await podeAcessarEmpresaId(req.user, empresaId);
+            if (!check.ok) return res.status(check.status || 403).json({ ok: false, erro: check.error });
+        }
+        const db = getDb();
+        let snap = await db.collection('simples_empresas').doc(empresaId).get();
+        if (!snap.exists) snap = await db.collection('lucro_empresas').doc(empresaId).get();
+        if (!snap.exists) return res.status(404).json({ ok: false, erro: 'Empresa não encontrada.' });
+        const emp = snap.data() || {};
+        const codMunIBGE = emp.dadosFiscais?.codMunIBGE || emp.codMunIBGE || '';
+        const cadastros = await carregarPrazosMunicipais(db);
+        const r = vencimentoMunicipalDaGuia({ cadastros, codMunIBGE, competencia, obrigacao });
+        return res.json({ ok: true, ...r });
+    } catch (e) {
+        console.error('[prazos-municipais/vencimento]', e);
+        return res.status(500).json({ ok: false, erro: e.message });
+    }
+});
+
 router.post('/consultar', requireAdmin, express.json(), async (req, res) => {
     try {
         const ai = req.app.get('ai');

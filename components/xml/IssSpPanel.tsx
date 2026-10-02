@@ -20,6 +20,7 @@ import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/en
 import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { motivoDoBotaoDesligado, motivoDoBotaoRetidoDesligado, retidoAptoParaEnvio } from '../../services/issEnvioBotao';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
+import { vencimentoDaGuia, type VencimentoDaGuia } from '../../services/prazosMunicipaisService';
 
 interface SaudeCaptura {
     farol: 'ok' | 'atencao' | 'quebrado';
@@ -72,6 +73,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const [competencia, setCompetencia] = useState(compAtual());
     const [carregando, setCarregando] = useState(false);
     const [apuracao, setApuracao] = useState<ApuracaoIssSp | null>(null);
+    // 📅 Vencimento pelo CALENDÁRIO do município (02/10) — o "dia 10" fixo não
+    // antecipava sábado (10/10/2026) nem servia para outra prefeitura.
+    const [vencGuia, setVencGuia] = useState<VencimentoDaGuia | null>(null);
     const [foraDaPraca, setForaDaPraca] = useState(false);
     const [pdfGuia, setPdfGuia] = useState<{ base64: string; nome: string } | null>(null);
     // ↩ Guia do ISS RETIDO como tomadora (02/10): anexo PRÓPRIO — é outra guia,
@@ -112,6 +116,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         if (!alvo || !currentUser) { onShowToast?.('Escolha a empresa.'); return; }
         setCarregando(true);
         setApuracao(null);
+        setVencGuia(null);
         setPdfGuia(null);
         setPdfGuiaRetido(null);
         try {
@@ -128,6 +133,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             setSaude(s);
             const ap = apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null });
             setApuracao(ap);
+            void vencimentoDaGuia({ empresaId: alvo.id, competencia }).then(setVencGuia);
             // CCM vem do CADASTRO, e só. Preencher sozinho pela nota seria
             // contornar cadastro em branco — e cadastro errado ou faltando
             // ACENDE ALERTA pro colaborador arrumar, não vira ferramenta de
@@ -230,6 +236,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         if (!apuracao || !empresa) return;
         const pdf = qual === 'retido' ? pdfGuiaRetido : pdfGuia;
         if (!pdf) { onShowToast?.('Anexe o PDF da guia emitida no portal antes de enviar.'); return; }
+        // Sem o calendário do município não há vencimento a declarar ao cliente.
+        if (!vencGuia?.achou) { onShowToast?.(vencGuia?.motivo || 'Vencimento ainda não consultado — aguarde ou apure de novo.'); return; }
+        const vencimentoGuia = vencGuia.data;
         const valor = qual === 'retido' ? apuracao.tomado.totalRetido : apuracao.aRecolher;
         const rotulo = qual === 'retido' ? 'ISS RETIDO (tomador de serviços)' : 'ISS';
         setEnviando(true);
@@ -243,7 +252,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 onShowToast?.('E-mail do cliente não cadastrado — preencha em "Dados Fiscais" da empresa.');
                 return;
             }
-            const venc = apuracao.vencimento.split('-').reverse().join('/');
+            const venc = vencimentoGuia.split('-').reverse().join('/');
             const r = await enviarGuiaPeloServidor({
                 empresaId: empresa.id,
                 empresaCnpj: empresa.cnpj,
@@ -269,7 +278,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 pdfBase64: pdf.base64,
                 pdfFileName: pdf.nome,
                 valor,
-                vencimento: apuracao.vencimento,
+                vencimento: vencimentoGuia,
             });
             if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
             else onShowToast?.(`Falha no envio: ${r.error}`);
@@ -659,7 +668,10 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-300">
                         {apuracao.notas.length} NFS-e emitida(s) · vencimento{' '}
-                        <strong>{apuracao.vencimento.split('-').reverse().join('/') || '—'}</strong> (dia 10 do mês seguinte).
+                        <strong>{vencGuia?.achou ? vencGuia.dataBr : '—'}</strong>
+                        {vencGuia?.achou
+                            ? <> (calendário{vencGuia.municipio ? ` de ${vencGuia.municipio}` : ''}{vencGuia.baseLegal ? ` · ${vencGuia.baseLegal}` : ''}; dia não útil antecipa).</>
+                            : vencGuia ? <span className="text-amber-700 dark:text-amber-400"> — {vencGuia.motivo}</span> : ' (consultando o calendário…)'}
                     </p>
 
                     {/* ISS RETIDO COMO TOMADORA — outra obrigação, outra guia.
@@ -727,7 +739,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                     <input type="file" accept="application/pdf" onChange={anexarPdfRetido} className="hidden" />
                                 </label>
                                 <button onClick={() => void enviarAoCliente('retido')}
-                                    disabled={enviando || !pdfGuiaRetido || !retidoAptoParaEnvio(apuracao.tomado)}
+                                    disabled={enviando || !pdfGuiaRetido || !retidoAptoParaEnvio(apuracao.tomado) || !vencGuia?.achou}
                                     title={motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado))
                                         || 'Envia a guia do ISS RETIDO pelo servidor, com o PDF anexado, gestor em cópia oculta e cópia no SharePoint.'}
                                     className="px-4 py-2 text-sm font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
@@ -755,7 +767,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             📎 {pdfGuia ? pdfGuia.nome : 'Anexar PDF da guia'}
                             <input type="file" accept="application/pdf" onChange={anexarPdf} className="hidden" />
                         </label>
-                        <button onClick={() => void enviarAoCliente('proprio')} disabled={enviando || !pdfGuia || !apuracao.apta}
+                        <button onClick={() => void enviarAoCliente('proprio')} disabled={enviando || !pdfGuia || !apuracao.apta || !vencGuia?.achou}
                             title={motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })
                                 || 'Envia pelo servidor, com o PDF anexado, gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.'}
                             className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
@@ -774,6 +786,12 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido }) && (
                         <p className="text-[11px] text-amber-700 dark:text-amber-400">
                             ⚠ {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })}
+                        </p>
+                    )}
+
+                    {vencGuia && !vencGuia.achou && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            ⚠ Envio travado: sem o vencimento do calendário do município não há data a declarar ao cliente. {vencGuia.motivo}
                         </p>
                     )}
 
