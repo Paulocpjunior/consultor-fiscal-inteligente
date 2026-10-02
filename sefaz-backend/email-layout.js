@@ -123,7 +123,12 @@ export function montarEmailGuia({ tipo, empresaNome, competencia, mensagem, temP
     const comp = String(competencia || '').includes('-')
         ? String(competencia).split('-').reverse().join('/')
         : (competencia || '');
-    const selo = [comp && `Competência ${comp}`, vencimento && `vence ${vencimento}`]
+    // 📅 02/10: o selo saía "VENCE 2026-10-10" — data no formato do banco
+    // num e-mail ao cliente. AAAA-MM-DD vira DD/MM/AAAA; o resto passa como veio.
+    const venc = /^\d{4}-\d{2}-\d{2}$/.test(String(vencimento || ''))
+        ? String(vencimento).split('-').reverse().join('/')
+        : vencimento;
+    const selo = [comp && `Competência ${comp}`, venc && `vence ${venc}`]
         .filter(Boolean).join(' · ') || undefined;
     const conteudoHtml = [
         `<p style="margin:0 0 12px 0;">${textoParaHtml(mensagem)}</p>`,
