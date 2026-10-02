@@ -107,10 +107,14 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, d
         if (!l.cienciaChaves.length) return;
         const n = { gravadas: 0, jaExistiam: 0, prazo: 0, recusadas: 0 };
         let ultimoMotivo = '';
+        let parouPor656 = false;
         for (let i = 0; i < l.cienciaChaves.length; i++) {
             setCienciaLote((m) => ({ ...m, [l.empresaId]: `Manifestando ${i + 1} de ${l.cienciaChaves.length}…` }));
             try {
-                const r = await manifestarUmaChave({ chNFe: l.cienciaChaves[i], cnpjDestinatario: l.cnpj, tipo: 'ciencia', empresaId: l.empresaId });
+                // 🚨 emLote (02/10): sem ele cada ciência aceita rebaixava a
+                // nota na hora — rajada no DistDFe = cStat 656 da raiz por ~1h,
+                // que derrubou a captura e o cron da ciência em 01/10.
+                const r = await manifestarUmaChave({ chNFe: l.cienciaChaves[i], cnpjDestinatario: l.cnpj, tipo: 'ciencia', empresaId: l.empresaId, emLote: true });
                 if (manifestacaoGravada(r)) {
                     if (r.desfecho?.situacao === 'ja-existia') n.jaExistiam++; else n.gravadas++;
                 } else if (manifestacaoComPrazoEncerrado(r)) n.prazo++;
@@ -118,12 +122,18 @@ const GuiaDoMes: React.FC<Props> = ({ currentUser, onShowToast, colaboradores, d
             } catch (e: any) {
                 n.recusadas++; ultimoMotivo = e?.message || String(e);
             }
+            // SEFAZ pediu para parar (656 — consumo indevido): insistir só
+            // re-arma o bloqueio da raiz. As que faltam ficam para depois.
+            if (/656|consumo indevido/i.test(ultimoMotivo)) { parouPor656 = true; break; }
+            // Mesmo ritmo do cron da ciência: 1 s entre chaves.
+            if (i < l.cienciaChaves.length - 1) await new Promise((ok) => setTimeout(ok, 1000));
         }
         const partes = [
             n.gravadas ? `${n.gravadas} manifestada(s) agora` : '',
             n.jaExistiam ? `${n.jaExistiam} já estavam na SEFAZ (evento gravado)` : '',
             n.prazo ? `${n.prazo} com prazo encerrado (596 — nada a fazer)` : '',
             n.recusadas ? `${n.recusadas} não gravaram${ultimoMotivo ? ` — ${ultimoMotivo}` : ''}` : '',
+            parouPor656 ? 'PAROU: a SEFAZ bloqueou por consumo (656) — aguarde ~1h e clique de novo para as demais' : '',
         ].filter(Boolean).join(' · ');
         setCienciaLote((m) => ({ ...m, [l.empresaId]: partes || 'Nada a manifestar.' }));
         onShowToast?.(`${l.nome}: ${partes || 'nada a manifestar'}.`);

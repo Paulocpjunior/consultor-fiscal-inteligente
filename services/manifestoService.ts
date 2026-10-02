@@ -234,7 +234,7 @@ export function motivoDaManifestacaoNaoGravada(r: ManifestarUmaResult | null | u
  * caracteres (Manual ENT 6.0), e quem recusa é o backend.
  */
 export async function manifestarUmaChave({
-    chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId,
+    chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId, emLote = false,
 }: {
     chNFe: string;
     cnpjDestinatario: string;
@@ -243,12 +243,19 @@ export async function manifestarUmaChave({
     dryRun?: boolean;
     /** Fora de admin, a ciência é por cliente da carteira — o backend confere. */
     empresaId?: string | null;
+    /**
+     * 🚨 Chamada dentro de um LAÇO (várias chaves seguidas)? Então true: o
+     * backend NÃO rebaixa a completa na hora (consChNFe em rajada = cStat 656
+     * da raiz por ~1h, derrubando a captura — 01/10). A completa vem no
+     * próximo ciclo DistDFe.
+     */
+    emLote?: boolean;
 }): Promise<ManifestarUmaResult> {
     const token = await getToken();
     const res = await fetch('/api/admin/sefaz/manifest-one', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun, empresaId: empresaId || null }),
+        body: JSON.stringify({ chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun, empresaId: empresaId || null, emLote: emLote === true }),
     });
     const data = await res.json();
     if (!res.ok) return { erro: data.error || data.erro || `HTTP ${res.status}` };
