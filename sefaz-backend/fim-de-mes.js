@@ -151,6 +151,9 @@ export function bloqueioDaEtapa(e) {
         // 📭 E a porta do SEM MOVIMENTO, pela mesma régua: só com zero documento
         // (etapa 1). Com nota capturada não é "sem movimento".
         podeDeclararSemMovimento: typeof e.podeDeclararSemMovimento === 'boolean' ? e.podeDeclararSemMovimento : null,
+        // 🚫 E a porta do "não emite saída" (02/10): entradas chegaram, saída
+        // nenhuma, e é só isso que segura a etapa 1.
+        podeMarcarSemSaida: typeof e.podeMarcarSemSaida === 'boolean' ? e.podeMarcarSemSaida : null,
         // As obrigações NOMEADAS: é essa lista que a declaração precisa
         // mencionar, e é ela que a leitura compara depois.
         propostas: Array.isArray(e.propostas) ? e.propostas : null,

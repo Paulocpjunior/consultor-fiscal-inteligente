@@ -233,3 +233,23 @@ export async function salvarParametrosRotina(p: Partial<ParametrosRotina>): Prom
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return data;
 }
+
+/**
+ * 🚫 Marca (ou desfaz) "esta empresa NÃO EMITE nota de saída" no cadastro
+ * (02/10). A régua mora em `sefaz-backend/sem-emissao-saida.js`.
+ */
+export async function marcarSemEmissaoDeSaida(p: {
+    empresaId: string; naoEmite: boolean; motivo?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+    const u = getAuth().currentUser;
+    if (!u) return { ok: false, error: 'Sessão expirada — entre novamente.' };
+    const token = await u.getIdToken();
+    const res = await fetch('/api/admin/rotina-fiscal/empresa-sem-saida', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true };
+}

@@ -41,6 +41,7 @@ import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-o
 // sem ela a etapa 4 mandava, para SEMPRE, não fechar o mês.
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
 import { podeDeclararSemMovimento, aplicarSemMovimentoDeclarado } from './sem-movimento-declarado.js';
+import { marcaSemEmissaoDeSaida, aplicarSemEmissaoNaCaptura } from './sem-emissao-saida.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -349,6 +350,12 @@ export function montarRotinaFiscal({
         eCaptura = etapa('captura', 'concluida', `${entradas} entrada(s) e ${saidas} saída(s).`, null,
             { entradas, saidas, total: docs.length });
     }
+    // 🚫 EMPRESA QUE NÃO EMITE SAÍDA (02/10, BENJAMIN CONSTANT): parâmetro da
+    // empresa, marcado por alguém (autor, data, motivo). Aplicado AQUI, antes do
+    // ISS: o "sem CCM" que vem depois continua acendendo (é o CCM que traz as
+    // TOMADAS), e a marca não apaga alerta que não é dela.
+    const marcaSemSaida = marcaSemEmissaoDeSaida(empresa?.rotinaParametros);
+    eCaptura = aplicarSemEmissaoNaCaptura({ captura: eCaptura, entradas, saidas, marca: marcaSemSaida });
 
     // ── 2. VALIDAÇÃO ────────────────────────────────────────────────────────
     // Resumo sem a completa não tem valor nem itens: entra na apuração a menor.
@@ -768,7 +775,7 @@ export function montarRotinaFiscal({
     }
 
     // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
-    const ajusteIss = aplicarIssNaRotina({ iss, envios, captura: eCaptura, validacao: eValidacao, guias: eGuias });
+    const ajusteIss = aplicarIssNaRotina({ iss, envios, captura: eCaptura, validacao: eValidacao, guias: eGuias, semEmissaoDeSaida: !!marcaSemSaida });
     eCaptura = ajusteIss.captura;
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
@@ -876,7 +883,7 @@ export function montarRotinaFiscal({
  * consegue fechar vira ruído, e ruído a equipe aprende a ignorar. Âmbar já
  * impede o "mês fechado" e mantém a empresa no funil.
  */
-export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias }) {
+export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias, semEmissaoDeSaida = false }) {
     if (!iss || iss.aplicavel !== true) return { captura, validacao, guias, iss: null };
 
     const aRecolher = Number(iss.aRecolher || 0);
@@ -898,7 +905,10 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
             'NFS-e de SP NÃO capturada: empresa sem CCM.',
             'Cadastre o CCM em Dados fiscais (SP capital). Sem ele a varredura do portal nem tenta a empresa — '
             + 'o ISS do mês fica invisível e "zero nota" não significa nada.');
-    } else if (iss.situacao === 'captura-incerta') {
+    } else if (iss.situacao === 'captura-incerta' && !(semEmissaoDeSaida && Number(iss.notas || 0) === 0)) {
+        // 🚫 Empresa marcada como SEM emissão de saída: o "zero NFS-e emitida"
+        // é a resposta declarada, não captura incerta (02/10). Com nota emitida
+        // sem valor gravado (notas > 0), a incerteza é outra e continua.
         eCaptura = piorar(captura,
             'NFS-e de SP com captura incerta neste mês.',
             iss.acao || 'A captura da NFS-e do mês não teve sucesso — rode a captura antes de concluir qualquer coisa sobre o ISS.');
