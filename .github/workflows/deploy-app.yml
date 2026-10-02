@@ -96,7 +96,11 @@ jobs:
             exit 0
           fi
 
-          if ! npm audit --omit=dev --audit-level=high; then
+          # 🔐 02/10 (node-forge GHSA-86w9-cpqp-85rv, sem correção upstream): a
+          # auditoria roda INTEIRA e só deixa passar o advisory aceito em
+          # scripts/audit-aceitos.json — GHSA exato, quem aprovou, motivo, trava
+          # e data `ate` (vencida, volta a bloquear). Régua: scripts/audit-aceitos.js.
+          if ! node scripts/audit-producao.mjs; then
             echo "::error::Advisory high/critical em dependência de PRODUÇÃO — vai dentro da imagem."
             cat >&2 <<'ACAO'
 
@@ -104,9 +108,10 @@ jobs:
             1. npm audit fix          → resolve sozinho quando há versão corrigida
             2. se um "overrides" do package.json estiver segurando a versão velha,
                suba o PISO da faixa (ex.: "^5.0.8" -> "^5.0.9") e rode npm install
-            3. sem correção upstream: [skip-audit] no assunto do commit libera o
-               deploy e o risco fica registrado no PR — use só se a entrega não
-               puder esperar.
+            3. sem correção upstream e com o Paulo de acordo: entrada em
+               scripts/audit-aceitos.json (GHSA, pacote, aprovadoPor, motivo,
+               trava, ate) — ou [skip-audit] no assunto do commit para um único
+               hotfix.
           ACAO
             exit 1
           fi
