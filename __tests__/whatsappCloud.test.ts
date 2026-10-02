@@ -252,3 +252,23 @@ describe('🖼️ enviarMidiaWhatsapp por LINK — o caminho do banner de fila (
         expect((r as any).erro).toContain('mediaId nem link');
     });
 });
+
+
+// 🐛 02/10 — anexo na conversa recusado por "nome do template aprovado (env
+// WHATSAPP_TEMPLATE_GUIA)". A env da guia é exigência do ENVIO DE GUIA; mídia
+// na conversa (📎, 🎤, banner do bot) só precisa de token + id do número.
+describe('🐛 mídia na conversa não exige o template da guia', () => {
+    const { enviarMidiaWhatsapp } = require('../sefaz-backend/whatsapp-cloud.js');
+    it('sem WHATSAPP_TEMPLATE_GUIA o anexo SAI (a Meta é chamada); sem token NÃO sai, nomeado', async () => {
+        const chamadas: string[] = [];
+        const fetchImpl = async (url: string) => { chamadas.push(url); return { status: 200, json: async () => ({ messages: [{ id: 'wamid.X' }] }) }; };
+        const semTemplate = { token: 't', phoneNumberId: '123', template: '', idioma: 'pt_BR', wabaId: '' };
+        const r = await enviarMidiaWhatsapp({ para: '5511999990000', tipo: 'image', link: 'https://x/y.png' }, { cfg: semTemplate, fetchImpl });
+        expect(r.ok).toBe(true);
+        expect(chamadas).toHaveLength(1);
+        const semToken = await enviarMidiaWhatsapp({ para: '5511999990000', tipo: 'image', link: 'https://x/y.png' }, { cfg: { ...semTemplate, token: '' }, fetchImpl });
+        expect(semToken.ok).toBe(false);
+        expect(semToken.erro).toMatch(/token/);
+        expect(semToken.erro).not.toMatch(/TEMPLATE_GUIA/);
+    });
+});
