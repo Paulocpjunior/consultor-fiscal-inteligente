@@ -18,7 +18,7 @@ import { listDocumentos, getEmpresasDisponiveis, getDadosFiscaisEmpresa, type Em
 import { apurarIssSp, empresaEhSpCapital, type ApuracaoIssSp } from '../../services/issSpApuracao';
 import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/envioImpostoService';
 import EmpresaSearchSelect from './EmpresaSearchSelect';
-import { motivoDoBotaoDesligado } from '../../services/issEnvioBotao';
+import { motivoDoBotaoDesligado, motivoDoBotaoRetidoDesligado, retidoAptoParaEnvio } from '../../services/issEnvioBotao';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 
 interface SaudeCaptura {
@@ -74,6 +74,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const [apuracao, setApuracao] = useState<ApuracaoIssSp | null>(null);
     const [foraDaPraca, setForaDaPraca] = useState(false);
     const [pdfGuia, setPdfGuia] = useState<{ base64: string; nome: string } | null>(null);
+    // ↩ Guia do ISS RETIDO como tomadora (02/10): anexo PRÓPRIO — é outra guia,
+    // e anexá-la no slot do ISS próprio mandaria o PDF errado com o valor errado.
+    const [pdfGuiaRetido, setPdfGuiaRetido] = useState<{ base64: string; nome: string } | null>(null);
     // Saúde do trilho de captura — sem ela, "0 notas" e "não conseguimos
     // buscar" ficam idênticos na tela, e o colaborador só descobre tentando.
     const [saude, setSaude] = useState<SaudeCaptura | null>(null);
@@ -110,6 +113,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         setCarregando(true);
         setApuracao(null);
         setPdfGuia(null);
+        setPdfGuiaRetido(null);
         try {
             const df = await getDadosFiscaisEmpresa(alvo.fonte, alvo.id);
             // Fora de SP capital a guia é de outra prefeitura, com outra regra
@@ -204,20 +208,30 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
         }
     };
 
-    const anexarPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const lerPdf = async (e: React.ChangeEvent<HTMLInputElement>, guardar: (p: { base64: string; nome: string }) => void) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const buf = await file.arrayBuffer();
         let bin = '';
         const bytes = new Uint8Array(buf);
         for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-        setPdfGuia({ base64: btoa(bin), nome: file.name });
+        guardar({ base64: btoa(bin), nome: file.name });
         e.target.value = '';
     };
+    const anexarPdf = (e: React.ChangeEvent<HTMLInputElement>) => lerPdf(e, setPdfGuia);
+    const anexarPdfRetido = (e: React.ChangeEvent<HTMLInputElement>) => lerPdf(e, setPdfGuiaRetido);
 
-    const enviarAoCliente = async () => {
+    /**
+     * Envia UMA das duas guias de ISS. `retido` = a do ISS retido como
+     * tomadora: tipo "ISS RETIDO" (o `guia-iss.js` a reconhece como a guia do
+     * retido, que não tem tarefa em Vencimentos), valor = total retido.
+     */
+    const enviarAoCliente = async (qual: 'proprio' | 'retido' = 'proprio') => {
         if (!apuracao || !empresa) return;
-        if (!pdfGuia) { onShowToast?.('Anexe o PDF da guia emitida no portal antes de enviar.'); return; }
+        const pdf = qual === 'retido' ? pdfGuiaRetido : pdfGuia;
+        if (!pdf) { onShowToast?.('Anexe o PDF da guia emitida no portal antes de enviar.'); return; }
+        const valor = qual === 'retido' ? apuracao.tomado.totalRetido : apuracao.aRecolher;
+        const rotulo = qual === 'retido' ? 'ISS RETIDO (tomador de serviços)' : 'ISS';
         setEnviando(true);
         try {
             const token = await (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
@@ -234,15 +248,17 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                 empresaId: empresa.id,
                 empresaCnpj: empresa.cnpj,
                 empresaNome: empresa.nome,
-                tipo: 'ISS',
+                tipo: qual === 'retido' ? 'ISS RETIDO' : 'ISS',
                 competencia,
                 para: contato.email,
-                assunto: `ISS ${competencia.split('-').reverse().join('/')} — ${empresa.nome}`,
+                assunto: `${rotulo} ${competencia.split('-').reverse().join('/')} — ${empresa.nome}`,
                 mensagem: [
                     'Olá, tudo bem?',
                     '',
-                    `Segue a guia do ISS referente à competência ${competencia.split('-').reverse().join('/')}.`,
-                    `Valor: ${brl(apuracao.aRecolher)}`,
+                    qual === 'retido'
+                        ? `Segue a guia do ISS RETIDO na fonte (serviços tomados com retenção) referente à competência ${competencia.split('-').reverse().join('/')}.`
+                        : `Segue a guia do ISS referente à competência ${competencia.split('-').reverse().join('/')}.`,
+                    `Valor: ${brl(valor)}`,
                     `Vencimento: ${venc}`,
                     '',
                     'A guia segue anexa. Por gentileza, confirme o pagamento após a quitação.',
@@ -250,9 +266,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                     'Atenciosamente,',
                     'SP Assessoria Contábil',
                 ].join('\n'),
-                pdfBase64: pdfGuia.base64,
-                pdfFileName: pdfGuia.nome,
-                valor: apuracao.aRecolher,
+                pdfBase64: pdf.base64,
+                pdfFileName: pdf.nome,
+                valor,
                 vencimento: apuracao.vencimento,
             });
             if (r.ok) onShowToast?.(mensagemEnvioServidor(r));
@@ -702,6 +718,27 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                     </tbody>
                                 </table>
                             </div>
+                            {/* ↩ ENVIO DA GUIA DO RETIDO (02/10, BOLA N'AGUA): o botão
+                                único conferia só o ISS próprio, e quem só deve o retido
+                                não tinha como mandar a guia. */}
+                            <div className="flex flex-wrap gap-2 items-center mt-2">
+                                <label className="px-3 py-2 text-sm font-bold rounded-lg border border-indigo-300 text-indigo-800 dark:text-indigo-200 cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/40">
+                                    📎 {pdfGuiaRetido ? pdfGuiaRetido.nome : 'Anexar PDF da guia do retido'}
+                                    <input type="file" accept="application/pdf" onChange={anexarPdfRetido} className="hidden" />
+                                </label>
+                                <button onClick={() => void enviarAoCliente('retido')}
+                                    disabled={enviando || !pdfGuiaRetido || !retidoAptoParaEnvio(apuracao.tomado)}
+                                    title={motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado))
+                                        || 'Envia a guia do ISS RETIDO pelo servidor, com o PDF anexado, gestor em cópia oculta e cópia no SharePoint.'}
+                                    className="px-4 py-2 text-sm font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
+                                    {enviando ? 'Enviando…' : `📤 Enviar guia do ISS retido (${brl(apuracao.tomado.totalRetido)})`}
+                                </button>
+                            </div>
+                            {motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado)) && (
+                                <p className="text-[11px] text-indigo-700 dark:text-indigo-400 mt-1">
+                                    ⚠ {motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado))}
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -718,11 +755,11 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             📎 {pdfGuia ? pdfGuia.nome : 'Anexar PDF da guia'}
                             <input type="file" accept="application/pdf" onChange={anexarPdf} className="hidden" />
                         </label>
-                        <button onClick={enviarAoCliente} disabled={enviando || !pdfGuia || !apuracao.apta}
-                            title={motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta)
+                        <button onClick={() => void enviarAoCliente('proprio')} disabled={enviando || !pdfGuia || !apuracao.apta}
+                            title={motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })
                                 || 'Envia pelo servidor, com o PDF anexado, gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.'}
                             className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
-                            {enviando ? 'Enviando…' : '📤 Enviar guia ao cliente'}
+                            {enviando ? 'Enviando…' : '📤 Enviar guia do ISS próprio'}
                         </button>
                     </div>
 
@@ -734,9 +771,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         PDF e **não dizia isso** — e botão apagado sem motivo
                         se lê como "não existe". É a lição de 20/08 (o campo do
                         cérebro do CFOP que "parecia desabilitado"). */}
-                    {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta) && (
+                    {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido }) && (
                         <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                            ⚠ {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta)}
+                            ⚠ {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })}
                         </p>
                     )}
 

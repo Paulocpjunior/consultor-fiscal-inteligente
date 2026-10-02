@@ -5,6 +5,15 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **↩ ISS RETIDO SEM BOTÃO DE ENVIO (02/10, BOLA N'AGUA)** (colaborador:
+  *"o consultor está habilitado somente para ISS PRESTADOS"*). IssSpPanel tinha
+  um botão só, com `apuracao.apta` (exige ISS próprio > 0). Agora o bloco do
+  retido tem anexo e envio próprios (tipo `ISS RETIDO` → `guiaIssDoEnvio`
+  'retido', `obrigacaoDoTipo` null = sem tarefa a baixar); régua
+  `retidoAptoParaEnvio` (valor > 0 e nenhuma tomada sem valor gravado) em
+  services/issEnvioBotao.ts; o botão do próprio com ISS zero diz "não há ISS
+  próprio" e aponta o retido. Trava em `issBotaoEnvio.test.ts`.
+
 - **🔓 REABERTURA RECUSAVA ATÉ ADMIN (02/10, Alexandre na KAWAI KODOMO)**.
   `fim-de-mes-routes.js /reabrir` conferia `req.user?.admin === true`; o
   `requireAuth` monta `{uid, role, email, ...}` — `admin` nunca existe, então
