@@ -5,6 +5,13 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔓 REABERTURA RECUSAVA ATÉ ADMIN (02/10, Alexandre na KAWAI KODOMO)**.
+  `fim-de-mes-routes.js /reabrir` conferia `req.user?.admin === true`; o
+  `requireAuth` monta `{uid, role, email, ...}` — `admin` nunca existe, então
+  ninguém reabria desde 26/08 (a tela mostrava o botão porque ela sabe o papel).
+  Fix: `role === 'admin'`. Trava `adminPeloPapel.test.ts` (varredura: nenhum
+  backend lê `user.admin`; premissa: o login monta `role` e não `admin`).
+
 - **📨 CIÊNCIA EM LOTE CAUSAVA 656 (02/10; e-mail "2 cron(s) com problema" de
   01/10)**. O "Manifestar ciência de todas" do Guia do Mês (#1345) chamava
   `/manifest-one` chave a chave, e cada ciência aceita disparava consChNFe

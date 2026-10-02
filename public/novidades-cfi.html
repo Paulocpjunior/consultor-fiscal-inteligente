@@ -77,6 +77,12 @@
 <section>
     <h2>🆕 O que mudou agora (02/10) — leia esta parte primeiro</h2>
 
+    <h3>🔓 <strong>Correção: administrador volta a conseguir reabrir competência fechada</strong></h3>
+    <p>O botão "Confirmar reabertura" aparecia para os administradores, mas o servidor respondia "Só um administrador
+    reabre competência fechada" para todos, inclusive para os administradores (caso KAWAI KODOMO). A conferência lia um
+    campo que o login não preenche. Agora ela confere o perfil de administrador do usuário, como o resto do sistema. A
+    regra continua a mesma: só administrador reabre, e o motivo escrito é obrigatório.</p>
+
     <h3>📨 <strong>Correção: "Manifestar ciência de todas" não bloqueia mais a captura da empresa na SEFAZ</strong></h3>
     <p>O botão do Guia do Mês enviava as ciências uma atrás da outra e, a cada nota aceita, já baixava o XML completo na
     hora. Essa rajada de consultas fazia a SEFAZ bloquear o CNPJ por cerca de 1 hora (cStat 656, "consumo indevido"). O
