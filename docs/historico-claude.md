@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🚫 EMPRESA QUE NÃO EMITE SAÍDA (02/10, CONDOMINIO BENJAMIN CONSTANT)**
+  (Paulo: *"devemos parametrizar… empresas que não possuem notas de saída mod.
+  55/65 nem NFS"*). Marca no cadastro `rotinaParametros.saidaPropria =
+  'nao-emite'` + `saidaPropriaMarca {por, em, motivo}`, via `POST
+  /api/admin/rotina-fiscal/empresa-sem-saida` (carteira). Dono
+  `sem-emissao-saida.js`: marcada + entradas + 0 saída ⇒ etapa 1 concluída;
+  saída chegando ⇒ alerta; sem marca ⇒ `podeMarcarSemSaida` (porta no
+  FimDeMesBloco); ISS `captura-incerta` com 0 notas não piora a marcada, `sem-ccm`
+  sim. ⚠️ A rota montava `empresa: {id,nome,cnpj,regime}` — `rotinaParametros`
+  precisou entrar na projeção. Desfazer no card. Trava `semEmissaoSaida.test.ts`.
+
 - **📅 VENCIMENTO DA GUIA DE ISS PELO CALENDÁRIO (02/10, RÁDIO E TV IBIRAPUERA)**
   (Paulo: *"eu achava que o vencimento no template mudava conforme o
   calendário"*). IssSpPanel usava `vencimentoIssSp` (dia 10 fixo) — 10/10/2026

@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CredencialEmailFaixa from './CredencialEmailFaixa';
 import RotinaParametrosBloco from './RotinaParametrosBloco';
 import { manifestarUmaChave, manifestacaoGravada, manifestacaoComPrazoEncerrado, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
-import { carregarRotinaFiscal, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
+import { carregarRotinaFiscal, marcarSemEmissaoDeSaida, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
 // 🔒 A PROJEÇÃO DO BLOQUEIO VEM DO DONO — montá-la aqui à mão foi o defeito da
@@ -395,6 +395,33 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                         </div>
                                         <Trilha etapas={r.etapas} destaque={p?.id} />
                                     </div>
+
+                                    {/* 🚫 Empresa marcada como SEM emissão de saída
+                                        (02/10): a marca aparece no card, com quem
+                                        marcou, e se desfaz daqui mesmo. */}
+                                    {(() => {
+                                        const marca = r.etapas.find((e) => e.id === 'captura')?.semSaidaMarcada;
+                                        if (!marca || !r.empresa?.id) return null;
+                                        return (
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                                🚫 Não emite nota de saída
+                                                {marca.por ? ` · marcado por ${marca.por}` : ''}
+                                                {marca.motivo ? ` — "${marca.motivo}"` : ''}
+                                                {' '}
+                                                <button
+                                                    className="underline text-blue-700 dark:text-blue-300"
+                                                    onClick={async () => {
+                                                        if (!window.confirm('Desfazer a marca "não emite nota de saída"? A etapa 1 volta a cobrar a saída.')) return;
+                                                        const res = await marcarSemEmissaoDeSaida({ empresaId: r.empresa!.id, naoEmite: false });
+                                                        if (!res.ok) { window.alert(res.error || 'Não consegui desfazer.'); return; }
+                                                        carregarRef.current?.(competencia);
+                                                    }}
+                                                >
+                                                    desfazer
+                                                </button>
+                                            </p>
+                                        );
+                                    })()}
 
                                     {/* ISS de SP capital: guia do município, que
                                         não fecha no DAS nem no DARF. Aparece

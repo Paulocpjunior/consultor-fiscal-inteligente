@@ -79,6 +79,8 @@ export interface Bloqueio {
     podeDeclararCobertura: boolean | null;
     /** 📭 Declarar "sem movimento" resolve? Só com zero documento (etapa 1). */
     podeDeclararSemMovimento: boolean | null;
+    /** 🚫 Marcar "não emite nota de saída" resolve ESTE bloqueio? (02/10) */
+    podeMarcarSemSaida: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — o que a declaração cobre. */
     propostas: string[] | null;
     /** As causas do rito, nomeadas pelo dono do painel de envios. */

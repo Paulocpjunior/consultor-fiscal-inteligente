@@ -43,6 +43,8 @@ export interface BloqueioFimDeMes {
     podeDeclararCobertura?: boolean | null;
     /** 📭 Declarar "sem movimento" resolve ESTE bloqueio? Só com zero documento (etapa 1). */
     podeDeclararSemMovimento?: boolean | null;
+    /** 🚫 Marcar "esta empresa não emite nota de saída" resolve ESTE bloqueio? (02/10) */
+    podeMarcarSemSaida?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
     /**
