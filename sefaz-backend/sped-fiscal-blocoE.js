@@ -195,8 +195,8 @@ export function buildBlocoE(dados) {
 
     linhas.push(fmt.buildLine([
         'E100',
-        fmt.formatCompetenciaInicio(dados.competenciaInicio),
-        fmt.formatCompetenciaFim(dados.competenciaFim),
+        fmt.dtIniDoArquivo(dados),
+        fmt.dtFinDoArquivo(dados),
     ]));
 
     // Ajustes da apuração (E111): lançados na aba do card SPED Fiscal,
@@ -251,8 +251,8 @@ export function buildBlocoE(dados) {
             notas: dados.notas,
             ufEmpresa: uf,
             ajustes: dados.ajustesApuracao,
-            dtIni: fmt.formatCompetenciaInicio(dados.competenciaInicio),
-            dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
+            dtIni: fmt.dtIniDoArquivo(dados),
+            dtFin: fmt.dtFinDoArquivo(dados),
             obrigacoesPorUf: dados.obrigacoesStPorUf || {},
         });
         // O módulo de ST devolve ARRAYS de campos — quem forma a linha
@@ -304,8 +304,8 @@ export function buildBlocoE(dados) {
         const difal = montarLinhasDifalBlocoE({
             notas: dados.notas,
             ufEmpresa: uf,
-            dtIni: fmt.formatCompetenciaInicio(dados.competenciaInicio),
-            dtFin: fmt.formatCompetenciaFim(dados.competenciaFim),
+            dtIni: fmt.dtIniDoArquivo(dados),
+            dtFin: fmt.dtFinDoArquivo(dados),
             mesRef: formatMesRef(dados.competenciaFim),
             obrigacoesPorUf: dados.obrigacoesDifalEc87PorUf || {},
             ajustes: dados.ajustesApuracao,
@@ -422,8 +422,8 @@ function buildE500E520(dados) {
         fmt.buildLine([
             'E500',
             '0',                          // IND_APUR: 0 = mensal
-            fmt.formatCompetenciaInicio(dados.competenciaInicio),
-            fmt.formatCompetenciaFim(dados.competenciaFim),
+            fmt.dtIniDoArquivo(dados),
+            fmt.dtFinDoArquivo(dados),
         ]),
         ...e510.linhas,
         fmt.buildLine([

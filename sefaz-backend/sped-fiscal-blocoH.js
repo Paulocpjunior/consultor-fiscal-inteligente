@@ -41,7 +41,9 @@ export function buildBlocoH(dados) {
     const linhas = [];
     const plano = planejarBlocoH({
         itens: dados.itens || [],
-        exigido: inventarioExigido({
+        // 🏁 Encerramento/cisão/fusão/incorporação: o inventário da data do
+        // evento é exigido (02/10) — sem contagem, sai vazio e o aviso diz.
+        exigido: !!dados.inventarioNoEvento || inventarioExigido({
             competenciaFim: dados.competenciaFim,
             gerarInventario: dados.empresa?.dadosFiscais?.gerarInventario,
         }),
@@ -64,7 +66,7 @@ export function buildBlocoH(dados) {
         // pela rede do ambiente) — os testes travam a estrutura.
         linhas.push(fmt.buildLine([
             'H005',
-            fmt.formatDate(dataInventario(dados.competenciaFim)),
+            fmt.formatDate(dados.inventarioNoEvento || dataInventario(dados.competenciaFim)),
             fmt.formatValue(plano.valorTotal, 2),
             plano.motInv,
         ]));

@@ -198,15 +198,20 @@ export const POS_DT_FIN_CONTRIBUICOES = 7;
 // pior, porque ninguém confere data de período a olho. E o PVA confere o
 // DT_DOC de cada documento contra este campo.
 //
-// ⚠️ As duas exceções do Guia (início e encerramento de atividades) NÃO abrem
-// buraco na regra: quem gera aqui monta o período a partir da COMPETÊNCIA, que
-// é sempre um mês fechado. Empresa que abriu no meio do mês entrega pelo PVA.
+// ⚠️ As exceções do Guia (início de atividades; encerramento, cisão, fusão e
+// incorporação) só valem DECLARADAS: no Contribuições pelo IND_SIT_ESP do
+// 0000; no ICMS/IPI (que não tem o campo) pelo `opts` de quem gerou com o
+// "Período da geração" da tela (02/10, `sped-fiscal-periodo.js`).
 /**
  * @param {string[]} linhas
  * @param {number}   posDtFinNo0000  5 no EFD ICMS/IPI · 7 no EFD-Contribuições
  *                                   (o DT_INI é sempre a posição anterior)
+ * @param {{inicioDoEvento?: boolean, fimDoEvento?: boolean}} [opts]
+ *   🏁 EFD ICMS/IPI (02/10): o 0000 dele NÃO tem IND_SIT_ESP, então quem
+ *   gerou declara a exceção do Guia que pediu na tela (início de atividades
+ *   move o DT_INI; encerramento/cisão/fusão/incorporação, o DT_FIN).
  */
-export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
+export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000, opts = {}) {
     const lista = (linhas || []).map(String);
     const linha0000 = lista.find((l) => registroDe(l) === '0000');
     if (!linha0000) return [];
@@ -226,8 +231,8 @@ export function conferirPeriodoDoArquivo(linhas, posDtFinNo0000) {
     // tem o campo. Sem isto, o arquivo de encerramento certo saía acusado —
     // e alarme falso é trava desligada.
     const indSitEsp = posDtFinNo0000 === 7 ? String(f[4] ?? '').trim() : '';
-    const iniPodeSerDoEvento = indSitEsp === '0';
-    const fimPodeSerDoEvento = ['1', '2', '3', '4'].includes(indSitEsp);
+    const iniPodeSerDoEvento = indSitEsp === '0' || opts?.inicioDoEvento === true;
+    const fimPodeSerDoEvento = ['1', '2', '3', '4'].includes(indSitEsp) || opts?.fimDoEvento === true;
     const erros = [];
     const acusar = (campo, valor, esperado, mensagem) => erros.push({
         regra: 'periodo-nao-e-mes-inteiro', registro: '0000', campo, valor, esperado,

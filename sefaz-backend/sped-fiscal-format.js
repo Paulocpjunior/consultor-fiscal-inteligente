@@ -239,10 +239,25 @@ function abrirBloco(reg, conteudo) {
     return buildLine([reg, linhas.length > 0 ? '0' : '1']);
 }
 
+// 🏁 DT_INI/DT_FIN DO ARQUIVO (02/10, encerramento das filiais da Vinatex):
+// o período conferido na porta (`dados.periodoArquivo`, de
+// `conferirPeriodoDaGeracao`) vale para TODO registro que repete o período —
+// 0000, E100, E200, E300, E500, G110, K100. Sem ele, o mês inteiro da
+// competência, como sempre. Um dono só: registro com período próprio
+// desmentiria o 0000, e o PVA recusa.
+function dtIniDoArquivo(dados) {
+    return dados?.periodoArquivo?.dtIni || formatCompetenciaInicio(dados?.competenciaInicio);
+}
+function dtFinDoArquivo(dados) {
+    return dados?.periodoArquivo?.dtFin || formatCompetenciaFim(dados?.competenciaFim);
+}
+
 export {
     formatDate,
     formatCompetenciaInicio,
     formatCompetenciaFim,
+    dtIniDoArquivo,
+    dtFinDoArquivo,
     formatValue,
     sanitizeString,
     sanitizeCnpjCpf,

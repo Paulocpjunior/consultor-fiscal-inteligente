@@ -66,8 +66,8 @@ export function buildBlocoK(dados) {
         movimentacoes: (dados?.blocoK?.movimentacoes || []).map((m) => ({
             ...m, codItemOri: cod(m.codItemOri), codItemDest: cod(m.codItemDest),
         })),
-        dtIni: fmt.formatCompetenciaInicio(dados?.competenciaInicio),
-        dtFin: fmt.formatCompetenciaFim(dados?.competenciaFim),
+        dtIni: fmt.dtIniDoArquivo(dados),
+        dtFin: fmt.dtFinDoArquivo(dados),
         // O item do K200 tem de existir no 0200 do arquivo — item órfão é
         // recusa do PVA (a família do 0150/0200 sem referência).
         itensDo0200: (dados?.itens || []).map((i) => cod(i.codItem)),

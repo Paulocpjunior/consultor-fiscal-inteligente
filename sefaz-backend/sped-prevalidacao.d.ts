@@ -41,7 +41,7 @@ export interface ResultadoPrevalidacao {
 
 export function prevalidarSpedFiscal(
     linhas: string[] | null | undefined,
-    ctx?: { contribuinteIpi?: string; regime?: string },
+    ctx?: { contribuinteIpi?: string; regime?: string; periodoInicioDoEvento?: boolean; periodoFimDoEvento?: boolean },
 ): ResultadoPrevalidacao;
 
 /** Linhas prontas para os warnings da geração (com a ação em cada uma). */

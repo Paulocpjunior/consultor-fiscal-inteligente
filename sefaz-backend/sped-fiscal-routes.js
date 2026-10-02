@@ -39,6 +39,7 @@ import { valorDoDocumento, docContaNoLivro } from './xml-metadata-helper.js';
 // O nome carrega a HORA da geração — dono ÚNICO nas duas famílias, senão o
 // EFD ICMS/IPI continuaria produzindo arquivos indistinguíveis (PWR, 25/08).
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
+import { conferirPeriodoDaGeracao, SITUACOES_PERIODO } from './sped-fiscal-periodo.js';
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -564,11 +565,25 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         const periodo = periodoDaRequisicao(req.body || {});
         if (!periodo.ok) return res.status(400).json({ error: periodo.erro });
 
+        // 🏁 PERÍODO DA GERAÇÃO De/Até (02/10, encerramento das filiais da
+        // Vinatex). Só no mensal; fora das exceções do Guia é recusa dita.
+        const { dataInicio, dataFim, situacaoPeriodo } = req.body || {};
+        if ((dataInicio || dataFim || situacaoPeriodo) && !periodo.competencia) {
+            return res.status(400).json({ error: 'Período da geração (De/Até) só existe no modo MENSAL.' });
+        }
+        const confPeriodo = conferirPeriodoDaGeracao({
+            competencia: periodo.competencia, dataInicio, dataFim, situacao: situacaoPeriodo,
+        });
+        if (!confPeriodo.ok) return res.status(400).json({ error: confPeriodo.erro });
+        const periodoArquivo = confPeriodo.valor;
+        const movePeriodo = SITUACOES_PERIODO[periodoArquivo?.situacao]?.move || null;
+
         const dados = await coletarDadosEmpresa({
             empresaId,
             competencia: periodo.competencia,
             competenciaInicio: periodo.competenciaInicio,
             competenciaFim: periodo.competenciaFim,
+            periodoArquivo,
         });
 
         const txt = await montarBlocos({ dados });
@@ -592,6 +607,8 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
             contribuinteIpi: dados.empresa?.dadosFiscais?.contribuinteIpi || '',
             // O regime decide a R44 (crédito de ICMS na entrada do optante).
             regime: dados.regimeEscrituracao || '',
+            periodoInicioDoEvento: movePeriodo === 'DT_INI',
+            periodoFimDoEvento: movePeriodo === 'DT_FIN',
         });
         for (const linha of resumoPrevalidacao(prevalidacao)) dados.warnings.push(linha);
 
@@ -630,8 +647,10 @@ router.post('/gerar', requireAdmin, express.json(), async (req, res) => {
         // Vem do período JÁ NORMALIZADO — o nome do arquivo carregava a forma
         // crua que a requisição mandou, então um `07/2026` viraria nome de
         // arquivo com barra.
+        // 🏁 Período parcial vai no nome (DDaDD): dois arquivos do mesmo mês —
+        // o de encerramento e um mensal antigo — não podem ter o mesmo nome.
         const sufixo = periodo.competencia
-            ? periodo.competencia.replace('-', '')
+            ? `${periodo.competencia.replace('-', '')}${periodoArquivo?.parcial ? `_${periodoArquivo.isoIni.slice(8)}a${periodoArquivo.isoFim.slice(8)}` : ''}`
             : `${periodo.competenciaInicio.replace('-', '')}_${periodo.competenciaFim.replace('-', '')}`;
         // 🚨 O NOME DIZ QUAL GERAÇÃO É — SPED_<cnpj>_<periodo>_<AAAAMMDD-HHMM>.txt
         const filename = nomeDoArquivoSped({ familia: 'SPED', cnpj, periodo: sufixo });
