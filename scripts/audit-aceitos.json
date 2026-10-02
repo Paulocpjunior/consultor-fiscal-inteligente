@@ -1,0 +1,10 @@
+[
+    {
+        "advisory": "GHSA-86w9-cpqp-85rv",
+        "pacote": "node-forge",
+        "ate": "2026-11-02",
+        "aprovadoPor": "Paulo, 02/10/2026",
+        "motivo": "Sem versão corrigida (afeta node-forge <=1.4.0). O defeito é na VERIFICAÇÃO de assinatura RSA PKCS#1 v1.5 do node-forge; o CFI só usa o node-forge para abrir PFX (pkcs12) e exportar PEM. A única verificação de assinatura do app usa o crypto nativo do Node.",
+        "trava": "__tests__/nodeForgeSemVerificacaoRsa.test.ts"
+    }
+]

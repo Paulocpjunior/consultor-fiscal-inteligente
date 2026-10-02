@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔐 ADVISORY ACEITO COM PRAZO (02/10, node-forge GHSA-86w9-cpqp-85rv)**.
+  Advisory high SEM correção (`node-forge <=1.4.0`) travou o deploy 1094 (SPED
+  de encerramento). Paulo: *"sim, libera, e precisamos de uma solução
+  urgente"*. O passo de auditoria do deploy-app.yml chama
+  `scripts/audit-producao.mjs`: roda o `npm audit --omit=dev` inteiro e só
+  deixa passar o que está em `scripts/audit-aceitos.json` (GHSA + pacote +
+  aprovadoPor + motivo + trava + `ate`; vencido volta a bloquear). Aceite do
+  node-forge até 02/11/2026. Trava `nodeForgeSemVerificacaoRsa.test.ts`: nenhum
+  arquivo que importa node-forge chama `.verify(` (o CFI só abre PFX). Quando
+  sair a 1.4.1, o robô audit-deps resolve; remova a entrada.
+
 - **🏁 SPED FISCAL: PERÍODO DA GERAÇÃO De/Até (02/10, encerramento das filiais
   da Vinatex)** (Paulo, print do IOB SAGE: *"tem que criar esse campo também,
   igual no EFD"*). Dono `sped-fiscal-periodo.js`: `conferirPeriodoDaGeracao` só
