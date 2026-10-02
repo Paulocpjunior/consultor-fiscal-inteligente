@@ -728,7 +728,12 @@ export async function subirPdf({ pdfBase64, nomeArquivo }, deps = {}) {
  */
 export async function enviarMidiaWhatsapp({ para, tipo, mediaId, link, nomeArquivo, legenda }, deps = {}) {
     const cfg = deps.cfg || configWhatsapp(deps.env);
-    const faltas = faltasDaConfig(cfg);
+    // 🐛 02/10 (Paulo, ao anexar na conversa): "Canal do WhatsApp não
+    // configurado: nome do template aprovado (env WHATSAPP_TEMPLATE_GUIA)".
+    // Mídia na conversa NÃO usa template nenhum — a env da guia é exigência
+    // SÓ do envio de guia (enviarGuiaWhatsapp). Aqui vale a mesma régua do
+    // texto livre: token + id do número.
+    const faltas = faltasDaConfig(cfg).filter((f) => !f.includes('WHATSAPP_TEMPLATE_GUIA'));
     if (faltas.length) {
         return { ok: false, configuracaoIncompleta: true, erro: `Canal do WhatsApp não configurado: ${faltas.join('; ')}.`, acao: 'Configure as credenciais no Cloud Run.' };
     }
