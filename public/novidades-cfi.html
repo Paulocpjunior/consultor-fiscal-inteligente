@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (02/10) — leia esta parte primeiro</h2>
 
+    <h3>📨 <strong>Correção: "Manifestar ciência de todas" não bloqueia mais a captura da empresa na SEFAZ</strong></h3>
+    <p>O botão do Guia do Mês enviava as ciências uma atrás da outra e, a cada nota aceita, já baixava o XML completo na
+    hora. Essa rajada de consultas fazia a SEFAZ bloquear o CNPJ por cerca de 1 hora (cStat 656, "consumo indevido"). O
+    bloqueio derrubava a captura de NF-e daquela empresa e o cron da ciência, que foi o alerta "2 cron(s) com problema"
+    de 01/10. Agora o botão envia só a ciência, com 1 segundo entre as notas, e o XML completo chega na captura
+    seguinte, como já acontece no envio automático. Se a SEFAZ responder 656 no meio, o botão para e avisa para tentar
+    de novo em cerca de 1 hora.</p>
+
     <h3>🏁 <strong>SPED Fiscal: "Período da geração" (De/Até) para o SPED de encerramento</strong></h3>
     <p>Em SPED Fiscal → Gerar SPED Fiscal, o card 2. Período ganhou os campos <strong>De</strong>, <strong>Até</strong> e
     <strong>Situação especial</strong>, como no IOB SAGE. Para o encerramento de uma filial, escolha "Encerramento de

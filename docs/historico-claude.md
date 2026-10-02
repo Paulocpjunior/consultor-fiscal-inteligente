@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📨 CIÊNCIA EM LOTE CAUSAVA 656 (02/10; e-mail "2 cron(s) com problema" de
+  01/10)**. O "Manifestar ciência de todas" do Guia do Mês (#1345) chamava
+  `/manifest-one` chave a chave, e cada ciência aceita disparava consChNFe
+  (re-download imediato) — rajada no NFeDistribuicaoDFe = 656 da raiz por ~1h,
+  derrubando a captura das 18h e o cron da ciência das 20h15 (a classe VINATEX
+  que o `skipRedownload` do cron já fechava). Fix: `emLote` na rota →
+  `skipRedownload`; o lote espaça 1 s e para no 1º 656. Trava
+  `cienciaEmLoteSemRajada.test.ts` (rota + varredura: chamada em laço declara
+  `emLote: true`). Lição: rota AVULSA chamada em laço vira lote — herda as
+  regras do lote.
+
 - **🔐 ADVISORY ACEITO COM PRAZO (02/10, node-forge GHSA-86w9-cpqp-85rv)**.
   Advisory high SEM correção (`node-forge <=1.4.0`) travou o deploy 1094 (SPED
   de encerramento). Paulo: *"sim, libera, e precisamos de uma solução

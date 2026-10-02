@@ -84,7 +84,7 @@ router.get('/manifest-elegiveis', authUser, async (req, res) => {
 // tipos afirmam sobre a operação e seguem admin.
 router.post('/manifest-one', authUser, async (req, res) => {
   try {
-    const { chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId = null } = req.body || {};
+    const { chNFe, cnpjDestinatario, tipo = 'ciencia', xJustificativa, dryRun = false, empresaId = null, emLote = false } = req.body || {};
     if (!chNFe || !cnpjDestinatario) {
       return res.status(400).json({ erro: 'chNFe e cnpjDestinatario são obrigatórios' });
     }
@@ -102,6 +102,12 @@ router.post('/manifest-one', authUser, async (req, res) => {
     const r = await manifestarUma({
       chNFe, cnpjDestinatario, tipo, xJustificativa, dryRun,
       capturadoPor: req.user, empresaId: empresaId || null,
+      // 🚨 LOTE NÃO REBAIXA NA HORA (02/10): o "📨 Manifestar ciência de todas"
+      // do Guia do Mês chama esta rota chave a chave, e cada ciência aceita
+      // disparava um consChNFe — rajada no NFeDistribuicaoDFe = cStat 656 da
+      // raiz por ~1h, que derrubou a captura e o cron da ciência em 01/10.
+      // Em lote a completa vem no próximo ciclo DistDFe (régua do cron).
+      skipRedownload: emLote === true,
     });
     // O retorno cru da SEFAZ é grande (SOAP inteiro) e a tela só precisa do desfecho.
     res.json({ ok: r.desfecho ? r.desfecho.registraEvento : false, desfecho: r.desfecho || null, idAttr: r.idAttr, dryRun: r.dryRun, retorno: r.retorno || null });
