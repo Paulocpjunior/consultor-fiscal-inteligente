@@ -28,6 +28,7 @@ import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped
 import { resolverSaldoAnterior, competenciasEntre } from './saldo-abertura.js';
 import { buildBlocoH } from './sped-fiscal-blocoH.js';
 import { dataInventario } from './sped-bloco-h.js';
+import { recortarNotasPeloPeriodo, SITUACOES_PERIODO } from './sped-fiscal-periodo.js';
 import { buildBlocoK } from './sped-fiscal-blocoK.js';
 import { apurarCiap, classificarSaidasCiap, montarLinhasBlocoG } from './sped-bloco-g.js';
 import * as fmtSped from './sped-fiscal-format.js';
@@ -92,7 +93,7 @@ function fa() {
  *   warnings: string[],
  * }>}
  */
-export async function coletarDadosEmpresa({ empresaId, competencia, competenciaInicio, competenciaFim }) {
+export async function coletarDadosEmpresa({ empresaId, competencia, competenciaInicio, competenciaFim, periodoArquivo = null }) {
     const db = fa().firestore();
 
     // ─── 1. Le empresa (tenta simples_empresas, depois lucro_empresas) ───
@@ -173,6 +174,14 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // `push` aqui seria ReferenceError — a MESMA classe que derrubou a
     // geração do SPED em 20/08, e que a trava de nomes do backend pega.
     const avisosDoFechamento = avisosDoRecorte(recorte);
+
+    // 🏁 PERÍODO PARCIAL (02/10, encerramento das filiais da Vinatex): o
+    // arquivo só leva o que o livro data DENTRO de DT_INI..DT_FIN — a mesma
+    // data que o C100 escreve no DT_E_S. O que fica fora é DITO (avisos).
+    const recortePeriodo = periodoArquivo?.parcial
+        ? recortarNotasPeloPeriodo(notas, periodoArquivo)
+        : { docs: notas, avisos: [] };
+    notas = recortePeriodo.docs;
 
     // ─── 4. Extrai participantes unicos (entrada + saida) ───
     //
@@ -338,6 +347,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    if (periodoArquivo?.aviso) warnings.push(`🏁 ${periodoArquivo.aviso}`);
+    warnings.push(...recortePeriodo.avisos);
     warnings.push(...avisosDoBlocoB({ uf: empresa?.dadosFiscais?.uf, apuracao: blocoB }));
     if (erroParametrosCfop) warnings.push(avisoParametrosCfop(erroParametrosCfop));
     // Colisão de COD_ITEM: o PVA ACEITA (há uma linha só no 0200) — quem vê o
@@ -396,8 +407,14 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // na aba 📦 Inventário. Sem ela o bloco H sai VAZIO — nunca zerado, que
     // declararia ao Fisco que não havia estoque (correção de 06/08).
     let inventarioMotInv = null;
+    // 🏁 No ENCERRAMENTO (e cisão/fusão/incorporação) o inventário é o da DATA
+    // DO EVENTO — a contagem gravada na aba 📦 Inventário com essa data. Não
+    // se deduz o motivo: ele vem do doc da contagem, como sempre.
+    const inventarioNoEvento = SITUACOES_PERIODO[periodoArquivo?.situacao]?.move === 'DT_FIN'
+        ? periodoArquivo.isoFim : null;
+    let inventarioDoEventoAchado = false;
     try {
-        const dtInv = dataInventario(periodoFim);
+        const dtInv = inventarioNoEvento || dataInventario(periodoFim);
         if (dtInv) {
             const invSnap = await admin.firestore().collection('sped_inventario')
                 .doc(`${empresaId}_${dtInv.replace(/\D/g, '')}`).get();
@@ -413,6 +430,7 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                     it.codPartInventario = c.codPartInventario || '';
                 }
                 inventarioMotInv = inv.motInv || null;
+                inventarioDoEventoAchado = !!inventarioNoEvento;
                 // Contado que NÃO está no 0200 do período: o item existe no
                 // estoque mas não teve movimento no mês — sumiria do arquivo em
                 // silêncio se ninguém dissesse.
@@ -428,6 +446,14 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     } catch (e) {
         // Falhar em LER o inventário não pode virar "não tem inventário".
         warnings.push(`Não consegui ler a contagem do inventário (${e.message}) — o bloco H pode sair incompleto.`);
+    }
+    if (inventarioNoEvento && !inventarioDoEventoAchado) {
+        const dataBr = inventarioNoEvento.split('-').reverse().join('/');
+        warnings.push(
+            `🏁 ${periodoArquivo.rotulo}: não há contagem de inventário gravada com a data ${dataBr}. `
+            + `Grave-a em SPED Fiscal → 📦 Inventário (Bloco H), com a data ${dataBr} e o motivo que se aplica `
+            + '(ex.: 03 — na solicitação de baixa cadastral), e gere de novo. Sem ela o bloco H sai VAZIO.',
+        );
     }
 
     // ─── 6c. Apontamento de produção e estoque (Bloco K) ──────────────────
@@ -790,6 +816,11 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
         parametrosCfop,
         competenciaInicio: periodoInicio,
         competenciaFim: periodoFim,
+        // 🏁 Período conferido na porta (null = mês inteiro). Lido por
+        // `fmt.dtIniDoArquivo/dtFinDoArquivo` em todo registro com período.
+        periodoArquivo: periodoArquivo || null,
+        // Data do inventário do evento (null = a régua de sempre).
+        inventarioNoEvento,
         notas,
         itens,
         // MOT_INV vem do doc do inventário (a pessoa escolhe ao contar); o
@@ -858,8 +889,8 @@ export async function montarBlocos({ dados }) {
     const linhasBlocoG = dados.ciap
         ? montarLinhasBlocoG({
             apuracao: dados.ciap,
-            dtIni: fmtSped.formatCompetenciaInicio(dados.competenciaInicio),
-            dtFin: fmtSped.formatCompetenciaFim(dados.competenciaFim),
+            dtIni: fmtSped.dtIniDoArquivo(dados),
+            dtFin: fmtSped.dtFinDoArquivo(dados),
         })
         : buildBlocoG();
     const linhasBlocoH = buildBlocoH(dados);   // inventario (Bloco H real)

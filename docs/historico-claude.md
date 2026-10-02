@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🏁 SPED FISCAL: PERÍODO DA GERAÇÃO De/Até (02/10, encerramento das filiais
+  da Vinatex)** (Paulo, print do IOB SAGE: *"tem que criar esse campo também,
+  igual no EFD"*). Dono `sped-fiscal-periodo.js`: `conferirPeriodoDaGeracao` só
+  aceita sair do mês inteiro nas exceções do Guia (abertura move DT_INI;
+  encerramento/cisão/fusão/incorporação movem DT_FIN), só no mensal.
+  `fmt.dtIniDoArquivo/dtFinDoArquivo` é o dono das datas em 0000, 0300, E100,
+  E200, E300, E500, G110, K100. A coleta recorta notas pela data do DT_E_S e
+  lista as de fora. Encerramento exige o inventário NA DATA DO EVENTO (doc
+  `sped_inventario` dessa data; MOT_INV vem da contagem, não se deduz). A R20
+  aceita a exceção declarada via ctx (`periodoInicioDoEvento/FimDoEvento`).
+  Nome do arquivo ganha `_DDaDD`. Trava `spedFiscalPeriodoDaGeracao.test.ts`.
+
 - **🚫 LISTA NEGRA DO CONNECT** (01/10, Paulo: *"modal disponível somente para
   admins, para black list de usuários indesejados, spam, anúncio entre
   outros"*). `whatsapp-bloqueios.js` (puro): `validarBloqueio` (wa_id 8–15

@@ -666,7 +666,12 @@ export function prevalidarSpedFiscal(linhas, ctx = {}) {
     // Mesma casa das R1/R16, e pelo MESMO motivo: a validação está nos dois
     // Guias e a regra nasceu hoje no EFD-Contribuições. Deixá-la numa família
     // só é a "meia trava" do COD_MUN do 0150 — aqui os campos são o 04 e o 05.
-    for (const e of conferirPeriodoDoArquivo(lista, POS_DT_FIN_ICMS_IPI)) add(erros, e);
+    // 🏁 A exceção do Guia que a tela declarou (02/10) — o 0000 do ICMS/IPI
+    // não a carrega, então ela vem no contexto de quem gerou.
+    for (const e of conferirPeriodoDoArquivo(lista, POS_DT_FIN_ICMS_IPI, {
+        inicioDoEvento: ctx.periodoInicioDoEvento === true,
+        fimDoEvento: ctx.periodoFimDoEvento === true,
+    })) add(erros, e);
 
     // ════════════════════════════════════════════════════════════════════════
     // R21–R25 — OS REGISTROS QUE NUNCA VIRAM O PVA (29/08)

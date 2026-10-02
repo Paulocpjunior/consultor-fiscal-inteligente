@@ -157,7 +157,7 @@ function buildBloco0(dados) {
     // arquivo não declara.
     const r0300 = montarRegistros0300(
         dados.ciap?.bens,
-        fmt.formatCompetenciaInicio(dados.competenciaInicio),
+        fmt.dtIniDoArquivo(dados),
     );
     for (const l of r0300.linhas) linhas.push(l);
     if (Array.isArray(dados.warnings)) for (const a of r0300.avisos) dados.warnings.push(a);
@@ -244,14 +244,14 @@ function perfilDoArquivo(dados) {
 }
 
 function build0000(dados) {
-    const { empresa, competenciaInicio, competenciaFim } = dados;
+    const { empresa } = dados;
     const df = empresa.dadosFiscais || {};
     return fmt.buildLine([
         '0000',
         VERSAO_LEIAUTE,
         '0',  // 0=Original
-        fmt.formatCompetenciaInicio(competenciaInicio),
-        fmt.formatCompetenciaFim(competenciaFim),
+        fmt.dtIniDoArquivo(dados),
+        fmt.dtFinDoArquivo(dados),
         fmt.sanitizeString(empresa.nome, 100),
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         '',  // CPF (vazio pra PJ)

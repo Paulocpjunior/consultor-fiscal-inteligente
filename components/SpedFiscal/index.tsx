@@ -48,6 +48,14 @@ function getCompetenciaAtual(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** Primeiro e último dia (AAAA-MM-DD) do mês da competência. */
+function limitesDoMes(comp: string): { primeiro: string; ultimo: string } {
+    const [ano, mes] = comp.split('-').map(Number);
+    const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+    const mm = String(mes).padStart(2, '0');
+    return { primeiro: `${ano}-${mm}-01`, ultimo: `${ano}-${mm}-${String(ultimo).padStart(2, '0')}` };
+}
+
 function getTrimestreFromCompetencia(comp: string): { inicio: string; fim: string } {
     const [ano, mes] = comp.split('-').map(Number);
     const trimestre = Math.floor((mes - 1) / 3);
@@ -71,6 +79,11 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
     const empresaId = useEmpresaAtivaId();
     const [competencia, setCompetencia] = useState<string>(getCompetenciaAtual());
     const [escopo, setEscopo] = useState<Escopo>('mensal');
+    // 🏁 PERÍODO DA GERAÇÃO De/Até (02/10, encerramento das filiais da
+    // Vinatex). Vazio = mês inteiro da competência, como sempre.
+    const [periodoDe, setPeriodoDe] = useState<string>('');
+    const [periodoAte, setPeriodoAte] = useState<string>('');
+    const [situacaoPeriodo, setSituacaoPeriodo] = useState<'' | 'abertura' | 'encerramento' | 'cisao' | 'fusao' | 'incorporacao'>('');
     const [gerando, setGerando] = useState(false);
     const [mensagem, setMensagem] = useState<MensagemRetorno | null>(null);
     // Contribuições state
@@ -132,6 +145,14 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
             const body: Record<string, string> = { empresaId };
             if (escopo === 'mensal') {
                 body.competencia = competencia;
+                const lim = limitesDoMes(competencia);
+                const de = periodoDe || lim.primeiro;
+                const ate = periodoAte || lim.ultimo;
+                if (situacaoPeriodo || de !== lim.primeiro || ate !== lim.ultimo) {
+                    body.dataInicio = de;
+                    body.dataFim = ate;
+                    if (situacaoPeriodo) body.situacaoPeriodo = situacaoPeriodo;
+                }
             } else {
                 const { inicio, fim } = getTrimestreFromCompetencia(competencia);
                 body.competenciaInicio = inicio;
@@ -830,7 +851,7 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         <input
                             type="month"
                             value={competencia}
-                            onChange={e => { setCompetencia(e.target.value); setMensagem(null); }}
+                            onChange={e => { setCompetencia(e.target.value); setPeriodoDe(''); setPeriodoAte(''); setMensagem(null); }}
                             className="w-full p-2.5 text-sm rounded-lg outline-none"
                             style={{
                                 background: 'var(--bg-card)',
@@ -848,6 +869,57 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         )}
                     </div>
                 </div>
+                {/* 🏁 PERÍODO DA GERAÇÃO (02/10, Vinatex): como o "De/Até" do IOB SAGE.
+                    O Guia só deixa sair do mês inteiro no início de atividades
+                    (DT_INI) e no encerramento/cisão/fusão/incorporação (DT_FIN). */}
+                {escopo === 'mensal' && competencia && (() => {
+                    const lim = limitesDoMes(competencia);
+                    const estilo = { background: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' };
+                    return (
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                            <div>
+                                <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                                    Período da geração — De
+                                </label>
+                                <input type="date" value={periodoDe || lim.primeiro} min={lim.primeiro} max={lim.ultimo}
+                                    onChange={e => { setPeriodoDe(e.target.value); setMensagem(null); }}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none" style={estilo} />
+                            </div>
+                            <div>
+                                <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                                    Até
+                                </label>
+                                <input type="date" value={periodoAte || lim.ultimo} min={lim.primeiro} max={lim.ultimo}
+                                    onChange={e => { setPeriodoAte(e.target.value); setMensagem(null); }}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none" style={estilo} />
+                            </div>
+                            <div>
+                                <label className="text-xs uppercase font-medium block mb-2" style={{ color: 'var(--text-muted)' }}>
+                                    Situação especial
+                                </label>
+                                <select value={situacaoPeriodo}
+                                    onChange={e => { setSituacaoPeriodo(e.target.value as typeof situacaoPeriodo); setMensagem(null); }}
+                                    className="w-full p-2.5 text-sm rounded-lg outline-none" style={estilo}>
+                                    <option value="">Nenhuma — mês inteiro</option>
+                                    <option value="encerramento">Encerramento de atividades (baixa)</option>
+                                    <option value="abertura">Início de atividades</option>
+                                    <option value="cisao">Cisão</option>
+                                    <option value="fusao">Fusão</option>
+                                    <option value="incorporacao">Incorporação</option>
+                                </select>
+                            </div>
+                            <p className="md:col-span-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                {situacaoPeriodo === 'abertura'
+                                    ? 'Início de atividades: o "De" é a data em que a empresa começou; o "Até" fica no último dia do mês.'
+                                    : situacaoPeriodo
+                                        ? 'O "Até" é a data do evento (vai no DT_FIN do 0000 e de todos os registros com período). '
+                                            + 'Notas depois dela ficam fora do arquivo e são listadas no aviso. O inventário do Bloco H é o da '
+                                            + 'mesma data: grave a contagem na aba 📦 Inventário com essa data e o motivo (ex.: 03 — baixa cadastral).'
+                                        : 'Mês inteiro, como sempre. Para o SPED de encerramento, escolha a situação e informe a data do evento no "Até".'}
+                            </p>
+                        </div>
+                    );
+                })()}
             </div>
 
             <div className="flex justify-center">
