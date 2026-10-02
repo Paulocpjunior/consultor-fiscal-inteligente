@@ -10,7 +10,10 @@
 // É a classe de 20/08 (o campo do cérebro do CFOP que "parecia desabilitado"):
 // para quem usa, "parece desligado" e "está desligado" são a mesma coisa.
 // ============================================================================
-import { motivoDoBotaoDesligado } from '../services/issEnvioBotao';
+import { motivoDoBotaoDesligado, motivoDoBotaoRetidoDesligado, retidoAptoParaEnvio } from '../services/issEnvioBotao';
+import { guiaIssDoEnvio } from '../sefaz-backend/guia-iss.js';
+// @ts-expect-error — módulo .js puro (sem tipos)
+import { obrigacaoDoTipo } from '../sefaz-backend/envio-imposto.js';
 
 describe('🚨 o botão desligado diz o que falta', () => {
     it('com PDF e apuração apta, o botão liga e não há frase', () => {
@@ -34,5 +37,44 @@ describe('🚨 o botão desligado diz o que falta', () => {
         const m = motivoDoBotaoDesligado(false, false)!;
         expect(m).toMatch(/apuração tem pendência/);
         expect(m).not.toMatch(/Falta anexar o PDF/);
+    });
+});
+
+// ============================================================================
+// ↩ 02/10 — BOLA N'AGUA: "tentei encaminhar o guia de ISS TOMADOS pelo
+// consultor, mas está habilitado somente para ISS PRESTADOS". ISS próprio
+// R$ 0,00 e retido como tomadora R$ 3,67: o botão único exigia ISS próprio.
+// ============================================================================
+describe('↩ a guia do ISS RETIDO como tomadora tem envio próprio', () => {
+    const nota = (over: any = {}) => ({ issRetido: 3.67, semValorGravado: false, ...over });
+
+    it('retido com valor e sem buraco de dado: apto', () => {
+        expect(retidoAptoParaEnvio({ totalRetido: 3.67, notas: [nota()] })).toBe(true);
+    });
+
+    it('nota retida sem o valor gravado: não apto (ausência não é zero)', () => {
+        expect(retidoAptoParaEnvio({ totalRetido: 3.67, notas: [nota(), nota({ issRetido: 0, semValorGravado: true })] })).toBe(false);
+        expect(motivoDoBotaoRetidoDesligado(true, false)).toMatch(/sem o valor gravado/);
+    });
+
+    it('sem retido: não apto', () => {
+        expect(retidoAptoParaEnvio({ totalRetido: 0, notas: [] })).toBe(false);
+        expect(retidoAptoParaEnvio(null)).toBe(false);
+    });
+
+    it('apto sem PDF diz o que falta; com PDF liga', () => {
+        expect(motivoDoBotaoRetidoDesligado(false, true)).toMatch(/Anexar PDF da guia do retido/);
+        expect(motivoDoBotaoRetidoDesligado(true, true)).toBeNull();
+    });
+
+    it('ISS próprio zero com retido: o botão do próprio não fala em "pendência" e aponta o do retido', () => {
+        const m = motivoDoBotaoDesligado(true, false, { aRecolher: 0, retido: 3.67 })!;
+        expect(m).not.toMatch(/pendência/);
+        expect(m).toMatch(/ISS RETIDO/);
+    });
+
+    it('o tipo que a tela manda ("ISS RETIDO") é a guia do retido e não procura a tarefa do ISS próprio', () => {
+        expect(guiaIssDoEnvio({ tipo: 'ISS RETIDO' })).toBe('retido');
+        expect(obrigacaoDoTipo('ISS RETIDO')).toBeNull();
     });
 });
