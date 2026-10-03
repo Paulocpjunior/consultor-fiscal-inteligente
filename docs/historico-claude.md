@@ -5,6 +5,22 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📅 dCOMPET DESCARTADO NA IMPORTAÇÃO PELA TELA (03/10, Santana de Parnaíba,
+  CLINICA VETERINARIA ALPHAVILLE, 34 NFS-e)**. `parseNFSeNacional`
+  (services/xmlParserService.ts) não repassava `lida.competencia` → a
+  competência saía da emissão (NFS-e 643: dCompet 29/08, emissão 09/09). Fix:
+  `competenciaDeclarada` repassada e GRAVADA no doc. Acervo
+  (`competencia-acervo.js`) passa a usar a declarada (precedência do dono);
+  a rota lê o dCompet do XML no Storage (`competencia-do-xml.js`, teto 600,
+  falha dita em `avisoLeitura`) na fila e na correção; o patch grava
+  `competenciaOrigem` e `competenciaDeclarada`. Trava
+  `nfseNacionalCompetenciaDCompet.test.ts` (vermelha no parser antigo).
+- **🔕 COFRE: inatividade pula quem "não emite saída" (03/10)**.
+  `detectarInatividade(..., {naoEmitem})`; a rota lê
+  `rotinaParametros.saidaPropria == 'nao-emite'` nas duas coleções; o e-mail
+  diz quantas ficaram fora e corta com "mostrando X de N". Trava em
+  `cofreEmailMetricsEAlerta.test.ts`.
+
 - **🚫 EMPRESA QUE NÃO EMITE SAÍDA (02/10, CONDOMINIO BENJAMIN CONSTANT)**
   (Paulo: *"devemos parametrizar… empresas que não possuem notas de saída mod.
   55/65 nem NFS"*). Marca no cadastro `rotinaParametros.saidaPropria =

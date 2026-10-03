@@ -21,12 +21,23 @@ const DIA_MS = 24 * 60 * 60 * 1000;
  * @param {Record<string,{nome?:string, ms:number}>} ultimaSaidaPorEmpresa
  * @param {number} hojeMs
  * @param {number} [janelaDias=7]
+ * @param {{naoEmitem?: Set<string>|string[]}} [opts]
+ *   🚫 02/10 (Paulo: "tira do e-mail do cofre também"): empresas MARCADAS na
+ *   Rotina como "não emite nota de saída" (`rotinaParametros.saidaPropria`)
+ *   não entram — "parou de enviar saída" sobre quem não emite é alarme sobre
+ *   estado correto. Quantas foram puladas volta em `inativos.pulados`.
  */
-export function detectarInatividade(ultimaSaidaPorEmpresa, hojeMs, janelaDias = 7) {
+export function detectarInatividade(ultimaSaidaPorEmpresa, hojeMs, janelaDias = 7, opts = {}) {
   const limite = hojeMs - janelaDias * DIA_MS;
   const inativos = [];
+  const naoEmitem = new Set(Array.from(opts?.naoEmitem || []).map(String));
+  let pulados = 0;
   for (const [empresaId, info] of Object.entries(ultimaSaidaPorEmpresa || {})) {
     const ms = Number(info?.ms);
+    if (naoEmitem.has(String(empresaId))) {
+      if (Number.isFinite(ms) && ms > 0 && ms < limite) pulados += 1;
+      continue;
+    }
     if (Number.isFinite(ms) && ms > 0 && ms < limite) {
       inativos.push({
         empresaId,
@@ -36,7 +47,10 @@ export function detectarInatividade(ultimaSaidaPorEmpresa, hojeMs, janelaDias = 
       });
     }
   }
-  return inativos.sort((a, b) => a.ultimaSaidaMs - b.ultimaSaidaMs);
+  inativos.sort((a, b) => a.ultimaSaidaMs - b.ultimaSaidaMs);
+  // Propriedade no próprio array: quem já chamava continua recebendo a lista.
+  Object.defineProperty(inativos, 'pulados', { value: pulados, enumerable: false });
+  return inativos;
 }
 
 /** Assinatura estável do estado de alerta — muda só quando o conteúdo muda. */
@@ -76,7 +90,10 @@ export function decidirAlertasCofre({ run = null, pendencias = [], inativos = []
     });
   }
   if (inativos.length > 0) {
-    alertas.push({ tipo: 'inatividade', qtd: inativos.length, empresas: inativos.slice(0, 50) });
+    alertas.push({
+      tipo: 'inatividade', qtd: inativos.length, empresas: inativos.slice(0, 50),
+      puladosNaoEmitem: Number(inativos.pulados || 0),
+    });
   }
 
   const assinatura = calcularAssinatura(alertas);
@@ -93,7 +110,12 @@ export function montarCorpoAlerta(alertas) {
     } else if (a.tipo === 'pendencias') {
       partes.push(`<h3>⚠ ${a.qtd} e-mail(s) com anexo mas sem XML importável</h3><ul>${a.detalhe.map((d) => `<li>${escapeHtml(d.assunto)}${d.from ? ` — ${escapeHtml(d.from)}` : ''} [${(d.anexos || []).map(escapeHtml).join(', ')}]</li>`).join('')}</ul>`);
     } else if (a.tipo === 'inatividade') {
-      partes.push(`<h3>🔕 ${a.qtd} cliente(s) sem enviar saída (emissor pode ter parado)</h3><ul>${a.empresas.map((e) => `<li>${escapeHtml(e.nome)} — ${e.diasSem} dia(s) sem saída</li>`).join('')}</ul>`);
+      // Lista cortada diz "mostrando X de N" (farol honesto).
+      const corte = a.qtd > a.empresas.length ? `<p>Mostrando ${a.empresas.length} de ${a.qtd}.</p>` : '';
+      const pulados = a.puladosNaoEmitem > 0
+        ? `<p style="color:#666;font-size:12px">${a.puladosNaoEmitem} cliente(s) marcado(s) na Rotina como "não emite nota de saída" ficaram fora desta lista.</p>`
+        : '';
+      partes.push(`<h3>🔕 ${a.qtd} cliente(s) sem enviar saída (emissor pode ter parado)</h3><ul>${a.empresas.map((e) => `<li>${escapeHtml(e.nome)} — ${e.diasSem} dia(s) sem saída</li>`).join('')}</ul>${corte}${pulados}`);
     }
   }
   partes.push('<p style="color:#888;font-size:12px">Aviso automático do Cofre CFI. Configure o responsável por empresa para direcionar estes alertas.</p>');

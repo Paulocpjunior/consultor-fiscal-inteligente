@@ -80,10 +80,12 @@ export function classificarCompetenciaDoAcervo(doc) {
     }
 
     const regua = competenciaDaNfse({
-        // ⚠️ A competência DECLARADA pelo documento não entra aqui, e isso é
-        // decisão: ela é o campo do próprio papel, e o que está gravado hoje já
-        // pode ser ela. Quem desempata o acervo é o FATO GERADOR contra a
-        // EMISSÃO, que é o par que produziu o defeito.
+        // 🚨 03/10 (Santana de Parnaíba, NFS-e nacional): a competência
+        // DECLARADA pelo documento (`dCompet`) ENTRA, quando conhecida — gravada
+        // na nota ou lida do XML guardado pela rota. O importador da tela a
+        // descartava e gravava a EMISSÃO, então "o que está gravado já é ela"
+        // deixou de ser verdade. Sem ela, desempata o FATO GERADOR × EMISSÃO.
+        competenciaDeclarada: d.competenciaDeclarada,
         dataFatoGerador: d.dataFatoGerador,
         dataEmissao: d.dhEmi || d.dataEmissao,
     });
@@ -99,7 +101,7 @@ export function classificarCompetenciaDoAcervo(doc) {
             motivo: regua.motivo,
         };
     }
-    if (regua.origem !== 'fato-gerador') {
+    if (regua.origem !== 'fato-gerador' && regua.origem !== 'declarada') {
         return {
             situacao: 'sem-fato-gerador',
             precisaCorrigir: false,
@@ -117,7 +119,8 @@ export function classificarCompetenciaDoAcervo(doc) {
         precisaCorrigir: true,
         competenciaGravada: gravada || null,
         competenciaCerta: certa,
-        motivo: `O serviço foi prestado em ${mesPorExtenso(certa)} (fato gerador) e a nota está `
+        origemDaCerta: regua.origem,
+        motivo: `O serviço foi prestado em ${mesPorExtenso(certa)} (${regua.origem === 'declarada' ? 'competência declarada na nota' : 'fato gerador'}) e a nota está `
             + `declarada em ${mesPorExtenso(gravada) || 'nenhum mês'}. Ela some do Livro de Serviços, do ISS `
             + `e do bloco A de ${mesPorExtenso(certa)} e aparece em ${mesPorExtenso(gravada)}, onde não deveria estar.`,
         consequencia: `Corrigir muda os DOIS meses: ${mesPorExtenso(gravada)} perde esta nota e `
@@ -207,7 +210,10 @@ export function patchCorrecaoCompetencia({ doc, porEmail, motivo, agoraIso } = {
         para: r.competenciaCerta,
         patch: {
             competencia: r.competenciaCerta,
-            competenciaOrigem: 'fato-gerador',
+            competenciaOrigem: r.origemDaCerta || 'fato-gerador',
+            // A competência declarada que decidiu (lida do XML, se não estava
+            // gravada) fica na nota: a próxima conferência não precisa reler.
+            ...(doc?.competenciaDeclarada ? { competenciaDeclarada: String(doc.competenciaDeclarada) } : {}),
             competenciaCorrigida: {
                 de: r.competenciaGravada,
                 para: r.competenciaCerta,

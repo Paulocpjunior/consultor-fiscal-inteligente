@@ -68,14 +68,28 @@
         <img src="/sp-logo.png" alt="SP Assessoria Contábil" onerror="this.style.display='none'">
         <div>
             <h1>📣 Novidades no CFI — o que mudou e o que fazer</h1>
-            <p>Departamento Fiscal · atualizado em 02/10/2026 · leitura de 30 minutos</p>
+            <p>Departamento Fiscal · atualizado em 03/10/2026 · leitura de 30 minutos</p>
         </div>
     </div>
 </header>
 <main>
 
 <section>
-    <h2>🆕 O que mudou agora (02/10) — leia esta parte primeiro</h2>
+    <h2>🆕 O que mudou agora (03/10) — leia esta parte primeiro</h2>
+
+    <h3>📅 <strong>NFS-e do padrão nacional (ex.: Santana de Parnaíba): a importação respeita a competência da nota</strong></h3>
+    <p>Na importação de XML pela tela, a NFS-e do padrão nacional entrava no mês da data de emissão. Quando o cliente
+    emite a nota a partir da RPS no mês seguinte, ela caía no mês errado (caso CLINICA VETERINARIA ALPHAVILLE: competência
+    29/08, emissão 09/09). Agora a importação usa a <strong>competência declarada na nota</strong> (dCompet) e guarda
+    esse campo. Para as notas que já entraram no mês errado, abra <strong>Conferir competências</strong> com a empresa e
+    o mês: o CFI lê a competência do XML guardado, mostra cada nota no mês errado com os dois meses e corrige pelo botão
+    da própria fila, com o seu nome e o motivo. Se algum desses meses já tiver sido entregue, regere o arquivo dele.</p>
+
+    <h3>🔕 <strong>E-mail do cofre: empresas marcadas como "não emite nota de saída" saem da lista</strong></h3>
+    <p>O alerta diário "clientes sem enviar saída" deixa de listar as empresas marcadas na Rotina como "não emite nota
+    de saída". O e-mail informa quantas ficaram fora da lista por causa da marca.</p>
+
+    <h2>Antes disso (02/10)</h2>
 
     <h3>🚫 <strong>Rotina: empresa que não emite nota de saída deixa de travar o fechamento do mês</strong></h3>
     <p>Condomínios, associações e outras empresas que só têm notas de entrada e serviços tomados ficavam todo mês com a
