@@ -282,3 +282,52 @@ describe('🚨 a chave e a fiação', () => {
         expect(rota).toMatch(/confira se é a fila certa/);
     });
 });
+
+
+// 📊 03/10 — O PAINEL DO PAULO: 486 de 500 "não entendeu" em 7 dias, e a
+// linha não dizia POR QUÊ. Três fatos diferentes caíam no mesmo balde: o
+// modelo escolheu "nenhuma" (mensagem genérica — comportamento esperado),
+// devolveu algo ilegível (defeito de prompt/modelo) ou não devolveu nada
+// (bloqueio/corte). Agora o detalhe sai do BRUTO e o painel agrupa.
+describe('🤷 "não entendi" sai com o porquê — lido da resposta crua', () => {
+    const { motivoDoNaoEntendi, classeDoNaoEntendi, resumirTriagemIa } = require('../sefaz-backend/whatsapp-triagem-ia.js');
+    const FILAS2 = [{ fila: 'fiscal', rotulo: 'Fiscal' }];
+
+    it('nenhuma / ilegível / vazia são distinguidos, e o ilegível carrega o começo do bruto', () => {
+        expect(decidirDestinoDaTriagem({ resultado: null, filas: FILAS2, bruto: '{"fila":"nenhuma","confianca":0.9}' }).detalhe).toBe('modelo escolheu "nenhuma" (mensagem genérica)');
+        expect(decidirDestinoDaTriagem({ resultado: null, filas: FILAS2, bruto: '' }).detalhe).toBe('resposta vazia do modelo');
+        expect(decidirDestinoDaTriagem({ resultado: null, filas: FILAS2, bruto: 'Desculpe, não posso\n ajudar com isso.' }).detalhe).toBe('resposta ilegível: Desculpe, não posso ajudar com isso.');
+        expect(motivoDoNaoEntendi('x'.repeat(500)).length).toBeLessThanOrEqual(20 + 120);
+        // Sem bruto (chamador antigo), continua "não entendi" — com detalhe de vazia, nunca undefined.
+        expect(decidirDestinoDaTriagem({ resultado: null, filas: FILAS2 }).situacao).toBe('nao-entendi');
+    });
+
+    it('o painel agrupa em classes — e o registro antigo (sem detalhe) é dito como tal', () => {
+        const em = '2026-10-03T10:00:00.000Z';
+        const r = resumirTriagemIa([
+            { em, situacao: 'nao-entendi', detalhe: 'modelo escolheu "nenhuma" (mensagem genérica)' },
+            { em, situacao: 'nao-entendi', detalhe: 'modelo escolheu "nenhuma" (mensagem genérica)' },
+            { em, situacao: 'nao-entendi', detalhe: 'resposta ilegível: blá' },
+            { em, situacao: 'nao-entendi', detalhe: 'resposta vazia do modelo' },
+            { em, situacao: 'nao-entendi' },
+            { em, situacao: 'classificada', fila: 'fiscal' },
+        ], { agora: new Date('2026-10-03T12:00:00.000Z'), dias: 7 });
+        expect(r.motivosNaoEntendi).toEqual([
+            { motivo: 'nenhuma (genérica)', quantidade: 2 },
+            { motivo: 'resposta ilegível', quantidade: 1 },
+            { motivo: 'resposta vazia', quantidade: 1 },
+            { motivo: 'sem detalhe (registro anterior a 03/10)', quantidade: 1 },
+        ]);
+        expect(classeDoNaoEntendi(null)).toMatch(/sem detalhe/);
+    });
+
+    it('o webhook passa o BRUTO para a decisão, e a tela mostra o agrupamento', () => {
+        const { readFileSync } = require('fs');
+        const { join } = require('path');
+        const webhook = readFileSync(join(process.cwd(), 'sefaz-backend/whatsapp-webhook-routes.js'), 'utf8');
+        expect(webhook).toMatch(/resultado: interpretarRespostaTriagem\(bruto, filas\),\s*filas,\s*bruto/);
+        const tela = readFileSync(join(process.cwd(), 'components/SpConnect/index.tsx'), 'utf8');
+        expect(tela).toMatch(/Não entendeu por:/);
+        expect(tela).toMatch(/painelIa\.motivosNaoEntendi/);
+    });
+});

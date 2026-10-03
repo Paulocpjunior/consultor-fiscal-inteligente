@@ -216,6 +216,7 @@ export interface PainelTriagemIa {
     taxaClassificada: number | null;
     filas: { fila: string; quantidade: number }[];
     motivosIndisponivel: { motivo: string; quantidade: number }[];
+    motivosNaoEntendi: { motivo: string; quantidade: number }[];
     ultimaEm: string | null;
     ultimas: RegistroTriagemIa[];
     truncado?: boolean;

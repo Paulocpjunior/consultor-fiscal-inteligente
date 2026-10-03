@@ -4439,6 +4439,12 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                                             ⛔ Fora do ar por: {painelIa.motivosIndisponivel.map((m) => `${m.motivo} (${m.quantidade})`).join(' · ')}
                                                         </p>
                                                     )}
+                                                    {(painelIa.motivosNaoEntendi || []).length > 0 && (
+                                                        <p className="text-[10px] text-slate-600 dark:text-slate-300">
+                                                            🤷 Não entendeu por: {painelIa.motivosNaoEntendi.map((m) => `${m.motivo} (${m.quantidade})`).join(' · ')}
+                                                            {' '}— "nenhuma" é a IA sendo honesta com mensagem genérica; "ilegível" ou "vazia" é defeito nosso.
+                                                        </p>
+                                                    )}
                                                     <details className="text-[10px]">
                                                         <summary className="cursor-pointer text-slate-500 dark:text-slate-400">Últimas {painelIa.ultimas.length} decisões</summary>
                                                         <ul className="mt-1 space-y-0.5 max-h-40 overflow-y-auto">
