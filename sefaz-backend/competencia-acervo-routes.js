@@ -24,6 +24,45 @@ import admin from 'firebase-admin';
 import { requireAdmin } from './require-admin.js';
 import { fetchAllDocs } from './firestore-paginate.js';
 import { montarFilaCompetencia, patchCorrecaoCompetencia } from './competencia-acervo.js';
+import { competenciaDeclaradaDoXml, precisaLerCompetenciaDoXml } from './competencia-do-xml.js';
+
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'consultorfiscalapp';
+const STORAGE_BUCKET = process.env.STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`;
+// O Storage do próprio firebase-admin (mesmo caminho do cofre de certificados).
+const bucket = () => admin.storage().bucket(STORAGE_BUCKET);
+
+/** Teto por fila: a leitura é do Storage, e a carteira inteira não passa por aqui. */
+const MAX_XML_LIDOS = 600;
+
+/**
+ * 🚨 03/10 (Santana de Parnaíba): nota de serviço gravada SEM a competência
+ * declarada ganha o `dCompet` lido do XML guardado — o importador da tela a
+ * descartava. Só em memória (a fila é leitura); a correção grava. Falha de
+ * leitura NÃO vira "confere": a nota segue como estava, e a contagem diz.
+ */
+async function completarCompetenciaDoXml(docs) {
+    let lidos = 0;
+    let falhas = 0;
+    const precisam = docs.filter(precisaLerCompetenciaDoXml);
+    const alvos = precisam.slice(0, MAX_XML_LIDOS);
+    const fila = [...alvos];
+    const trabalhador = async () => {
+        while (fila.length) {
+            const d = fila.shift();
+            try {
+                const [buf] = await bucket().file(d.storagePath).download();
+                const comp = competenciaDeclaradaDoXml(buf.toString('utf8'));
+                if (comp) { d.competenciaDeclarada = comp; d._competenciaDoXml = true; }
+                lidos += 1;
+            } catch (e) {
+                falhas += 1;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: 8 }, trabalhador));
+    // Lista cortada diz quantas ficaram de fora (farol honesto).
+    return { lidos, falhas, naoLidosPorTeto: precisam.length - alvos.length };
+}
 
 const router = express.Router();
 const json = () => express.json({ limit: '256kb' });
@@ -72,8 +111,10 @@ router.get('/fila', requireAdmin, async (req, res) => {
             }
         }
 
+        const leituraXml = await completarCompetenciaDoXml(docs);
         const fila = montarFilaCompetencia(docs);
         res.json({
+            leituraXml,
             empresaId,
             competencia,
             mesesLidos,
@@ -84,9 +125,14 @@ router.get('/fila', requireAdmin, async (req, res) => {
             // lido como "o acervo inteiro está certo".
             alcance: `Esta fila examina o que está gravado em ${mesesLidos.join(' e ')}. `
                 + 'Nota de outro mês do acervo não aparece aqui — confira a competência dela.',
-            avisoLeitura: mesesComFalha.length
-                ? `Não deu para ler ${mesesComFalha.map((x) => x.mes).join(', ')} — a fila está INCOMPLETA.`
-                : null,
+            avisoLeitura: [
+                mesesComFalha.length
+                    ? `Não deu para ler ${mesesComFalha.map((x) => x.mes).join(', ')} — a fila está INCOMPLETA.`
+                    : null,
+                leituraXml.falhas
+                    ? `${leituraXml.falhas} XML(s) guardado(s) não puderam ser lidos — essas notas foram conferidas sem a competência declarada.`
+                    : null,
+            ].filter(Boolean).join(' ') || null,
         });
     } catch (e) {
         res.status(500).json({ erro: e?.message || 'Falha ao montar a fila.' });
@@ -109,6 +155,9 @@ router.post('/corrigir', requireAdmin, json(), async (req, res) => {
         // corrigido a mesma nota, e gravar por cima reescreveria o autor e o
         // motivo originais por um segundo clique (o defeito do ✕ de 14/08).
         const doc = { id: snap.id, ...(snap.data() || {}) };
+        // A MESMA leitura da fila: sem ela, a nota que a fila acusou pelo
+        // `dCompet` do XML seria recusada aqui como "não está no mês errado".
+        await completarCompetenciaDoXml([doc]);
         const r = patchCorrecaoCompetencia({
             doc,
             porEmail: req.user?.email || req.adminEmail || '',

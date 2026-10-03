@@ -1010,6 +1010,11 @@ function parseNFSeNacional(xmlText: string): ParsedXml {
         numero: lida.numero,
         natOp: 'Prestação de serviço',
         dhEmi: lida.dhEmi,
+        // 🚨 O `dCompet` (03/10, Santana de Parnaíba — NFS-e 643 da CLINICA
+        // VETERINARIA ALPHAVILLE: competência 29/08, emissão 09/09). O dono
+        // já o lia (`lida.competencia`) e este encaixe o DESCARTAVA: a nota
+        // emitida da RPS no mês seguinte entrava pela data de emissão.
+        competenciaDeclarada: lida.competencia || undefined,
         status: 'autorizado',
         emitente,
         destinatario,
@@ -1151,6 +1156,9 @@ export function buildDocumentoFiscal(input: {
             competenciaDeclarada: parsed.competenciaDeclarada,
             dataEmissao: parsed.dhEmi,
         }).competencia || competenciaFromIso(parsed.dhEmi),
+        // GRAVADA (03/10): sem ela a fila "Conferir competências" não tem com o
+        // que comparar o mês gravado. Ausente continua ausente (sem undefined).
+        ...(parsed.competenciaDeclarada ? { competenciaDeclarada: String(parsed.competenciaDeclarada) } : {}),
         direcao: input.direcao,
         categoriaOperacao,
         status: parsed.status,

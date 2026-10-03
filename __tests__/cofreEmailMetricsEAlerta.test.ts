@@ -109,3 +109,31 @@ describe('montarCorpoAlerta', () => {
     expect(html).toContain('9 dia(s)');
   });
 });
+
+// 🚫 02/10 — Paulo: "tira do e-mail do cofre também". Empresa marcada na Rotina
+// como "não emite nota de saída" não é "cliente que parou de enviar saída".
+describe('inatividade do cofre pula quem não emite saída', () => {
+    const { detectarInatividade: det, decidirAlertasCofre: decidir, montarCorpoAlerta: corpo } = require('../sefaz-backend/cofre-alerta.js');
+    const HOJE = Date.parse('2026-10-02T12:00:00Z');
+    const DIA = 86400000;
+    const mapa = {
+        cond: { nome: 'CONDOMINIO BENJAMIN CONSTANT', ms: HOJE - 40 * DIA },
+        loja: { nome: 'LOJA QUE PAROU', ms: HOJE - 20 * DIA },
+    };
+
+    it('a marcada sai da lista e é contada como pulada', () => {
+        const r = det(mapa, HOJE, 7, { naoEmitem: new Set(['cond']) });
+        expect(r.map((e: any) => e.empresaId)).toEqual(['loja']);
+        expect(r.pulados).toBe(1);
+    });
+
+    it('sem marca, nada muda', () => {
+        expect(det(mapa, HOJE, 7).map((e: any) => e.empresaId)).toEqual(['cond', 'loja']);
+    });
+
+    it('o e-mail diz quantas ficaram fora', () => {
+        const inativos = det(mapa, HOJE, 7, { naoEmitem: ['cond'] });
+        const d = decidir({ inativos });
+        expect(corpo(d.alertas)).toMatch(/1 cliente\(s\) marcado\(s\) na Rotina como "não emite nota de saída" ficaram fora/);
+    });
+});

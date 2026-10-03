@@ -146,7 +146,19 @@ router.post('/xml-email-ingest/alerta-cron', requireCronAuth, async (req, res) =
       console.warn('[cofre-alerta] pendências indisponíveis:', e.message);
     }
 
-    const inativos = detectarInatividade(estado.ultimaSaidaPorEmpresa || {}, Date.now(), INATIVIDADE_DIAS);
+    // 🚫 02/10: quem a Rotina marcou como "não emite nota de saída" não é
+    // "cliente que parou de enviar". Falha ao LER a marca não vira "ninguém
+    // marcado em silêncio": segue sem o filtro e o log diz.
+    const naoEmitem = new Set();
+    try {
+      for (const col of ['simples_empresas', 'lucro_empresas']) {
+        const snap = await db.collection(col).where('rotinaParametros.saidaPropria', '==', 'nao-emite').get();
+        snap.forEach((d) => naoEmitem.add(d.id));
+      }
+    } catch (e) {
+      console.warn('[cofre-alerta] marcas "não emite saída" indisponíveis — alerta sem o filtro:', e.message);
+    }
+    const inativos = detectarInatividade(estado.ultimaSaidaPorEmpresa || {}, Date.now(), INATIVIDADE_DIAS, { naoEmitem });
     const decisao = decidirAlertasCofre({
       run: ultimaRun, pendencias, inativos, estadoAnterior: estado.alertaEstado || null,
     });
