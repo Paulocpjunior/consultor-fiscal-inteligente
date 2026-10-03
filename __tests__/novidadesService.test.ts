@@ -30,8 +30,12 @@ describe('temNovidadeNaoLida', () => {
         expect(temNovidadeNaoLida('', '2026-08-03')).toBe(false);
     });
 
-    it('a constante segue o formato AAAA-MM-DD (é o "atualizado em" da página)', () => {
-        expect(NOVIDADES_VERSAO).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    it('a constante segue o formato AAAA-MM-DD.N (data do "atualizado em" + itens da seção atual)', () => {
+        expect(NOVIDADES_VERSAO).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
+    });
+
+    it('item novo no MESMO dia reacende o selo de quem já abriu a página naquele dia (03/10)', () => {
+        expect(temNovidadeNaoLida('2026-10-03.4', '2026-10-03.3')).toBe(true);
     });
 });
 
@@ -46,12 +50,22 @@ describe('🚨 a página e o selo andam em PAR', () => {
         const m = html.match(/atualizado em (\d{2})\/(\d{2})\/(\d{4})/);
         expect(m).toBeTruthy();
         const [, dd, mm, aaaa] = m!;
-        expect(`${aaaa}-${mm}-${dd}`).toBe(NOVIDADES_VERSAO);
+        expect(`${aaaa}-${mm}-${dd}`).toBe(NOVIDADES_VERSAO.split('.')[0]);
     });
 
     it('a página tem conteúdo da revisão atual — versão nova sem texto novo é selo mentiroso', () => {
         // Não basta trocar a data: o selo aceso promete que há o que ler.
-        const [, mm, dd] = NOVIDADES_VERSAO.split('-');
+        const [, mm, dd] = NOVIDADES_VERSAO.split('.')[0].split('-');
         expect(html).toContain(`${dd}/${mm}`);
+    });
+
+    it('o N da versão é quantos itens a seção "🆕 O que mudou agora" tem — item novo no dia muda a versão', () => {
+        const ini = html.indexOf('<h2>🆕 O que mudou agora');
+        expect(ini).toBeGreaterThan(0);
+        const fim = html.indexOf('<h2>', ini + 5);
+        const secao = html.slice(ini, fim > 0 ? fim : undefined);
+        const itens = (secao.match(/<h3>/g) || []).length;
+        expect(itens).toBeGreaterThan(0);
+        expect(NOVIDADES_VERSAO.split('.')[1]).toBe(String(itens));
     });
 });

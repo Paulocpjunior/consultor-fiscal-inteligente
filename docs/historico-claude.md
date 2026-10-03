@@ -5,6 +5,14 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔴 SELO DAS NOVIDADES NÃO REACENDIA NO MESMO DIA (03/10)** (Paulo:
+  *"agora o Novidades está subindo sem a bolinha vermelha"*). `NOVIDADES_VERSAO`
+  era só a data: a 2ª+ entrega do dia não mudava a versão e quem já abrira a
+  página não via o selo (02/10 teve oito itens assim). Agora `AAAA-MM-DD.N`
+  (N = nº de `<h3>` da seção "🆕 O que mudou agora"); a trava em
+  `novidadesService.test.ts` confere data E contagem — TODO item novo exige
+  subir o N. ⚠️ Ao anexar novidade: some 1 no N (ou reinicie em `.1` num dia novo).
+
 - **📭 INFORMATIVO "SEM MOVIMENTO" AO CLIENTE NO FIM DE MÊS (03/10)** (Paulo:
   *"incluir em modo informativo ao cliente, usando o mesmo template, que
   naquele mês não houve movimentação — após o colaborador efetivar o fim do
