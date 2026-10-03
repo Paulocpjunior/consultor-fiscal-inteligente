@@ -143,3 +143,67 @@ export function cruzarRetencoes(
         resumo,
     };
 }
+
+// ── 💸 DARF DOS RETIDOS (03/10) ──────────────────────────────────────────────
+// Paulo: "fiz a captura, subi as retenções, finalizo enviando imposto pela
+// DCTFWeb; nesse conferir Reinf × DCTFWeb, igual PIS/COFINS, envio pelo sistema
+// dos DARF RETIDOS". Decisões dele (03/10): os DOIS caminhos (DARF avulso por
+// código E DARF numerado da DCTFWeb) e TRAVA quando o Reinf não bate.
+
+/** Código de receita do DARF avulso por família (o INSS retido só sai no numerado). */
+export const CODIGO_DARF_AVULSO: Readonly<Partial<Record<RetencaoFamilia, string>>> = Object.freeze({
+    IRRF: '1708',
+    CSRF: '5952',
+});
+
+/** Evento do lote que o CFI NÃO lê (reconhecido só pelo nome, sem valores). */
+export function eventosNaoLidosDoLote(eventos: Array<{ codigo?: string | null; schemaToken?: string; ok?: boolean }> | null | undefined): string[] {
+    return (eventos || [])
+        .filter((e) => e && e.ok !== false && !e.codigo)
+        .map((e) => e.schemaToken || 'evento sem nome');
+}
+
+export interface DecisaoDarfRetidos {
+    pode: boolean;
+    motivo: string | null;
+    /** IRRF/CSRF com valor na DCTFWeb — os que saem em DARF avulso. */
+    avulsos: Array<{ familia: RetencaoFamilia; codigo: string; valor: number }>;
+    /** INSS retido com valor: só sai no DARF numerado da DCTFWeb. */
+    inssSoNumerado: number;
+}
+
+/**
+ * 🔒 A TRAVA: só se emite DARF dos retidos quando a conferência FECHA — DCTFWeb
+ * lida, todo evento do lote lido pelo CFI, nenhuma família divergente e algum
+ * retido a recolher. O valor do DARF é o da DCTFWeb (é o débito declarado).
+ */
+export function decidirEmissaoRetidos(p: {
+    resultado: ConferenciaReinfResultado | null;
+    dctfwebLido: boolean;
+    eventosNaoLidos: string[];
+}): DecisaoDarfRetidos {
+    const nada = (motivo: string): DecisaoDarfRetidos => ({ pode: false, motivo, avulsos: [], inssSoNumerado: 0 });
+    if (!p.dctfwebLido || !p.resultado) {
+        return nada('A DCTFWeb não foi lida — sem o débito declarado não há DARF a emitir.');
+    }
+    if (p.eventosNaoLidos.length) {
+        return nada(`O lote tem evento que o CFI ainda não lê (${p.eventosNaoLidos.join(', ')}) — os valores dele não entraram `
+            + 'na conferência. Suba os eventos de retenção do mês (R-2010, R-4010, R-4020) ou aguarde a leitura desse evento.');
+    }
+    const div = p.resultado.divergencias.filter((d) => d.status !== 'ok');
+    if (div.length) {
+        return nada(`Reinf e DCTFWeb não batem em ${div.map((d) => d.familia).join(', ')} — confira e corrija antes de emitir o DARF.`);
+    }
+    if (!(p.resultado.totalDctfweb > 0)) {
+        return nada('Não há retenção a recolher na DCTFWeb desta competência.');
+    }
+    const avulsos: DecisaoDarfRetidos['avulsos'] = [];
+    let inssSoNumerado = 0;
+    for (const d of p.resultado.divergencias) {
+        if (!(d.valorDctfweb > 0)) continue;
+        const codigo = CODIGO_DARF_AVULSO[d.familia];
+        if (codigo) avulsos.push({ familia: d.familia, codigo, valor: d.valorDctfweb });
+        else inssSoNumerado = round2(inssSoNumerado + d.valorDctfweb);
+    }
+    return { pode: true, motivo: null, avulsos, inssSoNumerado };
+}

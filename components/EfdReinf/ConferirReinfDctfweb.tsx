@@ -11,6 +11,7 @@
  */
 import React, { useState } from 'react';
 import { conferirReinfDctfweb, conferirIrrfR4010, type ConferenciaReinfCompleta, type IrrfR4010Resposta } from '../../services/efdReinfConferenceService';
+import DarfRetidosBloco from './DarfRetidosBloco';
 
 interface Props {
     onShowToast?: (msg: string) => void;
@@ -205,6 +206,9 @@ const ConferirReinfDctfweb: React.FC<Props> = ({ onShowToast }) => {
             {irrf && <ResultadoIrrfPf r={irrf} />}
 
             {data && <Resultado data={data} />}
+
+            {/* 💸 DARF dos retidos (03/10): só depois da conferência, com a TRAVA. */}
+            {data && <DarfRetidosBloco data={data} cnpj={cnpjOverride} onShowToast={onShowToast} />}
         </div>
     );
 };
@@ -316,7 +320,11 @@ function Resultado({ data }: { data: ConferenciaReinfCompleta }) {
                                 {ev.tipoRetorno === 'fechamento' && ev.fechamento && <> · fechRet={ev.fechamento.fechRet}</>}
                             </span>
                             <span>
-                                {ev.validacao?.valido === false
+                                {/* 🚨 03/10: evento reconhecido só pelo nome (ex.: R-9015 evtRetCons)
+                                    não tem valores lidos — ✓ ali dizia "lido" sobre o que não foi. */}
+                                {ev.ok !== false && !ev.codigo
+                                    ? <span style={{ color: 'var(--warning)' }}>⚠ não lido pelo CFI — os valores deste evento NÃO entraram na conferência</span>
+                                    : ev.validacao?.valido === false
                                     ? <span style={{ color: 'var(--danger)' }}>⚠ {ev.validacao.erros[0]}</span>
                                     : ev.validacao?.avisos?.length
                                         ? <span style={{ color: 'var(--warning)' }}>aviso: {ev.validacao.avisos[0]}</span>

@@ -342,3 +342,43 @@ describe('gerarDarfsSeparados — escopo apenasCodigos (painel trimestrais)', ()
         })).rejects.toThrow(/escopo/i);
     });
 });
+
+// 💸 03/10 — DARF dos retidos pela tela EFD-Reinf × DCTFWeb (Paulo: os dois
+// caminhos + trava). IRRF 1708 e CSRF 5952 saem em DARF avulso SÓ quando
+// pedidos explicitamente; as guias separadas da declaração continuam sem eles.
+describe('gerarDarfsSeparados — retidos (1708/5952) só quando pedidos', () => {
+    const xmlRetidos = () => {
+        const ct = (cod: string, desc: string, valor: string) =>
+            `<CreditoTributarioApurado><codReceita>${cod}</codReceita><ctDescricaoTributo>${desc}</ctDescricaoTributo>`
+            + `<ctValor>${valor}</ctValor><saldoaPagar>${valor}</saldoaPagar></CreditoTributarioApurado>`;
+        return '<?xml version="1.0" encoding="utf-8"?><ProcDctf xmlns="http://www.serpro.gov.br/dctf/v1"><ConteudoDeclaracao id="ID1">'
+            + '<DctfXml versao="3.0"><A000-DadosIdentificadoresContribuinte><inscContrib>54061189000151</inscContrib>'
+            + '<perApuracao>092026</perApuracao><A050-CreditosTributariosApurados>'
+            + ct('595201', 'CSRF - RETENCAO', '208.09')
+            + ct('170806', 'IRRF - SERVICOS PJ', '50.00')
+            + '</A050-CreditosTributariosApurados></A000-DadosIdentificadoresContribuinte></DctfXml></ConteudoDeclaracao></ProcDctf>';
+    };
+    const respostas = () => {
+        mockInvokeIntegraContador.mockReset();
+        mockInvokeIntegraContador.mockResolvedValueOnce({ dados: { XMLStringBase64: Buffer.from(xmlRetidos(), 'utf8').toString('base64') } });
+        mockInvokeIntegraContador.mockResolvedValue({
+            dados: { consolidado: { valorPrincipalMoedaCorrente: 0, valorTotalConsolidado: 0, valorMultaMora: 0, valorJuros: 0 }, darf: 'PDF_B64', numeroDocumento: 'D' },
+            mensagens: [],
+        });
+    };
+
+    it('sem pedido explícito, os retidos ficam fora (como sempre)', async () => {
+        respostas();
+        await expect(gerarDarfsSeparados({ empresaCnpj: '54061189000151', anoPA: 2026, mesPA: 9 }))
+            .resolves.toMatchObject({ guias: [] });
+    });
+
+    it('pedidos pela tela do Reinf: 1 DARF por código, vencendo dia 20', async () => {
+        respostas();
+        const r = await gerarDarfsSeparados({ empresaCnpj: '54061189000151', anoPA: 2026, mesPA: 9, apenasCodigos: ['1708', '5952'] });
+        expect(r.guias.map((g: any) => g.codigo).sort()).toEqual(['1708', '5952']);
+        const sicalc = mockInvokeIntegraContador.mock.calls.map((c) => c[0]).filter((c) => c.idSistema === 'SICALC');
+        expect(sicalc.map((c) => c.dados.vencimento).every((v: string) => v.startsWith('2026-10-20'))).toBe(true);
+        expect(sicalc.find((c) => c.dados.codigoReceita === '5952')?.dados).toMatchObject({ codigoReceitaExtensao: '01', valorImposto: '208.09' });
+    });
+});
