@@ -17,6 +17,8 @@ import {
     consultarCrfFgtsSerpro,
 } from './nfp-compliance-provider.js';
 import { consultarCndsPublicas } from './cnd-publica-provider.js';
+import { getDctfwebProvider } from './dctfweb-provider.js';
+import { extrairDebitosDctfweb, identificacaoDeclaracao, conferirIdentificacao } from './dctfweb-retencao-normalizer.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -111,6 +113,46 @@ router.post('/dctfweb/status', requireCrossProjectAuth, async (req, res) => {
         return res.json(result);
     } catch (err) {
         console.error('[dp-integration/dctfweb/status]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+// DCTFWeb - Débitos com saldo a pagar, por código de receita
+// POST /api/dp-integration/dctfweb/debitos
+// Body: { cnpj, competencia: 'YYYY-MM' }
+//
+// Usado pela conferência pós-folha do Consultor DP para comparar a DCTFWeb
+// com o S-5011 do eSocial. Reaproveita o que a emissão de guias separadas já
+// usa: CONSXMLDECLARACAO38 (consultarXmlDeclaracao) + extrairDebitosDctfweb.
+// A identificação vem do PRÓPRIO XML (inscContrib/perApuracao), não do pedido:
+// número de outra empresa ou competência não pode chegar ao DP como se fosse
+// desta. `fonte` diz se veio do SERPRO ou do mock (DCTFWEB_MODE).
+router.post('/dctfweb/debitos', requireCrossProjectAuth, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    const competencia = String(req.body?.competencia || '');
+    if (!/^\d{4}-\d{2}$/.test(competencia)) {
+        return res.status(400).json({ error: 'competencia obrigatória no formato YYYY-MM' });
+    }
+    const [anoPA, mesPA] = competencia.split('-');
+    try {
+        const consulta = await getDctfwebProvider().consultarXmlDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA });
+        const xml = consulta?.xml || '';
+        if (!xml) {
+            return res.json({ ok: false, fonte: consulta?.fonte || null, erro: 'O SERPRO não devolveu o XML da declaração (DCTFWeb não transmitida ou sem declaração na competência).', debitos: [] });
+        }
+        const ext = extrairDebitosDctfweb(xml);
+        const identificacao = identificacaoDeclaracao(xml);
+        const conferencia = conferirIdentificacao(identificacao, { cnpj, competencia });
+        if (conferencia.problemas.length) {
+            return res.json({ ok: false, fonte: consulta?.fonte || null, identificacao, erro: `Declaração não confere com o pedido: ${conferencia.problemas.join('; ')}.`, debitos: [] });
+        }
+        if (!ext.lido) {
+            return res.json({ ok: false, fonte: consulta?.fonte || null, identificacao, erro: ext.motivo, debitos: [] });
+        }
+        return res.json({ ok: true, fonte: consulta?.fonte || null, identificacao, debitos: ext.debitos });
+    } catch (err) {
+        console.error('[dp-integration/dctfweb/debitos]', err);
         return res.status(500).json({ error: err.message });
     }
 });
