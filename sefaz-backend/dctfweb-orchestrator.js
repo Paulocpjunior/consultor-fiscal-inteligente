@@ -182,6 +182,12 @@ const RECEITAS_GUIA_SEPARADA = new Set([
     // pago no desembaraço) — esses seguem no DARF unificado.
     '5123', '0668', '1097',                   // IPI demais produtos/bebidas/automóveis
 ]);
+// 💸 RETIDOS (03/10, Paulo — DARF dos retidos pela tela EFD-Reinf × DCTFWeb):
+// IRRF 1708 e CSRF 5952 (vencem dia 20 — `darf-payload-builder.js`) saem em
+// DARF avulso SÓ quando pedidos EXPLICITAMENTE em `apenasCodigos`. Quem pede é
+// a tela do Reinf, depois da TRAVA (Reinf × DCTFWeb batendo); as "guias
+// separadas" da declaração continuam sem eles, como sempre.
+const RECEITAS_RETIDAS_AVULSO = new Set(['1708', '5952']);
 const DARF_VALOR_MINIMO = 10;       // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
 
 // A régua das quotas (mínimo por quota, divisão em centavos, vencimento e —
@@ -336,7 +342,8 @@ export async function gerarDarfsSeparados({
     const hoje = hojeIso || hojeBrt(); // 📅 26/09: Brasília, não UTC
 
     for (const deb of debitosAlvo) {
-        if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo)) {
+        const retidoPedido = !!escopo && RECEITAS_RETIDAS_AVULSO.has(deb.codigo);
+        if (!RECEITAS_GUIA_SEPARADA.has(deb.codigo) && !retidoPedido) {
             naoEmitidos.push({ ...deb, motivo: 'Receita fora da emissão avulsa (ex.: previdenciária) — pague pelo DARF unificado do Painel DCTFWeb.' });
             continue;
         }

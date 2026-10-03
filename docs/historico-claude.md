@@ -5,6 +5,18 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **💸 DARF DOS RETIDOS NA CONFERÊNCIA REINF × DCTFWEB (03/10)** (Paulo: *"envio
+  pelo sistema dos DARF RETIDOS"*; respostas: *"1- ambos os casos 2- sim trava"*).
+  `DarfRetidosBloco` na aba: avulso 1708/5952 (`gerarDarfsSeparados` com
+  `apenasCodigos`; o orquestrador só emite retido quando PEDIDO —
+  `RECEITAS_RETIDAS_AVULSO`) e numerado (`gerarDarf`). Envio por
+  `enviarGuiaPeloServidor` tipo 'DARF RETIDOS' → obrigação DCTFWEB (sem citar
+  PIS/CSLL no tipo). Trava `decidirEmissaoRetidos` (efdReinfConference.ts):
+  DCTFWeb não lida, família ≠ ok, total ≤ 0 ou evento NÃO LIDO → não emite.
+  R-9015 `evtRetCons` segue sem parser (aguardando XML real do Paulo) e por isso
+  trava; a lista mostra "⚠ não lido pelo CFI". Travas: `darfRetidosTrava.test.ts`
+  e `dctfwebDarfsSeparados.test.ts`.
+
 - **🔴 SELO DAS NOVIDADES NÃO REACENDIA NO MESMO DIA (03/10)** (Paulo:
   *"agora o Novidades está subindo sem a bolinha vermelha"*). `NOVIDADES_VERSAO`
   era só a data: a 2ª+ entrega do dia não mudava a versão e quem já abrira a
