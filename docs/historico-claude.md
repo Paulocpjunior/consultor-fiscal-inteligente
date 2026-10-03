@@ -5,6 +5,17 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **📭 INFORMATIVO "SEM MOVIMENTO" AO CLIENTE NO FIM DE MÊS (03/10)** (Paulo:
+  *"incluir em modo informativo ao cliente, usando o mesmo template, que
+  naquele mês não houve movimentação — após o colaborador efetivar o fim do
+  mês"*). Dono `informativo-sem-movimento.js`: só quando a etapa 1 fechou pela
+  DECLARAÇÃO (`semMovimentoDeclarado`), uma vez por competência (carimbo
+  `informativoSemMovimento` viaja no refechamento; falha tenta de novo); texto
+  afirma o fato (nenhuma nota), nunca "sem imposto"; layout `montarLayoutEmail`.
+  `POST /fim-de-mes/fechar` envia DEPOIS de gravar (remetente do colaborador,
+  gestor em BCC, `dadosFiscais.email`); erro não desfaz o fechamento.
+  FimDeMesBloco mostra o carimbo. Trava `informativoSemMovimento.test.ts`.
+
 - **📅 dCOMPET DESCARTADO NA IMPORTAÇÃO PELA TELA (03/10, Santana de Parnaíba,
   CLINICA VETERINARIA ALPHAVILLE, 34 NFS-e)**. `parseNFSeNacional`
   (services/xmlParserService.ts) não repassava `lida.competencia` → a

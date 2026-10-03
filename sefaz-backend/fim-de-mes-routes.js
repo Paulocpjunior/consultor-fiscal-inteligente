@@ -43,6 +43,49 @@ import {
     conferirReabertura, aplicarReabertura, descreverFechamento, competenciaFechada } from './fim-de-mes.js';
 
 import { COLECAO_FECHAMENTOS as COLECAO, idDoFechamento, lerFechamentoDaCompetencia } from './fechamento-store.js';
+import { deveEnviarInformativo, montarInformativoSemMovimento } from './informativo-sem-movimento.js';
+import { enviarEmail } from './graph-provider.js';
+import { anexoLogo } from './email-layout.js';
+import { parseDestinatarios, lerDestinatarios } from './email-destinatarios-helper.js';
+import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
+import { GESTOR_EMAIL } from './envio-imposto.js';
+
+/**
+ * 📭 Envia ao cliente o informativo "sem movimento" (03/10). Nunca lança:
+ * devolve o carimbo — enviado (quando, para quem, por quem) ou o motivo de
+ * não ter saído. O fechamento já está gravado; e-mail que falha não o desfaz.
+ */
+async function enviarInformativoSemMovimento(db, { empresa, competencia, user }) {
+    const base = { por: user?.email || null, tentadoEm: new Date().toISOString() };
+    try {
+        const col = empresa?.colecao || 'simples_empresas';
+        const snap = await db.collection(col).doc(String(empresa.id)).get();
+        const emailCliente = String(snap.exists ? (snap.data()?.dadosFiscais?.email || '') : '').trim();
+        if (!emailCliente) {
+            return { ...base, enviadoEm: null, motivo: 'e-mail do cliente não cadastrado em Dados Fiscais.' };
+        }
+        const lidos = lerDestinatarios(emailCliente);
+        if (!lidos.validos.length) {
+            return { ...base, enviadoEm: null, motivo: `e-mail do cliente inválido em Dados Fiscais ("${emailCliente}").` };
+        }
+        const { assunto, corpoHtml } = montarInformativoSemMovimento({ empresaNome: empresa.nome, competencia });
+        const padrao = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        const escolha = escolherRemetente({ emailColaborador: user?.email, padrao, dominios: dominiosPermitidos() });
+        const jaNoPara = new Set(lidos.validos.map((e) => e.toLowerCase()));
+        const bcc = parseDestinatarios(process.env.DAS_ENVIO_BCC || process.env.DAS_ENVIO_CC, GESTOR_EMAIL)
+            .filter((c) => !jaNoPara.has(c.toLowerCase()));
+        let remetente = escolha.remetente;
+        let envio = await enviarEmail({ remetente, para: lidos.validos, bcc, assunto, corpoHtml, anexos: anexoLogo() });
+        if (!envio.ok && escolha.fonte === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
+            remetente = padrao;
+            envio = await enviarEmail({ remetente, para: lidos.validos, bcc, assunto, corpoHtml, anexos: anexoLogo() });
+        }
+        if (!envio.ok) return { ...base, enviadoEm: null, motivo: envio.error || 'o servidor de e-mail recusou o envio.' };
+        return { ...base, enviadoEm: new Date().toISOString(), para: lidos.validos.join(', '), remetente, motivo: null };
+    } catch (e) {
+        return { ...base, enviadoEm: null, motivo: e?.message || String(e) };
+    }
+}
 
 const router = Router();
 
@@ -232,8 +275,29 @@ router.post('/fechar', requireAuth, async (req, res) => {
             return res.status(400).json({ ok: false, erro: montado.motivo, bloqueios: montado.bloqueios });
         }
 
-        await db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia))
-            .set(montado.fechamento, { merge: false });
+        // O informativo já enviado num fechamento anterior (antes de uma
+        // reabertura) VIAJA no carimbo novo — o `merge:false` o apagaria, e o
+        // cliente receberia o mesmo aviso de novo.
+        if (r.fechamento?.informativoSemMovimento) {
+            montado.fechamento.informativoSemMovimento = r.fechamento.informativoSemMovimento;
+        }
+        const refFechamento = db.collection(COLECAO).doc(idDoFechamento(r.empresa.id, r.competencia));
+        await refFechamento.set(montado.fechamento, { merge: false });
+
+        // 📭 SEM MOVIMENTO DECLARADO → informativo ao cliente, no MESMO layout
+        // das guias (03/10, Paulo). Depois de gravar: o mês está fechado com ou
+        // sem e-mail, e o carimbo diz o que aconteceu.
+        if (deveEnviarInformativo({ rotina: r.rotina, anterior: r.fechamento })) {
+            const informativo = await enviarInformativoSemMovimento(db, {
+                empresa: r.empresa, competencia: r.competencia, user: req.user,
+            });
+            montado.fechamento.informativoSemMovimento = informativo;
+            try {
+                await refFechamento.update({ informativoSemMovimento: informativo });
+            } catch (e) {
+                console.warn('[fim-de-mes] carimbo do informativo não gravou:', e.message);
+            }
+        }
 
         return res.json({ ok: true, fechamento: montado.fechamento, descricao: descreverFechamento(montado.fechamento) });
     } catch (e) {

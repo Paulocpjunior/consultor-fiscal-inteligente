@@ -74,6 +74,10 @@ export interface FechamentoCompetencia {
     apurado: Record<string, number | null>;
     lastro: { situacao: string; cor: string; mensagem: string; acao: string | null } | null;
     reaberturas: Array<{ em: string; por: string | null; motivo: string; versaoReaberta: number }>;
+    /** 📭 Informativo "sem movimento" ao cliente (03/10): enviado (quando/para) ou o motivo de não ter saído. */
+    informativoSemMovimento?: {
+        enviadoEm: string | null; para?: string; por?: string | null; motivo?: string | null; tentadoEm?: string;
+    } | null;
 }
 
 export interface SituacaoFimDeMes {
