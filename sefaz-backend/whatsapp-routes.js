@@ -3844,9 +3844,18 @@ async function executarAgendamento(db, doc, agora) {
 
 /** Roda até LOTE_TICK_AGENDA agendamentos vencidos. */
 async function tickAgenda(db, agora) {
-    const snap = await db.collection(COLECAO_AGENDAMENTOS)
-        .where('status', '==', 'agendado').where('enviarEm', '<=', agora.toISOString())
-        .orderBy('enviarEm', 'asc').limit(LOTE_TICK_AGENDA).get();
+    // 🐛 03/10 (print do Paulo: "9 FAILED_PRECONDITION: The query requires an
+    // index"): `where status == … + where enviarEm <= … + orderBy` exige índice
+    // composto, e índice que falta derruba o tick inteiro em produção — o
+    // Scheduler batia a cada 5 min e a ⚙️ dizia "o tick NUNCA rodou". Regra da
+    // casa (mesma da listagem de conversas): UMA igualdade na consulta, o
+    // recorte e a ordem em memória. Agendado pendente é conjunto pequeno.
+    const pendentes = await db.collection(COLECAO_AGENDAMENTOS).where('status', '==', 'agendado').limit(2000).get();
+    const limite = agora.toISOString();
+    const vencidos = pendentes.docs
+        .filter((d) => String(d.data()?.enviarEm || '') <= limite)
+        .sort((a, b) => String(a.data().enviarEm).localeCompare(String(b.data().enviarEm)));
+    const snap = { size: Math.min(vencidos.length, LOTE_TICK_AGENDA), docs: vencidos.slice(0, LOTE_TICK_AGENDA), truncadoLeitura: pendentes.size >= 2000 };
     const desfechos = [];
     for (const doc of snap.docs) {
         try {
@@ -3858,7 +3867,7 @@ async function tickAgenda(db, agora) {
         }
     }
     const conta = (acao) => desfechos.filter((d) => d.acao === acao).length;
-    return { lidos: snap.size, enviados: conta('enviar'), dispensados: conta('dispensar'), falhas: conta('falhar') + conta('erro'), desfechos, maisNaFila: snap.size >= LOTE_TICK_AGENDA };
+    return { lidos: snap.size, enviados: conta('enviar'), dispensados: conta('dispensar'), falhas: conta('falhar') + conta('erro'), desfechos, maisNaFila: vencidos.length > LOTE_TICK_AGENDA, truncadoLeitura: snap.truncadoLeitura };
 }
 
 // ═══ 📣 CAMPANHAS EM LOTE (29/09) ═════════════════════════════════════════
@@ -4100,8 +4109,16 @@ router.post('/conversas/:numero/resumo', requireAuth, async (req, res) => {
         if (!podeLer) return res.status(403).json({ ok: false, error: 'Esta conversa não está disponível para o seu perfil.' });
         const ai = req.app?.get?.('ai');
         if (!ai) return res.status(503).json({ ok: false, error: 'IA indisponível: sem cliente Gemini no servidor (GEMINI_API_KEY?).' });
-        const snap = await db.collection('whatsapp_mensagens').where('conversaId', '==', numero).orderBy('timestamp', 'desc').limit(120).get();
-        const mensagens = selecionarMensagensParaResumo(snap.docs.map((d) => d.data()));
+        // Mesma régua do /mensagens: `where + orderBy` exige índice composto; se
+        // ele não existir, lê sem ordem e o núcleo ordena em memória.
+        let docsMsgs;
+        try {
+            docsMsgs = (await db.collection('whatsapp_mensagens').where('conversaId', '==', numero).orderBy('timestamp', 'desc').limit(120).get()).docs;
+        } catch (e) {
+            console.warn('[whatsapp/resumo] sem índice composto, lendo sem ordem:', e.message);
+            docsMsgs = (await db.collection('whatsapp_mensagens').where('conversaId', '==', numero).limit(400).get()).docs;
+        }
+        const mensagens = selecionarMensagensParaResumo(docsMsgs.map((d) => d.data()));
         if (mensagens.length < 2) return res.status(422).json({ ok: false, error: 'Conversa curta demais para resumir (menos de 2 mensagens).' });
         const contato = (await db.collection('whatsapp_contatos').doc(numero).get()).data() || {};
         const modelos = req.app.get('geminiModelos');
