@@ -14780,6 +14780,15 @@ estiverem abertos, **não tratar o número da tela como fechado** — vale a reg
 de 12/08: print sem versão não é evidência, e pendência aberta não vira fato.
 Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
 
+**📋 REVISÃO 03/10 (Paulo: *"revisa a fila antiga e me diz o que está em
+aberto"*).** Sem registro de fechamento no histórico — aberto = SEM CONFIRMAÇÃO
+dele, não fato de produção (este ambiente não alcança a produção): **0c**
+rotação do `sefaz-cron-secret`; **0b** confirmação por resultado do
+`SISTEMA_DEV_EMAILS`; **1** NOVA ERA (FUNRURAL); **2** EXPERTE (última menção
+21/08, ainda bloqueada); **5** JOAO EVANGELISTA; **6f** PS VIDROS. Saíram da
+fila: **3** (tela contínua, não pendência) e **4** (leitura feita: 3 empresas,
+onda final; o Bloco K nasceu).
+
 0. **CLOUD RUN — sobraram DUAS, e nenhuma muda imposto** (16/08; a terceira,
    que era a única urgente, virou decisão e saiu da fila).
    a) ✅ **RESOLVIDO 16/08, e não por comando: por DECISÃO.** O
@@ -14831,11 +14840,11 @@ Riscar daqui quando ele confirmar; nunca "concluir" por dedução.
    varredura e na Rotina), mas quem diz o bloqueio é o **📊 Status por Empresa**
    — certificado, procuração ou município sem trilho. É esta empresa que segura
    a prova final do E510.
-3. **🏁 Fila de migração — a leitura de "quem pode migrar hoje"**. A tela junta
+3. ✅ **SAIU DA FILA 03/10 — é tela de uso contínuo, não pendência que fecha.** **🏁 Fila de migração — a leitura de "quem pode migrar hoje"**. A tela junta
    as três provas (prova de captura, aptidão da saída, blocos do perfil) e
    ordena por esforço. É ela que decide o ritmo da migração agora que o
    histórico saiu do caminho crítico (decisão de 05/08).
-4. **Bloco K — olhar o número da varredura**. A 🚦 Migração já DETECTA produção
+4. ✅ **RESOLVIDO — a leitura foi feita: o bloco K vale para 3 empresas da carteira (contagem da 🚦 Migração), na onda FINAL, e o Bloco K nasceu (K220 incluso).** **Bloco K — olhar o número da varredura**. A 🚦 Migração já DETECTA produção
    pelos CFOPs desde 06/08. **Zero empresa ⇒ o bloco é descartável como o SAT
    foi**; uma que seja ⇒ vira alvo nomeado. Não dá para decidir sem a leitura, e
    deduzir "deve ter alguém" seria inventar trabalho.
