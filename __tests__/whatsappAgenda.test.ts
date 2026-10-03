@@ -144,7 +144,13 @@ describe('🚨 fiação — agendamento sem tick é promessa que ninguém cumpre
         // A mensagem enviada entra na thread como saída, assinada por quem agendou.
         expect(exec).toMatch(/enviadoPor: ag\.criadoPor \|\| null, agendamentoId: ag\.id/);
         const tick = rotas.slice(rotas.indexOf('async function tickAgenda'), rotas.indexOf('// ═══ 📣 CAMPANHAS EM LOTE'));
-        expect(tick).toMatch(/where\('status', '==', 'agendado'\)\.where\('enviarEm', '<=', agora\.toISOString\(\)\)/);
+        // 🐛 03/10: a consulta tinha where+where+orderBy e pedia índice composto
+        // (FAILED_PRECONDITION em produção; o tick nunca rodava). Agora é UMA
+        // igualdade e o vencimento é decidido em memória — regra da casa.
+        expect(tick).toMatch(/where\('status', '==', 'agendado'\)\.limit\(/);
+        expect(tick).not.toMatch(/where\('enviarEm'/);
+        expect(tick).not.toMatch(/orderBy\('enviarEm'/);
+        expect(tick).toMatch(/enviarEm \|\| ''\) <= limite/);
         expect(LOTE_TICK_AGENDA).toBeGreaterThan(0);
     });
 
