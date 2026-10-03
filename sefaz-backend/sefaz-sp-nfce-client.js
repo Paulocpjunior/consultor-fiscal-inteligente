@@ -50,9 +50,9 @@ const CA_BUNDLE = (() => {
 // antigo — passar o pfx bruto para o https.Agent faz o OpenSSL lancar
 // "Unsupported PKCS12 PFX data" e a captura quebra logo na listagem.
 //
-// SOLUCAO: converter o pfx para cert+key PEM com node-forge (JS puro, entende
-// os ciphers legados). Se o forge falhar (pfx moderno AES-GCM que ele nao le),
-// cai pro pfx bruto — que nesse caso o OpenSSL 3 aceita. Cobrimos os dois lados.
+// SOLUCAO: converter o pfx para cert+key PEM com o leitor proprio (`pkcs12.js`,
+// que decifra RC2/3DES/AES sem depender do provider legado). Se a leitura
+// falhar, cai pro pfx bruto — que o OpenSSL 3 aceita quando o formato e dele.
 function credenciaisCliente(pfxBuffer, password) {
   try {
     const { pemKey, pemCert } = pfxToPem(pfxBuffer, password);

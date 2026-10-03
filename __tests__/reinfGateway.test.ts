@@ -4,7 +4,7 @@
  * O assinador e o lote são PORTES de código que já transmitiu de verdade
  * (plano-contas-iob, R-1000/R-4010 homologados). O que os testes trancam:
  *
- * 1. A assinatura VALIDA de verdade (certificado real gerado com forge,
+ * 1. A assinatura VALIDA de verdade (certificado real de teste, num .pfx,
  *    assina e verifica) — inclusive para eventos que o código antigo não
  *    conhecia (evtRetPJ do R-4020): a generalização é o motivo do gateway.
  * 2. As lições MS0017 não regridem: minifica antes, wrapper não repete id.
@@ -12,29 +12,14 @@
  */
 // @ts-expect-error — módulo .js puro (sem tipos)
 import { assinarEventoReinf, verificarAssinaturaReinf, extrairEvento, montarLote, normalizarXmlEvento, extrairProtocolo, extrairCdResposta, resolverAmbiente, extrairPemDoPfx, NS_LOTE } from '../sefaz-backend/reinf-gateway';
-// @ts-expect-error — node-forge sem @types instalado
-import * as forge from 'node-forge';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { abrirPfx } from '../sefaz-backend/pkcs12.js';
 
 // ─── um A1 de mentira, mas criptograficamente REAL ──────────────────────────
-function gerarCert() {
-    const chaves = forge.pki.rsa.generateKeyPair(1024);
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = chaves.publicKey;
-    cert.serialNumber = '01';
-    cert.validity.notBefore = new Date('2026-01-01');
-    cert.validity.notAfter = new Date('2027-01-01');
-    const attrs = [{ name: 'commonName', value: 'SP ASSESSORIA CONTABIL LTDA:44388152000189' }];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.sign(chaves.privateKey, forge.md.sha256.create());
-    return {
-        pemKey: forge.pki.privateKeyToPem(chaves.privateKey),
-        pemCert: forge.pki.certificateToPem(cert),
-        forgeCert: cert,
-        forgeKey: chaves.privateKey,
-    };
-}
-const CERT = gerarCert();
+// (__tests__/fixtures/pfx — gerado com o OpenSSL, só para teste)
+const PFX = readFileSync(join(__dirname, 'fixtures', 'pfx', 'aes256.pfx'));
+const CERT = (() => { const { pemKey, pemCert } = abrirPfx(PFX, 'senha123'); return { pemKey, pemCert }; })();
 
 const ID = 'ID1443881520001892026080810300000001';
 const evtRetPJ = (id = ID) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -144,8 +129,7 @@ describe('parsers da resposta da Receita', () => {
 
 describe('o pfx do cofre vira PEM — o caminho real do certificado', () => {
     it('extrai chave e certificado de um PKCS#12 de verdade', () => {
-        const p12 = forge.pkcs12.toPkcs12Asn1(CERT.forgeKey, [CERT.forgeCert], 'senha123', { algorithm: '3des' });
-        const pfxBuffer = Buffer.from(forge.asn1.toDer(p12).getBytes(), 'binary');
+        const pfxBuffer = readFileSync(join(__dirname, 'fixtures', 'pfx', 'legado-rc2-3des.pfx'));
         const { pemKey, pemCert } = extrairPemDoPfx(pfxBuffer, 'senha123');
         expect(pemKey).toContain('PRIVATE KEY');
         expect(pemCert).toContain('CERTIFICATE');
@@ -155,9 +139,7 @@ describe('o pfx do cofre vira PEM — o caminho real do certificado', () => {
     });
 
     it('senha errada não passa em silêncio', () => {
-        const p12 = forge.pkcs12.toPkcs12Asn1(CERT.forgeKey, [CERT.forgeCert], 'senha123', { algorithm: '3des' });
-        const pfxBuffer = Buffer.from(forge.asn1.toDer(p12).getBytes(), 'binary');
-        expect(() => extrairPemDoPfx(pfxBuffer, 'errada')).toThrow();
+        expect(() => extrairPemDoPfx(PFX, 'errada')).toThrow(/Senha incorreta/);
     });
 });
 

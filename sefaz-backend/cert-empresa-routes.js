@@ -102,7 +102,7 @@ router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => 
 
         // Classificacao precisa do erro pra NAO mascarar problema de infra
         // como "senha errada". Tres familias:
-        //  1) Senha/.pfx invalido (node-forge)  -> 400, culpa do input
+        //  1) Senha/.pfx invalido (pkcs12.js)   -> 400, culpa do input
         //  2) Secret Manager / Storage / infra  -> 503, culpa do ambiente
         //  3) Resto                              -> 500
         const ehSenhaOuPfx = /MAC could not be verified|Invalid password|PKCS#12|pkcs12|asn1|Too few bytes|unsupported|integrity|DER/i.test(msg);

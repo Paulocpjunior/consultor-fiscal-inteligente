@@ -1,30 +1,16 @@
 // @ts-nocheck
 /**
  * Testa extracao de chave + cert de um PFX. Para nao depender de cert real,
- * geramos um PFX de teste in-memory via node-forge a cada execucao.
+ * usa os PFX de teste de __tests__/fixtures/pfx (gerados com o OpenSSL).
  */
-import * as forge from 'node-forge';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { extrairCertPEM, certificadoBase64 } from '../sefaz-backend/abrasf/cert-extractor.js';
 
-/**
- * Gera um PFX de teste (key RSA 2048 + cert self-signed) protegido por senha.
- * Retorna Buffer pronto pra usar como entrada do extractor.
- */
-function gerarPfxDemo(senha: string, cn: string = 'TESTE SP CONTABIL:11222333000181'): Buffer {
-    const keys = forge.pki.rsa.generateKeyPair(2048);
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = '01';
-    cert.validity.notBefore = new Date();
-    cert.validity.notAfter = new Date();
-    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
-    const attrs = [{ name: 'commonName', value: cn }, { name: 'organizationName', value: 'SP Assessoria' }];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.sign(keys.privateKey, forge.md.sha256.create());
-    const p12Asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], senha, { algorithm: '3des' });
-    const der = forge.asn1.toDer(p12Asn1).getBytes();
-    return Buffer.from(der, 'binary');
+/** PFX de teste (senha123). Com CNPJ no CN, ou o de CN sem CNPJ. */
+function gerarPfxDemo(_senha: string, cn: string = 'EMPRESA TESTE CFI, LTDA:11222333000181'): Buffer {
+    const arquivo = /\d{14}/.test(cn) ? '3des.pfx' : 'sem-cnpj.pfx';
+    return readFileSync(join(__dirname, 'fixtures', 'pfx', arquivo));
 }
 
 describe('extrairCertPEM', () => {

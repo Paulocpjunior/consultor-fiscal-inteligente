@@ -20,7 +20,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import forge from 'node-forge';
+import { lerCertificado, campoDoNome } from './pkcs12.js';
 import { requireAuth } from './require-admin.js';
 // 📗 Plano de contas do SPED (0500): a forma é conferida pelo dono antes de gravar.
 import { conferirPlanoContasSped } from './plano-contas-sped.js';
@@ -418,10 +418,9 @@ router.get('/empresas-status-captura', requireAuth, async (req, res) => {
         try {
             const certEsc = await loadCertificate();
             if (certEsc?.pemCert) {
-                const cert509 = forge.pki.certificateFromPem(certEsc.pemCert);
-                const subjectAttrs = cert509.subject?.attributes || [];
-                const cn = (subjectAttrs.find(a => a.shortName === 'CN' || a.name === 'commonName')?.value || '');
-                const serial = (subjectAttrs.find(a => a.shortName === 'serialNumber')?.value || '');
+                const subjectAttrs = lerCertificado(certEsc.pemCert).subject;
+                const cn = campoDoNome(subjectAttrs, 'CN');
+                const serial = campoDoNome(subjectAttrs, 'serialNumber');
                 const matchCN = cn.match(/:(\d{14})$/);
                 const matchSerial = serial.match(/\d{14}/);
                 const cnpjCert = matchCN ? matchCN[1] : (matchSerial ? matchSerial[0] : null);

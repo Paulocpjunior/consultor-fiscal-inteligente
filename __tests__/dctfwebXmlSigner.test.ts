@@ -8,25 +8,15 @@
  * 08/07/2026 EntradaIncorreta-DCTFWEB-TRANS02 ("o conteúdo assinado deve ser
  * o elemento 'ConteudoDeclaracao'", Reference URI="" rejeitado).
  */
-import * as forge from 'node-forge';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { abrirPfx } from '../sefaz-backend/pkcs12.js';
 // @ts-expect-error — modulo .js puro
 import { assinarXmlDctfweb, assinarXmlDctfwebBase64 } from '../sefaz-backend/dctfweb-xml-signer.js';
 
 function gerarCertAutoAssinado() {
-    const keys = forge.pki.rsa.generateKeyPair(1024); // 1024 só p/ velocidade de teste
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = '01';
-    cert.validity.notBefore = new Date();
-    cert.validity.notAfter = new Date(Date.now() + 86400000);
-    const attrs = [{ name: 'commonName', value: 'TESTE LTDA:00000000000191' }];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.sign(keys.privateKey, forge.md.sha256.create());
-    return {
-        privateKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
-        certificatePem: forge.pki.certificateToPem(cert),
-    };
+    const { pemKey, pemCert } = abrirPfx(readFileSync(join(__dirname, 'fixtures', 'pfx', 'aes256.pfx')), 'senha123');
+    return { privateKeyPem: pemKey, certificatePem: pemCert };
 }
 
 const XML = '<DeclaracaoDctfWeb><ConteudoDeclaracao><cnpj>09010732000137</cnpj><pa>2026-06</pa></ConteudoDeclaracao></DeclaracaoDctfWeb>';

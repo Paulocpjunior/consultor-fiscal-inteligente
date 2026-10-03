@@ -60,7 +60,6 @@
     "lucide-react": "^0.575.0",
     "motion": "^12.40.0",
     "multer": "^2.4.0",
-    "node-forge": "^1.4.0",
     "pdfjs-dist": "^4.10.38",
     "playwright": "^1.51.0",
     "react": "^19.2.7",

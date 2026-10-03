@@ -1,30 +1,15 @@
 // @ts-nocheck
 /**
- * Testa assinatura XML-DSig. Gera PFX in-memory e assina envelopes ABRASF
+ * Testa assinatura XML-DSig. Usa o PFX de teste (fixtures/pfx) e assina envelopes ABRASF
  * de exemplo. Verifica estrutura da assinatura (presença de Signature,
  * SignatureValue, DigestValue, X509Certificate) e idempotência.
  */
-import * as forge from 'node-forge';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { assinarXmlAbrasf, temAssinaturaXmlValida } from '../sefaz-backend/abrasf/xml-signer.js';
 import { montarConsultarServicoTomado } from '../sefaz-backend/abrasf/envelope-builder.js';
 
-function gerarPfxDemo(senha: string): Buffer {
-    const keys = forge.pki.rsa.generateKeyPair(2048);
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = '01';
-    cert.validity.notBefore = new Date();
-    cert.validity.notAfter = new Date();
-    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
-    const attrs = [{ name: 'commonName', value: 'TESTE:11222333000181' }];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.sign(keys.privateKey, forge.md.sha256.create());
-    const p12Asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], senha, { algorithm: '3des' });
-    return Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), 'binary');
-}
-
-const pfx = gerarPfxDemo('senha123');
+const pfx = readFileSync(join(__dirname, 'fixtures', 'pfx', '3des.pfx'));
 
 describe('assinarXmlAbrasf', () => {
     it('assina ConsultarNfseServicoTomado com SHA-1 (default)', () => {

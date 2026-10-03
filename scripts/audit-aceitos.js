@@ -16,6 +16,10 @@
 //   · a trava que mantém o motivo verdadeiro;
 //   · uma data `ate` — vencida, o advisory volta a BLOQUEAR, dito.
 // Advisory NOVO no mesmo pacote bloqueia normalmente.
+//
+// 03/10: o node-forge SAIU do projeto (leitor próprio em sefaz-backend/pkcs12.js,
+// trava __tests__/semNodeForge.test.ts) e a lista ficou vazia. A régua fica
+// para o próximo advisory sem correção.
 // ============================================================================
 
 const GRAVES = new Set(['high', 'critical']);
