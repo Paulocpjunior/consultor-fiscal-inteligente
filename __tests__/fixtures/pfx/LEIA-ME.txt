@@ -1,0 +1,4 @@
+Certificados de TESTE do CFI (nao sao ICP-Brasil de verdade).
+Gerados com o OpenSSL em 03/10/2026, validade ate 2126. Senha: senha123
+(acento-pbes2-bytes.pfx: senha "sênha!"). Usados por __tests__/pkcs12Leitor.test.ts
+e pelos testes de assinatura XML. Nao usar fora dos testes.

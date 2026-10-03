@@ -5,7 +5,7 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import forge from 'node-forge';
+import { lerCertificado } from './pkcs12.js';
 import { sincronizarEmpresa } from './sync-orchestrator.js';
 // 🚦 Janela da rodada completa (25/09): recusa rodada dentro de 1 h, pula a
 // empresa já consultada como "janela" (não falha) e resume com a causa.
@@ -1167,9 +1167,9 @@ router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
       });
     }
     // Parseia o cert pra extrair subject e validade
-    const cert509 = forge.pki.certificateFromPem(cert.pemCert);
-    const subjectAttrs = (cert509.subject?.attributes || []).map(a => ({
-      shortName: a.shortName || a.name || a.type,
+    const cert509 = lerCertificado(cert.pemCert);
+    const subjectAttrs = cert509.subject.map(a => ({
+      shortName: a.shortName || a.name,
       value: a.value,
     }));
     const subjectStr = subjectAttrs.map(a => `${a.shortName}=${a.value}`).join(', ');
@@ -1186,8 +1186,8 @@ router.get('/cert-escritorio-info', requireAuth, async (req, res) => {
     const cnpjDoSerial = matchSerial ? matchSerial[0] : null;
     const cnpjNoCert = cnpjDoCN || cnpjDoSerial;
 
-    const notBefore = cert509.validity?.notBefore?.toISOString?.() || null;
-    const notAfter = cert509.validity?.notAfter?.toISOString?.() || null;
+    const notBefore = cert509.notBefore.toISOString();
+    const notAfter = cert509.notAfter.toISOString();
     const valido = notBefore && notAfter && new Date() >= new Date(notBefore) && new Date() < new Date(notAfter);
     const mismatch = cnpjNoCert ? cnpjNoCert !== CNPJ_ESCRITORIO : null;
     const cnpjBaseDoCert = cnpjNoCert ? cnpjNoCert.slice(0, 8) : null;

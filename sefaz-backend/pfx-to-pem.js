@@ -10,11 +10,9 @@
 // nao do escritorio).
 // ============================================================================
 
-import * as forgeNs from 'node-forge';
-
-// Interop: em node ESM o node-forge (CJS) chega no default; no transform do
-// jest chega como namespace. As duas formas passam por aqui.
-const forge = forgeNs.default ?? forgeNs;
+// 03/10: a leitura do PKCS#12 mora em `pkcs12.js` (crypto nativo; o
+// node-forge saiu do projeto). Este módulo mantém a assinatura de sempre.
+import { abrirPfx } from './pkcs12.js';
 
 /**
  * @param {Buffer} pfxBuffer
@@ -22,25 +20,8 @@ const forge = forgeNs.default ?? forgeNs;
  * @returns {{ pemKey: string, pemCert: string }}
  */
 export function pfxToPem(pfxBuffer, password) {
-    const pkcs12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
-    const pkcs12 = forge.pkcs12.pkcs12FromAsn1(pkcs12Asn1, password);
-
-    let pemKey = null;
-    let pemCert = null;
-
-    for (const safeContents of pkcs12.safeContents) {
-        for (const safeBag of safeContents.safeBags) {
-            if (safeBag.type === forge.pki.oids.pkcs8ShroudedKeyBag || safeBag.type === forge.pki.oids.keyBag) {
-                pemKey = forge.pki.privateKeyToPem(safeBag.key);
-            } else if (safeBag.type === forge.pki.oids.certBag) {
-                // Cert folha (do CNPJ) — ignora cadeia ICP-Brasil intermediaria
-                if (!pemCert) pemCert = forge.pki.certificateToPem(safeBag.cert);
-            }
-        }
-    }
-
-    if (!pemKey) throw new Error('Chave privada nao encontrada no .pfx');
-    if (!pemCert) throw new Error('Certificado nao encontrado no .pfx');
+    // Cert folha = o que casa com a chave (a cadeia ICP-Brasil fica de fora).
+    const { pemKey, pemCert } = abrirPfx(pfxBuffer, password);
     return { pemKey, pemCert };
 }
 

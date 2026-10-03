@@ -16,7 +16,7 @@
 import admin from 'firebase-admin';
 import crypto from 'crypto';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
-import forge from 'node-forge';
+import { abrirPfx, campoDoNome, nomeComoTexto } from './pkcs12.js';
 import { selecionarCertA1PorBase } from './cert-base-helper.js';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'consultorfiscalapp';
@@ -99,22 +99,19 @@ async function decryptBuffer(encryptedBuffer) {
  * Le metadados do .pfx (CNPJ, validade, subject) sem armazenar.
  */
 function extrairMetadadosCert(pfxBuffer, password) {
-    const p12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
-    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
-
-    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag];
-    if (!certBags || certBags.length === 0) throw new Error('Nenhum certificado no .pfx');
-
-    const cert = certBags[0].cert;
-    const subjectStr = cert.subject.attributes
-        .map(a => `${a.shortName || a.name}=${a.value}`)
-        .join(', ');
+    let cert;
+    try {
+        cert = abrirPfx(pfxBuffer, password).certificado;
+    } catch (e) {
+        if (e?.codigo === 'SEM_CERTIFICADO') throw new Error('Nenhum certificado no .pfx');
+        throw e;
+    }
+    const subjectStr = nomeComoTexto(cert.subject);
 
     // CNPJ extraido especificamente do CN (Common Name).
     // Em certs PJ ICP-Brasil, o CN tem formato 'RAZAO SOCIAL:CNPJ'.
     // Outros campos (OU, etc) podem ter CNPJ do responsavel - nao confundir.
-    const cnAttr = cert.subject.attributes.find(a => (a.shortName === 'CN' || a.name === 'commonName'));
-    const cnValue = cnAttr?.value || '';
+    const cnValue = campoDoNome(cert.subject, 'CN');
     const cnpjFromCN = cnValue.match(/:(\d{14})\b/);
     let cnpj = cnpjFromCN ? cnpjFromCN[1] : null;
     if (!cnpj) {
@@ -122,18 +119,13 @@ function extrairMetadadosCert(pfxBuffer, password) {
         cnpj = fallback ? fallback[1] : null;
     }
 
-    // Fingerprint SHA-256
-    const md = forge.md.sha256.create();
-    md.update(forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes());
-    const fingerprint = md.digest().toHex();
-
     return {
         subject: subjectStr,
         cnpj,
-        notBefore: cert.validity.notBefore.toISOString(),
-        notAfter: cert.validity.notAfter.toISOString(),
-        fingerprint,
-        issuer: cert.issuer.attributes.map(a => `${a.shortName || a.name}=${a.value}`).join(', '),
+        notBefore: cert.notBefore.toISOString(),
+        notAfter: cert.notAfter.toISOString(),
+        fingerprint: cert.fingerprintSha256,
+        issuer: nomeComoTexto(cert.issuer),
     };
 }
 

@@ -5,6 +5,25 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔐 NODE-FORGE FORA DO CFI — LEITOR DE PFX PRÓPRIO (03/10)** (Paulo: *"faz a
+  troca do node-forge, resolva de forma definitiva"*). O advisory
+  GHSA-86w9-cpqp-85rv (sem correção) estava aceito até 02/11; agora o pacote
+  SAIU (`npm uninstall`, `audit-aceitos.json` = `[]`, auditoria "0 aceitos").
+  `sefaz-backend/pkcs12.js` (+ .d.ts) lê o PKCS#12 sobre o crypto nativo: DER e
+  BER indefinido, KDF do RFC 7292, 3DES/AES/PBKDF2 do OpenSSL, **RC2 em JS**
+  (RFC 2268 — o OpenSSL 3 tirou o RC2 do provider padrão e A1 antigo do Windows
+  cifra o certificado com RC2-40), MAC conferido antes de tudo (senha errada =
+  `SENHA_INCORRETA`, frase "PKCS#12 MAC could not be verified" mantida para as
+  rotas), folha = o certificado que CASA com a chave (checkPrivateKey), senha
+  com acento nas duas leituras (como o OpenSSL). As 5 cópias do leitor
+  (secret-loader, pfx-to-pem, cert-manager, cert-storage, abrasf) e os 2
+  `certificateFromPem` (sync-routes, empresa-status) usam o módulo. Saída
+  idêntica byte a byte à do forge nos PFX de teste; RC2 conferido contra o
+  OpenSSL legado em 2000 blocos aleatórios. PFX de teste em
+  `__tests__/fixtures/pfx` (OpenSSL, até 2126, senha123). Travas:
+  `pkcs12Leitor.test.ts` e `semNodeForge.test.ts` (varredura de import +
+  package.json + aceites; herdou os testes de `avaliarAuditoria`).
+
 - **💸 DARF DOS RETIDOS NA CONFERÊNCIA REINF × DCTFWEB (03/10)** (Paulo: *"envio
   pelo sistema dos DARF RETIDOS"*; respostas: *"1- ambos os casos 2- sim trava"*).
   `DarfRetidosBloco` na aba: avulso 1708/5952 (`gerarDarfsSeparados` com

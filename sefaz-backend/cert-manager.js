@@ -7,7 +7,7 @@
 
 import express from 'express';
 import multer from 'multer';
-import forge from 'node-forge';
+import { abrirPfx, campoDoNome } from './pkcs12.js';
 import admin from 'firebase-admin';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { requireAdmin } from './require-admin.js';
@@ -34,22 +34,16 @@ function fa() {
 
 // --- Parse PKCS#12 (A1) ---
 function parseA1Certificate(pfxBuffer, password) {
-  const p12Der = forge.util.createBuffer(pfxBuffer.toString('binary'));
-  const p12Asn1 = forge.asn1.fromDer(p12Der);
-  const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
-
-  const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag];
-  if (!certBags || certBags.length === 0) throw new Error('Nenhum certificado no .pfx');
-  const cert = certBags[0].cert;
-
-  const keyShrouded = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [];
-  const keyPlain = p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || [];
-  if (keyShrouded.length === 0 && keyPlain.length === 0) {
-    throw new Error('Chave privada ausente — não é A1 válido');
+  let cert;
+  try {
+    cert = abrirPfx(pfxBuffer, password).certificado;
+  } catch (e) {
+    if (e?.codigo === 'SEM_CERTIFICADO') throw new Error('Nenhum certificado no .pfx');
+    if (e?.codigo === 'SEM_CHAVE') throw new Error('Chave privada ausente — não é A1 válido');
+    throw e;
   }
 
-  const cnAttr = cert.subject.getField('CN');
-  const cn = cnAttr ? cnAttr.value : '';
+  const cn = campoDoNome(cert.subject, 'CN');
 
   let cnpj = null, cpfTitular = null, tipo = 'desconhecido';
   const m14 = cn.match(/:(\d{14})$/);
@@ -58,21 +52,19 @@ function parseA1Certificate(pfxBuffer, password) {
   else if (m11) { cpfTitular = m11[1]; tipo = 'PF'; }
 
   const titular = cn.replace(/:\d+$/, '').trim();
-  const issuerCN = cert.issuer.getField('CN');
-  const issuerO = cert.issuer.getField('O');
-  const notBefore = cert.validity.notBefore;
-  const notAfter = cert.validity.notAfter;
+  const issuerCN = campoDoNome(cert.issuer, 'CN');
+  const issuerO = campoDoNome(cert.issuer, 'O');
+  const notBefore = cert.notBefore;
+  const notAfter = cert.notAfter;
   const diasRestantes = Math.floor((notAfter.getTime() - Date.now()) / 86_400_000);
 
-  const md = forge.md.sha1.create();
-  md.update(forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes());
-  const fingerprint = md.digest().toHex().toUpperCase().match(/.{2}/g).join(':');
+  const fingerprint = cert.fingerprintSha1.toUpperCase().match(/.{2}/g).join(':');
 
-  const isICPBrasil = !!(issuerO && /icp[\s-]?brasil/i.test(issuerO.value));
+  const isICPBrasil = /icp[\s-]?brasil/i.test(issuerO);
 
   return {
     cnpj, cpfTitular, titular, cnCompleto: cn,
-    issuer: { cn: issuerCN ? issuerCN.value : null, o: issuerO ? issuerO.value : null },
+    issuer: { cn: issuerCN || null, o: issuerO || null },
     validade: {
       inicio: notBefore.toISOString(),
       fim: notAfter.toISOString(),

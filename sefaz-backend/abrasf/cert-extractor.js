@@ -3,7 +3,7 @@
 //
 // xml-crypto exige PEM separados; cert-storage devolve PFX cru.
 
-import * as forge from 'node-forge';
+import { abrirPfx, campoDoNome } from '../pkcs12.js';
 
 /**
  * Le um buffer PFX e devolve { privateKeyPem, certificatePem, cnpj?, notAfter? }.
@@ -16,34 +16,21 @@ export function extrairCertPEM(pfxBuffer, password) {
     if (!Buffer.isBuffer(pfxBuffer)) {
         throw new Error('pfxBuffer deve ser Buffer');
     }
-    const p12Der = pfxBuffer.toString('binary');
-    const p12Asn1 = forge.asn1.fromDer(p12Der);
-    let p12;
+    let aberto;
     try {
-        p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+        aberto = abrirPfx(pfxBuffer, password);
     } catch (e) {
+        if (e?.codigo === 'SEM_CHAVE') throw new Error('PFX sem chave privada');
+        if (e?.codigo === 'SEM_CERTIFICADO') throw new Error('PFX sem certificado');
         throw new Error(`PFX invalido ou senha incorreta: ${e.message}`);
     }
-
-    // Procura keyBag e certBag
-    const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
-    const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag]?.[0]
-        || p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag]?.[0];
-    if (!keyBag?.key) throw new Error('PFX sem chave privada');
-
-    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
-    const certBag = certBags[forge.pki.oids.certBag]?.[0];
-    if (!certBag?.cert) throw new Error('PFX sem certificado');
-
-    const privateKeyPem = forge.pki.privateKeyToPem(keyBag.key);
-    const certificatePem = forge.pki.certificateToPem(certBag.cert);
+    const { pemKey: privateKeyPem, pemCert: certificatePem, certificado } = aberto;
 
     // Metadados uteis pra logging/diagnostico
-    const cert = certBag.cert;
-    const cnpjAttr = cert.subject?.attributes?.find(a => a.shortName === 'CN');
     // CN em e-CNPJ ICP-Brasil eh "Razao Social:CNPJ" - extrai os 14 digitos
-    const cnpj = cnpjAttr ? (String(cnpjAttr.value).match(/\d{14}/)?.[0] || null) : null;
-    const notAfter = cert.validity?.notAfter?.toISOString?.() || null;
+    const cn = campoDoNome(certificado.subject, 'CN');
+    const cnpj = cn ? (cn.match(/\d{14}/)?.[0] || null) : null;
+    const notAfter = certificado.notAfter.toISOString();
 
     return {
         privateKeyPem,

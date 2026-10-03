@@ -9,7 +9,9 @@
  * Transforms (enveloped + C14N inclusiva). Esta trava assina um evento de
  * verdade e confere o XML produzido — não a linha de configuração.
  */
-import * as forge from 'node-forge';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { abrirPfx } from '../sefaz-backend/pkcs12.js';
 import { DOMParser } from '@xmldom/xmldom';
 import { SignedXml } from 'xml-crypto';
 
@@ -28,17 +30,8 @@ const ESQUEMA_NFE = {
 };
 
 function certAutoAssinado() {
-    const keys = forge.pki.rsa.generateKeyPair(1024); // 1024 só p/ velocidade de teste
-    const cert = forge.pki.createCertificate();
-    cert.publicKey = keys.publicKey;
-    cert.serialNumber = '01';
-    cert.validity.notBefore = new Date();
-    cert.validity.notAfter = new Date(Date.now() + 86400000);
-    const attrs = [{ name: 'commonName', value: 'TESTE LTDA:17660729000197' }];
-    cert.setSubject(attrs);
-    cert.setIssuer(attrs);
-    cert.sign(keys.privateKey, forge.md.sha256.create());
-    return { pemKey: forge.pki.privateKeyToPem(keys.privateKey), pemCert: forge.pki.certificateToPem(cert) };
+    const { pemKey, pemCert } = abrirPfx(readFileSync(join(__dirname, 'fixtures', 'pfx', 'aes256.pfx')), 'senha123');
+    return { pemKey, pemCert };
 }
 
 const CHAVE = '35260836353810001505500100003057136193057600';
