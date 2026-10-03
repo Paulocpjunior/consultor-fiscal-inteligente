@@ -25,7 +25,14 @@
  * Agora `__tests__/novidadesService.test.ts` compara esta constante com o
  * "atualizado em" da página e derruba o build quando as duas divergem.
  */
-export const NOVIDADES_VERSAO = '2026-10-03';
+// 🔴 03/10, Paulo: *"agora o Novidades está subindo sem a bolinha vermelha"*.
+// A versão era SÓ a data: a segunda, a terceira e a quarta entrega do MESMO dia
+// não mudavam nada, e quem já tinha aberto a página naquele dia nunca mais via
+// o selo (em 02/10 entraram oito itens assim). Agora a versão é
+// `AAAA-MM-DD.N` — a data do "atualizado em" + quantos itens (<h3>) a seção
+// "🆕 O que mudou agora" tem. Item novo no mesmo dia ⇒ N muda ⇒ selo reacende.
+// A trava (`novidadesService.test.ts`) confere a data E a contagem na página.
+export const NOVIDADES_VERSAO = '2026-10-03.4';
 
 export const NOVIDADES_URL = '/novidades-cfi.html';
 
