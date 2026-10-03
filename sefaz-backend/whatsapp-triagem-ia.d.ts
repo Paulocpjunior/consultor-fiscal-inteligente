@@ -37,11 +37,15 @@ export function montarPromptTriagem(p: { texto: string; filas: FilaDaTriagem[] }
 export function interpretarRespostaTriagem(
     bruto: string | null | undefined, filas: FilaDaTriagem[],
 ): LeituraDaTriagem | null;
+export function motivoDoNaoEntendi(bruto: string | null | undefined): string;
+export function classeDoNaoEntendi(detalhe: string | null | undefined): string;
 export function decidirDestinoDaTriagem(p: {
     resultado: LeituraDaTriagem | null;
     filas: FilaDaTriagem[];
     minimo?: number;
     erro?: unknown;
+    /** A resposta CRUA do modelo — é dela que sai o porquê do "não entendi". */
+    bruto?: string | null;
 }): DestinoDaTriagem;
 
 // ── 📊 Painel da IA (28/09) ─────────────────────────────────────────────────
@@ -58,6 +62,7 @@ export interface ResumoTriagemIa {
     taxaClassificada: number | null;
     filas: { fila: string; quantidade: number }[];
     motivosIndisponivel: { motivo: string; quantidade: number }[];
+    motivosNaoEntendi: { motivo: string; quantidade: number }[];
     ultimaEm: string | null;
     ultimas: RegistroTriagem[];
 }

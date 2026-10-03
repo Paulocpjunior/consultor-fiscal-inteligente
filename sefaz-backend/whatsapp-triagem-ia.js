@@ -138,9 +138,15 @@ export function interpretarRespostaTriagem(bruto, filas) {
  * fatos diferentes, e um contador só faria os dois parecerem a mesma coisa
  * quando alguém for olhar por que a triagem não está pegando.
  */
-export function decidirDestinoDaTriagem({ resultado, filas, minimo = CONFIANCA_MINIMA_TRIAGEM, erro = null }) {
+export function decidirDestinoDaTriagem({ resultado, filas, minimo = CONFIANCA_MINIMA_TRIAGEM, erro = null, bruto = null }) {
     if (erro) return { fila: null, situacao: 'ia-indisponivel', detalhe: String(erro).slice(0, 200) };
-    if (!resultado) return { fila: null, situacao: 'nao-entendi' };
+    // 📊 03/10 (painel do Paulo: 486 de 500 "não entendeu"): "não entendeu"
+    // sem o POR QUÊ não se investiga. Três coisas diferentes caíam no mesmo
+    // balde — o modelo escolheu "nenhuma" (mensagem genérica, que é o
+    // esperado), devolveu algo ilegível (defeito de prompt/modelo) ou não
+    // devolveu nada (bloqueio/corte). O detalhe nasce do BRUTO, nunca de
+    // dedução, e o painel agrupa.
+    if (!resultado) return { fila: null, situacao: 'nao-entendi', detalhe: motivoDoNaoEntendi(bruto) };
     if (!resultado.fila) {
         // O modelo escolheu algo que não existe. Isso é DEFEITO do prompt ou
         // do modelo, não do cliente — por isso sai nomeado, com o que ele
@@ -155,6 +161,24 @@ export function decidirDestinoDaTriagem({ resultado, filas, minimo = CONFIANCA_M
         fila: resultado.fila, rotulo, situacao: 'classificada',
         confianca: resultado.confianca, motivo: resultado.motivo || null,
     };
+}
+
+/** Por que o "não entendi": lido da resposta crua do modelo. */
+export function motivoDoNaoEntendi(bruto) {
+    const t = String(bruto ?? '').trim();
+    if (!t) return 'resposta vazia do modelo';
+    if (/"fila"\s*:\s*"nenhuma"/i.test(t) || /^nenhuma$/i.test(t)) return 'modelo escolheu "nenhuma" (mensagem genérica)';
+    return `resposta ilegível: ${t.replace(/\s+/g, ' ').slice(0, 120)}`;
+}
+
+/** Agrupa o detalhe do "não entendi" em três classes (+ os registros antigos, sem detalhe). */
+export function classeDoNaoEntendi(detalhe) {
+    const d = String(detalhe || '');
+    if (!d) return 'sem detalhe (registro anterior a 03/10)';
+    if (d.startsWith('modelo escolheu "nenhuma"')) return 'nenhuma (genérica)';
+    if (d.startsWith('resposta vazia')) return 'resposta vazia';
+    if (d.startsWith('resposta ilegível')) return 'resposta ilegível';
+    return d.slice(0, 60);
 }
 
 // ═══ 📊 O PAINEL DA IA — "a IA está pegando?" deixa de ser palpite (28/09) ══
@@ -205,6 +229,7 @@ export function resumirTriagemIa(registros, { agora = new Date(), dias = 7, ulti
     const contadores = Object.fromEntries(SITUACOES_TRIAGEM.map((s) => [s, 0]));
     const porFila = {};
     const motivosIndisponivel = {};
+    const motivosNaoEntendi = {};
     for (const r of naJanela) {
         const s = SITUACOES_TRIAGEM.includes(r.situacao) ? r.situacao : 'nao-entendi';
         contadores[s] += 1;
@@ -212,6 +237,10 @@ export function resumirTriagemIa(registros, { agora = new Date(), dias = 7, ulti
         if (s === 'ia-indisponivel') {
             const k = String(r.detalhe || 'sem detalhe').slice(0, 60);
             motivosIndisponivel[k] = (motivosIndisponivel[k] || 0) + 1;
+        }
+        if (s === 'nao-entendi') {
+            const k = classeDoNaoEntendi(r.detalhe);
+            motivosNaoEntendi[k] = (motivosNaoEntendi[k] || 0) + 1;
         }
     }
     const ordenados = [...naJanela].sort((a, b) => (a.em < b.em ? 1 : a.em > b.em ? -1 : 0));
@@ -223,6 +252,7 @@ export function resumirTriagemIa(registros, { agora = new Date(), dias = 7, ulti
         taxaClassificada: total ? Math.round((contadores.classificada / total) * 100) : null,
         filas: Object.entries(porFila).sort((a, b) => b[1] - a[1]).map(([fila, quantidade]) => ({ fila, quantidade })),
         motivosIndisponivel: Object.entries(motivosIndisponivel).sort((a, b) => b[1] - a[1]).map(([motivo, quantidade]) => ({ motivo, quantidade })),
+        motivosNaoEntendi: Object.entries(motivosNaoEntendi).sort((a, b) => b[1] - a[1]).map(([motivo, quantidade]) => ({ motivo, quantidade })),
         ultimaEm: ordenados[0]?.em || null,
         ultimas: ordenados.slice(0, ultimas),
     };

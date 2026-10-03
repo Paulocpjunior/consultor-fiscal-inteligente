@@ -629,9 +629,11 @@ async function triarComIa({ app, config, texto, db = null, numero = null }) {
         const prazo = new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), TEMPO_MAX_TRIAGEM_MS));
         const r = await Promise.race([corrida, prazo]);
 
+        const bruto = r?.text ?? '';
         const destino = decidirDestinoDaTriagem({
-            resultado: interpretarRespostaTriagem(r?.text ?? '', filas),
+            resultado: interpretarRespostaTriagem(bruto, filas),
             filas,
+            bruto,   // o "não entendi" sai com o porquê (nenhuma / ilegível / vazia)
         });
         // 📊 TODA decisão vira registro — a que classificou e a que não. É o
         // painel da aba 🤖; antes só o console.log sabia.
