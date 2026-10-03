@@ -184,6 +184,15 @@ const FimDeMesBloco: React.FC<Props> = ({
                 <p className="text-[11px] text-emerald-900/70 dark:text-emerald-200/70">
                     É esta a base de impostos, livros, ficha financeira e da importação do Contábil.
                 </p>
+                {/* 📭 Informativo "sem movimento" ao cliente (03/10): o carimbo diz
+                    se saiu, para quem, ou por que não saiu. */}
+                {f.informativoSemMovimento && (
+                    <p className={`text-[11px] ${f.informativoSemMovimento.enviadoEm ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-400'}`}>
+                        {f.informativoSemMovimento.enviadoEm
+                            ? `📧 Informativo de sem movimento enviado ao cliente (${f.informativoSemMovimento.para || 'e-mail do cadastro'}) em ${fmtDataHora(f.informativoSemMovimento.enviadoEm)}.`
+                            : `⚠ Informativo de sem movimento NÃO enviado: ${f.informativoSemMovimento.motivo || 'falha não detalhada'} Corrija e reabra/feche, ou avise o cliente por fora.`}
+                    </p>
+                )}
                 {ehAdmin && !pedindoMotivo && (
                     <button
                         onClick={() => setPedindoMotivo(true)}
