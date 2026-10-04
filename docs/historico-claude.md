@@ -9,6 +9,39 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **⬇️ DOWNLOAD DE EVENTOS DO eSOCIAL PELO TÚNEL** (04/10/2026, Paulo, no
+  Consultor DP: *"pode seguir com download dos eventos do esocial"*). Duas rotas
+  no túnel:
+  - `POST /api/dp-integration/esocial/download/identificadores`, com
+    `{ cnpj, tipo: empregador|tabela|trabalhador, tpEvt?, perApur?, cpfTrab?, dtIni?, dtFim?, chEvt?, certificado? }`;
+  - `POST /api/dp-integration/esocial/download/eventos`, com
+    `{ cnpj, ids | nrRecs (até 50), certificado? }`.
+
+  **Como funciona:**
+  - Webservices WsConsultarIdentificadoresEventos e WsSolicitarDownloadEventos
+    ("dwlcirurgico"), SOAP 1.1 com mTLS.
+  - O pedido é assinado no elemento `eSocial`, com `URI=""` (RSA-SHA256, C14N).
+  - Nomes, namespaces e SOAPActions vêm dos XSD/WSDL oficiais da comunicação
+    v1_5_0 (nfephp-org/sped-esocial).
+  - Núcleo puro em `esocial-download.js`. I/O em `esocial-download-client.js`:
+    o A1 vem do cofre e por padrão é o do escritório (procurador); a chave não
+    sai do CFI.
+  - Os XMLs voltam como o eSocial mandou. O DP remonta no formato
+    retornoEventoCompleto e entrega um .zip.
+
+  **Auditoria:** `dp_esocial_download_log` (catálogo) guarda quem pediu,
+  empregador, operação, filtro SEM CPF e cdResposta, nunca o conteúdo. Conta os
+  pedidos do dia por empregador, porque o eSocial limita: as fontes falam em
+  cerca de 10 a 12 por dia e 50 por resposta, sem confirmação oficial lida.
+
+  **Ainda não provado:** nada foi chamado no eSocial real, porque este
+  ambiente não tem saída para o governo. O primeiro uso real vai dizer se a
+  procuração do escritório cobre o download; se não cobrir, a tela tem a opção
+  "certificado da própria empresa".
+
+  Teste: `esocialDownload.test.ts`. As rotas estão declaradas em
+  `rotaTemChamada` (túnel do DP).
+
 - **🔌 "PODE PUBLICAR A ROTA DO CFI"** (04/10/2026, Paulo, a pedido do
   Consultor DP). Nova rota do túnel `POST /api/dp-integration/dctfweb/debitos`
   `{ cnpj, competencia: 'YYYY-MM' }`: devolve os débitos com saldo a pagar da

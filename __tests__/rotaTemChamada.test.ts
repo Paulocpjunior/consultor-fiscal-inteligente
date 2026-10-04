@@ -51,6 +51,8 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     // ── Túnel: quem chama é um APP IRMÃO (DP/Folha, Contábil, Financeiro) ───
     '/empresa-completo': 'túnel do DP/Folha',
     '/fgts/crf': 'túnel do DP/Folha',
+    '/esocial/download/identificadores': 'túnel do DP/Folha (download de eventos do eSocial, tela no Consultor DP)',
+    '/esocial/download/eventos': 'túnel do DP/Folha (download de eventos do eSocial, tela no Consultor DP)',
     '/movimento-fiscal': 'túnel somente leitura do Consultor Contábil (CCI)',
 
     // ── Agente local cfi-a3 (captura por A3, fora deste repo) ───────────────

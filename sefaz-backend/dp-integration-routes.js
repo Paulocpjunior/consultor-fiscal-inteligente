@@ -19,6 +19,8 @@ import {
 import { consultarCndsPublicas } from './cnd-publica-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
+import { montarPedidoIdentificadores, montarPedidoDownload, lerRetornoIdentificadores, lerRetornoDownload } from './esocial-download.js';
+import { carregarCertificado, executarPedido, auditarPedido } from './esocial-download-client.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -143,6 +145,53 @@ router.post('/dctfweb/debitos', requireCrossProjectAuth, async (req, res) => {
         return res.status(500).json({ error: err.message });
     }
 });
+
+// eSocial - Download de eventos (download cirúrgico)
+// POST /api/dp-integration/esocial/download/identificadores
+// Body: { cnpj, tipo: 'empregador'|'tabela'|'trabalhador', tpEvt?, perApur?,
+//         cpfTrab?, dtIni?, dtFim?, chEvt?, certificado?: 'escritorio'|'empresa', tpAmb? }
+// POST /api/dp-integration/esocial/download/eventos
+// Body: { cnpj, ids?: string[] | nrRecs?: string[] (até 50), certificado?, tpAmb? }
+//
+// O CFI assina o pedido e abre o mTLS com o A1 do cofre (por padrão o do
+// escritório, procurador do empregador); a chave não sai daqui. Devolve os
+// XMLs como o eSocial mandou e quantos pedidos já foram feitos hoje para o
+// empregador, porque o eSocial limita os pedidos por dia. O conteúdo dos
+// eventos não é gravado; a auditoria (dp_esocial_download_log) guarda quem,
+// o quê e o código de resposta, sem CPF.
+async function executarDownload(req, res, montar, ler, operacao) {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    let pedido;
+    try { pedido = montar({ ...req.body, cnpj }); } catch (err) { return res.status(400).json({ error: err.message }); }
+    const tpAmb = Number(req.body?.tpAmb || 1);
+    let cert;
+    try { cert = await carregarCertificado({ origem: req.body?.certificado, cnpjEmpresa: cnpj }); } catch (err) { return res.status(412).json({ error: err.message }); }
+    try {
+        const r = await executarPedido({ pedido, cert, tpAmb });
+        let retorno;
+        try { retorno = ler(r.body); } catch (err) {
+            return res.status(502).json({ error: `Resposta inesperada do eSocial (HTTP ${r.status}): ${err.message}`, detalhe: String(r.body || '').slice(0, 300) });
+        }
+        const b = req.body || {};
+        const filtro = operacao === 'identificadores'
+            ? { tipo: b.tipo, tpEvt: b.tpEvt || null, perApur: b.perApur || null, dtIni: b.dtIni || null, dtFim: b.dtFim || null, trabalhador: b.tipo === 'trabalhador' }
+            : { porRecibo: !(Array.isArray(b.ids) && b.ids.length) };
+        const qtd = operacao === 'identificadores' ? retorno.identificadores.length : retorno.arquivos.length;
+        const pedidosHoje = await auditarPedido({ por: req.user?.email, cnpj, operacao, filtro, qtd, cdResposta: retorno.cdResposta, httpStatus: r.status, certFingerprint: cert.fingerprint, tpAmb })
+            .catch((err) => { console.warn('[dp-integration/esocial/download] auditoria falhou:', err.message); return null; });
+        return res.json({ ...retorno, httpStatus: r.status, tpAmb, pedidosHoje, certificado: req.body?.certificado === 'empresa' ? 'empresa' : 'escritorio' });
+    } catch (err) {
+        console.error(`[dp-integration/esocial/download/${operacao}]`, err);
+        return res.status(502).json({ error: err.message });
+    }
+}
+
+router.post('/esocial/download/identificadores', requireCrossProjectAuth, (req, res) =>
+    executarDownload(req, res, montarPedidoIdentificadores, lerRetornoIdentificadores, 'identificadores'));
+
+router.post('/esocial/download/eventos', requireCrossProjectAuth, (req, res) =>
+    executarDownload(req, res, montarPedidoDownload, lerRetornoDownload, 'eventos'));
 
 // Batch query — all DP-relevant data for a company in a single call.
 // POST /api/dp-integration/empresa-completo
