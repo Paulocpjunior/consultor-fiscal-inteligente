@@ -18,7 +18,7 @@ import {
 } from './nfp-compliance-provider.js';
 import { consultarCndsPublicas } from './cnd-publica-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
-import { extrairDebitosDctfweb, identificacaoDeclaracao, conferirIdentificacao } from './dctfweb-retencao-normalizer.js';
+import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -137,20 +137,7 @@ router.post('/dctfweb/debitos', requireCrossProjectAuth, async (req, res) => {
     const [anoPA, mesPA] = competencia.split('-');
     try {
         const consulta = await getDctfwebProvider().consultarXmlDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA });
-        const xml = consulta?.xml || '';
-        if (!xml) {
-            return res.json({ ok: false, fonte: consulta?.fonte || null, erro: 'O SERPRO não devolveu o XML da declaração (DCTFWeb não transmitida ou sem declaração na competência).', debitos: [] });
-        }
-        const ext = extrairDebitosDctfweb(xml);
-        const identificacao = identificacaoDeclaracao(xml);
-        const conferencia = conferirIdentificacao(identificacao, { cnpj, competencia });
-        if (conferencia.problemas.length) {
-            return res.json({ ok: false, fonte: consulta?.fonte || null, identificacao, erro: `Declaração não confere com o pedido: ${conferencia.problemas.join('; ')}.`, debitos: [] });
-        }
-        if (!ext.lido) {
-            return res.json({ ok: false, fonte: consulta?.fonte || null, identificacao, erro: ext.motivo, debitos: [] });
-        }
-        return res.json({ ok: true, fonte: consulta?.fonte || null, identificacao, debitos: ext.debitos });
+        return res.json(montarRespostaDebitosDctfweb(consulta, { cnpj, competencia }));
     } catch (err) {
         console.error('[dp-integration/dctfweb/debitos]', err);
         return res.status(500).json({ error: err.message });
