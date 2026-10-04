@@ -8,6 +8,9 @@
 //   1. WsConsultarIdentificadoresEventos — devolve até 50 identificadores
 //      (Id do evento + número do recibo) por consulta: do empregador (tpEvt +
 //      perApur), de tabela (tpEvt + período) ou do trabalhador (CPF + período).
+//      Período de até 31 dias e fim até uma hora atrás; um pedido ativo por
+//      empregador de cada vez (Manual do Desenvolvedor do eSocial, apontado na
+//      revisão do PR #1370).
 //   2. WsSolicitarDownloadEventos — devolve o XML do evento e o do recibo,
 //      por Id ou por número de recibo.
 //
@@ -62,13 +65,43 @@ export function raizCnpj(cnpj) {
 
 const ideEmpregador = (raiz) => `<ideEmpregador><tpInsc>1</tpInsc><nrInsc>${raiz}</nrInsc></ideEmpregador>`;
 
+/** O eSocial recusa período de mais de 31 dias (código 410) e data final na última hora (409). */
+export const MAX_DIAS_PERIODO = 31;
+const MARGEM_MINUTOS = 61;
+
+/** Data e hora de Brasília, no formato do xs:dateTime que o eSocial lê. */
+export function horaBrasilia(d) {
+    return new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).format(d).replace(' ', 'T');
+}
+const dataHoraValida = (d) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(d) && dataValida(d.slice(0, 10));
+const ms = (dh) => Date.parse(`${dh}Z`);
+
+/**
+ * Período da consulta, já dentro das regras do eSocial — recusar aqui não gasta
+ * a cota diária. dtIni aceita data (AAAA-MM-DD) ou data e hora (continuação a
+ * partir do dhUltimoEvtRetornado); dtFim de hoje vira "agora menos 61 minutos".
+ */
+export function periodoDaConsulta(dtIni, dtFim, agora = new Date()) {
+    if (!dataValida(dtIni || '') && !dataHoraValida(dtIni || '')) throw new Error('dtIni no formato AAAA-MM-DD.');
+    if (!dataValida(dtFim || '')) throw new Error('dtFim no formato AAAA-MM-DD.');
+    const ini = dtIni.length === 10 ? `${dtIni}T00:00:00` : dtIni;
+    const limite = horaBrasilia(new Date(agora.getTime() - MARGEM_MINUTOS * 60000));
+    if (dtFim > limite.slice(0, 10)) throw new Error('dtFim no futuro: o eSocial só aceita até uma hora atrás.');
+    const fim = `${dtFim}T23:59:59` > limite ? limite : `${dtFim}T23:59:59`;
+    if (fim < ini) throw new Error('dtFim anterior a dtIni.');
+    if (ms(fim) - ms(ini) > MAX_DIAS_PERIODO * 86400000) throw new Error(`Período de no máximo ${MAX_DIAS_PERIODO} dias por consulta (regra do eSocial).`);
+    return `<dtIni>${ini}</dtIni><dtFim>${fim}</dtFim>`;
+}
+
 /**
  * Pedido de identificadores, ainda sem assinatura.
  * empregador: { tpEvt: 'S-1299', perApur: '2026-09' | '2026' }
- * tabela:     { tpEvt: 'S-1010', chEvt?, dtIni?, dtFim? }   (datas AAAA-MM-DD)
- * trabalhador:{ cpfTrab, dtIni, dtFim }                      (datas AAAA-MM-DD)
+ * tabela:     { tpEvt: 'S-1010', chEvt?, dtIni?, dtFim? }   (as duas datas ou nenhuma)
+ * trabalhador:{ cpfTrab, dtIni, dtFim }
  */
-export function montarPedidoIdentificadores(p) {
+export function montarPedidoIdentificadores(p, agora = new Date()) {
     const tipo = CONSULTAS[p?.tipo];
     if (!tipo) throw new Error('tipo deve ser empregador, tabela ou trabalhador.');
     const raiz = raizCnpj(p.cnpj);
@@ -77,17 +110,15 @@ export function montarPedidoIdentificadores(p) {
     if (p.tipo === 'empregador') {
         if (!/^\d{4}(-(0[1-9]|1[0-2]))?$/.test(p.perApur || '')) throw new Error('perApur no formato AAAA-MM ou AAAA.');
         filtro = `<tpEvt>${p.tpEvt}</tpEvt><perApur>${p.perApur}</perApur>`;
+    } else if (p.tipo === 'tabela') {
+        if (!!p.dtIni !== !!p.dtFim) throw new Error('Informe as duas datas ou nenhuma.');
+        const periodo = p.dtIni ? periodoDaConsulta(p.dtIni, p.dtFim, agora) : '';
+        filtro = `<tpEvt>${p.tpEvt}</tpEvt>${p.chEvt ? `<chEvt>${esc(p.chEvt)}</chEvt>` : ''}${periodo}`;
     } else {
-        for (const k of ['dtIni', 'dtFim']) if (p[k] && !dataValida(p[k])) throw new Error(`${k} no formato AAAA-MM-DD.`);
-        if (p.dtIni && p.dtFim && p.dtFim < p.dtIni) throw new Error('dtFim anterior a dtIni.');
-        const periodo = `${p.dtIni ? `<dtIni>${p.dtIni}T00:00:00</dtIni>` : ''}${p.dtFim ? `<dtFim>${p.dtFim}T23:59:59</dtFim>` : ''}`;
-        if (p.tipo === 'tabela') filtro = `<tpEvt>${p.tpEvt}</tpEvt>${p.chEvt ? `<chEvt>${esc(p.chEvt)}</chEvt>` : ''}${periodo}`;
-        else {
-            const cpf = String(p.cpfTrab || '').replace(/\D/g, '');
-            if (cpf.length !== 11) throw new Error('cpfTrab com 11 dígitos.');
-            if (!p.dtIni || !p.dtFim) throw new Error('Consulta do trabalhador exige dtIni e dtFim.');
-            filtro = `<cpfTrab>${cpf}</cpfTrab>${periodo}`;
-        }
+        const cpf = String(p.cpfTrab || '').replace(/\D/g, '');
+        if (cpf.length !== 11) throw new Error('cpfTrab com 11 dígitos.');
+        if (!p.dtIni || !p.dtFim) throw new Error('Consulta do trabalhador exige dtIni e dtFim.');
+        filtro = `<cpfTrab>${cpf}</cpfTrab>${periodoDaConsulta(p.dtIni, p.dtFim, agora)}`;
     }
     const xml = `<eSocial xmlns="http://www.esocial.gov.br/schema/consulta/identificadores-eventos/${tipo.ns}/v1_0_0">`
         + `<consultaIdentificadoresEvts>${ideEmpregador(raiz)}<${tipo.grupo}>${filtro}</${tipo.grupo}></consultaIdentificadoresEvts></eSocial>`;

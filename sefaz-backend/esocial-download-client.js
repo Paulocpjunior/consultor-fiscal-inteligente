@@ -50,6 +50,19 @@ export function postSoap({ url, action, envelope, pfxBuffer, password }) {
     });
 }
 
+// O eSocial aceita UM pedido ativo por empregador: o segundo é recusado e gasta
+// a cota. Fila por empregador nesta instância (o Cloud Run pode ter mais de uma;
+// é o melhor esforço sem lock distribuído, e a recusa volta legível ao DP).
+const filas = new Map();
+export function serializarPorEmpregador(raiz, fn) {
+    const anterior = filas.get(raiz) || Promise.resolve();
+    const atual = anterior.catch(() => {}).then(fn);
+    const fim = atual.catch(() => {});
+    filas.set(raiz, fim);
+    fim.then(() => { if (filas.get(raiz) === fim) filas.delete(raiz); });
+    return atual;
+}
+
 /** Assina, envelopa e envia um pedido; `transporte` é injetável para teste. */
 export async function executarPedido({ pedido, cert, tpAmb = 1, transporte = postSoap }) {
     const ep = ENDPOINTS[tpAmb];
@@ -64,7 +77,8 @@ function getDb() {
 }
 
 /**
- * Registra o pedido e devolve quantos já foram feitos hoje para o empregador.
+ * Registra o pedido e devolve quantos já foram feitos hoje para o empregador,
+ * no mesmo ambiente (produção e produção restrita têm cotas separadas).
  * O eSocial limita os pedidos por dia; o DP mostra a contagem para a equipe
  * não gastar a cota à toa. CPF não é gravado.
  */
@@ -73,6 +87,6 @@ export async function auditarPedido({ por, cnpj, operacao, filtro, qtd, cdRespos
     const col = getDb().collection('dp_esocial_download_log');
     await col.add({ em: admin.firestore.FieldValue.serverTimestamp(), dia, por: por || null, empregador: cnpj, operacao, filtro, qtd, cdResposta: cdResposta ?? null, httpStatus: httpStatus ?? null, certFingerprint: certFingerprint || null, tpAmb });
     // Campo `empregador` (não `cnpj`): log do download, não consulta ao cadastro de empresas.
-    const snap = await col.where('empregador', '==', cnpj).where('dia', '==', dia).get();
+    const snap = await col.where('empregador', '==', cnpj).where('dia', '==', dia).where('tpAmb', '==', tpAmb).get();
     return snap.size;
 }

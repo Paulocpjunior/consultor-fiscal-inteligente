@@ -20,7 +20,7 @@ import { consultarCndsPublicas } from './cnd-publica-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
 import { montarPedidoIdentificadores, montarPedidoDownload, lerRetornoIdentificadores, lerRetornoDownload } from './esocial-download.js';
-import { carregarCertificado, executarPedido, auditarPedido } from './esocial-download-client.js';
+import { carregarCertificado, executarPedido, auditarPedido, serializarPorEmpregador } from './esocial-download-client.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -168,7 +168,7 @@ async function executarDownload(req, res, montar, ler, operacao) {
     let cert;
     try { cert = await carregarCertificado({ origem: req.body?.certificado, cnpjEmpresa: cnpj }); } catch (err) { return res.status(412).json({ error: err.message }); }
     try {
-        const r = await executarPedido({ pedido, cert, tpAmb });
+        const r = await serializarPorEmpregador(cnpj.slice(0, 8), () => executarPedido({ pedido, cert, tpAmb }));
         let retorno;
         try { retorno = ler(r.body); } catch (err) {
             return res.status(502).json({ error: `Resposta inesperada do eSocial (HTTP ${r.status}): ${err.message}`, detalhe: String(r.body || '').slice(0, 300) });

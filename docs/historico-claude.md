@@ -39,6 +39,14 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
   procuração do escritório cobre o download; se não cobrir, a tela tem a opção
   "certificado da própria empresa".
 
+  **Regras do Manual do Desenvolvedor**, apontadas pelo Codex na revisão do
+  PR e conferidas antes de gastar a cota:
+  - período de no máximo 31 dias (410);
+  - data final até uma hora atrás (409): o "hoje" vira agora menos 61 min,
+    em horário de Brasília;
+  - um pedido ativo por empregador: fila por empregador na instância;
+  - a contagem do dia é separada por ambiente.
+
   Teste: `esocialDownload.test.ts`. As rotas estão declaradas em
   `rotaTemChamada` (túnel do DP).
 

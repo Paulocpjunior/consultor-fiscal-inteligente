@@ -13,7 +13,7 @@
  *    recibo exatamente como vieram — e SOAP Fault vira erro legível.
  */
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { montarPedidoIdentificadores, montarPedidoDownload, assinarPedidoEsocial, verificarAssinaturaPedido, montarEnvelope, lerRetornoIdentificadores, lerRetornoDownload, raizCnpj, ENDPOINTS, MAX_POR_PEDIDO } from '../sefaz-backend/esocial-download.js';
+import { montarPedidoIdentificadores, periodoDaConsulta, horaBrasilia, montarPedidoDownload, assinarPedidoEsocial, verificarAssinaturaPedido, montarEnvelope, lerRetornoIdentificadores, lerRetornoDownload, raizCnpj, ENDPOINTS, MAX_POR_PEDIDO } from '../sefaz-backend/esocial-download.js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { abrirPfx } from '../sefaz-backend/pkcs12.js';
@@ -33,19 +33,35 @@ describe('pedido de identificadores', () => {
         expect(p.parametro).toBe('consultaEventosEmpregador');
     });
 
+    // "Agora" fixo: 04/10/2026 12:00 em Brasília (15:00 UTC).
+    const AGORA = new Date('2026-10-04T15:00:00Z');
+
     it('trabalhador e tabela: período vira dateTime do dia inteiro', () => {
-        const t = montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '529.982.247-25', dtIni: '2026-01-01', dtFim: '2026-09-30' });
-        expect(t.xml).toContain('<consultaEvtsTrabalhador><cpfTrab>52998224725</cpfTrab><dtIni>2026-01-01T00:00:00</dtIni><dtFim>2026-09-30T23:59:59</dtFim></consultaEvtsTrabalhador>');
+        const t = montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '529.982.247-25', dtIni: '2026-09-01', dtFim: '2026-09-30' }, AGORA);
+        expect(t.xml).toContain('<consultaEvtsTrabalhador><cpfTrab>52998224725</cpfTrab><dtIni>2026-09-01T00:00:00</dtIni><dtFim>2026-09-30T23:59:59</dtFim></consultaEvtsTrabalhador>');
         expect(t.xml).toContain('identificadores-eventos/trabalhador/v1_0_0');
-        const tab = montarPedidoIdentificadores({ tipo: 'tabela', cnpj: CNPJ, tpEvt: 'S-1010', dtIni: '2025-01-01' });
-        expect(tab.xml).toContain('<consultaEvtsTabela><tpEvt>S-1010</tpEvt><dtIni>2025-01-01T00:00:00</dtIni></consultaEvtsTabela>');
+        const tab = montarPedidoIdentificadores({ tipo: 'tabela', cnpj: CNPJ, tpEvt: 'S-1010', dtIni: '2025-01-01', dtFim: '2025-01-31' }, AGORA);
+        expect(tab.xml).toContain('<consultaEvtsTabela><tpEvt>S-1010</tpEvt><dtIni>2025-01-01T00:00:00</dtIni><dtFim>2025-01-31T23:59:59</dtFim></consultaEvtsTabela>');
+        expect(montarPedidoIdentificadores({ tipo: 'tabela', cnpj: CNPJ, tpEvt: 'S-1010' }, AGORA).xml).toContain('<consultaEvtsTabela><tpEvt>S-1010</tpEvt></consultaEvtsTabela>');
+    });
+
+    it('regras do eSocial antes de gastar cota: até 31 dias, fim até uma hora atrás, continuação com hora', () => {
+        expect(horaBrasilia(AGORA)).toBe('2026-10-04T12:00:00');
+        expect(() => periodoDaConsulta('2026-01-01', '2026-09-30', AGORA)).toThrow(/31 dias/);
+        expect(() => periodoDaConsulta('2026-09-01', '2026-10-05', AGORA)).toThrow(/futuro/);
+        // fim "hoje" vira agora menos 61 minutos (o eSocial recusa a última hora)
+        expect(periodoDaConsulta('2026-09-10', '2026-10-04', AGORA)).toBe('<dtIni>2026-09-10T00:00:00</dtIni><dtFim>2026-10-04T10:59:00</dtFim>');
+        expect(() => periodoDaConsulta('2026-09-03', '2026-10-04', AGORA)).toThrow(/31 dias/);
+        // continuação a partir do dhUltimoEvtRetornado, com hora
+        expect(periodoDaConsulta('2026-09-16T12:00:00', '2026-09-30', AGORA)).toBe('<dtIni>2026-09-16T12:00:00</dtIni><dtFim>2026-09-30T23:59:59</dtFim>');
+        expect(() => montarPedidoIdentificadores({ tipo: 'tabela', cnpj: CNPJ, tpEvt: 'S-1010', dtIni: '2025-01-01' }, AGORA)).toThrow(/duas datas/);
     });
 
     it('recusa entrada fora do formato antes de gastar cota', () => {
         expect(() => montarPedidoIdentificadores({ tipo: 'empregador', cnpj: CNPJ, tpEvt: '1299', perApur: '2026-09' })).toThrow(/S-9999/);
         expect(() => montarPedidoIdentificadores({ tipo: 'empregador', cnpj: CNPJ, tpEvt: 'S-1299', perApur: '09/2026' })).toThrow(/perApur/);
-        expect(() => montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '123', dtIni: '2026-01-01', dtFim: '2026-01-31' })).toThrow(/cpfTrab/);
-        expect(() => montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '52998224725', dtIni: '2026-02-01', dtFim: '2026-01-31' })).toThrow(/anterior/);
+        expect(() => montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '123', dtIni: '2026-01-01', dtFim: '2026-01-31' }, new Date('2026-10-04T15:00:00Z'))).toThrow(/cpfTrab/);
+        expect(() => montarPedidoIdentificadores({ tipo: 'trabalhador', cnpj: CNPJ, cpfTrab: '52998224725', dtIni: '2026-02-01', dtFim: '2026-01-31' }, new Date('2026-10-04T15:00:00Z'))).toThrow(/anterior/);
         expect(() => montarPedidoIdentificadores({ tipo: 'outro', cnpj: CNPJ })).toThrow(/tipo/);
         expect(() => raizCnpj('123')).toThrow(/14 dígitos/);
     });
@@ -116,7 +132,7 @@ describe('leitura das respostas', () => {
 });
 
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { executarPedido } from '../sefaz-backend/esocial-download-client.js';
+import { executarPedido, serializarPorEmpregador } from '../sefaz-backend/esocial-download-client.js';
 
 describe('execução do pedido (transporte simulado)', () => {
     it('assina, envelopa e manda para o endpoint e a SOAPAction certos', async () => {
@@ -131,5 +147,24 @@ describe('execução do pedido (transporte simulado)', () => {
         expect(chamadas[0].envelope).toContain('<Reference URI="">');
         expect(chamadas[0].pfxBuffer).toBe(PFX);
         await expect(executarPedido({ pedido, cert: CERT, tpAmb: 3, transporte })).rejects.toThrow(/tpAmb/);
+    });
+});
+
+describe('um pedido ativo por empregador', () => {
+    it('pedidos do mesmo empregador esperam a vez; de empregadores diferentes, não', async () => {
+        const ordem: string[] = [];
+        const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        const tarefa = (nome: string, ms: number) => async () => { ordem.push(`ini ${nome}`); await pausa(ms); ordem.push(`fim ${nome}`); return nome; };
+        const r = await Promise.all([
+            serializarPorEmpregador('29463877', tarefa('a1', 30)),
+            serializarPorEmpregador('29463877', tarefa('a2', 1)),
+            serializarPorEmpregador('11222333', tarefa('b1', 1)),
+        ]);
+        expect(r).toEqual(['a1', 'a2', 'b1']);
+        expect(ordem.indexOf('ini a2')).toBeGreaterThan(ordem.indexOf('fim a1'));
+        expect(ordem.indexOf('ini b1')).toBeLessThan(ordem.indexOf('fim a1'));
+        // erro de um pedido não trava a fila
+        await expect(serializarPorEmpregador('29463877', async () => { throw new Error('falhou'); })).rejects.toThrow('falhou');
+        await expect(serializarPorEmpregador('29463877', async () => 'segue')).resolves.toBe('segue');
     });
 });
