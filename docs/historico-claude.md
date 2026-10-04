@@ -3,6 +3,10 @@
 Memória de trabalho para sessões do Claude. Atualize ao assumir compromissos
 com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
+## 04/10/2026 — Templates e agendamentos compartilhados
+
+Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "pode publicar e seguir". Nova administração no Config Admin, com modelos versionados de e-mail/WhatsApp, prévia, agendas únicas/recorrentes, ativação explícita e histórico. Execução protegida por reserva transacional e sem retry de resultado incerto. Job exclusivo `comunicacao-templates-tick`; atalhos CCI/DP/Financeiro/Legalização/SP Connect. Detalhes em `docs/templates-agendamentos.md`. Publicação será verificada por commit, serviço e heartbeat.
+
 ## Regras permanentes de operação
 
 - **🔌 "PODE PUBLICAR A ROTA DO CFI"** (04/10/2026, Paulo, a pedido do

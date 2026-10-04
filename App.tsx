@@ -142,7 +142,7 @@ const App: React.FC = () => {
     const [isAuthResolved, setIsAuthResolved] = useState(false);
     const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
     const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
-    const [isConfigAdminOpen, setIsConfigAdminOpen] = useState(false);
+    const [isConfigAdminOpen, setIsConfigAdminOpen] = useState(() => new URLSearchParams(window.location.search).get('painel') === 'comunicacao');
 
     const [searchType, setSearchType] = useState<SearchType>(SearchType.CFOP);
     /** Aba em que Relatórios abre quando se chega por atalho (null = a primeira). */
@@ -784,6 +784,7 @@ const App: React.FC = () => {
                     <main className="p-3 sm:p-4">
                         <Suspense fallback={<LoadingSpinner />}>
                             <SpConnect currentUser={currentUser} />
+                            {currentUser.role === 'admin' && <div className="mt-6"><ConfigAdminModal isOpen={isConfigAdminOpen} onClose={() => setIsConfigAdminOpen(false)} /><button onClick={() => setIsConfigAdminOpen(true)} className="rounded-lg border px-3 py-2">Templates e agendamentos</button></div>}
                         </Suspense>
                     </main>
                     {/* Rodapé do Connect: versão (print sem versão é narrativa,
@@ -1625,7 +1626,7 @@ const App: React.FC = () => {
                 currentUserRole={currentUser.role}
             />
             <ConfigAdminModal
-                isOpen={isConfigAdminOpen}
+                isOpen={isConfigAdminOpen && currentUser.role === 'admin'}
                 onClose={() => setIsConfigAdminOpen(false)}
                 onOpenUsers={() => setIsUsersModalOpen(true)}
             />

@@ -141,6 +141,11 @@ export const CATALOGO_BANCO = [
     // Desenho em docs/desenho-modulo-comunicacao.md. Rules: default deny
     // (só o backend escreve). As duas primeiras existiam SEM linha aqui —
     // registradas na F1 junto com as do webhook.
+    { colecao: 'comunicacao_modelos_revisoes', grupo: 'Comunicação', funcionalidade: 'Revisões imutáveis dos modelos, somente backend' },
+    { colecao: 'comunicacao_agendas_historico', grupo: 'Comunicação', funcionalidade: 'Histórico de ativação, pausa e cancelamento, somente backend' },
+    { colecao: 'comunicacao_modelos', grupo: 'Comunicação', funcionalidade: 'Templates por departamento com revisões, gerenciados por admin' },
+    { colecao: 'comunicacao_agendas', grupo: 'Comunicação', funcionalidade: 'Agendamentos e histórico administrativo de alterações' },
+    { colecao: 'comunicacao_execucoes', grupo: 'Comunicação', funcionalidade: 'Ocorrências reservadas e resultados dos envios, somente backend' },
     { colecao: 'whatsapp_templates', grupo: 'Comunicação', funcionalidade: 'Cadastro de templates da Meta por departamento (⚙️ Config Admin) — o de-para nome × variáveis nomeadas' },
     { colecao: 'whatsapp_envios', grupo: 'Comunicação', funcionalidade: 'Auditoria de envio por template (destino, template, messageId, quem, projeto) + status de entrega vindo do webhook — nunca o conteúdo do documento' },
     { colecao: 'whatsapp_contatos', grupo: 'Comunicação', funcionalidade: 'Contatos do WhatsApp: 1 doc por número E.164, vínculo com empresa (nullable = pendência) e origem carimbada (ultrafox-import/cadastro/espontaneo)' },

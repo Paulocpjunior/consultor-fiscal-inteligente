@@ -1,3 +1,4 @@
+import comunicacaoRouter from './sefaz-backend/comunicacao-routes.js';
 import ebefRouter from './sefaz-backend/ebef-routes.js';
 import express from 'express';
 import { secretsMatch } from './sefaz-backend/cron-secret.js';
@@ -427,6 +428,7 @@ app.use('/api/admin/reinf/gateway', reinfGatewayRouter);
 // Cadastro central: o CFI como dono do cadastro dos apps irmãos. Certificado
 // NÃO trafega — é chave privada; leva-se a operação, nunca a chave.
 app.use('/api/admin/cadastro', cadastroCentralRouter);
+app.use('/api/admin/comunicacao', comunicacaoRouter);
 app.use('/api/admin/whatsapp', whatsappRouter);
 // PÚBLICA (a Meta chama): GET = handshake, POST = eventos assinados (HMAC).
 app.use('/api/whatsapp', whatsappWebhookRouter);
