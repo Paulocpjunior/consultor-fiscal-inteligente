@@ -7,6 +7,7 @@
 //   · Horários dos colaboradores — a EXCEÇÃO de horário mora por usuário no
 //     "Gerenciar Usuários"; aqui só o atalho, pra não duplicar a régua.
 // ============================================================================
+import ComunicacaoPanel from './ComunicacaoPanel';
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { CogIcon, CloseIcon, UserGroupIcon } from './Icons';
 import {
@@ -632,6 +633,7 @@ const ConfigAdminModal: React.FC<Props> = ({ isOpen, onClose, onOpenUsers }) => 
                         )}
                     </section>
 
+                    <ComunicacaoPanel />
                     {/* ── Templates do WhatsApp ───────────────────────────────── */}
                     <section className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                         <div className="flex items-center justify-between gap-2 flex-wrap">

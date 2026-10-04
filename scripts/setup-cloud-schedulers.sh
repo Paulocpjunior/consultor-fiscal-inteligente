@@ -339,6 +339,10 @@ upsert_job \
 # `legalizacao`) — o job legalizacao-cron-diario é criado pelo
 # scripts/setup-scheduler.sh DAQUELE repositório, apontando pra URL própria.
 
+
+# Templates de todos os departamentos, administrados no CFI.
+upsert_job "comunicacao-templates-tick" "*/5 * * * *" "/api/admin/comunicacao/tick" "Templates e recorrencias definidos pelos administradores"
+
 # ─── Verifica ──────────────────────────────────────────────────────────────
 echo ""
 echo "═══ Jobs ativos em $REGION ═══"
