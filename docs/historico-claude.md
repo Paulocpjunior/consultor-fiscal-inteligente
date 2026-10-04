@@ -5,6 +5,19 @@ com o Paulo (admin/dono) — é daqui que a próxima sessão retoma.
 
 ## Regras permanentes de operação
 
+- **🔌 "PODE PUBLICAR A ROTA DO CFI"** (04/10/2026, Paulo, a pedido do
+  Consultor DP). Nova rota do túnel `POST /api/dp-integration/dctfweb/debitos`
+  `{ cnpj, competencia: 'YYYY-MM' }`: devolve os débitos com saldo a pagar da
+  DCTFWeb por código de receita, para a conferência pós-folha do DP comparar com
+  o S-5011 do eSocial. NÃO é leitura nova: reaproveita `consultarXmlDeclaracao`
+  (CONSXMLDECLARACAO38) + `extrairDebitosDctfweb`, os mesmos das guias
+  separadas. Regras em `dp-dctfweb-debitos.js` (`montarRespostaDebitosDctfweb`):
+  identificação lida do PRÓPRIO XML e conferida contra o pedido; XML ausente,
+  ilegível ou sem identificação volta `ok:false` com o motivo — NUNCA lista
+  vazia como "sem débito"; `fonte` (serpro | mock) sempre vai junto e o DP
+  recusa mock. Custo: +1 consulta Integra Contador por clique no DP.
+  Teste: `dpIntegracaoDctfwebDebitos.test.ts`.
+
 - **🔐 NODE-FORGE FORA DO CFI — LEITOR DE PFX PRÓPRIO (03/10)** (Paulo: *"faz a
   troca do node-forge, resolva de forma definitiva"*). O advisory
   GHSA-86w9-cpqp-85rv (sem correção) estava aceito até 02/11; agora o pacote
