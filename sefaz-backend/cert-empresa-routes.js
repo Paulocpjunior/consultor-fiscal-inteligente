@@ -8,6 +8,7 @@ import multer from 'multer';
 import admin from 'firebase-admin';
 import {
     uploadCertEmpresa,
+    lerMetadadosPfx,
     loadCertEmpresa,
     deleteCertEmpresa,
     getCertInfoEmpresa,
@@ -15,6 +16,9 @@ import {
 } from './cert-storage.js';
 import { requireAdmin, requireAuth } from './require-admin.js';
 import { podeAcessarEmpresaId } from './carteira-auth.js';
+import { podeRenovarPeloLegal, motivoRecusaRenovacao, registrosDaRenovacao } from './cert-renovacao-legal.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+import { fetchAllDocs } from './firestore-paginate.js';
 
 const router = express.Router();
 
@@ -119,6 +123,70 @@ router.post('/upload', requireAdmin, upload.single('cert'), async (req, res) => 
                        'Verifique se o secret "cfi-empresa-cert-key" existe no projeto e se a service account do Cloud Run tem acesso. Detalhe nos logs.',
                 _infra: true,
             });
+        }
+        return res.status(500).json({ ok: false, error: msg });
+    }
+});
+
+// ── POST /upload-legal — renovação pelo app Legal (Paulo, 04/10) ─────────
+// O .pfx renovado sobe pelo Departamento Legal e grava NESTE cofre (o único
+// do SaaS). Quem: admin do CFI ou quem tem o departamento 'legalizacao'.
+// Body multipart: cert (.pfx), password, cnpj (14 dígitos).
+// Antes de gravar: o certificado tem que ser do CNPJ pedido e estar válido.
+// Depois: a validade lida do arquivo vai ao acompanhamento do Legal
+// (`dataVencimentoCofre`) e a renovação fica em `legalizacao_renovacoes`.
+router.post('/upload-legal', requireAuth, upload.single('cert'), async (req, res) => {
+    try {
+        if (!podeRenovarPeloLegal(req.user)) {
+            return res.status(403).json({ ok: false, error: 'Só a equipe do Departamento Legal (ou um admin) sobe certificado renovado.' });
+        }
+        const cnpj = String(req.body?.cnpj || '').replace(/\D/g, '');
+        const password = req.body?.password;
+        if (!password) return res.status(400).json({ ok: false, error: 'Informe a senha do certificado.' });
+        if (!req.file?.buffer) return res.status(400).json({ ok: false, error: 'Escolha o arquivo do certificado (.pfx ou .p12).' });
+
+        let meta;
+        try { meta = lerMetadadosPfx(req.file.buffer, password); }
+        catch { return res.status(400).json({ ok: false, error: 'Senha incorreta ou arquivo .pfx inválido.' }); }
+        const recusa = motivoRecusaRenovacao({ cnpjAlvo: cnpj, meta, cnpjEscritorio: CNPJ_ESCRITORIO });
+        if (recusa) return res.status(400).json({ ok: false, error: recusa });
+
+        const db = fa().firestore();
+        // CNPJ gravado em duas formas no cadastro: a busca do dono casa as duas.
+        const achada = await acharEmpresaCadastrada(db, cnpj);
+        const empresa = achada ? { id: achada.empresaId } : null;
+        if (!empresa?.id) {
+            return res.status(404).json({ ok: false, error: `O CNPJ ${cnpj} não está no cadastro do Consultor Fiscal: cadastre a empresa antes de subir o certificado.` });
+        }
+        const antes = await db.collection('empresas_certificados').doc(empresa.id).get();
+        const anterior = antes.exists ? antes.data()?.notAfter || null : null;
+
+        const result = await uploadCertEmpresa(empresa.id, req.file.buffer, password, { email: req.user.email, uid: req.user.uid });
+
+        // Acompanhamento do Legal: falha aqui não desfaz o upload (o cofre é a fonte); vai no retorno.
+        let legalAtualizados = 0;
+        let avisoLegal = null;
+        try {
+            // Filtra o CNPJ em memória (o Jotform grava só dígitos, mas a regra da casa é não consultar CNPJ por igualdade).
+            const itensSnap = await fetchAllDocs(db.collection('legalizacao_vencimentos').where('categoria', '==', 'certificado'), { label: 'cert-legal/vencimentos', maxDocs: 5000 });
+            const itens = itensSnap.map((d) => ({ id: d.id, ...(d.data() || {}) })).filter((i) => String(i.cnpj || '').replace(/\D/g, '') === cnpj);
+            const { atualizacoes, renovacao } = registrosDaRenovacao({ cnpj, notAfter: result.notAfter, anterior, itens, autor: req.user.email || req.user.uid });
+            const lote = db.batch();
+            const agora = admin.firestore.FieldValue.serverTimestamp();
+            for (const a of atualizacoes) lote.set(db.collection('legalizacao_vencimentos').doc(a.id), { ...a.dados, cofreAtualizadoEm: agora }, { merge: true });
+            lote.set(db.collection('legalizacao_renovacoes').doc(renovacao.id), { ...renovacao.dados, criadoEm: agora }, { merge: true });
+            await lote.commit();
+            legalAtualizados = atualizacoes.length;
+        } catch (e) {
+            console.error('[cert-empresa/upload-legal] acompanhamento do Legal:', e.message);
+            avisoLegal = 'Certificado gravado no cofre, mas o acompanhamento do Legal não foi atualizado agora. Ele se acerta no próximo envio ou pelo Jotform.';
+        }
+        return res.json({ ok: true, empresaId: empresa.id, cnpj: result.cnpj, validoAte: result.notAfter, anterior, legalAtualizados, avisoLegal });
+    } catch (err) {
+        console.error('[cert-empresa/upload-legal]', err);
+        const msg = err.message || 'erro desconhecido';
+        if (/Secret\b|secretmanager|cfi-empresa-cert-key|PERMISSION_DENIED|bucket|storage|AES key invalida/i.test(msg)) {
+            return res.status(503).json({ ok: false, error: 'Falha de infraestrutura ao guardar o certificado no cofre. Tente de novo; se persistir, avise o administrador.' });
         }
         return res.status(500).json({ ok: false, error: msg });
     }

@@ -15592,3 +15592,23 @@ renovado sobe pelo app Legal, gravando no cofre do CFI (próxima etapa).
   o cruzamento e diz isso num aviso.
 - Continua saindo só METADADO: o teste tranca que o cruzamento não vaza
   arquivo nem senha. 7 testes novos (28 no arquivo; 95 no cadastro central).
+- **Renovação pelo app Legal (mesmo PR):** `POST /api/admin/cert-empresa/upload-legal`
+  (multipart: cert, password, cnpj). Decisões do Paulo: sobe a **equipe do
+  Legal** (admin ou departamento `legalizacao`) e a validade acompanhada
+  passa a vir **do próprio arquivo**.
+  - Antes de gravar (`cert-renovacao-legal.js`, puro): o certificado tem que
+    ser do CNPJ pedido (e-CNPJ de outro cliente é recusado, dizendo de quem
+    é), estar válido e não ser o A1 do escritório.
+  - Grava no cofre (`uploadCertEmpresa`) e, no Legal: `dataVencimentoCofre`
+    nas linhas de certificado do CNPJ (o sync do Jotform é por merge e não
+    apaga) + registro em `legalizacao_renovacoes` (origem `upload-cofre`,
+    id no formato do sync). Falha no Legal não desfaz o upload; vai no
+    retorno. Vale a data mais tarde entre a digitada e a do arquivo, também
+    no túnel (`vencimentoEfetivo`).
+  - Empresa achada por `acharEmpresaCadastrada` (CNPJ nas duas formas) e
+    linhas do Legal filtradas em memória (regra: nada de `where(cnpj, ==)`).
+  - `legalizacao_vencimentos` e `legalizacao_renovacoes` entraram no
+    `catalogo-banco.js` (faltavam desde o primeiro commit deste PR).
+  - Rota declarada em `rotaTemChamada` (quem chama é o app Legalização).
+  - Testes: `certRenovacaoLegal.test.ts` (8). Suíte inteira: 625 suítes,
+    9174 testes passando.

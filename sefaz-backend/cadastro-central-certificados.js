@@ -41,6 +41,7 @@
 
 import { faixaDeVencimento, diasAteVencimento } from './cert-vencimento-helper.js';
 import { cnpjBase, limparCnpj } from './cert-base-helper.js';
+import { vencimentoEfetivo } from './cert-renovacao-legal.js';
 
 const texto = (v) => {
     const t = String(v ?? '').trim();
@@ -208,7 +209,9 @@ export function acompanhamentoLegalPorCnpj({ vencimentos = [], renovacoes = [] }
     for (const v of vencimentos || []) {
         if (!v || v.categoria !== 'certificado' || v.removidoDoJotform || v.semDocumento) continue;
         const cnpj = limparCnpj(v.cnpj);
-        const venc = dia(v.dataVencimento);
+        // Vale a data mais tarde: a digitada (Jotform) ou a lida do arquivo no
+        // upload pelo Legal (`dataVencimentoCofre`, cert-renovacao-legal.js).
+        const venc = vencimentoEfetivo(v);
         if (!cnpj || !venc) continue;
         const atual = porCnpj.get(cnpj);
         if (atual && atual.vencimentoInformado >= venc) continue;
