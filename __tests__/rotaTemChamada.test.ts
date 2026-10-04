@@ -53,6 +53,7 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     '/fgts/crf': 'túnel do DP/Folha',
     '/esocial/download/identificadores': 'túnel do DP/Folha (download de eventos do eSocial, tela no Consultor DP)',
     '/esocial/download/eventos': 'túnel do DP/Folha (download de eventos do eSocial, tela no Consultor DP)',
+    '/holerites/extrair': 'túnel do DP/Folha (leitura dos holerites do IOB pelo Gemini, tela Cálculo › Conferir com holerites no Consultor DP)',
     '/movimento-fiscal': 'túnel somente leitura do Consultor Contábil (CCI)',
 
     // ── Agente local cfi-a3 (captura por A3, fora deste repo) ───────────────

@@ -21,6 +21,7 @@ import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
 import { montarPedidoIdentificadores, montarPedidoDownload, lerRetornoIdentificadores, lerRetornoDownload } from './esocial-download.js';
 import { carregarCertificado, executarPedido, auditarPedido, serializarPorEmpregador } from './esocial-download-client.js';
+import { validarPdf, montarPromptHolerites, lerRespostaHolerites, SCHEMA_HOLERITES } from './holerite-extracao.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -192,6 +193,37 @@ router.post('/esocial/download/identificadores', requireCrossProjectAuth, (req, 
 
 router.post('/esocial/download/eventos', requireCrossProjectAuth, (req, res) =>
     executarDownload(req, res, montarPedidoDownload, lerRetornoDownload, 'eventos'));
+
+// Leitura de holerites do IOB em PDF pelo Gemini (conferência do motor de
+// cálculo do DP). O Gemini só transcreve; a comparação é feita no DP.
+// POST /api/dp-integration/holerites/extrair
+// Body: { pdfBase64, competencia?: 'YYYY-MM' }
+router.post('/holerites/extrair', requireCrossProjectAuth, async (req, res) => {
+    const ai = req.app.get('ai');
+    if (!ai) return res.status(503).json({ error: 'IA indisponível no CFI (GEMINI_API_KEY ausente).' });
+    const pdf = validarPdf(req.body?.pdfBase64);
+    if (!pdf.ok) return res.status(400).json({ error: pdf.erro });
+    const competencia = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.body?.competencia || '')) ? req.body.competencia : undefined;
+    const modelos = req.app.get('geminiModelos');
+    const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+    try {
+        const r = await ai.models.generateContent({
+            model: modelo,
+            contents: [{ role: 'user', parts: [{ text: montarPromptHolerites({ competencia }) }, { inlineData: { mimeType: 'application/pdf', data: pdf.base64 } }] }],
+            config: { responseMimeType: 'application/json', responseSchema: SCHEMA_HOLERITES, temperature: 0, maxOutputTokens: 65536 },
+        });
+        if (r?.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+            return res.status(422).json({ error: 'O PDF tem holerites demais para uma leitura só. Divida em partes de até uns 30 funcionários.' });
+        }
+        const lido = lerRespostaHolerites(r?.text ?? '', { competencia });
+        // LGPD: o log não leva nomes nem valores.
+        console.info(`[dp-integration/holerites/extrair] ${pdf.bytes} bytes, ${lido.holerites.length} holerite(s), modelo ${modelo || 'padrão'}`);
+        return res.json({ ok: true, modelo: modelo || null, ...lido });
+    } catch (err) {
+        console.error('[dp-integration/holerites/extrair]', err?.message);
+        return res.status(502).json({ error: err.message });
+    }
+});
 
 // Batch query — all DP-relevant data for a company in a single call.
 // POST /api/dp-integration/empresa-completo
