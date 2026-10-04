@@ -12,7 +12,7 @@
  * 3. AUSÊNCIA NUNCA VIRA APTIDÃO, e "cadastrado" nunca vira "assina".
  */
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { aptidaoDeAssinatura, montarCertificados, metadadoDoCertificado, titularDoSubject, acompanhamentoLegalPorCnpj, divergenciaComLegal } from '../sefaz-backend/cadastro-central-certificados';
+import { aptidaoDeAssinatura, montarCertificados, metadadoDoCertificado, titularDoSubject, acompanhamentoLegalPorCnpj, divergenciaComLegal, recortePorCnpjs } from '../sefaz-backend/cadastro-central-certificados';
 
 const AGORA = new Date('2026-08-07T12:00:00Z');
 const emDias = (d: number) => new Date(AGORA.getTime() + d * 86400000).toISOString();
@@ -274,6 +274,27 @@ describe('🤝 o cofre e o acompanhamento do Departamento Legal falam a mesma co
         const r = montarCertificados({ empresas: [{ id: 'e1', cnpj: '51227692000146' }], certificados: [cert()], agora: AGORA });
         expect(r.linhas[0]).not.toHaveProperty('legal');
         expect(r.resumo).not.toHaveProperty('renovadosSemUpload');
+    });
+
+    it('a última renovação é a REGISTRADA por último, mesmo com validade menor (correção)', () => {
+        const m = acompanhamentoLegalPorCnpj({ renovacoes: [
+            { cnpj: '51227692000146', dataAntiga: '2026-02-24', dataNova: '2027-12-31', criadoEm: new Date('2026-02-20T10:00:00Z') },
+            { cnpj: '51227692000146', dataAntiga: '2026-02-24', dataNova: '2027-02-24', criadoEm: new Date('2026-02-21T09:00:00Z') },
+        ] });
+        expect(m.get('51227692000146')!.ultimaRenovacao.dataNova).toBe('2027-02-24');
+    });
+
+    it('empresa inativa não gera aviso de upload pendente', () => {
+        const linha = { situacao: 'vencido', certificado: { validoAte: '2026-01-01T00:00:00Z' } };
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2027-01-01', empresaInativa: true })).toBeNull();
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2027-01-01', empresaInativa: false })).toBe('renovado-sem-upload');
+    });
+
+    it('recorte por CNPJ (a carteira de quem pergunta): só os válidos; vazio = tudo', () => {
+        expect([...recortePorCnpjs('51.227.692/0001-46, 11222333000181,123,')!]).toEqual(['51227692000146', '11222333000181']);
+        expect(recortePorCnpjs('')).toBeNull();
+        expect(recortePorCnpjs(undefined)).toBeNull();
+        expect(recortePorCnpjs('abc')).toBeNull();
     });
 
     it('o cruzamento com o Legal também não vaza a chave', () => {

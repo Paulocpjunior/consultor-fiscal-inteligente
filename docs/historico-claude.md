@@ -15612,3 +15612,12 @@ renovado sobe pelo app Legal, gravando no cofre do CFI (próxima etapa).
   - Rota declarada em `rotaTemChamada` (quem chama é o app Legalização).
   - Testes: `certRenovacaoLegal.test.ts` (8). Suíte inteira: 625 suítes,
     9174 testes passando.
+- **Revisão do PR #1372 (Codex), corrigida:**
+  - **P2:** a "última renovação" passa a ser a REGISTRADA por último
+    (`criadoEm`), não a de validade maior — uma correção lançada depois
+    pode ter validade menor.
+  - **P2:** `/certificados/:cnpj` agora diz quando o Legal não pôde ser
+    lido (`legalIndisponivel` + aviso), em vez de parecer "sem registro".
+  - **P2:** empresa inativa no Legal não gera "renovado sem upload".
+  - E, pela revisão do PR do DP: `/certificados?cnpjs=` recorta a resposta
+    à carteira de quem pergunta (`recortePorCnpjs`).

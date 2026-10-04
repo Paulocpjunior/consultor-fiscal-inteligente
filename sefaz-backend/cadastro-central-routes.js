@@ -51,7 +51,7 @@ import { fileURLToPath } from 'url';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
-import { montarCertificados, aptidaoDeAssinatura, acompanhamentoLegalPorCnpj, divergenciaComLegal } from './cadastro-central-certificados.js';
+import { montarCertificados, aptidaoDeAssinatura, acompanhamentoLegalPorCnpj, divergenciaComLegal, recortePorCnpjs } from './cadastro-central-certificados.js';
 import {
     montarUsuariosCadastro, normalizarUsuarioCadastro, acessoAoModulo, validarDepartamentos,
 } from './cadastro-central-departamentos.js';
@@ -404,7 +404,11 @@ async function lerAcompanhamentoLegal(db) {
 router.get('/certificados', autorizar, async (req, res) => {
     try {
         const db = getDb();
-        const [{ empresas }, certificados, legal] = await Promise.all([lerCadastro(db), lerCertificados(db), lerAcompanhamentoLegal(db)]);
+        const [{ empresas: todas }, certificados, legal] = await Promise.all([lerCadastro(db), lerCertificados(db), lerAcompanhamentoLegal(db)]);
+        // `?cnpjs=` (lista separada por vírgula): o app irmão pede só a carteira de
+        // quem está logado — a resposta não traz empresa fora dela.
+        const recorte = recortePorCnpjs(req.query.cnpjs);
+        const empresas = recorte ? todas.filter((e) => recorte.has(soDigitos(e.cnpj))) : todas;
         const r = montarCertificados({ empresas, certificados, legal: legal ?? new Map() });
         if (!legal) r.avisos.push('O acompanhamento do Departamento Legal não pôde ser lido agora: vencimentos e renovações do Legal ficaram de fora desta resposta.');
         return res.json({ ok: true, ...r });
@@ -441,6 +445,9 @@ router.get('/certificados/:cnpj', autorizar, async (req, res) => {
             ...aptidao,
             legal: doLegal,
             divergenciaLegal: divergenciaComLegal(aptidao, doLegal),
+            // Falha na leitura do Legal não pode parecer "sem registro no Legal".
+            legalIndisponivel: !legal,
+            ...(legal ? {} : { avisos: ['O acompanhamento do Departamento Legal não pôde ser lido agora: o cruzamento com o Legal ficou de fora desta resposta.'] }),
         });
     } catch (e) {
         console.error('[cadastro-central/certificados/cnpj]', e);

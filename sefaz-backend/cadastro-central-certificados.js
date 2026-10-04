@@ -223,14 +223,17 @@ export function acompanhamentoLegalPorCnpj({ vencimentos = [], renovacoes = [] }
             ultimaRenovacao: atual?.ultimaRenovacao ?? null,
         });
     }
+    // A ÚLTIMA renovação é a registrada por último (criadoEm) — uma correção
+    // lançada depois pode ter validade igual ou menor. Sem data de registro,
+    // desempata pela validade nova.
+    const ordem = (x) => `${x?.registradaEm || ''}|${x?.dataNova || ''}`;
     for (const r of renovacoes || []) {
         const cnpj = limparCnpj(r?.cnpj);
         const nova = dia(r?.dataNova);
         if (!cnpj || !nova) continue;
         const atual = porCnpj.get(cnpj) ?? { vencimentoInformado: null, tipoDetalhe: texto(r.tipoDetalhe), responsavel: null, empresaInativa: false, ultimaRenovacao: null };
-        if (!atual.ultimaRenovacao || atual.ultimaRenovacao.dataNova < nova) {
-            atual.ultimaRenovacao = { dataAntiga: dia(r.dataAntiga), dataNova: nova, registradaEm: iso(r.criadoEm) };
-        }
+        const candidata = { dataAntiga: dia(r.dataAntiga), dataNova: nova, registradaEm: iso(r.criadoEm) };
+        if (!atual.ultimaRenovacao || ordem(candidata) > ordem(atual.ultimaRenovacao)) atual.ultimaRenovacao = candidata;
         porCnpj.set(cnpj, atual);
     }
     return porCnpj;
@@ -246,11 +249,22 @@ export function acompanhamentoLegalPorCnpj({ vencimentos = [], renovacoes = [] }
  */
 export function divergenciaComLegal(linha, legal) {
     if (!legal?.vencimentoInformado) return null;
+    // Empresa inativa não gera cobrança operacional (mesma regra dos alertas do Legal).
+    if (legal.empresaInativa) return null;
     const noCofre = dia(linha?.certificado?.validoAte);
     if (!noCofre) return linha?.situacao === 'apto-pela-raiz' ? null : 'renovado-sem-upload';
     if (legal.vencimentoInformado > noCofre) return 'renovado-sem-upload';
     if (legal.vencimentoInformado < noCofre) return 'legal-desatualizado';
     return null;
+}
+
+/**
+ * Recorte por CNPJ pedido pelo app irmão (`?cnpjs=` — a carteira de quem
+ * pergunta). Sem recorte (vazio/inválido), devolve tudo.
+ */
+export function recortePorCnpjs(valor) {
+    const lista = String(valor ?? '').split(',').map((c) => limparCnpj(c)).filter((c) => c && c.length === 14);
+    return lista.length ? new Set(lista) : null;
 }
 
 /**
