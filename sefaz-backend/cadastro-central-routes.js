@@ -51,7 +51,7 @@ import { fileURLToPath } from 'url';
 import { acharEmpresaPorCnpj, filiaisDaRaiz } from './empresa-por-cnpj.js';
 import { registrarMudancaPermissao } from './auditoria-permissoes.js';
 import { montarResponsaveis, responsavelDoCnpj } from './cadastro-central-responsaveis.js';
-import { montarCertificados, aptidaoDeAssinatura } from './cadastro-central-certificados.js';
+import { montarCertificados, aptidaoDeAssinatura, acompanhamentoLegalPorCnpj, divergenciaComLegal, recortePorCnpjs } from './cadastro-central-certificados.js';
 import {
     montarUsuariosCadastro, normalizarUsuarioCadastro, acessoAoModulo, validarDepartamentos,
 } from './cadastro-central-departamentos.js';
@@ -383,11 +383,35 @@ async function lerCertificados(db) {
     return snaps.map((s) => ({ empresaId: s.id, ...(s.data() || {}) }));
 }
 
+/**
+ * O acompanhamento do Departamento Legal (mesmo Firestore): vencimentos de
+ * certificados do Jotform e renovações registradas. Falha aqui NÃO derruba o
+ * panorama do cofre: devolve null e o aviso diz que o cruzamento ficou de fora.
+ */
+async function lerAcompanhamentoLegal(db) {
+    try {
+        const [venc, renov] = await Promise.all([
+            fetchAllDocs(db.collection('legalizacao_vencimentos').where('categoria', '==', 'certificado'), { label: 'cadastro-central/legal-vencimentos', maxDocs: 5000 }),
+            fetchAllDocs(db.collection('legalizacao_renovacoes'), { label: 'cadastro-central/legal-renovacoes', maxDocs: 5000 }),
+        ]);
+        return acompanhamentoLegalPorCnpj({ vencimentos: venc.map((s) => s.data() || {}), renovacoes: renov.map((s) => s.data() || {}) });
+    } catch (e) {
+        console.error('[cadastro-central/certificados] acompanhamento do Legal:', e.message);
+        return null;
+    }
+}
+
 router.get('/certificados', autorizar, async (req, res) => {
     try {
         const db = getDb();
-        const [{ empresas }, certificados] = await Promise.all([lerCadastro(db), lerCertificados(db)]);
-        return res.json({ ok: true, ...montarCertificados({ empresas, certificados }) });
+        const [{ empresas: todas }, certificados, legal] = await Promise.all([lerCadastro(db), lerCertificados(db), lerAcompanhamentoLegal(db)]);
+        // `?cnpjs=` (lista separada por vírgula): o app irmão pede só a carteira de
+        // quem está logado — a resposta não traz empresa fora dela.
+        const recorte = recortePorCnpjs(req.query.cnpjs);
+        const empresas = recorte ? todas.filter((e) => recorte.has(soDigitos(e.cnpj))) : todas;
+        const r = montarCertificados({ empresas, certificados, legal: legal ?? new Map() });
+        if (!legal) r.avisos.push('O acompanhamento do Departamento Legal não pôde ser lido agora: vencimentos e renovações do Legal ficaram de fora desta resposta.');
+        return res.json({ ok: true, ...r });
     } catch (e) {
         console.error('[cadastro-central/certificados]', e);
         return res.status(500).json({ ok: false, error: e.message });
@@ -412,10 +436,18 @@ router.get('/certificados/:cnpj', autorizar, async (req, res) => {
         }
         // Empresa cadastrada e SEM certificado responde 200 com o motivo, não
         // 404: ela existe, e "sem certificado" é a resposta, não a ausência dela.
+        const legal = await lerAcompanhamentoLegal(db);
+        const aptidao = aptidaoDeAssinatura({ cnpj, certificados });
+        const doLegal = legal?.get(aptidao.cnpj) ?? null;
         return res.json({
             ok: true,
             empresa: { cnpj: empresa.cnpj, nome: empresa.nome, regime: empresa.regime },
-            ...aptidaoDeAssinatura({ cnpj, certificados }),
+            ...aptidao,
+            legal: doLegal,
+            divergenciaLegal: divergenciaComLegal(aptidao, doLegal),
+            // Falha na leitura do Legal não pode parecer "sem registro no Legal".
+            legalIndisponivel: !legal,
+            ...(legal ? {} : { avisos: ['O acompanhamento do Departamento Legal não pôde ser lido agora: o cruzamento com o Legal ficou de fora desta resposta.'] }),
         });
     } catch (e) {
         console.error('[cadastro-central/certificados/cnpj]', e);

@@ -55,6 +55,7 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     '/esocial/download/eventos': 'túnel do DP/Folha (download de eventos do eSocial, tela no Consultor DP)',
     '/holerites/extrair': 'túnel do DP/Folha (leitura dos holerites do IOB pelo Gemini, tela Cálculo › Conferir com holerites no Consultor DP)',
     '/movimento-fiscal': 'túnel somente leitura do Consultor Contábil (CCI)',
+    '/upload-legal': 'app Legalização (mesmo projeto Firebase): renovação do certificado pela equipe do Legal, gravando no cofre do CFI',
 
     // ── Agente local cfi-a3 (captura por A3, fora deste repo) ───────────────
     '/empresas-a3': 'agente local cfi-a3',

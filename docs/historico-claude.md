@@ -15565,3 +15565,59 @@ onda final; o Bloco K nasceu).
   resolve escolhendo o dono, não gerando arquivo pro outro sistema; (3) a
   decisão de 05/08 (e-Fiscal = CONSULTA do histórico, operação migra) vale
   também pro Reinf.
+
+## Cofre de certificados único: túnel cruza o cofre com o Legal (04/10/2026)
+
+Paulo: *"nosso cofre dos certificados digitais, o módulo de folha de
+pagamento bem como os outros app devem ter acesso ao cofre dos certificados
+… todos poderão acompanhar seus vencimentos, prazos, renovações, assim
+quando um certificado de um determinado cliente for renovado ou vencido
+todos dentro do SaaS terão a mesma informação"*. Decisão dele: o .pfx
+renovado sobe pelo app Legal, gravando no cofre do CFI (próxima etapa).
+
+- O cofre de verdade é este (`empresas_certificados` + Storage cifrado). O
+  app Legalização só acompanha vencimentos do Jotform
+  (`legalizacao_vencimentos`) e registra renovações
+  (`legalizacao_renovacoes`); as duas fontes não se cruzavam.
+- `GET /api/admin/cadastro/certificados[/:cnpj]` agora traz, por linha:
+  - `legal`: vencimento que o Legal acompanha, tipo, responsável e a última
+    renovação registrada (`acompanhamentoLegalPorCnpj`, puro);
+  - `divergenciaLegal`: `renovado-sem-upload` (o Legal registrou vencimento
+    posterior ao do A1 do cofre — ou não há A1 — e o arquivo novo não
+    subiu) ou `legal-desatualizado` (o cofre tem A1 mais novo);
+  - resumo com `renovadosSemUpload` e `legalDesatualizado`, e aviso.
+- Ficam de fora: procuração, "não possui certificado" e linhas removidas
+  do Jotform; filial apta pela raiz não acusa falta de upload.
+- Falha ao ler o Legal não derruba o panorama do cofre: a resposta sai sem
+  o cruzamento e diz isso num aviso.
+- Continua saindo só METADADO: o teste tranca que o cruzamento não vaza
+  arquivo nem senha. 7 testes novos (28 no arquivo; 95 no cadastro central).
+- **Renovação pelo app Legal (mesmo PR):** `POST /api/admin/cert-empresa/upload-legal`
+  (multipart: cert, password, cnpj). Decisões do Paulo: sobe a **equipe do
+  Legal** (admin ou departamento `legalizacao`) e a validade acompanhada
+  passa a vir **do próprio arquivo**.
+  - Antes de gravar (`cert-renovacao-legal.js`, puro): o certificado tem que
+    ser do CNPJ pedido (e-CNPJ de outro cliente é recusado, dizendo de quem
+    é), estar válido e não ser o A1 do escritório.
+  - Grava no cofre (`uploadCertEmpresa`) e, no Legal: `dataVencimentoCofre`
+    nas linhas de certificado do CNPJ (o sync do Jotform é por merge e não
+    apaga) + registro em `legalizacao_renovacoes` (origem `upload-cofre`,
+    id no formato do sync). Falha no Legal não desfaz o upload; vai no
+    retorno. Vale a data mais tarde entre a digitada e a do arquivo, também
+    no túnel (`vencimentoEfetivo`).
+  - Empresa achada por `acharEmpresaCadastrada` (CNPJ nas duas formas) e
+    linhas do Legal filtradas em memória (regra: nada de `where(cnpj, ==)`).
+  - `legalizacao_vencimentos` e `legalizacao_renovacoes` entraram no
+    `catalogo-banco.js` (faltavam desde o primeiro commit deste PR).
+  - Rota declarada em `rotaTemChamada` (quem chama é o app Legalização).
+  - Testes: `certRenovacaoLegal.test.ts` (8). Suíte inteira: 625 suítes,
+    9174 testes passando.
+- **Revisão do PR #1372 (Codex), corrigida:**
+  - **P2:** a "última renovação" passa a ser a REGISTRADA por último
+    (`criadoEm`), não a de validade maior — uma correção lançada depois
+    pode ter validade menor.
+  - **P2:** `/certificados/:cnpj` agora diz quando o Legal não pôde ser
+    lido (`legalIndisponivel` + aviso), em vez de parecer "sem registro".
+  - **P2:** empresa inativa no Legal não gera "renovado sem upload".
+  - E, pela revisão do PR do DP: `/certificados?cnpjs=` recorta a resposta
+    à carteira de quem pergunta (`recortePorCnpjs`).

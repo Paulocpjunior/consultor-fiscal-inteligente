@@ -131,6 +131,11 @@ function extrairMetadadosCert(pfxBuffer, password) {
 
 // ── API publica ──────────────────────────────────────────────────────────
 
+/** Lê só os metadados do .pfx (valida a senha), sem gravar nada. */
+export function lerMetadadosPfx(pfxBuffer, password) {
+    return extrairMetadadosCert(pfxBuffer, password);
+}
+
 /**
  * Upload de um cert pra uma empresa.
  * 1. Valida o .pfx + senha (extrai metadados)

@@ -32,6 +32,8 @@ export const CATALOGO_BANCO = [
     { colecao: 'empresas_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificados A1/A3 por empresa (metadados)' },
     { colecao: 'sefaz_certificados', grupo: 'Cadastro & Acesso', funcionalidade: 'Certificado do escritório (config)' },
     { colecao: 'sefaz_certificados_historico', grupo: 'Cadastro & Acesso', funcionalidade: 'Histórico de trocas do certificado do escritório' },
+    { colecao: 'legalizacao_vencimentos', grupo: 'Cadastro & Acesso', funcionalidade: 'Vencimentos de certidões e certificados acompanhados pelo app Legalização (espelho do Jotform; dono: app Legalização). O CFI lê os de certificado para cruzar com o cofre no túnel e grava `dataVencimentoCofre` quando o Legal sobe o A1 renovado (04/10/2026)' },
+    { colecao: 'legalizacao_renovacoes', grupo: 'Cadastro & Acesso', funcionalidade: 'Renovações de certificado registradas (dono: app Legalização; o CFI também registra a renovação feita pelo upload do Legal no cofre, origem "upload-cofre")' },
     { colecao: 'notificacoes', grupo: 'Cadastro & Acesso', funcionalidade: 'Notificações in-app (sino)' },
 
     // ── Captura NF-e (DistDFe) ─────────────────────────────────────────────

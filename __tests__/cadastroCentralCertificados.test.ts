@@ -12,7 +12,7 @@
  * 3. AUSÊNCIA NUNCA VIRA APTIDÃO, e "cadastrado" nunca vira "assina".
  */
 // @ts-expect-error — módulo .js puro (sem tipos)
-import { aptidaoDeAssinatura, montarCertificados, metadadoDoCertificado, titularDoSubject } from '../sefaz-backend/cadastro-central-certificados';
+import { aptidaoDeAssinatura, montarCertificados, metadadoDoCertificado, titularDoSubject, acompanhamentoLegalPorCnpj, divergenciaComLegal, recortePorCnpjs } from '../sefaz-backend/cadastro-central-certificados';
 
 const AGORA = new Date('2026-08-07T12:00:00Z');
 const emDias = (d: number) => new Date(AGORA.getTime() + d * 86400000).toISOString();
@@ -223,5 +223,84 @@ describe('o panorama do cadastro', () => {
 
     it('cadastro vazio é falha de leitura, não escritório sem clientes', () => {
         expect(montarCertificados().avisos.join(' ')).toMatch(/falha de leitura/);
+    });
+});
+
+describe('🤝 o cofre e o acompanhamento do Departamento Legal falam a mesma coisa (04/10)', () => {
+    const venc = (over: any = {}) => ({ categoria: 'certificado', cnpj: '51.227.692/0001-46', dataVencimento: '2027-02-24', tipoDetalhe: '2- CERTIFICADO E-CNPJ MOD.A1', responsavel: 'Equipe Legal', ...over });
+
+    it('por CNPJ: só certificado vigente; procuração, "não possui" e removido ficam de fora', () => {
+        const m = acompanhamentoLegalPorCnpj({ vencimentos: [
+            venc(),
+            venc({ dataVencimento: '2026-01-10' }),                       // linha antiga do mesmo CNPJ
+            venc({ cnpj: '11222333000181', categoria: 'procuracao' }),
+            venc({ cnpj: '11444777000161', semDocumento: true }),
+            venc({ cnpj: '33000167000101', removidoDoJotform: true }),
+        ] });
+        expect([...m.keys()]).toEqual(['51227692000146']);
+        expect(m.get('51227692000146')).toMatchObject({ vencimentoInformado: '2027-02-24', tipoDetalhe: '2- CERTIFICADO E-CNPJ MOD.A1' });
+    });
+
+    it('a última renovação registrada vai junto (a mais recente)', () => {
+        const m = acompanhamentoLegalPorCnpj({ vencimentos: [venc()], renovacoes: [
+            { cnpj: '51227692000146', dataAntiga: '2025-02-24', dataNova: '2026-02-24', criadoEm: new Date('2025-02-20T10:00:00Z') },
+            { cnpj: '51227692000146', dataAntiga: '2026-02-24', dataNova: '2027-02-24', criadoEm: { toDate: () => new Date('2026-02-20T10:00:00Z') } },
+        ] });
+        expect(m.get('51227692000146')!.ultimaRenovacao).toEqual({ dataAntiga: '2026-02-24', dataNova: '2027-02-24', registradaEm: '2026-02-20T10:00:00.000Z' });
+    });
+
+    it('renovado no Legal e o A1 novo não subiu: o painel avisa', () => {
+        const legal = acompanhamentoLegalPorCnpj({ vencimentos: [venc({ dataVencimento: emDias(565).slice(0, 10) })] });
+        const r = montarCertificados({ empresas: [{ id: 'e1', cnpj: '51227692000146', nome: 'CLINIPAR' }], certificados: [cert()], legal, agora: AGORA });
+        expect(r.linhas[0].divergenciaLegal).toBe('renovado-sem-upload');
+        expect(r.linhas[0].legal.vencimentoInformado).toBe(emDias(565).slice(0, 10));
+        expect(r.resumo.renovadosSemUpload).toBe(1);
+        expect(r.avisos.join(' ')).toMatch(/SEM o A1 novo no cofre/);
+    });
+
+    it('mesma data: nada a avisar; cofre mais novo: o Legal está desatualizado', () => {
+        const linha = { situacao: 'apto-proprio', certificado: { validoAte: '2027-02-24T23:59:59.000Z' } };
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2027-02-24' })).toBeNull();
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2026-02-24' })).toBe('legal-desatualizado');
+        expect(divergenciaComLegal(linha, null)).toBeNull();
+    });
+
+    it('sem A1 no cofre e vencimento no Legal: falta subir; filial pela raiz não precisa', () => {
+        expect(divergenciaComLegal({ situacao: 'sem-certificado', certificado: null }, { vencimentoInformado: '2027-01-01' })).toBe('renovado-sem-upload');
+        expect(divergenciaComLegal({ situacao: 'apto-pela-raiz', certificado: null }, { vencimentoInformado: '2027-01-01' })).toBeNull();
+    });
+
+    it('sem o acompanhamento (legal ausente) a resposta continua a mesma de antes', () => {
+        const r = montarCertificados({ empresas: [{ id: 'e1', cnpj: '51227692000146' }], certificados: [cert()], agora: AGORA });
+        expect(r.linhas[0]).not.toHaveProperty('legal');
+        expect(r.resumo).not.toHaveProperty('renovadosSemUpload');
+    });
+
+    it('a última renovação é a REGISTRADA por último, mesmo com validade menor (correção)', () => {
+        const m = acompanhamentoLegalPorCnpj({ renovacoes: [
+            { cnpj: '51227692000146', dataAntiga: '2026-02-24', dataNova: '2027-12-31', criadoEm: new Date('2026-02-20T10:00:00Z') },
+            { cnpj: '51227692000146', dataAntiga: '2026-02-24', dataNova: '2027-02-24', criadoEm: new Date('2026-02-21T09:00:00Z') },
+        ] });
+        expect(m.get('51227692000146')!.ultimaRenovacao.dataNova).toBe('2027-02-24');
+    });
+
+    it('empresa inativa não gera aviso de upload pendente', () => {
+        const linha = { situacao: 'vencido', certificado: { validoAte: '2026-01-01T00:00:00Z' } };
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2027-01-01', empresaInativa: true })).toBeNull();
+        expect(divergenciaComLegal(linha, { vencimentoInformado: '2027-01-01', empresaInativa: false })).toBe('renovado-sem-upload');
+    });
+
+    it('recorte por CNPJ (a carteira de quem pergunta): só os válidos; vazio = tudo', () => {
+        expect([...recortePorCnpjs('51.227.692/0001-46, 11222333000181,123,')!]).toEqual(['51227692000146', '11222333000181']);
+        expect(recortePorCnpjs('')).toBeNull();
+        expect(recortePorCnpjs(undefined)).toBeNull();
+        expect(recortePorCnpjs('abc')).toBeNull();
+    });
+
+    it('o cruzamento com o Legal também não vaza a chave', () => {
+        const legal = acompanhamentoLegalPorCnpj({ vencimentos: [venc()] });
+        const json = JSON.stringify(montarCertificados({ empresas: [{ id: 'e1', cnpj: '51227692000146' }], certificados: [cert()], legal, agora: AGORA }));
+        expect(json).not.toContain('passwordEnc');
+        expect(json).not.toContain('certs/e1.pfx.enc');
     });
 });

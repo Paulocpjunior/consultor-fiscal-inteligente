@@ -41,6 +41,7 @@
 
 import { faixaDeVencimento, diasAteVencimento } from './cert-vencimento-helper.js';
 import { cnpjBase, limparCnpj } from './cert-base-helper.js';
+import { vencimentoEfetivo } from './cert-renovacao-legal.js';
 
 const texto = (v) => {
     const t = String(v ?? '').trim();
@@ -175,16 +176,110 @@ export function aptidaoDeAssinatura({ cnpj, certificados = [], agora = new Date(
     };
 }
 
+// ═══ O ACOMPANHAMENTO DO DEPARTAMENTO LEGAL (Paulo, 04/10) ═════════════════
+//
+// *"Todos poderão acompanhar seus vencimentos, prazos, renovações, assim
+// quando um certificado de um determinado cliente for renovado ou vencido
+// todos dentro do SaaS terão a mesma informação."*
+//
+// O app Legalização acompanha o vencimento informado pela equipe (Jotform →
+// `legalizacao_vencimentos`, categoria 'certificado') e registra cada
+// renovação (`legalizacao_renovacoes`). O cofre (`empresas_certificados`) tem
+// o arquivo de verdade. As duas fontes não se cruzavam: aqui se cruzam por
+// CNPJ, e a DIVERGÊNCIA vira aviso — o caso que importa é "o Legal já
+// registrou a renovação, mas o A1 novo ainda não subiu ao cofre": o sistema
+// continua assinando com o velho até ele vencer.
+
+const dia = (v) => (texto(v) ? String(v).slice(0, 10) : null);
+const iso = (v) => {
+    if (!v) return null;
+    if (typeof v?.toDate === 'function') return v.toDate().toISOString();
+    if (v instanceof Date) return v.toISOString();
+    return texto(v);
+};
+
+/**
+ * Por CNPJ: o vencimento que o Legal acompanha e a última renovação
+ * registrada. Linhas removidas do Jotform, "não possui certificado" e
+ * procurações ficam de fora. Havendo mais de uma linha do mesmo CNPJ, vale a
+ * de vencimento mais tarde (é a vigente).
+ */
+export function acompanhamentoLegalPorCnpj({ vencimentos = [], renovacoes = [] } = {}) {
+    const porCnpj = new Map();
+    for (const v of vencimentos || []) {
+        if (!v || v.categoria !== 'certificado' || v.removidoDoJotform || v.semDocumento) continue;
+        const cnpj = limparCnpj(v.cnpj);
+        // Vale a data mais tarde: a digitada (Jotform) ou a lida do arquivo no
+        // upload pelo Legal (`dataVencimentoCofre`, cert-renovacao-legal.js).
+        const venc = vencimentoEfetivo(v);
+        if (!cnpj || !venc) continue;
+        const atual = porCnpj.get(cnpj);
+        if (atual && atual.vencimentoInformado >= venc) continue;
+        porCnpj.set(cnpj, {
+            vencimentoInformado: venc,
+            tipoDetalhe: texto(v.tipoDetalhe),
+            responsavel: texto(v.responsavel),
+            empresaInativa: !!v.empresaInativa,
+            ultimaRenovacao: atual?.ultimaRenovacao ?? null,
+        });
+    }
+    // A ÚLTIMA renovação é a registrada por último (criadoEm) — uma correção
+    // lançada depois pode ter validade igual ou menor. Sem data de registro,
+    // desempata pela validade nova.
+    const ordem = (x) => `${x?.registradaEm || ''}|${x?.dataNova || ''}`;
+    for (const r of renovacoes || []) {
+        const cnpj = limparCnpj(r?.cnpj);
+        const nova = dia(r?.dataNova);
+        if (!cnpj || !nova) continue;
+        const atual = porCnpj.get(cnpj) ?? { vencimentoInformado: null, tipoDetalhe: texto(r.tipoDetalhe), responsavel: null, empresaInativa: false, ultimaRenovacao: null };
+        const candidata = { dataAntiga: dia(r.dataAntiga), dataNova: nova, registradaEm: iso(r.criadoEm) };
+        if (!atual.ultimaRenovacao || ordem(candidata) > ordem(atual.ultimaRenovacao)) atual.ultimaRenovacao = candidata;
+        porCnpj.set(cnpj, atual);
+    }
+    return porCnpj;
+}
+
+/**
+ * O cofre e o Legal dizem a mesma coisa? null = sim (ou não há o que comparar).
+ * - 'renovado-sem-upload': o Legal acompanha vencimento POSTERIOR ao do A1 do
+ *   cofre — renovaram, mas o arquivo novo não subiu;
+ *   (inclui o caso sem certificado no cofre e com vencimento no Legal)
+ * - 'legal-desatualizado': o cofre tem A1 que vence DEPOIS do que o Legal
+ *   acompanha — subiram o novo, falta atualizar o acompanhamento.
+ */
+export function divergenciaComLegal(linha, legal) {
+    if (!legal?.vencimentoInformado) return null;
+    // Empresa inativa não gera cobrança operacional (mesma regra dos alertas do Legal).
+    if (legal.empresaInativa) return null;
+    const noCofre = dia(linha?.certificado?.validoAte);
+    if (!noCofre) return linha?.situacao === 'apto-pela-raiz' ? null : 'renovado-sem-upload';
+    if (legal.vencimentoInformado > noCofre) return 'renovado-sem-upload';
+    if (legal.vencimentoInformado < noCofre) return 'legal-desatualizado';
+    return null;
+}
+
+/**
+ * Recorte por CNPJ pedido pelo app irmão (`?cnpjs=` — a carteira de quem
+ * pergunta). Sem recorte (vazio/inválido), devolve tudo.
+ */
+export function recortePorCnpjs(valor) {
+    const lista = String(valor ?? '').split(',').map((c) => limparCnpj(c)).filter((c) => c && c.length === 14);
+    return lista.length ? new Set(lista) : null;
+}
+
 /**
  * O panorama de todo o cadastro — quem pode transmitir hoje e quem vai parar.
  *
  * Empresa SEM certificado NÃO some: é ela que faz o outro app achar que a
  * carteira inteira está apta. Mesma regra da fase 2.
  */
-export function montarCertificados({ empresas = [], certificados = [], agora = new Date() } = {}) {
+export function montarCertificados({ empresas = [], certificados = [], legal = null, agora = new Date() } = {}) {
     const linhas = empresas.map((e) => {
         const a = aptidaoDeAssinatura({ cnpj: e.cnpj, certificados, agora });
-        return { ...a, empresaId: e.id || null, nome: e.nome || null, regime: e.regime || null };
+        const linha = { ...a, empresaId: e.id || null, nome: e.nome || null, regime: e.regime || null };
+        if (!legal) return linha;
+        const doLegal = legal.get(a.cnpj) ?? null;
+        return { ...linha, legal: doLegal, divergenciaLegal: divergenciaComLegal(linha, doLegal) };
     });
 
     const conta = (s) => linhas.filter((l) => l.situacao === s).length;
@@ -201,6 +296,10 @@ export function montarCertificados({ empresas = [], certificados = [], agora = n
             a3: conta('a3-nao-assina-em-nuvem'),
             cadastroIncompleto: conta('cadastro-incompleto'),
             vencendoEm30Dias: vencendo,
+            ...(legal ? {
+                renovadosSemUpload: linhas.filter((l) => l.divergenciaLegal === 'renovado-sem-upload').length,
+                legalDesatualizado: linhas.filter((l) => l.divergenciaLegal === 'legal-desatualizado').length,
+            } : {}),
         },
         avisos: avisosDosCertificados({ linhas, vencendo, conta }),
     };
@@ -226,6 +325,11 @@ function avisosDosCertificados({ linhas, vencendo, conta }) {
     }
     if (conta('a3-nao-assina-em-nuvem')) {
         out.push(`${conta('a3-nao-assina-em-nuvem')} empresa(s) com A3: token físico não assina em servidor.`);
+    }
+    const semUpload = linhas.filter((l) => l.divergenciaLegal === 'renovado-sem-upload').length;
+    if (semUpload) {
+        out.push(`${semUpload} certificado(s) com renovação registrada no Legal e SEM o A1 novo no cofre — `
+            + 'o sistema segue assinando com o antigo até ele vencer. Suba o renovado no cofre.');
     }
     if (!linhas.length) {
         out.push('NENHUMA empresa no cadastro. Isso não é "escritório sem clientes": é falha de leitura.');
