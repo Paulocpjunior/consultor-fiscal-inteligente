@@ -38,6 +38,7 @@ const PERMITIDO: Record<string, string> = {
     // ── O DONO da régua: é aqui que o `tpNF` é lido e a direção decidida.
     'sefaz-backend/xml-metadata-helper.js': 'dono de direcaoEfetivaDoc/ehNotaPropriaDeEntrada',
     'sefaz-backend/participante-doc-helper.js': 'dono de ladoDaContraparte/ehEmissaoPropriaDoc — o laço da nota própria vem na linha seguinte',
+    'sefaz-backend/nfse-iss-retido-releitura.js': 'linha já calculada — a rota grava `direcao` com direcaoEfetivaDoc antes de chamar impactoDaCorrecao/agruparCorrecoes',
 
     // ── O ESCRITOR: ele DECIDE a direção na gravação; não há o que reler.
     'sefaz-backend/xml-importer.js': 'escritor — compara dono x dono no dedup da posse',

@@ -52,3 +52,61 @@ export function patchDaReleituraIssRetido(xml, agoraIso) {
         },
     };
 }
+
+// ── VARREDURA DA CARTEIRA (05/10, Paulo: "faz a varredura da carteira inteira") ──
+
+/**
+ * O que a correção de UMA nota muda no imposto — dito em português, porque
+ * é isso que a pessoa precisa para decidir se reconfere uma guia já enviada.
+ *
+ * @param {{direcao: string, antes: boolean, depois: boolean}} c
+ */
+export function impactoDaCorrecao({ direcao, antes, depois } = {}) {
+    if (antes === depois) return null;
+    if (direcao === 'saida') {
+        return antes
+            ? 'ISS próprio: a nota era abatida como "retido pelo tomador" sem ter sido — o A RECOLHER saiu MENOR.'
+            : 'ISS próprio: a nota retida não era abatida — o A RECOLHER saiu MAIOR.';
+    }
+    return antes
+        ? 'ISS retido como tomadora: a nota entrava na guia sem ter retenção — a guia do retido saiu MAIOR.'
+        : 'ISS retido como tomadora: a nota com retenção ficava FORA da guia — a guia do retido saiu MENOR (ou não saiu).';
+}
+
+/**
+ * Junta as notas corrigidas por empresa × competência — a unidade em que a
+ * guia sai e em que a pessoa reconfere.
+ *
+ * @param {Array<{empresaId, empresaNome, empresaCnpj, competencia, numero, direcao, antes, depois}>} corrigidas
+ */
+export function agruparCorrecoes(corrigidas) {
+    const grupos = new Map();
+    for (const c of corrigidas || []) {
+        const chave = `${c.empresaId || c.empresaCnpj || '?'}|${c.competencia || '?'}`;
+        if (!grupos.has(chave)) {
+            grupos.set(chave, {
+                empresaId: c.empresaId || null,
+                empresaNome: c.empresaNome || null,
+                empresaCnpj: c.empresaCnpj || null,
+                competencia: c.competencia || null,
+                saidas: 0,
+                entradas: 0,
+                impactos: [],
+                notas: [],
+            });
+        }
+        const g = grupos.get(chave);
+        if (c.direcao === 'saida') g.saidas += 1; else g.entradas += 1;
+        const imp = impactoDaCorrecao(c);
+        if (imp && !g.impactos.includes(imp)) g.impactos.push(imp);
+        g.notas.push({ numero: c.numero || null, direcao: c.direcao || null, antes: c.antes, depois: c.depois });
+    }
+    return [...grupos.values()].sort((a, b) =>
+        String(b.competencia).localeCompare(String(a.competencia))
+        || String(a.empresaNome || '').localeCompare(String(b.empresaNome || '')));
+}
+
+/** Envio de guia que é de ISS (próprio ou retido) — os que a correção pode ter deixado errados. */
+export function ehEnvioDeIss(envio) {
+    return /\bISS\b/i.test(String(envio?.tipo || ''));
+}

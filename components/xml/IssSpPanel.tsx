@@ -22,6 +22,7 @@ import { motivoDoBotaoDesligado, motivoDoBotaoRetidoDesligado, retidoAptoParaEnv
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { vencimentoDaGuia, type VencimentoDaGuia } from '../../services/prazosMunicipaisService';
 import { relerIssRetidoDoXml } from '../../services/nfseIssRetidoService';
+import VarreduraIssRetido from './VarreduraIssRetido';
 import { precisaReleituraIssRetido } from '../../sefaz-backend/nfse-iss-retido-releitura.js';
 
 interface SaudeCaptura {
@@ -325,6 +326,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
 
     return (
         <div className="space-y-4">
+            {/* 🔁 05/10: correção da retenção invertida na carteira inteira (admin). */}
+            {currentUser?.role === 'admin' && <VarreduraIssRetido />}
             {/* Visão de CARTEIRA: a apuração abaixo resolve o cliente que está
                 na mão; esta responde QUEM FALTA — a onda 1 são 157 empresas. */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
