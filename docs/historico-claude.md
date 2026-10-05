@@ -9,6 +9,18 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🔎 VARREDURA DA CARTEIRA — tpRetISSQN (05/10)** (Paulo: *"faz a varredura da
+  carteira inteira"*). Este ambiente não alcança a produção → BOTÃO admin
+  `VarreduraIssRetido` na aba ISS. Rotas (admin) em `nfse-iss-retido-routes.js`:
+  `POST /varrer {cursor}` (lote de 400 NFS-e em ordem de id, `tipo == 'NFSe'`,
+  pula lápide e nota já carimbada, relê do Storage, devolve antes × depois) e
+  `POST /envios-iss {pares}` (`impostos_enviados` de ISS por CNPJ ×
+  formasDaCompetencia). Puros: `impactoDaCorrecao`, `agruparCorrecoes`,
+  `ehEnvioDeIss`. A rota trocou `express` default por `Router` (o parser JSON é
+  global no server.js) — com o default o jest não carrega a rota. Trava:
+  `varreduraIssRetido.test.ts` (rota com Firestore/Storage simulados + XML real
+  5725). ⚠️ Resultado da varredura em produção: PENDENTE (o Paulo clica).
+
 - **🔁 tpRetISSQN INVERTIDO NO PADRÃO NACIONAL (05/10)** (Paulo, REALITY 0899
   tomados 09/2026: *"apenas 1 nf tem a retenção do ISS, porém na aba de ISS
   aparece como se todos fossem retidos"* — 9 notas, R$ 1.290,33). O leitor
