@@ -9,6 +9,23 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾 R-9015 LIDO + 📅 "ÚLTIMO DIA ÚTIL" NO CALENDÁRIO MUNICIPAL (05/10)** (Paulo
+  mandou o REINF-Recibo-5799223-…xml: *"emissão travada, segue o arquivo"*; e
+  HS PROJETOS/SP com as duas guias de ISS travadas em "calendário sem o dia do
+  vencimento" com SP "dia 10" na tela). (1) `efd-reinf-parser.js`: evtRetCons
+  → R-9015 CALIBRADO contra o arquivo real; `infoTotalCR/totApurMen`
+  (CRMen, vlrCRMenDCTF) → família pela MESMA régua da DCTFWeb
+  (`familiaPorReceita`, agora exportada); CSRF vai em `totais.csrf` (5952 sem
+  quebra); cdRetorno≠0 não soma; CR fora das famílias vira observação; 2
+  recibos = vale o dhProcess mais recente. Destrava o DARF dos retidos
+  (CSRF 208,09 = DCTFWeb). (2) `resolverPrazoMunicipal` DESCARTAVA
+  `ultimoDiaUtilDoMes` (os resolvedores federal/esfera levavam) → dia 0 →
+  "sem o dia"; agora leva, e o catálogo também. O motivo `sem-dia` nomeia o
+  cadastro (vigência, quem cadastrou, base) e a tela mostra a regra ao lado da
+  data. ⚠️ Não vi os dados de produção: se SP continuar travado, o aviso novo
+  diz QUAL cadastro de SP está valendo. Travas: `reinfR9015Consolidacao.test.ts`,
+  `vencimentoDaGuiaPeloCalendario.test.ts`, `prazosMunicipais.test.ts`.
+
 - **⬇️ DOWNLOAD DE EVENTOS DO eSOCIAL PELO TÚNEL** (04/10/2026, Paulo, no
   Consultor DP: *"pode seguir com download dos eventos do esocial"*). Duas rotas
   no túnel:

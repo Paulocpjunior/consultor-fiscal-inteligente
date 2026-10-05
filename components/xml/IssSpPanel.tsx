@@ -670,7 +670,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         {apuracao.notas.length} NFS-e emitida(s) · vencimento{' '}
                         <strong>{vencGuia?.achou ? vencGuia.dataBr : '—'}</strong>
                         {vencGuia?.achou
-                            ? <> (calendário{vencGuia.municipio ? ` de ${vencGuia.municipio}` : ''}{vencGuia.baseLegal ? ` · ${vencGuia.baseLegal}` : ''}; dia não útil antecipa).</>
+                            ? <> (calendário{vencGuia.municipio ? ` de ${vencGuia.municipio}` : ''}{vencGuia.regra ? ` · ${vencGuia.regra}` : ''}{vencGuia.baseLegal ? ` · ${vencGuia.baseLegal}` : ''}; dia não útil antecipa).</>
                             : vencGuia ? <span className="text-amber-700 dark:text-amber-400"> — {vencGuia.motivo}</span> : ' (consultando o calendário…)'}
                     </p>
 

@@ -31,7 +31,7 @@ export interface ReinfAnaliseResposta {
     eventos: Array<{
         ok: boolean; codigo: string | null; schemaToken: string; tipoRetorno: string;
         perApur: string; contribuinte: { tpInsc: string; nrInsc: string };
-        totais: { inssRetPrinc: number; inssRetAdic: number; irrf: number; csll: number; pis: number; cofins: number };
+        totais: { inssRetPrinc: number; inssRetAdic: number; irrf: number; csll: number; pis: number; cofins: number; csrf?: number };
         fechamento: { fechRet: string | null; responsavel?: { nome: string; cpf: string } | null } | null;
         validacao: { valido: boolean; erros: string[]; avisos: string[] };
         observacoes: string[];

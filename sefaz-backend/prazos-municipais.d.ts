@@ -10,9 +10,12 @@ export function validarPrazoMunicipal(p: any): { ok: boolean; erros: string[] };
 export function vigenteNaCompetencia(cadastro: any, competencia: string): boolean;
 
 export interface PrazoMunicipalResolvido {
+    id: string | null;
     codMunIBGE: string;
     obrigacao: string;
-    diaVencimento: number;
+    /** Regra "último dia útil do mês" — com ela, `diaVencimento` é null. */
+    ultimoDiaUtilDoMes: boolean;
+    diaVencimento: number | null;
     mesesApos: number;
     ajusteDiaNaoUtil: 'antecipa' | 'prorroga';
     baseLegal: string;

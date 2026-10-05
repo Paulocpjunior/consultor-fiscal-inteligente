@@ -26,7 +26,7 @@ export async function carregarCalendariosMunicipais(): Promise<any[]> {
 }
 
 export type VencimentoDaGuia =
-    | { achou: true; data: string; dataBr: string; baseLegal: string | null; municipio: string | null; ajuste: string }
+    | { achou: true; data: string; dataBr: string; baseLegal: string | null; municipio: string | null; ajuste: string; regra: string | null }
     | { achou: false; situacao?: string; motivo: string };
 
 /**
@@ -45,7 +45,7 @@ export async function vencimentoDaGuia(p: { empresaId: string; competencia: stri
         const j = await res.json().catch(() => ({}));
         if (!res.ok || !j?.ok) return { achou: false, motivo: `Não consegui consultar o calendário de vencimentos (${j?.erro || `HTTP ${res.status}`}).` };
         return j.achou
-            ? { achou: true, data: j.data, dataBr: j.dataBr, baseLegal: j.baseLegal ?? null, municipio: j.municipio ?? null, ajuste: j.ajuste || 'antecipa' }
+            ? { achou: true, data: j.data, dataBr: j.dataBr, baseLegal: j.baseLegal ?? null, municipio: j.municipio ?? null, ajuste: j.ajuste || 'antecipa', regra: j.regra ?? null }
             : { achou: false, situacao: j.situacao, motivo: j.motivo || 'Calendário do município não encontrado.' };
     } catch (e: any) {
         return { achou: false, motivo: `Não consegui consultar o calendário de vencimentos (${e?.message || e}).` };

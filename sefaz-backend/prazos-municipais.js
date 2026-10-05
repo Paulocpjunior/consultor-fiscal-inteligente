@@ -216,13 +216,20 @@ export function resolverPrazoMunicipal(cadastros, { codMunIBGE, obrigacao, compe
     // período). Cadastro sem início é o genérico e perde para o datado.
     const escolhido = [...vigentes].sort((a, b) =>
         String(b.vigenciaInicio || '').localeCompare(String(a.vigenciaInicio || '')))[0];
+    // 🚨 05/10: o "último dia útil" (cadastrável desde 22/09) era DESCARTADO
+    // aqui — o prazo saía com dia 0 e a guia acusava "calendário sem o dia do
+    // vencimento" com o calendário certo na tela. Os resolvedores federal e
+    // de esfera já levavam a marca; o municipal, não.
+    const ultimoDiaUtilDoMes = escolhido.ultimoDiaUtilDoMes === true;
 
     return {
         achou: true,
         prazo: {
+            id: escolhido.id || null,
             codMunIBGE: mun,
             obrigacao: obr,
-            diaVencimento: Number(escolhido.diaVencimento),
+            ultimoDiaUtilDoMes,
+            diaVencimento: ultimoDiaUtilDoMes ? null : Number(escolhido.diaVencimento),
             mesesApos: Number.isFinite(Number(escolhido.mesesApos)) ? Number(escolhido.mesesApos) : 1,
             // Política do escritório (Paulo, 11/08): SEMPRE ANTECIPA. Pagar no
             // dia útil anterior nunca gera multa; o inverso, sim.

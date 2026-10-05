@@ -232,6 +232,15 @@ describe('o cadastro do município transforma pendência em obrigação com DATA
         expect(m.propostas.some((r: any) => r.obrigacao === 'ISS')).toBe(false);
     });
 
+    it('🚨 calendário municipal "último dia útil" também dá vencimento na tarefa (05/10)', () => {
+        // O resolvedor municipal descartava a marca e a tarefa nascia sem data.
+        const m = lucroEm(SP, [cad({ diaVencimento: null, ultimoDiaUtilDoMes: true })]);
+        const iss = m.obrigacoes.find((r: any) => r.obrigacao === 'ISS');
+        expect(iss?.vencimento).toBeInstanceOf(Date);
+        // 06/2026 → último dia útil de julho/2026: sexta, 31/07.
+        expect([iss.vencimento.getFullYear(), iss.vencimento.getMonth() + 1, iss.vencimento.getDate()]).toEqual([2026, 7, 31]);
+    });
+
     it('🚨 com calendário cadastrado, o ISS vira obrigação COM VENCIMENTO', () => {
         const m = lucroEm(SP, [cad()]);
         const iss = m.obrigacoes.find((r: any) => r.obrigacao === 'ISS');

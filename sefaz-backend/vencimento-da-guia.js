@@ -46,7 +46,21 @@ export function vencimentoMunicipalDaGuia({ cadastros, codMunIBGE, competencia, 
     }
     const d = calcularVencimento(`${m[2]}/${m[1]}`, r.prazo);
     if (!d) {
-        return { achou: false, situacao: 'sem-dia', motivo: `O calendário de ${obrigacao} deste município está sem o dia do vencimento — corrija o cadastro.` };
+        // QUAL calendário: com mais de um cadastro da cidade, vale o de
+        // vigência mais recente — e é ESSE que precisa de conserto. Sem o nome
+        // dele, a pessoa olha o cadastro certo e não acha o defeito (05/10).
+        const p = r.prazo;
+        const qual = [
+            p.vigenciaInicio ? `vigente desde ${p.vigenciaInicio}` : 'sem início de vigência',
+            p.cadastradoPorEmail ? `cadastrado por ${p.cadastradoPorEmail}` : null,
+            p.baseLegal ? `base: ${p.baseLegal}` : null,
+        ].filter(Boolean).join(', ');
+        return {
+            achou: false,
+            situacao: 'sem-dia',
+            motivo: `O calendário de ${obrigacao} de ${p.municipioNome || 'este município'} que vale em ${competencia} `
+                + `(${qual}) está sem o dia do vencimento — corrija ou desative esse cadastro em Configurações do Admin → Prazos.`,
+        };
     }
     const data = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     return {
@@ -56,5 +70,7 @@ export function vencimentoMunicipalDaGuia({ cadastros, codMunIBGE, competencia, 
         baseLegal: r.prazo.baseLegal || null,
         municipio: r.prazo.municipioNome || null,
         ajuste: r.prazo.ajusteDiaNaoUtil || 'antecipa',
+        // A regra vai à tela ao lado da data: calendário errado fica VISÍVEL.
+        regra: r.prazo.ultimoDiaUtilDoMes ? 'último dia útil do mês' : `dia ${r.prazo.diaVencimento}`,
     };
 }

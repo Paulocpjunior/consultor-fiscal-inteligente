@@ -22,6 +22,9 @@
 
 import { DOMParser } from '@xmldom/xmldom';
 import { validarXmlSeguro, XmlInseguroError } from './xml-seguranca.js';
+// A MESMA régua código de receita → família do lado DCTFWeb: o R-9015 fala em
+// código de receita, e conferir com outra tabela seria cruzar réguas.
+import { familiaPorReceita } from './dctfweb-retencao-normalizer.js';
 
 // Token do schema (segmento apos /schemas/ na URI do namespace) -> codigo Reinf.
 // So os que temos confianca. Verificados contra arquivo real marcados com ✓.
@@ -38,12 +41,15 @@ const SCHEMA_CODIGO = {
     evtFechamento: 'R-2099',
     evtTotalContrib: 'R-5001',
     evtTotal: 'R-5011',
+    // ✓ R-9015: conferido contra arquivo REAL (05/10, recibo 5799223-09-4099-
+    // 2609-5799223, perApur 2026-09, CSRF 595207 = R$ 208,09).
+    evtRetCons: 'R-9015',
 };
 
 // Eventos cuja extracao financeira foi calibrada contra arquivo real.
 // R-4010 entra CALIBRADO porque a forma vem do gerador homologado, campo a
 // campo (evtRetPF > ideEstab > ideBenef > idePgto > infoPgto > vlrIR).
-const CALIBRADOS = new Set(['R-2010', 'R-4099', 'R-4010']);
+const CALIBRADOS = new Set(['R-2010', 'R-4099', 'R-4010', 'R-9015']);
 
 // ── helpers de DOM (namespace-agnosticos) ──────────────────────────────────
 function localName(node) {
@@ -84,7 +90,9 @@ const r2 = (n) => Math.round(n * 100) / 100;
 const soDigitos = (v) => String(v == null ? '' : v).replace(/\D/g, '');
 
 function totaisZerados() {
-    return { inssRetPrinc: 0, inssRetAdic: 0, baseRet: 0, bruto: 0, irrf: 0, csll: 0, pis: 0, cofins: 0 };
+    // `csrf` = o código 5952 (CSLL+PIS+COFINS num só), como o R-9015 e a
+    // DCTFWeb o informam — sem a quebra pelas três, que o arquivo não traz.
+    return { inssRetPrinc: 0, inssRetAdic: 0, baseRet: 0, bruto: 0, irrf: 0, csll: 0, pis: 0, cofins: 0, csrf: 0 };
 }
 
 // ── deteccao do evento ──────────────────────────────────────────────────────
@@ -249,6 +257,59 @@ function extrairFechamento(evento) {
     };
 }
 
+/**
+ * R-9015 (evtRetCons) — o RECIBO DE CONSOLIDAÇÃO da série R-4000 que a Receita
+ * devolve depois do R-4099: o total por CÓDIGO DE RECEITA que foi para a
+ * DCTFWeb. É o totalizador da série R-4000 (o par do R-5011 na série R-2000).
+ *
+ * Forma conferida contra arquivo REAL (05/10):
+ *   evtRetCons > ideEvento(perApur) > ideContri(nrInsc)
+ *              > ideRecRetorno > ideStatus(cdRetorno, descRetorno)
+ *              > infoRecEv(nrRecArqBase, dhProcess, tpEv, fechRet)
+ *              > infoCR_CNR(indExistInfo, identEscritDCTF,
+ *                           totApurMen*(CRMen, vlrCRMenInf, vlrCRMenDCTF, natRend))
+ *              > infoTotalCR > totApurMen*(CRMen, vlrCRMenDCTF)
+ *
+ * O valor que conta é o `vlrCRMenDCTF` do `infoTotalCR` — o que FOI para a
+ * DCTFWeb. Sem `infoTotalCR`, vale a soma do `infoCR_CNR`. Código de receita
+ * fora das famílias conferidas NÃO some: vai em `foraDasFamilias`.
+ * Retorno com cdRetorno ≠ 0 não é consolidação: nada é somado, e é dito.
+ */
+function extrairR9015(evento) {
+    const totais = totaisZerados();
+    const status = deepFirst(evento, 'ideStatus');
+    const cdRetorno = status ? textOf(status, 'cdRetorno') : '';
+    const infoRec = deepFirst(evento, 'infoRecEv');
+    const consolidacao = {
+        cdRetorno,
+        descRetorno: status ? textOf(status, 'descRetorno') : '',
+        nrRecArqBase: infoRec ? textOf(infoRec, 'nrRecArqBase') : '',
+        dhProcess: infoRec ? textOf(infoRec, 'dhProcess') : '',
+        tpEv: infoRec ? textOf(infoRec, 'tpEv') : '',
+        fechRet: infoRec ? textOf(infoRec, 'fechRet') : '',
+        porCodigo: [],
+        foraDasFamilias: [],
+    };
+    if (cdRetorno !== '0') return { totais, consolidacao, sucesso: false };
+
+    const linhas = (bloco) => (bloco ? childrenByTag(bloco, 'totApurMen') : []).map((t) => ({
+        codigo: soDigitos(textOf(t, 'CRMen')),
+        valor: r2(num(textOf(t, 'vlrCRMenDCTF'))),
+        valorInformado: textOf(t, 'vlrCRMenInf') ? r2(num(textOf(t, 'vlrCRMenInf'))) : null,
+        natRend: textOf(t, 'natRend') || null,
+    }));
+    const total = linhas(deepFirst(evento, 'infoTotalCR'));
+    const porCodigo = total.length ? total : linhas(deepFirst(evento, 'infoCR_CNR'));
+    consolidacao.porCodigo = porCodigo;
+    for (const l of porCodigo) {
+        const familia = familiaPorReceita(l.codigo);
+        if (familia === 'IRRF') totais.irrf = r2(totais.irrf + l.valor);
+        else if (familia === 'CSRF') totais.csrf = r2(totais.csrf + l.valor);
+        else consolidacao.foraDasFamilias.push(l);
+    }
+    return { totais, consolidacao, sucesso: true };
+}
+
 // ── API publica ─────────────────────────────────────────────────────────────
 
 /**
@@ -305,6 +366,7 @@ export function parseEventoReinf(xml) {
     let retencoes = [];
     let totais = totaisZerados();
     let fechamento = null;
+    let consolidacaoR9015 = null;
     const calibrado = CALIBRADOS.has(codigo);
 
     if (codigo === 'R-2010') {
@@ -323,6 +385,19 @@ export function parseEventoReinf(xml) {
     } else if (codigo === 'R-4099' || codigo === 'R-2099') {
         tipoRetorno = 'fechamento';
         fechamento = extrairFechamento(evento);
+    } else if (codigo === 'R-9015') {
+        tipoRetorno = 'consolidacao';
+        const r = extrairR9015(evento);
+        totais = r.totais;
+        consolidacaoR9015 = r.consolidacao;
+        if (!r.sucesso) {
+            observacoes.push(`R-9015 com retorno ${r.consolidacao.cdRetorno || '?'} (${r.consolidacao.descRetorno || 'sem descrição'}) — não é consolidação aceita; nada foi somado.`);
+        } else if (!r.consolidacao.porCodigo.length) {
+            observacoes.push('R-9015 sem nenhum totApurMen legível — nada foi somado (o zero aqui não é resposta).');
+        }
+        for (const l of r.consolidacao.foraDasFamilias) {
+            observacoes.push(`R-9015: código de receita ${l.codigo} (R$ ${l.valor.toFixed(2)}) fora das famílias conferidas (INSS/IRRF/CSRF) — não entrou na conferência.`);
+        }
     } else if (codigo) {
         // Evento reconhecido mas extracao financeira nao calibrada contra real.
         tipoRetorno = (codigo.startsWith('R-50')) ? 'fechamento' : 'retencao';
@@ -341,6 +416,7 @@ export function parseEventoReinf(xml) {
         retencoes,
         totais,
         fechamento,
+        consolidacaoR9015,
         observacoes,
     };
 
@@ -349,7 +425,7 @@ export function parseEventoReinf(xml) {
             ok: false, codigo: null, schemaToken: '', tipoRetorno: 'desconhecido', calibrado: false,
             id: null, ideEvento: { perApur: '', indRetif: '', tpAmb: '', procEmi: '', verProc: '' },
             contribuinte: { tpInsc: '', nrInsc: '' }, retencoes: [], totais: totaisZerados(),
-            fechamento: null, observacoes: [motivo],
+            fechamento: null, consolidacaoR9015: null, observacoes: [motivo],
         };
     }
 }
@@ -430,6 +506,23 @@ export function consolidarReinf(parsedList) {
         if (/^R-40(10|20|40|80)$/.test(p.codigo || '')) {
             const r4000 = (p.totais.irrf + p.totais.csll + p.totais.pis + p.totais.cofins);
             if (r4000 > 0) temR4000Retencao = true;
+        }
+    }
+
+    // R-9015: o totalizador OFICIAL da série R-4000 (IRRF/CSRF por código de
+    // receita, o que foi para a DCTFWeb). Mais de um recibo da mesma
+    // competência = reabertura/novo fechamento: vale o processado POR ÚLTIMO
+    // — somar os dois contaria o mesmo débito duas vezes. E é dito.
+    const recibos9015 = list
+        .filter((p) => p.codigo === 'R-9015' && p.consolidacaoR9015 && p.consolidacaoR9015.cdRetorno === '0')
+        .sort((a, b) => String(b.consolidacaoR9015.dhProcess).localeCompare(String(a.consolidacaoR9015.dhProcess)));
+    if (recibos9015.length) {
+        const vale = recibos9015[0];
+        totais.irrf = r2(totais.irrf + vale.totais.irrf);
+        totais.csrf = r2(totais.csrf + vale.totais.csrf);
+        if (recibos9015.length > 1) {
+            alertas.push(`${recibos9015.length} recibos R-9015 da mesma competência: vale o processado por último `
+                + `(${vale.consolidacaoR9015.dhProcess || 'sem data'}, recibo ${vale.consolidacaoR9015.nrRecArqBase || '?'}).`);
         }
     }
 

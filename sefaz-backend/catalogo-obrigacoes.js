@@ -748,6 +748,7 @@ export function mesDoCliente(empresa, competencia) {
             ...r,
             status: 'ativa',
             diaVencimento: achado.prazo.diaVencimento,
+            ultimoDiaUtilDoMes: achado.prazo.ultimoDiaUtilDoMes === true,
             mesesApos: achado.prazo.mesesApos,
             ajusteDiaNaoUtil: achado.prazo.ajusteDiaNaoUtil,
             abrangencia: `IBGE:${achado.prazo.codMunIBGE}`,

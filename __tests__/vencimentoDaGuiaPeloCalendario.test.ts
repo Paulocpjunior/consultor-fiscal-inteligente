@@ -55,3 +55,35 @@ describe('a aba ISS SP não carimba mais o dia fixo', () => {
         expect(src).toMatch(/vencimentoDaGuia\(/);
     });
 });
+
+/**
+ * 05/10 — Paulo, HS PROJETOS (São Paulo), 09/2026: as duas guias travadas com
+ * "O calendário de ISS deste município está sem o dia do vencimento", com o
+ * calendário de SÃO PAULO "dia 10" na tela de Configurações. O resolvedor
+ * municipal DESCARTAVA a marca "último dia útil" (cadastrável desde 22/09):
+ * o prazo saía com dia 0 e a guia não tinha data. E a mensagem não dizia
+ * QUAL cadastro da cidade estava valendo — com dois, a pessoa olha o certo.
+ */
+describe('calendário municipal com "último dia útil" e o cadastro dito pelo nome', () => {
+    const ULTIMO = { ...SP, diaVencimento: null, ultimoDiaUtilDoMes: true, vigenciaInicio: '2026-09-01', cadastradoPorEmail: 'fulano@spassessoriacontabil.com.br', baseLegal: 'Lei X' };
+
+    it('"último dia útil" dá data (30/10/2026, sexta), e a regra vai junto', () => {
+        const r = vencimentoMunicipalDaGuia({ cadastros: [ULTIMO], codMunIBGE: '3550308', competencia: '2026-09' });
+        expect(r).toMatchObject({ achou: true, data: '2026-10-30', regra: 'último dia útil do mês' });
+    });
+
+    it('dia fixo diz a regra "dia 10"', () => {
+        const r = vencimentoMunicipalDaGuia({ cadastros: [SP], codMunIBGE: '3550308', competencia: '2026-09' });
+        expect(r).toMatchObject({ achou: true, regra: 'dia 10' });
+    });
+
+    it('cadastro vigente sem dia: o motivo nomeia QUAL (vigência e quem cadastrou)', () => {
+        const quebrado = { ...SP, diaVencimento: null, vigenciaInicio: '2026-08-01', cadastradoPorEmail: 'beltrano@spassessoriacontabil.com.br' };
+        const r = vencimentoMunicipalDaGuia({ cadastros: [{ ...SP, vigenciaInicio: '2012-05-17' }, quebrado], codMunIBGE: '3550308', competencia: '2026-09' });
+        expect(r.achou).toBe(false);
+        if (r.achou) throw new Error('inalcançável');
+        expect(r.situacao).toBe('sem-dia');
+        expect(r.motivo).toContain('2026-08-01');
+        expect(r.motivo).toContain('beltrano@spassessoriacontabil.com.br');
+    });
+});
