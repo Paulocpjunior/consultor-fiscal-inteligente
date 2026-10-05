@@ -46,7 +46,8 @@ const RECEITA_RAIZ_FAMILIA = {
 
 const FAMILIAS = ['INSS', 'IRRF', 'CSRF'];
 
-function familiaPorReceita(cod) {
+/** Código de receita (4 ou 6 dígitos) → família de retenção, ou null. */
+export function familiaPorReceita(cod) {
     const c = String(cod || '').replace(/\D/g, '');
     if (c.length < 4) return null;
     return RECEITA_RAIZ_FAMILIA[c.slice(0, 4)] || null;

@@ -66,12 +66,14 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export function extrairRetencoesReinf(totais: {
     inssRetPrinc?: number; inssRetAdic?: number;
     irrf?: number; csll?: number; pis?: number; cofins?: number;
+    /** 5952 consolidado (R-9015), sem a quebra CSLL/PIS/COFINS. */
+    csrf?: number;
 } | null | undefined): RetencoesPorFamilia {
     const t = totais || {};
     return {
         INSS: round2((t.inssRetPrinc || 0) + (t.inssRetAdic || 0)),
         IRRF: round2(t.irrf || 0),
-        CSRF: round2((t.csll || 0) + (t.pis || 0) + (t.cofins || 0)),
+        CSRF: round2((t.csll || 0) + (t.pis || 0) + (t.cofins || 0) + (t.csrf || 0)),
     };
 }
 

@@ -318,6 +318,7 @@ function Resultado({ data }: { data: ConferenciaReinfCompleta }) {
                                 <b>{ev.codigo || ev.schemaToken || 'evento'}</b>
                                 {ev.tipoRetorno === 'retencao' && ev.totais?.inssRetPrinc > 0 && <> · INSS {brl(ev.totais.inssRetPrinc)}</>}
                                 {ev.tipoRetorno === 'fechamento' && ev.fechamento && <> · fechRet={ev.fechamento.fechRet}</>}
+                                {ev.tipoRetorno === 'consolidacao' && <> · consolidação da série R-4000{ev.totais?.irrf > 0 && <> · IRRF {brl(ev.totais.irrf)}</>}{(ev.totais?.csrf || 0) > 0 && <> · CSRF {brl(ev.totais.csrf || 0)}</>}</>}
                             </span>
                             <span>
                                 {/* 🚨 03/10: evento reconhecido só pelo nome (ex.: R-9015 evtRetCons)
@@ -413,8 +414,8 @@ function Resultado({ data }: { data: ConferenciaReinfCompleta }) {
                     )}
 
                     <p className="mt-4 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                        INSS = retenção previdenciária (R-2010/2020 ↔ DCTFWeb cod 1162). IRRF/CSRF da Reinf
-                        populam quando os eventos R-4020 forem incluídos. Tolerância de R$ 0,02.
+                        INSS = retenção previdenciária (R-2010/2020 ↔ DCTFWeb cod 1162). IRRF/CSRF da Reinf vêm do
+                        recibo R-9015 (consolidação da série R-4000, por código de receita). Tolerância de R$ 0,02.
                     </p>
                 </div>
             )}
