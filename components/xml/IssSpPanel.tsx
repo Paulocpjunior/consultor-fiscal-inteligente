@@ -21,6 +21,8 @@ import EmpresaSearchSelect from './EmpresaSearchSelect';
 import { motivoDoBotaoDesligado, motivoDoBotaoRetidoDesligado, retidoAptoParaEnvio } from '../../services/issEnvioBotao';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { vencimentoDaGuia, type VencimentoDaGuia } from '../../services/prazosMunicipaisService';
+import { relerIssRetidoDoXml } from '../../services/nfseIssRetidoService';
+import { precisaReleituraIssRetido } from '../../sefaz-backend/nfse-iss-retido-releitura.js';
 
 interface SaudeCaptura {
     farol: 'ok' | 'atencao' | 'quebrado';
@@ -76,6 +78,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     // 📅 Vencimento pelo CALENDÁRIO do município (02/10) — o "dia 10" fixo não
     // antecipava sábado (10/10/2026) nem servia para outra prefeitura.
     const [vencGuia, setVencGuia] = useState<VencimentoDaGuia | null>(null);
+    /** Falha ao reler a retenção do XML — a apuração pode estar com o dado antigo. */
+    const [avisoReleitura, setAvisoReleitura] = useState<string | null>(null);
     const [foraDaPraca, setForaDaPraca] = useState(false);
     const [pdfGuia, setPdfGuia] = useState<{ base64: string; nome: string } | null>(null);
     // ↩ Guia do ISS RETIDO como tomadora (02/10): anexo PRÓPRIO — é outra guia,
@@ -126,10 +130,26 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
             // um número que ninguém pode pagar aqui.
             setForaDaPraca(!empresaEhSpCapital(df));
             setDiagWs(null);
-            const [docs, s] = await Promise.all([
+            let [docs, s] = await Promise.all([
                 listDocumentos(currentUser, { competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj }),
                 carregarSaude(alvo.cnpj),
             ]);
+            // 🔁 05/10: a retenção do ISS das NFS-e do padrão nacional foi
+            // gravada INVERTIDA até hoje. Nota ainda não conferida no XML é
+            // relida antes de apurar — e a falha fica DITA na tela.
+            setAvisoReleitura(null);
+            if ((docs as any[]).some(precisaReleituraIssRetido)) {
+                const rel = await relerIssRetidoDoXml({ empresaId: alvo.id, competencia });
+                if (rel.ok && rel.relidas > 0) {
+                    docs = await listDocumentos(currentUser, { competencia, empresaId: alvo.id, empresaCnpj: alvo.cnpj });
+                    if (rel.corrigidas > 0) onShowToast?.(`Retenção do ISS relida do XML: ${rel.corrigidas} nota(s) corrigida(s).`);
+                }
+                // O que conta é o que AINDA está sem conferência depois da
+                // releitura — inclusive nota que a rota não alcançou.
+                const restantes = (docs as any[]).filter(precisaReleituraIssRetido).length;
+                if (!rel.ok) setAvisoReleitura(`Não consegui reler a retenção do ISS no XML das notas (${rel.erro}). Os valores de ISS retido abaixo podem estar invertidos — apure de novo.`);
+                else if (restantes > 0) setAvisoReleitura(`${restantes} nota(s) ainda sem a retenção do ISS conferida no XML — os valores de ISS retido abaixo podem estar invertidos. Apure de novo; se persistir, avise o suporte.`);
+            }
             setSaude(s);
             const ap = apurarIssSp(docs, competencia, { issConfig: (df as any)?.issConfig || null });
             setApuracao(ap);
@@ -652,6 +672,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
 
             {apuracao && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    {avisoReleitura && (
+                        <p className="text-[11px] mb-2 text-amber-700 dark:text-amber-400">⚠ {avisoReleitura}</p>
+                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
                             ['Serviços', brl(apuracao.totalServicos)],

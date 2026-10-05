@@ -9,6 +9,23 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🔁 tpRetISSQN INVERTIDO NO PADRÃO NACIONAL (05/10)** (Paulo, REALITY 0899
+  tomados 09/2026: *"apenas 1 nf tem a retenção do ISS, porém na aba de ISS
+  aparece como se todos fossem retidos"* — 9 notas, R$ 1.290,33). O leitor
+  (`nfse-nacional-leitura.js`) e o emissor do DPS diziam "1 = retido"; é 1 = NÃO
+  retido, 2 = tomador, 3 = intermediário. PROVA por arquivo real
+  (fixtures/progress-retencoes 5725/5747: tpRetISSQN=1, vLiq = vServ − vTotalRet
+  federal, ISS fora do líquido). 3 vira `null` + lacuna. O código cru vai em
+  `valores.tpRetISSQN`. Notas JÁ gravadas: `nfse-iss-retido-releitura.js` +
+  rota `POST /api/admin/nfse-iss-retido/reler` (relê do XML no Storage, carimba
+  `valores.issRetidoRelidoEm`); a aba ISS chama sozinha quando vê nota sem
+  carimbo e mostra aviso se sobrar alguma. ⚠️ Só corrige as notas de
+  empresa/competência que passam pela aba ISS — outras telas que leem
+  `valores.issRetido` (Rotina, relatórios) seguem com o dado antigo até lá.
+  ⚠️ O emissor do DPS (homologação por padrão) também estava invertido.
+  Resposta ao Paulo: o corpo do e-mail da guia usa o RESUMO da apuração, não o
+  valor do PDF. Travas: `nfseTpRetIssqn.test.ts` (+ leitura e builder corrigidos).
+
 - **🧾 R-9015 LIDO + 📅 "ÚLTIMO DIA ÚTIL" NO CALENDÁRIO MUNICIPAL (05/10)** (Paulo
   mandou o REINF-Recibo-5799223-…xml: *"emissão travada, segue o arquivo"*; e
   HS PROJETOS/SP com as duas guias de ISS travadas em "calendário sem o dia do

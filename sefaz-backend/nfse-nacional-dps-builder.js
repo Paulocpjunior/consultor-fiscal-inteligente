@@ -174,7 +174,7 @@ export function buildDpsXml(req) {
           <tribISSQN>1</tribISSQN>
           <cLocIncid>${ibgePrestador}</cLocIncid>
           <pAliq>${num2(aliquotaIss)}</pAliq>
-          <tpRetISSQN>${servico.issRetido ? '1' : '2'}</tpRetISSQN>
+          <tpRetISSQN>${servico.issRetido ? '2' : '1'}</tpRetISSQN>
           <vBC>${num2(valorBruto)}</vBC>
           <vISSQN>${num2(issValor)}</vISSQN>
         </tribMun>

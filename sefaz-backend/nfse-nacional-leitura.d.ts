@@ -24,8 +24,10 @@ export interface ValoresNfseNacional {
     baseCalculo: number | null;
     aliquotaIss: number | null;
     iss: number | null;
-    /** null = a nota não diz; true/false = ela diz. */
+    /** null = a nota não diz (ou diz "intermediário"); true/false = ela diz. */
     issRetido: boolean | null;
+    /** Código cru: 1 não retido · 2 retido pelo tomador · 3 pelo intermediário. */
+    tpRetISSQN: string | null;
     liquido: number | null;
     ir?: number;
     inss?: number;

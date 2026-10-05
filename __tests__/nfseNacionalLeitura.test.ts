@@ -131,10 +131,12 @@ describe('🚨 leitura da NFS-e do padrão NACIONAL', () => {
     it('ISS retido ausente vira null, nunca "a nota disse que não"', () => {
         const semRet = NFSE_NACIONAL.replace(/<tpRetISSQN>\d<\/tpRetISSQN>/, '');
         expect(lerNfseNacional(semRet).valores.issRetido).toBeNull();
-        expect(lerNfseNacional(NFSE_NACIONAL).valores.issRetido).toBe(false);
+        // 05/10: 2 = retido pelo TOMADOR, 1 = NÃO retido (provado por arquivo
+        // real em nfseTpRetIssqn.test.ts — este leitor dizia o contrário).
+        expect(lerNfseNacional(NFSE_NACIONAL).valores.issRetido).toBe(true);
         expect(lerNfseNacional(
             NFSE_NACIONAL.replace('<tpRetISSQN>2<', '<tpRetISSQN>1<'),
-        ).valores.issRetido).toBe(true);
+        ).valores.issRetido).toBe(false);
     });
 });
 

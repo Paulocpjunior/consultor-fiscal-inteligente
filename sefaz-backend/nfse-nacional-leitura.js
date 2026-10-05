@@ -185,6 +185,8 @@ export function lerNfseNacional(xml) {
     const tpRetIss = tag(txt, 'tpRetISSQN');
 
     if (servico === null) lacunas.push('valor do serviço não encontrado (<vServ>)');
+    if (tpRetIss === '3') lacunas.push('ISS retido pelo INTERMEDIÁRIO (tpRetISSQN=3): não é guia da tomadora nem do prestador — confira quem recolhe');
+    else if (tpRetIss !== null && tpRetIss !== '' && tpRetIss !== '1' && tpRetIss !== '2') lacunas.push(`código de retenção do ISS desconhecido (tpRetISSQN=${tpRetIss})`);
 
     // NT 007/2026: vRetCSLL agrega as contribuicoes indicadas por tpRetPisCofins.
     // vPis/vCofins sao apuracao propria, nao parcelas adicionais de retencao.
@@ -217,10 +219,19 @@ export function lerNfseNacional(xml) {
             baseCalculo,
             aliquotaIss,
             iss,
-            // ⚠️ `tpRetISSQN` = 1 é RETIDO (é o que o builder do DPS escreve
-            // para `servico.issRetido`). Ausência não vira `false` afirmado:
-            // vira `null`, que o leitor distingue de "a nota diz que não".
-            issRetido: tpRetIss === null || tpRetIss === '' ? null : tpRetIss === '1',
+            // 🚨 `tpRetISSQN`: 1 = NÃO retido · 2 = retido pelo TOMADOR ·
+            // 3 = retido pelo INTERMEDIÁRIO. Até 05/10 este leitor dizia o
+            // contrário ("1 é retido") e a REALITY (0899, tomados 09/2026) viu
+            // nove notas sem retenção como retidas — e a única retida, fora.
+            // Provado por ARQUIVO REAL (fixtures/progress-retencoes 5725 e
+            // 5747, tpRetISSQN=1): vLiq = vServ − vTotalRet, e o vTotalRet é
+            // só o federal — o ISS da nota NÃO saiu do líquido.
+            // Ausência não vira `false` afirmado: vira `null`. E o 3 também é
+            // `null`: houve retenção, mas quem recolhe é o intermediário — nem
+            // o prestador nem a tomadora; afirmar qualquer lado seria chute.
+            issRetido: tpRetIss === '2' ? true : tpRetIss === '1' ? false : null,
+            /** O código CRU do XML — quem lê depois não precisa reabrir o arquivo. */
+            tpRetISSQN: tpRetIss === null || tpRetIss === '' ? null : tpRetIss,
             liquido,
             retencoesFederaisGravadas: retencoesLidas,
             ...federais,
