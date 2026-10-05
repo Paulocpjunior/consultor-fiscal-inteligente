@@ -1024,6 +1024,7 @@ function parseNFSeNacional(xmlText: string): ParsedXml {
             liquido: lida.valores.liquido ?? valorServicos,
             iss: lida.valores.iss ?? 0,
             issRetido: lida.valores.issRetido === true,
+            tpRetISSQN: lida.valores.tpRetISSQN ?? null,
             baseCalculo,
             aliquotaIss: lida.valores.aliquotaIss ?? 0,
             retencoesLidas: lida.valores.retencoesFederaisGravadas,
@@ -1186,6 +1187,8 @@ export function buildDocumentoFiscal(input: {
                 deducoes: nfseValores.deducoes,
                 issRetido: nfseValores.issRetido,
                 valorIssRetido: nfseValores.valorIssRetido,
+                // Código cru do padrão nacional (1 não · 2 tomador · 3 intermediário).
+                ...(nfseValores.tpRetISSQN ? { tpRetISSQN: nfseValores.tpRetISSQN } : {}),
                 // 🚨 OS CAMPOS FEDERAIS SÓ EXISTEM QUANDO FORAM LIDOS — e a
                 // diferença entre AUSENTE e ZERO é o produto aqui.
                 //

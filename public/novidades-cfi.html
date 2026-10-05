@@ -77,6 +77,15 @@
 <section>
     <h2>🆕 O que mudou agora (05/10) — leia esta parte primeiro</h2>
 
+    <h3>🔁 <strong>ISS retido das NFS-e do padrão nacional: o CFI lia a retenção ao contrário — corrigido</strong></h3>
+    <p>Na NFS-e do padrão nacional, o código de retenção do ISS é 1 = <strong>não retido</strong> e 2 = <strong>retido
+    pelo tomador</strong>. O CFI lia ao contrário: nota sem retenção aparecia como retida e a retida ficava de fora (caso
+    REALITY, tomados 09/2026). A leitura foi corrigida, e as notas já importadas são corrigidas sozinhas: ao apurar a
+    empresa na aba de ISS, o CFI relê a retenção no XML guardado de cada nota e recalcula. Um aviso aparece quando
+    alguma nota foi corrigida, e outro, amarelo, quando alguma não pôde ser relida. Não é preciso alterar nada no campo
+    de retenções nem importar de novo. Ao apurar, confira se o quadro "ISS retido como TOMADORA" mostra só as notas que
+    têm a retenção.</p>
+
     <h3>🧾 <strong>Recibo R-9015 da EFD-Reinf é lido na conferência — e destrava o DARF dos retidos</strong></h3>
     <p>Na aba <strong>Conferir Reinf × DCTFWeb</strong>, o recibo de consolidação da série R-4000 (arquivo
     <em>REINF-Recibo-…xml</em>, evento R-9015) deixou de aparecer como "⚠ não lido pelo CFI". O CFI lê o total

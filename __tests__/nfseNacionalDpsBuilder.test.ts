@@ -126,11 +126,12 @@ describe('buildDpsXml — estrutura e campos obrigatorios', () => {
         expect(xml).toContain('<NIFNaoInformado/>');
     });
 
-    it('ISS retido -> tpRetISSQN=1, senao 2', () => {
+    it('ISS retido -> tpRetISSQN=2 (retido pelo tomador), senao 1 (não retido)', () => {
+        // 05/10: estava invertido — ver nfseTpRetIssqn.test.ts (prova por arquivo real).
         const { xml: xmlNaoRetido } = buildDpsXml(baseReq);
-        expect(xmlNaoRetido).toContain('<tpRetISSQN>2</tpRetISSQN>');
+        expect(xmlNaoRetido).toContain('<tpRetISSQN>1</tpRetISSQN>');
         const { xml: xmlRetido } = buildDpsXml({ ...baseReq, servico: { ...baseReq.servico, issRetido: true } });
-        expect(xmlRetido).toContain('<tpRetISSQN>1</tpRetISSQN>');
+        expect(xmlRetido).toContain('<tpRetISSQN>2</tpRetISSQN>');
     });
 
     it('ambiente=producao -> tpAmb=1, default homologacao -> tpAmb=2', () => {
