@@ -9,6 +9,7 @@
 // ============================================================================
 
 import express from 'express';
+import admin from 'firebase-admin';
 import { requireCrossProjectAuth } from './require-cross-project-auth.js';
 import {
     consultarFgtsDigital,
@@ -20,7 +21,14 @@ import { consultarCndsPublicas } from './cnd-publica-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
 import { montarPedidoIdentificadores, montarPedidoDownload, lerRetornoIdentificadores, lerRetornoDownload } from './esocial-download.js';
-import { carregarCertificado, executarPedido, auditarPedido, serializarPorEmpregador } from './esocial-download-client.js';
+import { carregarCertificado, executarPedido, auditarPedido, serializarPorEmpregador, postSoap, CNPJ_ESCRITORIO } from './esocial-download-client.js';
+import { assinarPedidoEsocial } from './esocial-download.js';
+import {
+    analisarLote, montarLoteEnvio, envelopeEnvio, envelopeConsulta, lerRetornoEnvio, lerRetornoProcessamento,
+    situacaoDoLote, validarProtocolo, ENDPOINTS_ENVIO, ACTION_ENVIO, ACTION_CONSULTA,
+} from './esocial-envio.js';
+import { confirmarEmpresaDaCarteiraDp, AcessoNegado } from './dp-acesso-empresa.js';
+import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { validarPdf, montarPromptHolerites, lerRespostaHolerites, SCHEMA_HOLERITES } from './holerite-extracao.js';
 
 const router = express.Router();
@@ -193,6 +201,124 @@ router.post('/esocial/download/identificadores', requireCrossProjectAuth, (req, 
 
 router.post('/esocial/download/eventos', requireCrossProjectAuth, (req, res) =>
     executarDownload(req, res, montarPedidoDownload, lerRetornoDownload, 'eventos'));
+
+// eSocial - Transmissão de eventos pelo cofre (Paulo, 05/10/2026)
+// POST /api/dp-integration/esocial/envio/lote
+// Body: { empresaId, cnpj, eventos: string[] (até 50, mesmo grupo),
+//         tpAmb?: 1|2, confirmoProducao?: true, certificado?: 'escritorio'|'empresa' }
+// POST /api/dp-integration/esocial/envio/consulta
+// Body: { empresaId, cnpj, protocolo, tpAmb?, certificado? }
+//
+// Só o Consultor DP entra (transmitir ao eSocial não é para qualquer módulo),
+// e só nas empresas da carteira do usuário — conferido nas regras do próprio
+// DP com o token dele (dp-acesso-empresa.js). O CFI confere cada evento
+// (empregador, ambiente, grupo, Id), assina com o A1 do cofre (por padrão o
+// do escritório, procurador) e envia. Produção restrita é o padrão; produção
+// exige confirmoProducao=true, como no gateway da EFD-Reinf: entrega ao
+// eSocial não se desfaz. A auditoria (dp_esocial_envio_log) guarda quem,
+// empresa, ambiente, Ids, tipos e protocolo — nunca o conteúdo dos eventos.
+const soDoDp = crossProjectAuth([PROJETO.dpFolha]);
+
+function resolverAmbienteEsocial(b) {
+    const tpAmb = Number(b?.tpAmb ?? 2);
+    if (![1, 2].includes(tpAmb)) return { erro: 'tpAmb deve ser 1 (produção) ou 2 (produção restrita).' };
+    if (tpAmb === 1 && b?.confirmoProducao !== true) {
+        return { erro: 'Transmissão em PRODUÇÃO exige confirmação explícita (confirmoProducao: true): entrega ao eSocial não se desfaz.' };
+    }
+    return { tpAmb };
+}
+
+async function travasDoEnvio(req, res) {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return null;
+    const amb = resolverAmbienteEsocial(req.body);
+    if (amb.erro) { res.status(400).json({ error: amb.erro }); return null; }
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
+        return null;
+    }
+    let cert;
+    try { cert = await carregarCertificado({ origem: req.body?.certificado, cnpjEmpresa: cnpj }); } catch (err) { res.status(412).json({ error: err.message }); return null; }
+    return { cnpj, tpAmb: amb.tpAmb, cert };
+}
+
+function logDoEnvio() {
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    return admin.firestore().collection('dp_esocial_envio_log');
+}
+function auditarEnvio(dados) {
+    return logDoEnvio().add({ em: admin.firestore.FieldValue.serverTimestamp(), ...dados })
+        .catch((err) => console.warn('[dp-integration/esocial/envio] auditoria falhou:', err.message));
+}
+/** O protocolo tem de ter saído deste túnel, para esta empresa e neste ambiente. */
+async function protocoloEnviadoPorAqui(protocolo, cnpj, tpAmb) {
+    const s = await logDoEnvio().where('protocolo', '==', protocolo).where('operacao', '==', 'envio').limit(5).get();
+    return s.docs.some((d) => d.data().empregador === cnpj && d.data().tpAmb === tpAmb);
+}
+
+router.post('/esocial/envio/lote', soDoDp, async (req, res) => {
+    const cnpjPedido = String(req.body?.cnpj || '').replace(/\D/g, '');
+    const ambPedido = resolverAmbienteEsocial(req.body);
+    // Conferir os eventos ANTES das travas de I/O: erro de conteúdo volta sem gastar consulta.
+    let lote;
+    try { lote = analisarLote(req.body?.eventos, { cnpj: cnpjPedido, tpAmb: ambPedido.tpAmb ?? 2 }); } catch (err) { return res.status(400).json({ error: err.message }); }
+    const t = await travasDoEnvio(req, res);
+    if (!t) return;
+    const { cnpj, tpAmb, cert } = t;
+    try {
+        const assinados = lote.eventos.map((e) => ({ id: e.id, xml: assinarPedidoEsocial(e.xml, cert) }));
+        const transmissor = String(req.body?.certificado === 'empresa' ? (cert.cnpjFonte || cnpj) : (cert.cnpjFonte || CNPJ_ESCRITORIO)).replace(/\D/g, '');
+        const envelope = envelopeEnvio(montarLoteEnvio({ cnpj, cnpjTransmissor: transmissor, grupo: lote.grupo, eventos: assinados }));
+        const r = await serializarPorEmpregador(cnpj.slice(0, 8), () => postSoap({
+            url: ENDPOINTS_ENVIO[tpAmb].envio, action: ACTION_ENVIO, envelope, pfxBuffer: cert.pfxBuffer, password: cert.password,
+        }));
+        let retorno;
+        try { retorno = lerRetornoEnvio(r.body); } catch (err) {
+            return res.status(502).json({ error: `Resposta inesperada do eSocial (HTTP ${r.status}): ${err.message}`, detalhe: String(r.body || '').slice(0, 300) });
+        }
+        const eventos = lote.eventos.map((e) => ({ id: e.id, tipo: e.tipo, perApur: e.perApur || null }));
+        await auditarEnvio({
+            operacao: 'envio', por: req.user?.email || null, empresaIdDp: req.body.empresaId, empregador: cnpj, tpAmb, grupo: lote.grupo,
+            eventos, protocolo: retorno.protocolo || null, cdResposta: retorno.cdResposta, httpStatus: r.status, certFingerprint: cert.fingerprint || null, transmissor,
+        });
+        return res.json({ ...retorno, recebido: retorno.cdResposta === 201 && !!retorno.protocolo, grupo: lote.grupo, eventos, tpAmb, transmissor, httpStatus: r.status });
+    } catch (err) {
+        console.error('[dp-integration/esocial/envio/lote]', err);
+        return res.status(502).json({ error: err.message });
+    }
+});
+
+router.post('/esocial/envio/consulta', soDoDp, async (req, res) => {
+    let protocolo;
+    try { protocolo = validarProtocolo(req.body?.protocolo); } catch (err) { return res.status(400).json({ error: err.message }); }
+    // Consultar não altera nada no eSocial: produção não pede confirmação.
+    if (Number(req.body?.tpAmb) === 1) req.body.confirmoProducao = true;
+    const t = await travasDoEnvio(req, res);
+    if (!t) return;
+    const { cnpj, tpAmb, cert } = t;
+    try {
+        if (!(await protocoloEnviadoPorAqui(protocolo, cnpj, tpAmb))) {
+            return res.status(404).json({ error: 'Este protocolo não foi enviado pelo Consultor DP para esta empresa neste ambiente.' });
+        }
+        const r = await serializarPorEmpregador(cnpj.slice(0, 8), () => postSoap({
+            url: ENDPOINTS_ENVIO[tpAmb].consulta, action: ACTION_CONSULTA, envelope: envelopeConsulta(protocolo), pfxBuffer: cert.pfxBuffer, password: cert.password,
+        }));
+        let retorno;
+        try { retorno = lerRetornoProcessamento(r.body); } catch (err) {
+            return res.status(502).json({ error: `Resposta inesperada do eSocial (HTTP ${r.status}): ${err.message}`, detalhe: String(r.body || '').slice(0, 300) });
+        }
+        await auditarEnvio({
+            operacao: 'consulta', por: req.user?.email || null, empresaIdDp: req.body.empresaId, empregador: cnpj, tpAmb, protocolo,
+            cdResposta: retorno.cdResposta, aceitos: retorno.eventos.filter((e) => e.nrRecibo).length, recusados: retorno.eventos.filter((e) => !e.nrRecibo).length, httpStatus: r.status,
+        });
+        return res.json({ ...retorno, protocolo: retorno.protocolo || protocolo, situacao: situacaoDoLote(retorno.cdResposta), tpAmb, httpStatus: r.status });
+    } catch (err) {
+        console.error('[dp-integration/esocial/envio/consulta]', err);
+        return res.status(502).json({ error: err.message });
+    }
+});
 
 // Leitura de holerites do IOB em PDF pelo Gemini (conferência do motor de
 // cálculo do DP). O Gemini só transcreve; a comparação é feita no DP.
