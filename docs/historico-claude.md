@@ -15672,3 +15672,5 @@ renovado sobe pelo app Legal, gravando no cofre do CFI (próxima etapa).
 ## 2026-10-06 — Relatórios: carteira com múltiplas empresas
 
 Consulta por empresa selecionada combinava o ID com cada ID da carteira; o ramo contraditório era recusado pelas rules e descartava o resultado anterior. Interseção do escopo autorizado antes da consulta, sem ampliar acesso; Relatórios diferencia erro de leitura de truncamento e bloqueia prévia vazia após falha. Reproduzido com as regras publicadas no emulador e perfil colaborador com duas empresas.
+
+Complemento da mesma correção: o paginador passou a aplicar uma única condição de empresa por consulta, tanto para colaboradores quanto administradores. Isso evita também o conflito entre filtro IN do grupo e a igualdade da carteira. Seleção individual, conjunta e bloqueio externo conferidos no emulador com os helpers reais.

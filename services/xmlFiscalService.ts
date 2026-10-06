@@ -819,18 +819,9 @@ export async function listDocumentos(
     const scope = await getCarteiraScope(user);
 
     const constraints: QueryConstraint[] = [];
-    // Admin: busca tudo (com filtro opcional de empresa). Colaborador: busca
-    // tudo (rules permitem) e filtra no cliente por createdBy OU empresa em
-    // carteira. Antes filtrava so por createdBy -- colaborador nao via doc
-    // de empresa atribuida via carteira quando outro colega importou (mesmo
-    // padrao corrigido no #120 pra empresas).
-    if (filters.empresaId) constraints.push(where('empresaId', '==', filters.empresaId));
-    // Vários ids (matriz + filiais da mesma raiz): `in` aceita até 30 valores.
-    // Sem isto, a tela caía na leitura da coleção INTEIRA e o teto de 20.000
-    // docs cortava justamente as notas procuradas (caso GUARANI 27/07).
-    else if (filters.empresaIds && filters.empresaIds.length > 0) {
-        constraints.push(where('empresaId', 'in', filters.empresaIds.slice(0, 30)));
-    }
+    // O paginador aplica o filtro de empresa uma única vez, pelo escopo
+    // selecionado e autorizado. Combinar IN ou igualdade com outro filtro
+    // de empresa confunde a avaliação das rules, mesmo em carteira válida.
     // Competência vai ao SERVIDOR: corta a busca de dezenas de milhares de docs
     // para o mês pedido (igualdade — não exige índice composto; o range
     // competenciaInicio/Fim continua no cliente via applyDocumentosFilters).
