@@ -21,7 +21,12 @@ export async function restricoesDeCarteira(colecao: string, empresasSelecionadas
     const user = auth?.currentUser;
     if (!user || !db) throw new Error('Usuário não autenticado');
     const perfil = await getDoc(doc(db, 'users', user.uid));
-    if (perfil.data()?.role === 'admin') return [[]];
+    if (perfil.data()?.role === 'admin') {
+        if (empresasSelecionadas && ['documentos_fiscais', 'simples_notas', 'nfp_analises'].includes(colecao)) {
+            return [...new Set(empresasSelecionadas)].map(id => [where('empresaId', '==', id)]);
+        }
+        return [[]];
+    }
     if (colecao === 'carteiras') return [[where('colaboradorUid', '==', user.uid)]];
     const acl = await getDoc(doc(db, 'carteira_acessos', user.uid));
     const ids = new Set<string>((acl.data()?.empresaIds || []).filter((id: unknown) => typeof id === 'string'));

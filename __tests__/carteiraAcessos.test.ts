@@ -51,3 +51,8 @@ test('empresa própria continua acessível e empresa alheia é recusada', async 
     expect(await restricoesDeCarteira('documentos_fiscais', ['propria'])).toEqual([[{ field: 'empresaId', op: '==', value: 'propria' }]]);
     await expect(restricoesDeCarteira('documentos_fiscais', ['fora'])).rejects.toThrow('fora da sua carteira');
 });
+
+test('admin respeita a seleção explícita de empresas dos relatórios', async () => {
+    (getDoc as jest.Mock).mockResolvedValue({ data: () => ({ role: 'admin' }) });
+    expect(await restricoesDeCarteira('documentos_fiscais', ['a','b'])).toEqual(['a','b'].map(value => [{field: 'empresaId', op: '==', value}]));
+});
