@@ -1,3 +1,4 @@
+import { podeOperarFiscal } from '../sefaz-backend/cfi-acesso.js';
 /**
  * config/menuConfig.ts
  *
@@ -203,9 +204,10 @@ export const PERMISSOES_FUNCIONAIS: MenuCard[] = [
  * liberou o módulo (modulosPermitidos contém o SearchType do card).
  */
 export const podeAcessarCard = (
-    user: Pick<User, 'role' | 'modulosPermitidos'>,
+    user: Pick<User, 'role' | 'modulosPermitidos' | 'departamentos' | 'acessoCfi'>,
     card: MenuCard,
 ): boolean =>
+    !podeOperarFiscal(user) ? card.type === SearchType.RELATORIOS : (
     !card.adminOnly
     || user.role === 'admin'
-    || (user.modulosPermitidos ?? []).includes(card.type);
+    || (user.modulosPermitidos ?? []).includes(card.type));

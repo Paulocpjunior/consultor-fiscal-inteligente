@@ -186,7 +186,7 @@ describe('🚨 a nota digitada precisa do createdBy — sem ele o Firestore RECU
         // É o que produzia "Missing or insufficient permissions" no print de
         // 17/08 — a terceira porta nunca gravou nota NOVA, nem para o dono.
         const bloco = rules.slice(rules.indexOf('match /documentos_fiscais/'));
-        expect(bloco).toMatch(/allow create: if isSignedIn\(\) && request\.resource\.data\.createdBy == request\.auth\.uid/);
+        expect(bloco).toMatch(/allow create: if [^;]*isSignedIn\(\) && request\.resource\.data\.createdBy == request\.auth\.uid/);
     });
 
     /**

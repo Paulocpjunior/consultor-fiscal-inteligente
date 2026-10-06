@@ -95,6 +95,7 @@ import healthAlertaCronRouter from './sefaz-backend/health-alerta-cron.js';
 import empresasPerfilRouter from './sefaz-backend/empresas-perfil-routes.js';
 import saeNfceRouter from './sefaz-backend/sefaz-sp-nfce-routes.js';
 import cadastroContabilRouter from './sefaz-backend/cadastro-contabil-routes.js';
+import { protegerOperacaoFiscal } from './sefaz-backend/cfi-acesso-middleware.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
@@ -347,6 +348,7 @@ const sefazWindowLimiter = rateLimit({
 app.use('/api/admin/cert-empresa', certEmpresaLimiter);
 app.use('/api/admin/sefaz/window', sefazWindowLimiter);
 app.use('/api/', apiLimiter);
+app.use('/api/', protegerOperacaoFiscal);
 app.use('/api/admin/sefaz/consulta-nfe-por-chave', sefazLimiter);
 app.use('/api/admin/sefaz/sync-one', sefazLimiter);
 app.use('/api/admin/cnpj-lookup', cnpjLookupLimiter);

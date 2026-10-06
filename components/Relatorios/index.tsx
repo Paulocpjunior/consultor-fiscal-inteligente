@@ -1,3 +1,4 @@
+import { podeOperarFiscal } from '../../sefaz-backend/cfi-acesso.js';
 /**
  * Menu RELATÓRIOS — card próprio no menu principal (Paulo, 01/08).
  *
@@ -187,7 +188,9 @@ const competenciaAtual = () => {
 };
 
 const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }) => {
-    const [aba, setAba] = useState<AbaId>(abaInicial || 'livro');
+    const operacional = podeOperarFiscal(currentUser);
+    const [abaEscolhida, setAba] = useState<AbaId>(abaInicial || 'livro');
+    const aba = !operacional && ['cfop-nota', 'canceladas'].includes(abaEscolhida) ? 'livro' : abaEscolhida;
     const [competencia, setCompetencia] = useState(competenciaAtual());
     const [empresas, setEmpresas] = useState<EmpresaXmlOption[]>([]);
     // NASCE NA EMPRESA ATIVA (Paulo, 15/08 — a sequência é login → ativar).
@@ -324,7 +327,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 {GRUPOS.map(g => (
                     <div key={g.titulo} className="flex items-center gap-1 flex-wrap">
                         <span className="text-[9px] uppercase font-bold text-slate-400 w-40 shrink-0">{g.titulo}</span>
-                        {g.abas.map(a => (
+                        {g.abas.filter(a => operacional || !['cfop-nota', 'canceladas'].includes(a.id)).map(a => (
                             <button
                                 key={a.id}
                                 onClick={() => setAba(a.id)}

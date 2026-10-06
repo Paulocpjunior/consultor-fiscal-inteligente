@@ -21,6 +21,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function canOperateFiscal() {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let deps = u.get('departamentos', []);
+      return isSignedIn() && u.get('acessoCfi', '') != 'relatorios'
+        && (u.get('acessoCfi', '') == 'operacional' || (u.role == 'admin' && deps.size() == 0)
+          || (deps.size() == 1 && 'fiscal' in deps));
+    }
+
     function isOwnerOrAdmin(userId) {
       return isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
@@ -55,6 +63,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data.get('horarioAcesso', null) == null
+        && request.resource.data.get('acessoCfi', 'relatorios') == 'relatorios'
         // Perfil novo nao pode nascer com modulos restritos liberados
         && (!('modulosPermitidos' in request.resource.data)
             || request.resource.data.modulosPermitidos.size() == 0)
@@ -89,7 +98,7 @@ service cloud.firestore {
         // User pode atualizar proprio doc, sem mudar a propria role
         // nem a propria lista de modulos liberados
         request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['horarioAcesso'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['horarioAcesso', 'acessoCfi'])
         && (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
         && (!('modulosPermitidos' in request.resource.data)
             || request.resource.data.modulosPermitidos == resource.data.get('modulosPermitidos', []))
@@ -134,21 +143,21 @@ service cloud.firestore {
       allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/simples_empresas/$(empId)) || isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
       allow list: if isSignedIn() && request.query.limit <= 500 && (isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
       // Colaboradores atribuidos podem salvar, sem mudar o criador.
-      allow update: if companyAccess(empId)
+      allow update: if canOperateFiscal() && (companyAccess(empId)
         && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
         // Lapide _deleted (soft-delete, caso WALDESA 24/07): SO admin pode
         // criar/alterar/remover — exclusao logica e exclusiva de admin, e
         // um save de cache velho de colaborador nao pode apagar a lapide.
         && (request.resource.data.get('_deleted', false) == resource.data.get('_deleted', false)
-            || isAdmin());
+            || isAdmin()));
       // delete: SO admin. Colaborador pode visualizar e editar, mas nao
       // excluir a empresa do cadastro. Antes era isOwnerOrAdmin, mas
       // colaborador que criou conseguia apagar — inconsistente com a UI
       // (Lucro/Simples ja escondem botao delete pra nao-admin) e perigoso.
       // (Hoje a exclusao e SOFT — lapide _deleted via update acima; o
       // deleteDoc fisico continua reservado a admin p/ limpeza definitiva.)
-      allow delete: if isAdmin();
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if canOperateFiscal() && (isAdmin());
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.createdBy == request.auth.uid);
     }
 
     match /lucro_empresas/{empId} {
@@ -158,13 +167,13 @@ service cloud.firestore {
       allow list: if isSignedIn() && request.query.limit <= 500 && (isOwnerOrAdmin(resource.data.get('createdBy', '')) || assignedCompany(empId));
       // update: acesso a empresa, sem mudar o dono nem a lapide _deleted
       // (ver simples_empresas).
-      allow update: if companyAccess(empId)
+      allow update: if canOperateFiscal() && (companyAccess(empId)
         && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
         && (request.resource.data.get('_deleted', false) == resource.data.get('_deleted', false)
-            || isAdmin());
+            || isAdmin()));
       // delete: SO admin (ver comentario em simples_empresas).
-      allow delete: if isAdmin();
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if canOperateFiscal() && (isAdmin());
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.createdBy == request.auth.uid);
     }
 
     match /documentos_fiscais/{docId} {
@@ -174,14 +183,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/documentos_fiscais/$(docId)) || companyAccess(resource.data.get('empresaId', '')));
       allow list: if isSignedIn() && request.query.limit <= 5000 && companyAccess(resource.data.get('empresaId', ''));
       // UPDATE: preserva criador e empresa; exige acesso a carteira.
-      allow update: if companyAccess(resource.data.get('empresaId', '')) && (
+      allow update: if canOperateFiscal() && (companyAccess(resource.data.get('empresaId', '')) && (
         isAdmin() ||
         (request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
           && request.resource.data.empresaId == resource.data.empresaId)
-      );
+      ));
       // DELETE: dono original ou admin (operacao destrutiva).
-      allow delete: if companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy);
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', ''));
+      allow delete: if canOperateFiscal() && (companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy));
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', '')));
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -194,12 +203,12 @@ service cloud.firestore {
     match /simples_notas/{notaId} {
       allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/simples_notas/$(notaId)) || companyAccess(resource.data.get('empresaId', '')));
       allow list: if isSignedIn() && request.query.limit <= 5000 && companyAccess(resource.data.get('empresaId', ''));
-      allow update: if companyAccess(resource.data.get('empresaId', '')) && (
+      allow update: if canOperateFiscal() && (companyAccess(resource.data.get('empresaId', '')) && (
         isAdmin() ||
         (request.resource.data.createdBy == resource.data.createdBy && request.resource.data.empresaId == resource.data.empresaId)
-      );
-      allow delete: if companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy);
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', ''));
+      ));
+      allow delete: if canOperateFiscal() && (companyAccess(resource.data.get('empresaId', '')) && isOwnerOrAdmin(resource.data.createdBy));
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.createdBy == request.auth.uid && companyAccess(request.resource.data.get('empresaId', '')));
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -230,11 +239,13 @@ service cloud.firestore {
     // ───────────────────────────────────────────────────────────────
 
     match /simples_empresas/{empId}/{subcoll}/{docId} {
-      allow read, write: if companyAccess(empId);
+      allow read: if companyAccess(empId);
+      allow write: if canOperateFiscal() && (companyAccess(empId));
     }
 
     match /lucro_empresas/{empId}/{subcoll}/{docId} {
-      allow read, write: if companyAccess(empId);
+      allow read: if companyAccess(empId);
+      allow write: if canOperateFiscal() && (companyAccess(empId));
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -244,11 +255,12 @@ service cloud.firestore {
 
     match /sefaz_certificados/{docId} {
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     match /sefaz_certificados_historico/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     // Cadastro dos fornecedores produtores rurais (base da DIPAM 1.1 e da
@@ -257,17 +269,17 @@ service cloud.firestore {
     // jurídica errada muda o que vai declarado na EFD e na GIA.
     match /produtores_rurais/{docId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     match /manifestacoes_log/{docId} {
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     match /manifestacoes_cron_logs/{docId} {
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -304,7 +316,7 @@ service cloud.firestore {
     match /categorias_fornecedor/{regraId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // De→Para de códigos de participante do E-Fiscal (Exportar SAGE) — um doc
@@ -314,7 +326,7 @@ service cloud.firestore {
     match /sage_codigos_participantes/{empresaId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -328,7 +340,7 @@ service cloud.firestore {
     match /empresa_credito_config/{empresaId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -342,7 +354,7 @@ service cloud.firestore {
     match /fornecedores_ocultos/{regraId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -355,7 +367,7 @@ service cloud.firestore {
     match /notas_ocultas/{regraId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -366,7 +378,7 @@ service cloud.firestore {
     match /invoices_manuais/{invoiceId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -377,7 +389,7 @@ service cloud.firestore {
     match /categorias_credito_custom/{catId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isSignedIn();
+      allow write: if canOperateFiscal() && (isSignedIn());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -389,8 +401,8 @@ service cloud.firestore {
     match /tarefas/{tarefaId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // Logs do cron: leitura admin, escrita soh backend (regra firme)
@@ -406,8 +418,8 @@ service cloud.firestore {
 
     match /xml_capturas/{logId} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.usuarioId == request.auth.uid);
+      allow update, delete: if canOperateFiscal() && (isAdmin());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -417,9 +429,9 @@ service cloud.firestore {
 
     match /xml_erros/{errId} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.usuarioId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.usuarioId == request.auth.uid;
-      allow update: if isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid && request.resource.data.usuarioId == resource.data.usuarioId);
-      allow delete: if isAdmin();
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.usuarioId == request.auth.uid);
+      allow update: if canOperateFiscal() && (isAdmin() || (isSignedIn() && resource.data.usuarioId == request.auth.uid && request.resource.data.usuarioId == resource.data.usuarioId));
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -430,8 +442,8 @@ service cloud.firestore {
     match /empresas_xml_config/{configId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.createdBy == request.auth.uid);
+      allow update, delete: if canOperateFiscal() && (isAdmin());
     }
 
     // ─── Coleções operacionais (escritas pelo backend via admin SDK,
@@ -496,7 +508,8 @@ service cloud.firestore {
     // `list` fica fechado: os dois consumidores sabem o docId exato.
     match /reinf_retencoes_ajustadas/{docId} {
       allow get: if isSignedIn();
-      allow list, write: if false;
+      allow list: if false;
+      allow write: if false;
     }
 
     // dare_codigos_servico: codigo de servico DARE que nao e tabela fixa —
@@ -522,13 +535,13 @@ service cloud.firestore {
     match /cfop_parametros/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 2000;
-      allow create: if isSignedIn() && request.resource.data.criadoPor == request.auth.token.email;
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.criadoPor == request.auth.token.email);
       // UPDATE so para DESLIGAR — parametro nao se reescreve por baixo, porque
       // ele explica as competencias que ja datou. Vigencia nova = doc novo.
-      allow update: if isSignedIn()
+      allow update: if canOperateFiscal() && (isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']);
-      allow delete: if isAdmin();
+             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']));
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // retencao_parametros: o MESMO desenho do cerebro do CFOP, para a RETENCAO
@@ -544,12 +557,12 @@ service cloud.firestore {
     match /retencao_parametros/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 2000;
-      allow create: if isSignedIn() && request.resource.data.criadoPor == request.auth.token.email;
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.criadoPor == request.auth.token.email);
       // UPDATE so para DESLIGAR — vigencia nova e doc novo.
-      allow update: if isSignedIn()
+      allow update: if canOperateFiscal() && (isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']);
-      allow delete: if isAdmin();
+             .hasOnly(['ativo', 'desligadoPor', 'desligadoEm']));
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     match /ncm_parametros/{docId} {
@@ -565,7 +578,7 @@ service cloud.firestore {
     match /nfts_codigos_recusados/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 1000;
-      allow write: if isAdmin();
+      allow write: if canOperateFiscal() && (isAdmin());
     }
 
     match /nfse_nacional_emitidas/{docId} {
@@ -605,8 +618,8 @@ service cloud.firestore {
     match /sped_arquivos/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
+      allow create: if canOperateFiscal() && (isSignedIn());
+      allow update, delete: if canOperateFiscal() && (isAdmin());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -620,15 +633,15 @@ service cloud.firestore {
       // escolhe por empresa; exclusão só admin.
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     match /sped_ajustes_apuracao/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // sped_ciap_bens: CIAP / Bloco G — bens do ativo imobilizado com o crédito
@@ -637,8 +650,8 @@ service cloud.firestore {
     match /sped_ciap_bens/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // sped_inventario: contagem física do Bloco H (H005/H010). 1 doc por
@@ -648,8 +661,8 @@ service cloud.firestore {
     match /sped_inventario/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // sped_saldos_abertura: 🧮 saldo credor de abertura (SPED entregue colado).
@@ -668,8 +681,8 @@ service cloud.firestore {
     match /gia_st_guias/{docId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn() && request.query.limit <= 500;
-      allow create, update: if isSignedIn();
-      allow delete: if isAdmin();
+      allow create, update: if canOperateFiscal() && (isSignedIn());
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // nfp_analises: analises de compliance tributario (NFP Pro Cloud).
@@ -678,13 +691,13 @@ service cloud.firestore {
     match /nfp_analises/{docId} {
       allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/nfp_analises/$(docId)) || companyAccess(docId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
       allow list: if isSignedIn() && request.query.limit <= 500 && (companyAccess(resource.data.empresaId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.empresaId == docId
+      allow create: if canOperateFiscal() && (isSignedIn() && request.resource.data.empresaId == docId
         && request.resource.data.analisadoPorUid == request.auth.uid
-        && (companyAccess(docId) || docId.matches('prospect_[0-9]{14}'));
-      allow update: if isSignedIn() && request.resource.data.empresaId == resource.data.empresaId
+        && (companyAccess(docId) || docId.matches('prospect_[0-9]{14}')));
+      allow update: if canOperateFiscal() && (isSignedIn() && request.resource.data.empresaId == resource.data.empresaId
         && request.resource.data.analisadoPorUid == request.auth.uid
-        && (companyAccess(docId) || resource.data.get('analisadoPorUid', '') == request.auth.uid);
-      allow delete: if isAdmin();
+        && (companyAccess(docId) || resource.data.get('analisadoPorUid', '') == request.auth.uid));
+      allow delete: if canOperateFiscal() && (isAdmin());
     }
 
     // ───────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ import {
     User as FirebaseUser
 } from 'firebase/auth';
 import {
-    doc, setDoc, getDoc, collection, addDoc,
+    doc, setDoc, getDoc, collection, addDoc, onSnapshot,
     getDocs, deleteDoc, query, orderBy, limit as fbLimit, where
 } from 'firebase/firestore';
 
@@ -76,7 +76,9 @@ export const subscribeAuthState = (callback: (user: User | null) => void) => {
         return () => {};
     }
 
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    let pararPerfil: (() => void) | undefined;
+    const pararAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+        pararPerfil?.();
         if (!firebaseUser) {
             clearLocalSession();
             // Logout: o próximo erro não pode sair carimbado com o usuário anterior.
@@ -90,7 +92,13 @@ export const subscribeAuthState = (callback: (user: User | null) => void) => {
         // derruba o login: o `setUser` engole por dentro.
         void setSentryUser({ id: user.id, email: user.email });
         callback(user);
+        if (db && auth?.currentUser?.uid === firebaseUser.uid) pararPerfil = onSnapshot(doc(db, 'users', firebaseUser.uid), snap => {
+            if (!snap.exists()) { callback(null); return; }
+            const atual = { ...user, ...snap.data(), id: firebaseUser.uid } as User;
+            cacheSession(atual); callback(atual);
+        }, () => { callback({ ...user, acessoCfi: 'relatorios' }); });
     });
+    return () => { pararAuth(); pararPerfil?.(); };
 };
 
 // ─── CURRENT USER ─────────────────────────────────────────────────────────────
@@ -598,4 +606,9 @@ export const logAction = (
             console.debug('logAction: payload inválido para Firestore:', err?.message);
         }
     }
+};
+
+export const setUserAcessoCfi = async (userId: string, acessoCfi: 'relatorios' | 'operacional'): Promise<void> => {
+    if (!db) throw new Error('Conecte-se para alterar permissões do CFI.');
+    await setDoc(doc(db, 'users', userId), { acessoCfi }, { merge: true });
 };
