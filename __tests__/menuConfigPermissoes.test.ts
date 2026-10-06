@@ -22,23 +22,23 @@ describe('podeAcessarCard', () => {
     });
 
     it('colaborador SEM liberação NÃO acessa card restrito', () => {
-        expect(podeAcessarCard({ role: 'colaborador' }, cardRestrito)).toBe(false);
-        expect(podeAcessarCard({ role: 'colaborador', modulosPermitidos: [] }, cardRestrito)).toBe(false);
+        expect(podeAcessarCard({ role: 'colaborador', departamentos: ['fiscal'] }, cardRestrito)).toBe(false);
+        expect(podeAcessarCard({ role: 'colaborador', departamentos: ['fiscal'], modulosPermitidos: [] }, cardRestrito)).toBe(false);
         expect(podeAcessarCard(
-            { role: 'colaborador', modulosPermitidos: [SearchType.CFOP] },
+            { role: 'colaborador', departamentos: ['fiscal'], modulosPermitidos: [SearchType.CFOP] },
             cardRestrito,
         )).toBe(false);
     });
 
     it('colaborador COM liberação acessa card restrito', () => {
         expect(podeAcessarCard(
-            { role: 'colaborador', modulosPermitidos: [SearchType.NFP_PRO_CLOUD] },
+            { role: 'colaborador', departamentos: ['fiscal'], modulosPermitidos: [SearchType.NFP_PRO_CLOUD] },
             cardRestrito,
         )).toBe(true);
     });
 
     it('card sem adminOnly é acessível a qualquer role', () => {
-        expect(podeAcessarCard({ role: 'colaborador' }, cardLivre)).toBe(true);
+        expect(podeAcessarCard({ role: 'colaborador', departamentos: ['fiscal'] }, cardLivre)).toBe(true);
         expect(podeAcessarCard({ role: 'admin' }, cardLivre)).toBe(true);
     });
 });

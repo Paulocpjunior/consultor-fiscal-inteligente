@@ -126,6 +126,7 @@ export interface User {
      * Só admin pode alterar (Firestore rules garantem).
      */
     modulosPermitidos?: string[];
+    acessoCfi?: 'relatorios' | 'operacional';
     /**
      * Departamentos do SaaS (08/08): dizem qual MÓDULO do app a pessoa abre —
      * fiscal, contabil, dp-folha, legalizacao, financeiro. Outra granularidade

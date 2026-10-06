@@ -32,7 +32,7 @@
 // `AAAA-MM-DD.N` — a data do "atualizado em" + quantos itens (<h3>) a seção
 // "🆕 O que mudou agora" tem. Item novo no mesmo dia ⇒ N muda ⇒ selo reacende.
 // A trava (`novidadesService.test.ts`) confere a data E a contagem na página.
-export const NOVIDADES_VERSAO = '2026-10-06.5';
+export const NOVIDADES_VERSAO = '2026-10-06.6';
 
 export const NOVIDADES_URL = '/novidades-cfi.html';
 

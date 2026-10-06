@@ -14,7 +14,7 @@ try {
     await env.withSecurityRulesDisabled(async context => {
         const db = context.firestore();
         for (const uid of ['admin', 'principal', 'apoio', 'fora', 'criador']) {
-            await setDoc(doc(db, 'users', uid), { role: uid === 'admin' ? 'admin' : 'colaborador' });
+            await setDoc(doc(db, 'users', uid), { role: uid === 'admin' ? 'admin' : 'colaborador', departamentos: ['fiscal'] });
             await setDoc(doc(db, 'carteira_acessos', uid), { empresaIds: ['principal', 'apoio'].includes(uid) ? ['empresa-a'] : [] });
         }
         await setDoc(doc(db, 'simples_empresas', 'empresa-a'), { nome: 'A', createdBy: 'criador' });
@@ -39,6 +39,36 @@ try {
         await denied(uploadBytes(ref(storage, `xmls/empresa-a/${uid}.xml`), new Uint8Array([60, 62]), { contentType: 'application/xml' }));
         await ok(getBytes(ref(storage, `xmls/empresa-a/${uid}.xml`)));
     }
+    await env.withSecurityRulesDisabled(async context => {
+        const db = context.firestore();
+        for (const [uid, perfil] of Object.entries({
+            leitura: { role: 'colaborador', departamentos: ['contabil', 'fiscal'], acessoCfi: 'relatorios' },
+            externo: { role: 'colaborador', departamentos: ['dp-folha'] },
+            adminExterno: { role: 'admin', departamentos: ['contabil'] },
+            misto: { role: 'colaborador', departamentos: ['fiscal', 'contabil'] },
+            autorizado: { role: 'colaborador', departamentos: ['contabil'], acessoCfi: 'operacional' },
+        })) {
+            await setDoc(doc(db, 'users', uid), perfil);
+            await setDoc(doc(db, 'carteira_acessos', uid), { empresaIds: ['empresa-a'] });
+        }
+        await setDoc(doc(db, 'simples_empresas/empresa-a/calculos/2026-10'), { total: 100 });
+    });
+    for (const uid of ['leitura', 'externo', 'misto', 'adminExterno']) {
+        const db = env.authenticatedContext(uid).firestore();
+        await ok(getDoc(doc(db, 'simples_empresas', 'empresa-a')));
+        await ok(getDocs(query(collection(db, 'documentos_fiscais'), where('empresaId', '==', 'empresa-a'), limit(500))));
+        await ok(getDoc(doc(db, 'simples_empresas/empresa-a/calculos/2026-10')));
+        await denied(updateDoc(doc(db, 'simples_empresas/empresa-a'), { faturamentoManual: { '2026-10': 999 } }));
+        await denied(updateDoc(doc(db, 'simples_empresas/empresa-a/calculos/2026-10'), { total: 999 }));
+        await denied(updateDoc(doc(db, 'documentos_fiscais/nota-a'), { valorTotal: 999 }));
+        await denied(setDoc(doc(db, 'simples_notas/injetada'), { empresaId: 'empresa-a', createdBy: uid }));
+        await denied(setDoc(doc(db, 'sped_ajustes_apuracao/injetado'), { valor: 999 }));
+        if (uid !== 'adminExterno') await denied(updateDoc(doc(db, 'users', uid), { acessoCfi: 'operacional' }));
+        if (uid !== 'adminExterno') await denied(updateDoc(doc(db, 'users', uid), { departamentos: ['fiscal'] }));
+        if (uid !== 'adminExterno') await denied(getDoc(doc(db, 'lucro_empresas/empresa-b')));
+    }
+    await ok(updateDoc(doc(env.authenticatedContext('autorizado').firestore(), 'simples_empresas/empresa-a'), { nome: 'Operação autorizada' }));
+    await denied(setDoc(doc(env.authenticatedContext('admin').firestore(), 'documentos_fiscais/criador-falso'), { empresaId: 'empresa-a', createdBy: 'outro' }));
     const outsider = env.authenticatedContext('fora').firestore();
     await denied(getDoc(doc(outsider, 'simples_empresas', 'empresa-a')));
     await denied(getDoc(doc(outsider, 'documentos_fiscais', 'nota-a')));

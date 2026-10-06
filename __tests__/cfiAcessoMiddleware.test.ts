@@ -1,0 +1,11 @@
+import { protegerOperacaoFiscal } from '../sefaz-backend/cfi-acesso-middleware.js';
+const mockVerify=jest.fn(), mockGet=jest.fn();
+jest.mock('firebase-admin',()=>({__esModule:true,default:{apps:[{}],auth:()=>({verifyIdToken:mockVerify}),firestore:()=>({collection:()=>({doc:()=>({get:mockGet})})})}}));
+const req=()=>({method:'POST',originalUrl:'/api/admin/das/emitir',headers:{authorization:'Bearer valido'}});
+const res=()=>{const r:any={};r.status=jest.fn(()=>r);r.json=jest.fn(()=>r);return r;};
+beforeEach(()=>{mockVerify.mockReset().mockResolvedValue({uid:'leitura'});mockGet.mockReset().mockResolvedValue({exists:true,data:()=>({role:'colaborador',departamentos:['fiscal','contabil'],acessoCfi:'relatorios'})});});
+test('perfil atual recusa operação de token antigo antes da rota',async()=>{const r=res(),next=jest.fn();await protegerOperacaoFiscal(req(),r,next);expect(r.status).toHaveBeenCalledWith(403);expect(next).not.toHaveBeenCalled();});
+test('operação autorizada continua para as validações de carteira e emissão da rota',async()=>{mockGet.mockResolvedValue({exists:true,data:()=>({role:'colaborador',acessoCfi:'operacional'})});const next=jest.fn();await protegerOperacaoFiscal(req(),res(),next);expect(next).toHaveBeenCalled();});
+test('falha ao ler perfil não libera operação',async()=>{mockGet.mockRejectedValue(Error('offline'));const r=res(),next=jest.fn();await protegerOperacaoFiscal(req(),r,next);expect(r.status).toHaveBeenCalledWith(503);expect(next).not.toHaveBeenCalled();});
+test('relatório continua para autenticação e carteira existentes',async()=>{const next=jest.fn();await protegerOperacaoFiscal({...req(),method:'GET',originalUrl:'/api/admin/relatorios/faturamento'},res(),next);expect(next).toHaveBeenCalled();});
+test('token inválido é recusado',async()=>{mockVerify.mockRejectedValue(Error('token'));const r=res(),next=jest.fn();await protegerOperacaoFiscal(req(),r,next);expect(r.status).toHaveBeenCalledWith(401);expect(next).not.toHaveBeenCalled();});

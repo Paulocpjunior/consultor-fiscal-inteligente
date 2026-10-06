@@ -1,3 +1,4 @@
+import { podeOperarFiscal } from './sefaz-backend/cfi-acesso.js';
 import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -258,8 +259,8 @@ const App: React.FC = () => {
                 setCurrentUser(user);
                 setIsAuthResolved(true);
                 if (user) {
-                    loadSimplesData(user);
-                    runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
+                    if (podeOperarFiscal(user)) loadSimplesData(user);
+                    if (podeOperarFiscal(user)) runInitialSync(user); // fire-and-forget: sync localStorage -> Firestore
                     requestNotificationPermission(); // fire-and-forget: pede permissão push
                 }
             });
@@ -968,6 +969,11 @@ const App: React.FC = () => {
 
                 <div className="flex flex-col md:flex-row gap-6">
                     <main className="flex-grow min-w-0">
+                        {!podeOperarFiscal(currentUser) ? <>
+                            <p role="status" className="mb-4 rounded-lg bg-blue-50 p-3 text-blue-900">Acesso somente aos relatórios das empresas da sua carteira. Cálculos, alterações e emissões não estão liberados.</p>
+                            <ErrorBoundary modulo="Relatórios"><Suspense fallback={<LoadingSpinner />}><RelatoriosHub currentUser={currentUser} onShowToast={setToastMessage} /></Suspense></ErrorBoundary>
+                        </> : <>
+
                         <ErrorBoundary modulo="Aviso da Reforma">
                             <Suspense fallback={null}>
                                 <ReformaCountdownBanner
@@ -1596,6 +1602,7 @@ const App: React.FC = () => {
                         {(result && (searchType === SearchType.SIMPLES_NACIONAL || searchType === SearchType.LUCRO_PRESUMIDO_REAL)) || (searchType !== SearchType.SIMPLES_NACIONAL && searchType !== SearchType.LUCRO_PRESUMIDO_REAL) ? (
                             <TaxAlerts results={result ? [result] : []} searchType={searchType} />
                         ) : null}
+                    </>}
                     </main>
 
                     {/* Sidebar */}
