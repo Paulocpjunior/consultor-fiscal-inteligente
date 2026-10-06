@@ -17,7 +17,8 @@
 
 import express from 'express';
 import admin from 'firebase-admin';
-import { requireAdmin } from './require-admin.js';
+import { requireAdmin, requireAuth } from './require-admin.js';
+import { podeAcessarEmpresaId } from './carteira-auth.js';
 import { capturarNFCeSaida } from './sefaz-sp-nfce-orchestrator.js';
 import { baixarXmlNFCe } from './sefaz-sp-nfce-client.js';
 import { loadCertEmpresaPorCnpjBase } from './cert-storage.js';
@@ -221,7 +222,7 @@ async function conferirDestinoDasChaves(chaves, empresaIdEsperada) {
 
 // O parser JSON global (server.js) ja aceita ate 20mb — um lote de 100 NFC-e
 // (~100 KB cada) fica bem abaixo disso.
-router.post('/importar-xmls', requireAdmin, async (req, res) => {
+router.post('/importar-xmls', requireAuth, async (req, res) => {
   const inicio = Date.now();
   try {
     const { cnpj, xmls } = req.body || {};
@@ -258,6 +259,9 @@ router.post('/importar-xmls', requireAdmin, async (req, res) => {
         code: 'EMPRESA_NAO_ENCONTRADA',
       });
     }
+    // Operação fiscal já validada pelo middleware global; carteira é obrigatória.
+    const acesso = await podeAcessarEmpresaId(req.user, empresaId);
+    if (!acesso.ok) return res.status(acesso.status).json({ error: acesso.error });
     r.empresaId = empresaId;
     r.empresaNome = empresaNome;
 
