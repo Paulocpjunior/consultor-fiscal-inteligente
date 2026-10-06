@@ -24,6 +24,13 @@ describe('holerites do IOB pelo Gemini', () => {
         expect(validarPdf(grande.toString('base64')).erro).toContain('Divida o arquivo');
     });
 
+    it('rejeita padding interno ou excessivo e valida PDF grande sem estourar a pilha', () => {
+        for (const valor of ['JVBERi0===', 'JV=BERi0', '==']) {
+            expect(validarPdf(valor)).toEqual({ ok: false, erro: 'Arquivo em formato inválido.' });
+        }
+        expect(validarPdf(pdf('x'.repeat(2 * 1024 * 1024))).ok).toBe(true);
+    });
+
     it('pede transcrição, não cálculo, e o schema exige nome e verbas', () => {
         const p = montarPromptHolerites({ competencia: '2026-09' });
         expect(p).toContain('não calcule nada');
