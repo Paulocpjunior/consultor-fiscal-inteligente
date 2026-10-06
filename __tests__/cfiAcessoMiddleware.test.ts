@@ -9,3 +9,15 @@ test('operação autorizada continua para as validações de carteira e emissão
 test('falha ao ler perfil não libera operação',async()=>{mockGet.mockRejectedValue(Error('offline'));const r=res(),next=jest.fn();await protegerOperacaoFiscal(req(),r,next);expect(r.status).toHaveBeenCalledWith(503);expect(next).not.toHaveBeenCalled();});
 test('relatório continua para autenticação e carteira existentes',async()=>{const next=jest.fn();await protegerOperacaoFiscal({...req(),method:'GET',originalUrl:'/api/admin/relatorios/faturamento'},res(),next);expect(next).toHaveBeenCalled();});
 test('token inválido é recusado',async()=>{mockVerify.mockRejectedValue(Error('token'));const r=res(),next=jest.fn();await protegerOperacaoFiscal(req(),r,next);expect(r.status).toHaveBeenCalledWith(401);expect(next).not.toHaveBeenCalled();});
+test('editor pode alterar inventário mas não transmitir ou importar', async () => {
+    const { criarPermissoesCfi } = await import('../sefaz-backend/cfi-acesso.js');
+    mockGet.mockResolvedValue({exists:true,data:()=>({role:'colaborador',permissoesCfi:criarPermissoesCfi('edicao')})});
+    const next=jest.fn();
+    await protegerOperacaoFiscal({...req(),originalUrl:'/api/admin/sped-fiscal/inventario'},res(),next);
+    expect(next).toHaveBeenCalledTimes(1);
+    for(const path of ['/api/admin/das/emitir-regular','/api/admin/sae-nfce/importar-xmls','/api/admin/rota-nova']) {
+        const r=res(); await protegerOperacaoFiscal({...req(),originalUrl:path},r,next);
+        expect(r.status).toHaveBeenCalledWith(403);
+    }
+    expect(next).toHaveBeenCalledTimes(1);
+});

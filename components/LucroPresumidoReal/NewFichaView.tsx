@@ -128,6 +128,7 @@ interface NewFichaViewProps {
 
     // Callbacks
     onVoltar: () => void;
+    podeSalvar?: boolean;
     onSalvar: () => void;
     onAbrirConferirDctfweb: () => void;
 }
@@ -149,7 +150,7 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 uppercase">{p.selectedEmpresa?.nome}</h2>
             </div>
             <div>
-                <button onClick={p.onSalvar} disabled={p.loading} className="px-6 py-2 bg-sky-600 text-white rounded-lg font-bold hover:bg-sky-700 shadow-lg flex items-center gap-2">
+                <button onClick={p.onSalvar} disabled={p.loading || p.podeSalvar === false} className="px-6 py-2 bg-sky-600 text-white rounded-lg font-bold hover:bg-sky-700 shadow-lg flex items-center gap-2">
                     {p.loading ? 'Salvando...' : <><SaveIcon className="w-5 h-5" /> {p.selectedFichaId ? 'Salvar Alterações' : 'Salvar Competência'}</>}
                 </button>
             </div>

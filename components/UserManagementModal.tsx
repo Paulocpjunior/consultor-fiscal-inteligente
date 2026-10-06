@@ -1,4 +1,4 @@
-import { podeOperarFiscal } from '../sefaz-backend/cfi-acesso.js';
+import AcessoCfiEditor from './AcessoCfiEditor';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { User, AccessLog } from '../types';
 import * as authService from '../services/authService';
@@ -585,20 +585,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                             {/* Painel expandido: chips em LARGURA TOTAL, por seção nomeada */}
                                             {aberto && (
                                                 <div className="px-3 pb-3 pt-1 border-t border-slate-200 dark:border-slate-700 space-y-3">
-                                                    <div>
-                                                        <label className="block text-xs font-bold">Acesso dentro do CFI</label>
-                                                        <select aria-label={'Acesso CFI de ' + user.name} disabled={!isAdmin} value={podeOperarFiscal(user) ? 'operacional' : 'relatorios'} onChange={async e => {
-                                                            const acesso = e.target.value as 'relatorios' | 'operacional';
-                                                            try {
-                                                                await authService.setUserAcessoCfi(user.id, acesso);
-                                                                setUsers(prev => prev.map(u => u.id === user.id ? { ...u, acessoCfi: acesso } : u));
-                                                            } catch (error: any) { alert(error.message || 'Não foi possível salvar a permissão.'); }
-                                                        }} className="rounded border p-2 text-sm">
-                                                            <option value="relatorios">Somente relatórios — consulta e PDF</option>
-                                                            <option value="operacional">Operação fiscal — cálculos e alterações</option>
-                                                        </select>
-                                                        <p className="text-xs text-slate-500">Carteira e vínculos de outros departamentos não concedem operação fiscal. Emissão de tributos continua exigindo a permissão específica.</p>
-                                                    </div>
+                                                    <AcessoCfiEditor user={user} disabled={!isAdmin} onSaved={(permissoesCfi, permissoesCfiRevisao) => setUsers(prev => prev.map(u => u.id === user.id ? { ...u, permissoesCfi, permissoesCfiRevisao } : u))} />
                                                     <div>
                                                         <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">
                                                             Departamentos — módulos irmãos do SaaS

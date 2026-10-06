@@ -91,5 +91,22 @@ try {
     await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'carteira_acessos', 'principal'), { empresaIds: [] }));
     await denied(getDoc(doc(principal, 'simples_empresas', 'empresa-a')));
     await denied(getBytes(ref(env.authenticatedContext('principal').storage(), 'xmls/empresa-a/principal.xml')));
+    const edicao = { versao: 1, nivel: 'edicao', acoes: { editar: true, importar: false, calcular: false, emitir: false, fechar: false, excluir: false } };
+    await env.withSecurityRulesDisabled(async context => {
+        const db = context.firestore();
+        await setDoc(doc(db, 'users', 'editor'), { role: 'colaborador', acessoCfi: 'operacional', permissoesCfi: edicao });
+        await setDoc(doc(db, 'carteira_acessos', 'editor'), { empresaIds: ['empresa-a'] });
+    });
+    const editor = env.authenticatedContext('editor').firestore();
+    await ok(getDoc(doc(editor, 'simples_empresas', 'empresa-a')));
+    await ok(updateDoc(doc(editor, 'simples_empresas', 'empresa-a'), { nome: 'Cadastro conferido' }));
+    await denied(updateDoc(doc(editor, 'simples_empresas', 'empresa-a'), { historicoCalculos: [{das_mensal: 999}] }));
+    await denied(updateDoc(doc(editor, 'simples_empresas', 'empresa-a'), { faturamentoManual: {'2026-10': 999} }));
+    await denied(updateDoc(doc(editor, 'lucro_empresas', 'empresa-b'), { nome: 'Fora da carteira' }));
+    await denied(setDoc(doc(editor, 'documentos_fiscais', 'importacao-editor'), { createdBy: 'editor', empresaId: 'empresa-a' }));
+    await denied(updateDoc(doc(editor, 'users', 'editor'), { permissoesCfi: { ...edicao, nivel: 'operacao' } }));
+    await denied(setDoc(doc(editor, 'users', 'editor'), { role: 'colaborador' }));
+    await denied(updateDoc(doc(env.authenticatedContext('admin').firestore(), 'users', 'editor'), { permissoesCfi: edicao, permissoesCfiRevisao: 1 }));
+    await denied(setDoc(doc(editor, 'permissoes_auditoria', 'falso'), { autorUid: 'editor' }));
     console.log(`Carteira: ${assertions} verificacoes de regras aprovadas.`);
 } finally { await env.cleanup(); }
