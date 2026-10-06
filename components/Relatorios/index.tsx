@@ -200,6 +200,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
     const [docs, setDocs] = useState<DocumentoFiscal[] | null>(null);
     const [recorteKey, setRecorteKey] = useState('');
     const [truncado, setTruncado] = useState(false);
+    const [erroLeitura, setErroLeitura] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     // Identificação obrigatória dos relatórios (responsável legal + contador,
     // Paulo 01/08) — buscada junto com o recorte, do cadastro da empresa.
@@ -238,8 +239,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
         const alvo = empresas.find(e => e.id === idAlvo) || null;
         if (!alvo) { onShowToast?.('Escolha a empresa.'); return; }
         setLoading(true);
+        setErroLeitura(null);
         try {
-            const meta: { truncado?: boolean } = {};
+            const meta: { truncado?: boolean; erro?: string } = {};
             // Empresa vai ao SERVIDOR (id + CNPJ), como no Exportar SAGE (#437):
             // buscar a competência INTEIRA pra filtrar uma empresa no navegador
             // era pagar a leitura da carteira toda a cada relatório — e num mês
@@ -251,6 +253,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 getIdentificacaoEmpresa(alvo),
                 lerParametrosCfop(alvo.id),
             ]);
+            if (meta.erro) throw new Error(meta.erro);
             setIdentificacao(montarIdentificacao(dadosFiscais));
             setCadastroFiscal(dadosFiscais || null);
             setParametrosCfop(parametros.parametros);
@@ -261,6 +264,11 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 .filter(d => d.empresaId === alvo.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
                 .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
             setRecorteKey(`${alvo.id}|${competencia}`);
+        } catch (err: any) {
+            setDocs(null);
+            setRecorteKey('');
+            setTruncado(false);
+            setErroLeitura(String(err?.message || 'Falha ao consultar os documentos. Tente Rebuscar.'));
         } finally {
             setLoading(false);
         }
@@ -371,7 +379,8 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
                 )}
             </div>
 
-            {precisaEmpresa && !recorteValido && (
+            {erroLeitura && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{erroLeitura}</div>}
+            {precisaEmpresa && !recorteValido && !erroLeitura && (
                 <p className="text-sm text-slate-500 text-center py-4">
                     Escolha a empresa e clique em <strong>⚡ Ativar</strong> — o mesmo recorte serve todas as abas de Movimento e Serviços.
                 </p>

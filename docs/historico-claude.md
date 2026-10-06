@@ -15667,3 +15667,8 @@ renovado sobe pelo app Legal, gravando no cofre do CFI (próxima etapa).
   - **P2:** empresa inativa no Legal não gera "renovado sem upload".
   - E, pela revisão do PR do DP: `/certificados?cnpjs=` recorta a resposta
     à carteira de quem pergunta (`recortePorCnpjs`).
+
+
+## 2026-10-06 — Relatórios: carteira com múltiplas empresas
+
+Consulta por empresa selecionada combinava o ID com cada ID da carteira; o ramo contraditório era recusado pelas rules e descartava o resultado anterior. Interseção do escopo autorizado antes da consulta, sem ampliar acesso; Relatórios diferencia erro de leitura de truncamento e bloqueia prévia vazia após falha. Reproduzido com as regras publicadas no emulador e perfil colaborador com duas empresas.

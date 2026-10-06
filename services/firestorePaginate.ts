@@ -44,14 +44,14 @@ export interface FetchAllMeta {
 export async function fetchAllDocs(
     collectionName: string,
     baseConstraints: QueryConstraint[] = [],
-    { batchSize = 500, maxDocs = 20000, meta }:
-        { batchSize?: number; maxDocs?: number; meta?: FetchAllMeta } = {},
+    { batchSize = 500, maxDocs = 20000, meta, empresasSelecionadas }:
+        { batchSize?: number; maxDocs?: number; meta?: FetchAllMeta; empresasSelecionadas?: readonly string[] } = {},
 ): Promise<QueryDocumentSnapshot<DocumentData>[]> {
     if (meta) { meta.truncated = false; meta.count = 0; meta.maxDocs = maxDocs; }
     if (!db) return [];
     const out: QueryDocumentSnapshot<DocumentData>[] = [];
     const vistos = new Set<string>();
-    for (const escopo of await restricoesDeCarteira(collectionName)) {
+    for (const escopo of await restricoesDeCarteira(collectionName, empresasSelecionadas)) {
         let last: QueryDocumentSnapshot<DocumentData> | null = null;
         while (out.length < maxDocs) {
             const constraints = [...baseConstraints, ...escopo];

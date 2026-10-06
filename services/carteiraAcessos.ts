@@ -16,7 +16,7 @@ export async function carteiraApi(path: string, method: string, body?: unknown):
 const protegidas = new Set(['simples_empresas', 'lucro_empresas', 'documentos_fiscais', 'simples_notas', 'nfp_analises', 'carteiras']);
 
 /** Queries limitadas ANTES de ler dados. O banco continua sendo a fronteira. */
-export async function restricoesDeCarteira(colecao: string): Promise<QueryConstraint[][]> {
+export async function restricoesDeCarteira(colecao: string, empresasSelecionadas?: readonly string[]): Promise<QueryConstraint[][]> {
     if (!protegidas.has(colecao)) return [[]];
     const user = auth?.currentUser;
     if (!user || !db) throw new Error('Usuário não autenticado');
@@ -32,6 +32,13 @@ export async function restricoesDeCarteira(colecao: string): Promise<QueryConstr
             for (const d of owned.docs) ids.add(d.id);
             if (owned.size === 500) throw new Error('Carteira própria excedeu o limite de leitura. Contate o administrador.');
         }
+    }
+    // Um filtro de empresa da tela não pode ser combinado com IDs de outras
+    // empresas: as rules rejeitam esse AND contraditório, mesmo sem resultados.
+    if (empresasSelecionadas && !empresas) {
+        const selecionadas = new Set(empresasSelecionadas);
+        if ([...selecionadas].some(id => !ids.has(id))) throw new Error('Empresa fora da sua carteira. Solicite ao administrador a revisão do vínculo.');
+        for (const id of ids) if (!selecionadas.has(id)) ids.delete(id);
     }
     const filtros: QueryConstraint[][] = [...ids].map(id => [where(empresas ? documentId() : 'empresaId', '==', id)]);
     if (empresas) filtros.push([where('createdBy', '==', user.uid)]);
