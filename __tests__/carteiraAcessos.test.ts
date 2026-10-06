@@ -38,3 +38,16 @@ test('falha de leitura nao vira permissao irrestrita', async () => {
     (getDoc as jest.Mock).mockRejectedValue(new Error('indisponivel'));
     await expect(restricoesDeCarteira('documentos_fiscais')).rejects.toThrow('indisponivel');
 });
+
+test('empresa selecionada não consulta outros vínculos do colaborador', async () => {
+    expect(await restricoesDeCarteira('documentos_fiscais', ['a'])).toEqual([
+        [{ field: 'empresaId', op: '==', value: 'a' }],
+    ]);
+});
+test('matriz e filiais mantêm apenas o recorte autorizado pedido', async () => {
+    expect(await restricoesDeCarteira('documentos_fiscais', ['a', 'b'])).toEqual(['a','b'].map(value => [{ field: 'empresaId', op: '==', value }]));
+});
+test('empresa própria continua acessível e empresa alheia é recusada', async () => {
+    expect(await restricoesDeCarteira('documentos_fiscais', ['propria'])).toEqual([[{ field: 'empresaId', op: '==', value: 'propria' }]]);
+    await expect(restricoesDeCarteira('documentos_fiscais', ['fora'])).rejects.toThrow('fora da sua carteira');
+});

@@ -812,9 +812,9 @@ export async function listDocumentos(
     // Out-param opcional: preenchido com truncado=true quando a leitura bateu no
     // teto de páginas (pode haver mais docs). Callers que exportam/agregam devem
     // avisar o usuário — senão o recorte fica silenciosamente incompleto.
-    meta?: { truncado?: boolean; retirados?: number },
+    meta?: { truncado?: boolean; retirados?: number; erro?: string },
 ): Promise<DocumentoFiscal[]> {
-    if (meta) meta.truncado = false;
+    if (meta) { meta.truncado = false; delete meta.erro; }
     if (!user || !isFirebaseConfigured || !db) return [];
     const scope = await getCarteiraScope(user);
 
@@ -857,7 +857,7 @@ export async function listDocumentos(
     try {
         // documentos_fiscais permite limit <=5000 nas rules; usa pagina maior.
         const pageMeta = { truncated: false, count: 0, maxDocs: 0 };
-        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: pageMeta });
+        const snaps = await fetchAllDocs(COLLECTIONS.DOCUMENTOS, constraints, { batchSize: 2000, maxDocs: TETO_DOCUMENTOS_LISTA, meta: pageMeta, empresasSelecionadas: filters.empresaId ? [filters.empresaId] : filters.empresaIds?.length ? filters.empresaIds.slice(0, 30) : undefined });
         if (meta) meta.truncado = pageMeta.truncated;
         docs = snaps.map(d => ({ id: d.id, ...(d.data() as any) } as DocumentoFiscal));
 
@@ -913,7 +913,12 @@ export async function listDocumentos(
         console.warn('listDocumentos:', err?.message);
         // Leitura falhou (rules/rede/índice) — sinaliza incompletude pra o caller
         // não tratar [] como "base vazia legítima" (ex.: export/agregação).
-        if (meta) meta.truncado = true;
+        if (meta) {
+            meta.truncado = true;
+            meta.erro = err?.code === 'permission-denied'
+                ? 'O banco recusou a leitura dos documentos desta empresa. Solicite a revisão da carteira ao administrador.'
+                : 'Não foi possível carregar os documentos. Tente Rebuscar. Detalhe: ' + String(err?.message || err);
+        }
         return [];
     }
 
