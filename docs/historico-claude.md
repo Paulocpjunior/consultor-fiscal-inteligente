@@ -15686,3 +15686,6 @@ Complemento da mesma correção: o paginador passou a aplicar uma única condiç
 
 ## 06/10/2026 — Recuperação de acesso após revisão dos administradores
 A retirada de role admin revelou dependência do CCI no departamento central (gate em bloqueio), cadastros legados sem departamento e importador XML limitado a admin. Backup e auditoria precederam reparo de nove vínculos contábeis comprovados e operação fiscal de três colaboradores com carteira preexistente; preservados apenas os três administradores definidos e Letícia em relatórios. Importação XML passa a aceitar colaborador operacional com verificação de empresaId da carteira antes de qualquer importação. Sem recriar carteiras, sem restaurar administração geral.
+
+## 06/10/2026 — Níveis e ações por aplicativo
+CFI passa a oferecer consulta, edição e operação, com seis ações explícitas, gravação transacional, revisão concorrente e auditoria. Perfis existentes preservados sem migração em massa; departamentos, carteiras e papéis não são reescritos. Backend e Firestore conferem ações; edição cadastral não salva apuração; importação e exclusão separadas. Administração do CCI permanece independente.

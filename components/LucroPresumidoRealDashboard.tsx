@@ -1,3 +1,4 @@
+import { podeAcaoFiscal } from '../sefaz-backend/cfi-acesso.js';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { LucroPresumidoEmpresa, User, FichaFinanceiraRegistro, LucroInput, ItemFinanceiroAvulso } from '../types';
@@ -397,12 +398,14 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     };
 
     const handleCreateNewFicha = () => {
+        if (!podeAcaoFiscal(currentUser, 'calcular')) { alert('Seu perfil não permite calcular ou alterar apurações.'); return; }
         setSelectedFichaId(null);
         resetForm();
         setView('new_ficha');
     };
 
     const handleEditFicha = () => {
+        if (!podeAcaoFiscal(currentUser, 'calcular')) { alert('Seu perfil não permite calcular ou alterar apurações.'); return; }
         if (!selectedFicha) return;
         setView('new_ficha');
     };
@@ -632,6 +635,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     };
 
     const handleSaveFicha = async () => {
+        if (!podeAcaoFiscal(currentUser, 'calcular')) { alert('Seu perfil não permite salvar apurações.'); return; }
         if (!selectedEmpresa || !liveResults) return;
         setLoading(true);
         try {
@@ -889,6 +893,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
             liveResults={liveResults}
             retencoesAcumuladas={retencoesAcumuladas}
             onVoltar={() => setView("details")}
+            podeSalvar={podeAcaoFiscal(currentUser, 'calcular')}
             onSalvar={handleSaveFicha}
             onAbrirConferirDctfweb={() => setConferirDctfwebAberto(true)}
         />

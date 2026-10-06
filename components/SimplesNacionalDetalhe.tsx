@@ -1,3 +1,4 @@
+import { podeAcaoFiscal } from '../sefaz-backend/cfi-acesso.js';
 import React, { useState, useMemo, useEffect } from 'react';
 import { SimplesNacionalEmpresa, SimplesNacionalNota, SimplesNacionalImportResult, User, SimplesDetalheItem, SimplesItemCalculo } from '../types';
 import * as simplesService from '../services/simplesNacionalService';
@@ -866,6 +867,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     };
 
     const handleSaveMesVigente = async () => {
+        if (!podeAcaoFiscal(currentUser, 'calcular')) { onShowToast('Sem permissão para calcular e salvar apurações.'); return; }
         setIsSaving(true);
         try {
             const detalheMes: Record<string, SimplesDetalheItem> = {};
@@ -1016,6 +1018,7 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
     };
 
     const handleSaveHistory = async () => {
+        if (!podeAcaoFiscal(currentUser, 'calcular')) { onShowToast('Sem permissão para calcular e salvar apurações.'); return; }
         await onSaveFaturamentoManual(empresa.id, manualRbtHistory);
         setIsHistoryModalOpen(false);
         onShowToast("Histórico de faturamento atualizado!");
@@ -1583,7 +1586,8 @@ const SimplesNacionalDetalhe: React.FC<SimplesNacionalDetalheProps> = ({
                         <div className="mt-6 flex gap-3">
                             <button 
                                 onClick={handleSaveMesVigente} 
-                                disabled={isSaving} 
+                                disabled={isSaving || !podeAcaoFiscal(currentUser, 'calcular')}
+                                title={podeAcaoFiscal(currentUser, 'calcular') ? undefined : 'Cálculo não autorizado para seu perfil'}
                                 className={`flex-1 py-4 font-bold text-lg rounded-xl transition-all flex justify-center items-center gap-2 shadow-lg ${
                                     saveSuccess 
                                     ? 'bg-green-500 hover:bg-green-600 text-white' 

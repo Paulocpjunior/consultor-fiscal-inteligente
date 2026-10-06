@@ -1,3 +1,4 @@
+import { criarPermissoesCfi } from '../sefaz-backend/cfi-acesso.js';
 import { User, UserRole, AccessLog } from '../types';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { fetchAllDocs } from './firestorePaginate';
@@ -96,7 +97,7 @@ export const subscribeAuthState = (callback: (user: User | null) => void) => {
             if (!snap.exists()) { callback(null); return; }
             const atual = { ...user, ...snap.data(), id: firebaseUser.uid } as User;
             cacheSession(atual); callback(atual);
-        }, () => { callback({ ...user, acessoCfi: 'relatorios' }); });
+        }, () => { callback({ ...user, acessoCfi: 'relatorios', permissoesCfi: criarPermissoesCfi('consulta') }); });
     });
     return () => { pararAuth(); pararPerfil?.(); };
 };
@@ -611,4 +612,25 @@ export const logAction = (
 export const setUserAcessoCfi = async (userId: string, acessoCfi: 'relatorios' | 'operacional'): Promise<void> => {
     if (!db) throw new Error('Conecte-se para alterar permissões do CFI.');
     await setDoc(doc(db, 'users', userId), { acessoCfi }, { merge: true });
+};
+
+export const salvarPermissoesCfi = async (user: User, permissoes: import('../sefaz-backend/cfi-acesso.js').PermissoesCfi): Promise<number> => {
+    const token = await auth?.currentUser?.getIdToken();
+    if (!token) throw new Error('Faça login para alterar permissões.');
+    const res = await fetch('/api/acessos-cfi/' + encodeURIComponent(user.id), {
+        method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissoes, revisao: user.permissoesCfiRevisao || 0 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Não foi possível salvar as permissões.');
+    return data.revisao;
+};
+
+export const historicoPermissoesCfi = async (uid: string): Promise<Array<{ id: string; em: number; autor: string; antes: { nivel: string } | null; depois: { nivel: string } }>> => {
+    const token = await auth?.currentUser?.getIdToken();
+    if (!token) throw new Error('Faça login para consultar o histórico.');
+    const res = await fetch('/api/acessos-cfi/' + encodeURIComponent(uid) + '/historico', { headers: { Authorization: 'Bearer ' + token } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Não foi possível consultar o histórico.');
+    return data;
 };
