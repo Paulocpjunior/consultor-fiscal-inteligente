@@ -15683,3 +15683,6 @@ Complemento da mesma correção: o paginador passou a aplicar uma única condiç
 - Conferência adicional das rotas diretas do servidor: análise manual e upload de créditos fiscais também exigem operação, mesmo fora do prefixo /api/admin.
 
 - Publicação de 06/10: validação de base64 de holerites passa a examinar caracteres inválidos sem repetição sobre o arquivo inteiro, evitando estouro da pilha do V8 em PDFs grandes. Mantidos os bloqueios de formato, assinatura e tamanho; regressão cobre padding inválido e PDF grande.
+
+## 06/10/2026 — Recuperação de acesso após revisão dos administradores
+A retirada de role admin revelou dependência do CCI no departamento central (gate em bloqueio), cadastros legados sem departamento e importador XML limitado a admin. Backup e auditoria precederam reparo de nove vínculos contábeis comprovados e operação fiscal de três colaboradores com carteira preexistente; preservados apenas os três administradores definidos e Letícia em relatórios. Importação XML passa a aceitar colaborador operacional com verificação de empresaId da carteira antes de qualquer importação. Sem recriar carteiras, sem restaurar administração geral.
