@@ -15680,3 +15680,6 @@ Complemento da mesma correção: o paginador passou a aplicar uma única condiç
 - Frontend monta apenas relatórios para leitura, oculta abas de edição e suspende sync operacional. Perfil acompanha alterações em tempo real. Menu e URLs antigas não montam módulos de cálculo.
 - Banco exige operação para escritas fiscais e impede autoatribuição/remoção da permissão. Middleware verifica perfil atual antes de operações nas APIs fiscais; emissão continua com permissão específica e carteira. Portas dos apps irmãos conservam suas autorizações.
 - Letícia marcada somente relatórios, preservando departamentos e carteira. Testes cobrem token antigo, gravação direta, subcoleções de cálculos, documentos, bloqueio de outra empresa e operação explicitamente autorizada.
+- Conferência adicional das rotas diretas do servidor: análise manual e upload de créditos fiscais também exigem operação, mesmo fora do prefixo /api/admin.
+
+- Publicação de 06/10: validação de base64 de holerites passa a examinar caracteres inválidos sem repetição sobre o arquivo inteiro, evitando estouro da pilha do V8 em PDFs grandes. Mantidos os bloqueios de formato, assinatura e tamanho; regressão cobre padding inválido e PDF grande.

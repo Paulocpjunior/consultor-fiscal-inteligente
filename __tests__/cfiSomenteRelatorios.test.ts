@@ -16,7 +16,7 @@ test('departamentos externos e mistos exigem autorização operacional explícit
     expect(podeOperarFiscal({role:'admin',acessoCfi:'relatorios'})).toBe(false);
 });
 test('API nega cálculo, gravação, emissão e GET operacional; leitura do relatório permanece', () => {
-    for (const path of ['/api/admin/das/emitir','/api/admin/darf/emitir','/api/admin/lucro/salvar','/api/fiscal/query','/API/ADMIN/DAS/emitir','/api/admin/reinf/retencoes-pj/ajuste']) expect(exigeOperacaoFiscal('POST',path)).toBe(true);
+    for (const path of ['/api/admin/das/emitir','/api/admin/darf/emitir','/api/analise-creditos/manual','/api/analise-creditos/upload','/api/admin/lucro/salvar','/api/fiscal/query','/API/ADMIN/DAS/emitir','/api/admin/reinf/retencoes-pj/ajuste']) expect(exigeOperacaoFiscal('POST',path)).toBe(true);
     expect(exigeOperacaoFiscal('GET','/api/admin/das/previsao/id')).toBe(true);
     expect(exigeOperacaoFiscal('GET','/api/admin/relatorios/faturamento?competencia=2026-07')).toBe(false);
     expect(exigeOperacaoFiscal('POST','/api/admin/relatorios/faturamento')).toBe(true);

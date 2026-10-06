@@ -85,7 +85,9 @@ export function montarPromptHolerites({ competencia } = {}) {
 export function validarPdf(base64) {
     if (typeof base64 !== 'string' || !base64.trim()) return { ok: false, erro: 'Envie o PDF dos holerites.' };
     const limpo = base64.replace(/^data:application\/pdf;base64,/, '').replace(/\s+/g, '');
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(limpo)) return { ok: false, erro: 'Arquivo em formato inválido.' };
+    // Avoid a quantified whole-input regexp: large PDFs can exhaust V8's regexp stack.
+    const semPadding = limpo.replace(/={1,2}$/, '');
+    if (!semPadding || /[^A-Za-z0-9+/]/.test(semPadding)) return { ok: false, erro: 'Arquivo em formato inválido.' };
     const buf = Buffer.from(limpo, 'base64');
     if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') return { ok: false, erro: 'O arquivo não é um PDF.' };
     if (buf.length > MAX_PDF_BYTES) return { ok: false, erro: `PDF com ${(buf.length / 1048576).toFixed(1)} MB: o limite é ${MAX_PDF_BYTES / 1048576} MB. Divida o arquivo.` };

@@ -13,7 +13,7 @@ const COMPARTILHADAS = ['/api/admin/whatsapp', '/api/admin/comunicacao', '/api/a
 export function exigeOperacaoFiscal(method, url) {
     const path = String(url || '').split('?')[0].replace(/\/+$/, '').toLowerCase();
     method = String(method).toUpperCase();
-    if (!path.startsWith('/api/admin/') && !path.startsWith('/api/fiscal/')) return false;
+    if (!path.startsWith('/api/admin/') && !path.startsWith('/api/fiscal/') && !path.startsWith('/api/analise-creditos/')) return false;
     // Ajuste de retenções é escrita fiscal, mesmo no router compartilhado Reinf.
     if (path === '/api/admin/reinf/retencoes-pj/ajuste') return method !== 'GET';
     if (COMPARTILHADAS.some(p => path === p || path.startsWith(p + '/'))) return false;
