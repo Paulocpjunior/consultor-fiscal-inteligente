@@ -27,6 +27,12 @@ try {
             await uploadBytes(ref(context.storage(), `xmls/empresa-a/${uid}.xml`), new Uint8Array([60, 62]), { contentType: 'application/xml' });
         }
     });
+    const perfilDb = env.authenticatedContext('principal').firestore();
+    await denied(updateDoc(doc(perfilDb, 'users', 'principal'), { gestorAcessos: true }));
+    await denied(updateDoc(doc(perfilDb, 'users', 'principal'), { gestaoAcessosRevisao: 9 }));
+    const adminDbGestao = env.authenticatedContext('admin').firestore();
+    await denied(updateDoc(doc(adminDbGestao, 'users', 'principal'), { gestorAcessos: true }));
+    await denied(setDoc(doc(env.authenticatedContext('novo-gestor').firestore(), 'users', 'novo-gestor'), { role: 'colaborador', gestorAcessos: true }));
     for (const uid of ['admin', 'principal', 'apoio', 'criador']) {
         const db = env.authenticatedContext(uid).firestore();
         await ok(getDoc(doc(db, 'simples_empresas', 'empresa-a')));

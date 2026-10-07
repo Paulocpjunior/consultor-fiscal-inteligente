@@ -29,3 +29,15 @@
 As permissões são conferidas no servidor a cada operação. No CFI, as regras do banco também protegem gravações diretas. Rotas de operações compostas sem classificação específica exigem todas as ações, além dos controles originais; uma liberação parcial não contorna essa restrição. A edição cadastral sem cálculo no CFI abrange nome, contato, endereço e observações; campos de apuração exigem cálculo.
 
 Nenhuma configuração altera dados contábeis ou fiscais já existentes. Alterações de ações não concedem administração nem acesso fora da carteira.
+
+## Gestor de acessos e novos colaboradores
+
+Gestor de acessos é uma pessoa de confiança com administração e operação completas no aplicativo em que foi nomeada. Não é um papel limitado apenas à gestão de usuários. A nomeação no CFI não promove no CCI, e vice-versa. Administradores existentes continuam com suas atribuições.
+
+1. No CFI: Gerenciar Usuários → buscar e-mail → Acessos → Nomear gestor de acessos. No CCI: Administração → Usuários → Nomear gestor de acessos. Confira a confirmação: nomear habilita todas as ações do aplicativo.
+2. Para cadastrar alguém, clique em Cadastrar colaborador, informe nome e e-mail institucional. A conta começa em consulta e sem novas empresas atribuídas. A sessão do administrador é preservada.
+3. Compartilhe o link de definição de senha somente com o colaborador. O sistema não envia mensagem automaticamente. Se a conta já existe, localize-a na lista; não a recrie.
+4. Configure departamentos, carteira e nível/ações. No CFI use Carteira de Clientes → Atribuição. No CCI use Responsáveis pelas empresas → Salvar equipe. Confira separadamente qualquer acesso necessário no outro app.
+5. Consulte Ver histórico para identificar autor, data e nomeação. Retirar gestão mantém administração; para remover ambas use Rebaixar no CFI ou Remover admin no CCI. A retirada de administração não elimina permissões operacionais já salvas: revise também o nível e a carteira.
+
+Cadastros interrompidos podem ser retomados com o mesmo e-mail. Não são reutilizadas identidades antigas sem correspondência de login.

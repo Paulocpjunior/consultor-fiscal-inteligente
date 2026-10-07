@@ -626,11 +626,22 @@ export const salvarPermissoesCfi = async (user: User, permissoes: import('../sef
     return data.revisao;
 };
 
-export const historicoPermissoesCfi = async (uid: string): Promise<Array<{ id: string; em: number; autor: string; antes: { nivel: string } | null; depois: { nivel: string } }>> => {
+export const historicoPermissoesCfi = async (uid: string): Promise<Array<{ id: string; em: number; autor: string; evento?: string; gestorDepois?: boolean; adminDepois?: boolean; antes: { nivel: string } | null; depois: { nivel: string } }>> => {
     const token = await auth?.currentUser?.getIdToken();
     if (!token) throw new Error('Faça login para consultar o histórico.');
     const res = await fetch('/api/acessos-cfi/' + encodeURIComponent(uid) + '/historico', { headers: { Authorization: 'Bearer ' + token } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Não foi possível consultar o histórico.');
+    return data;
+};
+
+export const gestaoAcessosRequest = async (path: string, method: 'POST' | 'PUT', body: unknown): Promise<{ ok: boolean; mensagem?: string; linkSenha?: string | null; uid?: string }> => {
+    const token = await auth?.currentUser?.getIdToken();
+    if (!token) throw new Error('Faça login para gerenciar acessos.');
+    const res = await fetch('/api/gestao-acessos/' + path, {
+        method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Não foi possível gerenciar o acesso.');
     return data;
 };

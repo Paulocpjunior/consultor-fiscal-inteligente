@@ -15689,3 +15689,7 @@ A retirada de role admin revelou dependência do CCI no departamento central (ga
 
 ## 06/10/2026 — Níveis e ações por aplicativo
 CFI passa a oferecer consulta, edição e operação, com seis ações explícitas, gravação transacional, revisão concorrente e auditoria. Perfis existentes preservados sem migração em massa; departamentos, carteiras e papéis não são reescritos. Backend e Firestore conferem ações; edição cadastral não salva apuração; importação e exclusão separadas. Administração do CCI permanece independente.
+
+## 2026-10-07 — Gestores de acessos e cadastro de colaboradores
+
+Gerenciar Usuários permite nomear gestor (admin + operação CFI), cadastrar colaborador em consulta e fornecer link de definição de senha sem envio automático. Backend autentica o administrador do próprio app, revalida identidade e revisão, registra auditoria transacional e retoma cadastro parcial sem duplicar login. Campos de gestão protegidos contra escrita direta no Firestore. Nomeação não altera CCI; rebaixamento de gestor retira também a marca de gestão.

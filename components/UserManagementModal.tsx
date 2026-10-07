@@ -184,6 +184,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
     const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [linkNovoColaborador, setLinkNovoColaborador] = useState('');
+    const [criandoColaborador, setCriandoColaborador] = useState(false);
     const confirm = useConfirm();
     const prompt = usePrompt();
 
@@ -319,7 +321,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         });
         if (!ok) return;
         try {
-            const result = await authService.setUserRole(user.id, novoRole);
+            const result = user.gestorAcessos ? (await authService.gestaoAcessosRequest('administracao/' + encodeURIComponent(user.id), 'PUT', { ativo: novoRole === 'admin', revisao: user.gestaoAcessosRevisao || 0 })).ok : await authService.setUserRole(user.id, novoRole);
             if (result) {
                 setMsg({
                     text: `${user.name} agora é ${novoRole === 'admin' ? 'administrador' : 'colaborador'}.`,
@@ -445,6 +447,32 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
         }
     };
 
+    const handleGestor = async (user: User) => {
+        const ativo = user.gestorAcessos !== true;
+        if (!await confirm({ title: ativo ? 'Nomear gestor de acessos do CFI?' : 'Retirar gestão de acessos?', message: ativo ? `${user.name} terá administração e todas as ações do CFI, poderá cadastrar colaboradores e delegar funções e carteiras. O CCI não será alterado.` : 'A pessoa continuará administradora. Para retirar também a administração, use Rebaixar.', variant: 'warning' })) return;
+        try {
+            await authService.gestaoAcessosRequest('gestores/' + encodeURIComponent(user.id), 'PUT', { ativo, revisao: user.gestaoAcessosRevisao || 0 });
+            setMsg({ text: ativo ? 'Gestor de acessos nomeado no CFI.' : 'Gestão retirada; administração mantida.', type: 'success' });
+            await loadUsers();
+        } catch (e) { setMsg({ text: e instanceof Error ? e.message : 'Erro ao alterar gestor.', type: 'error' }); }
+    };
+
+    const handleCadastrarColaborador = async () => {
+        const nome = await prompt({ title: 'Cadastrar colaborador no CFI', message: 'Informe o nome completo. O acesso começa em consulta; depois configure departamentos, empresas e ações.', placeholder: 'Nome completo' });
+        if (!nome) return;
+        const email = await prompt({ title: 'E-mail do colaborador', message: 'Use o e-mail @spassessoriacontabil.com.br. Nenhum e-mail será enviado automaticamente.', placeholder: 'nome@spassessoriacontabil.com.br' });
+        if (!email) return;
+        setCriandoColaborador(true); setLinkNovoColaborador('');
+        try {
+            const data = await authService.gestaoAcessosRequest('colaboradores', 'POST', { nome, email });
+            setLinkNovoColaborador(data.linkSenha || '');
+            setMsg({ text: data.mensagem || 'Colaborador cadastrado.', type: 'success' });
+            await loadUsers();
+            if (data.uid) { setBusca(email.trim()); setExpandido(data.uid); }
+        } catch (e) { setMsg({ text: e instanceof Error ? e.message : 'Erro ao cadastrar.', type: 'error' }); }
+        finally { setCriandoColaborador(false); }
+    };
+
     const handleEditName = async (user: User) => {
         const novoNome = await prompt({
             title: 'Editar nome',
@@ -506,6 +534,11 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                 {/* Body */}
                 <div className="p-4 flex-grow overflow-y-auto bg-white dark:bg-slate-800">
+                    {tab === 'users' && isAdmin && <div className="mb-3 space-y-2">
+                        <button disabled={criandoColaborador} onClick={handleCadastrarColaborador} className="rounded bg-blue-600 text-white px-3 py-2">{criandoColaborador ? 'Cadastrando…' : 'Cadastrar colaborador'}</button>
+                        <p className="text-xs">Gestores de acessos são administradores do CFI e podem cadastrar colaboradores e delegar funções. A nomeação vale somente neste aplicativo.</p>
+                        {linkNovoColaborador && <label className="block text-sm">Link para definir a senha — compartilhe apenas com o colaborador<input aria-label="Link de senha do novo colaborador" className="block w-full border rounded p-2" readOnly value={linkNovoColaborador} onFocus={e => e.target.select()} /></label>}
+                    </div>}
                     {msg && (
                         <div className={`mb-4 p-3 rounded-lg text-sm font-bold ${
                             msg.type === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
@@ -569,7 +602,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                                         ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
                                                         : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                                 }`}>
-                                                    {user.role === 'admin' ? 'Admin' : 'Colaborador'}
+                                                    {user.gestorAcessos ? 'Gestor de acessos' : user.role === 'admin' ? 'Admin' : 'Colaborador'}
                                                 </span>
                                                 {/* Resumo honesto sem abrir: quantos vínculos, e o ⚠ de quem não tem nenhum */}
                                                 {user.role !== 'admin' && deps.length === 0 ? (
@@ -671,6 +704,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                                                     {user.role === 'admin' ? 'Rebaixar' : 'Promover'}
                                                                 </button>
                                                             )}
+                                                            {isAdmin && <button onClick={() => handleGestor(user)} className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-semibold">{user.gestorAcessos ? 'Retirar gestão (mantém admin)' : 'Nomear gestor de acessos'}</button>}
                                                             <button
                                                                 onClick={() => handleResetPassword(user.email, user.name)}
                                                                 className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-xs font-semibold whitespace-nowrap"
