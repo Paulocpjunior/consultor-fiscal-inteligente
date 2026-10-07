@@ -85,6 +85,7 @@ RUN node_modules/.bin/playwright install chromium
 
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
+COPY gestao-acessos.cjs ./gestao-acessos.cjs
 COPY sefaz-backend ./sefaz-backend
 # Helpers compartilhados que tambem sao importados pelo backend em runtime.
 # Copia-los explicitamente evita levar toda a arvore TypeScript do frontend
