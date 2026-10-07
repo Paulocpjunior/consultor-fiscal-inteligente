@@ -56,6 +56,7 @@ const SEM_CHAMADA_NA_TELA: Record<string, string> = {
     '/esocial/envio/lote': 'túnel do DP/Folha (transmissão de eventos do eSocial pelo cofre, tela eSocial › Transmissão no Consultor DP)',
     '/esocial/envio/consulta': 'túnel do DP/Folha (resultado do lote transmitido, tela eSocial › Transmissão no Consultor DP)',
     '/holerites/extrair': 'túnel do DP/Folha (leitura dos holerites do IOB pelo Gemini, tela Cálculo › Conferir com holerites no Consultor DP)',
+    '/assistente/mia': 'túnel do DP/Folha (MiA, a agente de IA do DP: botão flutuante em todas as telas do Consultor DP)',
     '/movimento-fiscal': 'túnel somente leitura do Consultor Contábil (CCI)',
     '/upload-legal': 'app Legalização (mesmo projeto Firebase): renovação do certificado pela equipe do Legal, gravando no cofre do CFI',
 

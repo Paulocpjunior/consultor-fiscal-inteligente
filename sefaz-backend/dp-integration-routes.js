@@ -30,6 +30,7 @@ import {
 import { confirmarEmpresaDaCarteiraDp, AcessoNegado } from './dp-acesso-empresa.js';
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { validarPdf, montarPromptHolerites, lerRespostaHolerites, SCHEMA_HOLERITES } from './holerite-extracao.js';
+import { instrucaoMia, validarConversa, montarConteudo, lerResposta } from './dp-assistente-mia.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -347,6 +348,36 @@ router.post('/holerites/extrair', requireCrossProjectAuth, async (req, res) => {
         return res.json({ ok: true, modelo: modelo || null, ...lido });
     } catch (err) {
         console.error('[dp-integration/holerites/extrair]', err?.message);
+        return res.status(502).json({ error: err.message });
+    }
+});
+
+// MiA, a agente de IA do DP (Consultor DP). Explica legislação, o cálculo da
+// tela e as divergências com o IOB; não calcula nem grava nada.
+// POST /api/dp-integration/assistente/mia
+// Body: { mensagens: [{ papel: 'usuaria'|'mia', texto }], contexto?: { tela, texto } }
+router.post('/assistente/mia', requireCrossProjectAuth, async (req, res) => {
+    const ai = req.app.get('ai');
+    if (!ai) return res.status(503).json({ error: 'IA indisponível no CFI (GEMINI_API_KEY ausente).' });
+    const conversa = validarConversa(req.body);
+    if (!conversa.ok) return res.status(400).json({ error: conversa.erro });
+    const modelos = req.app.get('geminiModelos');
+    const modelo = (typeof modelos === 'function' ? modelos().flash : null) || undefined;
+    const hoje = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+    try {
+        const r = await ai.models.generateContent({
+            model: modelo,
+            contents: montarConteudo(conversa.mensagens, conversa.contexto),
+            // Busca ligada: legislação com fonte, não de memória.
+            config: { systemInstruction: instrucaoMia({ hoje }), tools: [{ googleSearch: {} }], temperature: 0.3, maxOutputTokens: 4096 },
+        });
+        const { texto, fontes } = lerResposta(r);
+        if (!texto) return res.status(502).json({ error: 'A MiA não conseguiu responder agora. Tente reformular a pergunta.' });
+        // LGPD: o log não leva a conversa.
+        console.info(`[dp-integration/assistente/mia] ${conversa.mensagens.length} mensagem(ns), contexto ${conversa.contexto ? conversa.contexto.texto.length : 0} car., ${fontes.length} fonte(s), modelo ${modelo || 'padrão'}`);
+        return res.json({ ok: true, texto, fontes, modelo: modelo || null });
+    } catch (err) {
+        console.error('[dp-integration/assistente/mia]', err?.message);
         return res.status(502).json({ error: err.message });
     }
 });
