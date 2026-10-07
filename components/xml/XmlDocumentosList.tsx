@@ -78,6 +78,11 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
         () => (empresaAtivaSessao?.cnpj ? { empresaCnpj: empresaAtivaSessao.cnpj } : {}),
     );
     const [busca, setBusca] = useState('');
+    // 🏢 07/10 (WALDESA, 4 filiais): com as filiais cadastradas como empresas
+    // próprias, escolher UMA trazia as quatro — a lista casava pela RAIZ. A
+    // raiz continua valendo quando só há uma empresa cadastrada nela (o caso
+    // VINATEX de 24/07: nota gravada com o CNPJ de filial NÃO cadastrada).
+    const [incluirFiliais, setIncluirFiliais] = useState(false);
     // Quando a busca por nº/chave não acha NADA com os filtros atuais, o app
     // não pode dar de ombros: a nota pode estar em OUTRA empresa (importação
     // no cliente errado) ou sem dono. Aqui procuramos na base inteira e
@@ -119,7 +124,13 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
             : [];
         const filtrosServidor: ListDocumentosFilters = {};
         if (filters.competencia) filtrosServidor.competencia = filters.competencia;
-        if (idsDaRaiz.length === 1) filtrosServidor.empresaId = idsDaRaiz[0];
+        const exata = catalogoEmpresas.find(e => (e.cnpj || '').replace(/\D/g, '') === cnpjFiltro);
+        if (idsDaRaiz.length > 1 && exata && !incluirFiliais) {
+            // Só o estabelecimento escolhido: pelo dono E pelo CNPJ exato
+            // (documento capturado só com `empresaCnpj` também entra).
+            filtrosServidor.empresaId = exata.id;
+            filtrosServidor.empresaCnpj = cnpjFiltro;
+        } else if (idsDaRaiz.length === 1) filtrosServidor.empresaId = idsDaRaiz[0];
         else if (idsDaRaiz.length > 1) filtrosServidor.empresaIds = idsDaRaiz;
 
         // SEM recorte escolhido, não lê documento nenhum (Paulo, 27/07):
@@ -144,7 +155,7 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
         // Recarrega quando muda empresa/competência — são os filtros que vão ao
         // servidor. Os demais continuam em memória, sobre o recorte já lido.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser, refreshKey, filters.empresaCnpj, filters.competencia]);
+    }, [currentUser, refreshKey, filters.empresaCnpj, filters.competencia, incluirFiliais]);
 
     // Resolve o NOME da empresa pra docs gravados sem empresaNome (varia por
     // trilho de importação) — a lista mostrava só o CNPJ, dificultando qualquer
@@ -182,9 +193,18 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
         });
     }, [allDocs, catalogoEmpresas]);
 
+    /** Empresas cadastradas na MESMA raiz do CNPJ escolhido (matriz + filiais). */
+    const empresasDaRaiz = useMemo(() => {
+        const raiz = (filters.empresaCnpj || '').replace(/\D/g, '').slice(0, 8);
+        return raiz ? catalogoEmpresas.filter(e => (e.cnpj || '').replace(/\D/g, '').slice(0, 8) === raiz) : [];
+    }, [catalogoEmpresas, filters.empresaCnpj]);
+    const cnpjEscolhido = (filters.empresaCnpj || '').replace(/\D/g, '');
+    const modoExato = empresasDaRaiz.length > 1 && !incluirFiliais
+        && empresasDaRaiz.some(e => (e.cnpj || '').replace(/\D/g, '') === cnpjEscolhido);
+
     const docs = useMemo(
-        () => applyDocumentosFilters(docsComNome, { ...filters, busca }),
-        [docsComNome, filters, busca],
+        () => applyDocumentosFilters(docsComNome, { ...filters, empresaCnpjExato: modoExato, busca }),
+        [docsComNome, filters, busca, modoExato],
     );
 
     // Busca global automática: só quando há termo de busca e zero resultados.
@@ -220,13 +240,13 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
             direcao: undefined,
             competencia: undefined,
         };
-        const docsBase = applyDocumentosFilters(allDocs, { ...filtrosBase, busca });
+        const docsBase = applyDocumentosFilters(allDocs, { ...filtrosBase, empresaCnpjExato: modoExato, busca });
         docsBase.forEach(d => {
             const comp = getCompetenciaDocumento(d);
             if (comp) set.add(comp);
         });
         return Array.from(set).sort().reverse();
-    }, [allDocs, filters, busca]);
+    }, [allDocs, filters, busca, modoExato]);
 
     // Lista de empresas distintas (CNPJ → nome) pro combobox. Combina:
     //  1. CATALOGO COMPLETO (simples_empresas + lucro_empresas) — fonte de
@@ -677,6 +697,13 @@ const XmlDocumentosList: React.FC<Props> = ({ currentUser, onSelect, refreshKey,
                         valor={filters.empresaCnpj}
                         onChange={(cnpj) => setFilters(f => ({ ...f, empresaCnpj: cnpj }))}
                     />
+                    {empresasDaRaiz.length > 1 && (
+                        <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap"
+                            title="Esta empresa tem matriz/filiais cadastradas como empresas próprias. Desmarcado, a lista mostra só o CNPJ escolhido.">
+                            <input type="checkbox" checked={incluirFiliais} onChange={(e) => setIncluirFiliais(e.target.checked)} />
+                            incluir as {empresasDaRaiz.length - 1} filial(is) da mesma raiz
+                        </label>
+                    )}
                     <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-xs"
                         value={filters.tipoDoc || ''}
