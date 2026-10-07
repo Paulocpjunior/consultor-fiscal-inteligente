@@ -40,6 +40,10 @@ export interface DocumentosFiltroMem {
      *  campo `empresaCnpj` do doc — diferente do `busca`, que tambem casa em
      *  emitente/destinatario. Util pro dropdown explicito de empresa. */
     empresaCnpj?: string;
+    /** `empresaCnpj` casa pelos 14 dígitos (só o estabelecimento), não pela
+     *  raiz. Quem decide é a tela: filial cadastrada como empresa própria
+     *  (07/10, WALDESA — 4 filiais, a lista trazia as quatro). */
+    empresaCnpjExato?: boolean;
     busca?: string;
 }
 
@@ -128,7 +132,8 @@ export function applyDocumentosFilters(
             // de 14 dígitos subcontava — caso VINATEX 24/07: lista mostrava 52
             // docs e o exportador SAGE (que casa por raiz) mostrava 110 no MESMO
             // recorte, minando a confiança na consulta. Paridade com o SAGE.
-            if (!alvo || !empresaCnpjN || empresaCnpjN.slice(0, 8) !== alvo.slice(0, 8)) return false;
+            if (!alvo || !empresaCnpjN) return false;
+            if (filters.empresaCnpjExato ? empresaCnpjN !== alvo : empresaCnpjN.slice(0, 8) !== alvo.slice(0, 8)) return false;
         }
         if (filters.tipoDoc) {
             const t = String((d as any).tipoDoc || d.tipo || '').toLowerCase();

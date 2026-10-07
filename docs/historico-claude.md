@@ -9,6 +9,16 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏢 LISTA DE XMLs POR FILIAL (07/10)** (Paulo, WALDESA — 4 filiais: *"mesmo
+  fazendo a seleção da empresa, ela puxa as notas de todas as filiais"*). A
+  `XmlDocumentosList` casava pela RAIZ (decisão de 24/07, caso VINATEX: nota
+  gravada com CNPJ de filial NÃO cadastrada sumia). Agora: raiz com MAIS DE UMA
+  empresa cadastrada → modo exato (servidor: `empresaId` da exata +
+  `empresaCnpj` 14 dígitos; memória: `empresaCnpjExato` em
+  `applyDocumentosFilters`), com a caixa "incluir as N filial(is) da mesma
+  raiz" para o consolidado. Raiz com uma empresa só → raiz, como antes.
+  Trava: `xmlDocumentosFilter.test.ts` (exato × raiz).
+
 - **🔎 VARREDURA DA CARTEIRA — tpRetISSQN (05/10)** (Paulo: *"faz a varredura da
   carteira inteira"*). Este ambiente não alcança a produção → BOTÃO admin
   `VarreduraIssRetido` na aba ISS. Rotas (admin) em `nfse-iss-retido-routes.js`:

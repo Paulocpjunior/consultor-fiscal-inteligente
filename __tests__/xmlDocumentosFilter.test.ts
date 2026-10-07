@@ -243,4 +243,23 @@ describe('applyDocumentosFilters — outros filtros', () => {
             expect(r).not.toContain('hs');
         });
     });
+
+    describe('empresaCnpjExato — filial cadastrada como empresa própria (07/10, WALDESA)', () => {
+        // WALDESA: 4 filiais cadastradas; escolhida a 0005-02, a lista trazia
+        // as notas da 0003-32 junto, porque casava pela raiz.
+        const docsWaldesa = [
+            { id: 'w-0003', empresaCnpj: '05049535000332', tipo: 'NFe', direcao: 'entrada', dhEmi: '2026-09-29T10:00:00-03:00' },
+            { id: 'w-0005', empresaCnpj: '05049535000502', tipo: 'NFe', direcao: 'entrada', dhEmi: '2026-09-29T10:00:00-03:00' },
+            { id: 'outra', empresaCnpj: '11222333000181', tipo: 'NFe', direcao: 'entrada', dhEmi: '2026-09-29T10:00:00-03:00' },
+        ] as any[];
+        const ids = (f: any) => applyDocumentosFilters(docsWaldesa, f).map((d: any) => d.id).sort();
+
+        it('exato: só o estabelecimento escolhido', () => {
+            expect(ids({ empresaCnpj: '05.049.535/0005-02', empresaCnpjExato: true })).toEqual(['w-0005']);
+        });
+
+        it('sem a marca, continua pela raiz (o caso VINATEX não regride)', () => {
+            expect(ids({ empresaCnpj: '05049535000502' })).toEqual(['w-0003', 'w-0005']);
+        });
+    });
 });
