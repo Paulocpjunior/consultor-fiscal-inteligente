@@ -15693,3 +15693,5 @@ CFI passa a oferecer consulta, edição e operação, com seis ações explícit
 ## 2026-10-07 — Gestores de acessos e cadastro de colaboradores
 
 Gerenciar Usuários permite nomear gestor (admin + operação CFI), cadastrar colaborador em consulta e fornecer link de definição de senha sem envio automático. Backend autentica o administrador do próprio app, revalida identidade e revisão, registra auditoria transacional e retoma cadastro parcial sem duplicar login. Campos de gestão protegidos contra escrita direta no Firestore. Nomeação não altera CCI; rebaixamento de gestor retira também a marca de gestão.
+
+Correção de empacotamento (07/10): a candidata não iniciou porque a imagem final não copiava gestao-acessos.cjs da raiz. Dockerfile passa a incluir o módulo, e a regressão de imports examina todos os módulos do backend e os destinos de COPY da etapa final. Nenhum tráfego foi roteado para a candidata com erro.
