@@ -1,0 +1,11 @@
+import express from 'express';
+import admin from 'firebase-admin';
+import gestao from '../gestao-acessos.cjs';
+import { requireAdmin } from './require-admin.js';
+import { permissoesEfetivasCfi } from './cfi-acesso.js';
+const fa = () => { if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() }); return admin; };
+const db = { collection: (...args) => fa().firestore().collection(...args), runTransaction: fn => fa().firestore().runTransaction(fn) };
+const auth = Object.fromEntries(['getUser', 'getUserByEmail', 'createUser', 'updateUser', 'generatePasswordResetLink'].map(method => [method, (...args) => fa().auth()[method](...args)]));
+const router = express.Router();
+gestao.registrar(router, { db, auth, adminRequired: requireAdmin, aplicativo: 'cfi', efetivas: permissoesEfetivasCfi });
+export default router;

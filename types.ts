@@ -129,6 +129,8 @@ export interface User {
     acessoCfi?: 'relatorios' | 'operacional';
     permissoesCfi?: import('./sefaz-backend/cfi-acesso.js').PermissoesCfi;
     permissoesCfiRevisao?: number;
+    gestorAcessos?: boolean;
+    gestaoAcessosRevisao?: number;
     /**
      * Departamentos do SaaS (08/08): dizem qual MÓDULO do app a pessoa abre —
      * fiscal, contabil, dp-folha, legalizacao, financeiro. Outra granularidade

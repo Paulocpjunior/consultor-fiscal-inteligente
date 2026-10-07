@@ -27,7 +27,7 @@ export default function AcessoCfiEditor({ user, disabled, onSaved }: { user: Use
             finally { setBusy(false); }
         }}>{busy ? 'Salvando…' : 'Salvar permissões do CFI'}</button>
         <button type="button" className="text-sm underline ml-3" onClick={async () => { try { setHistorico(await historicoPermissoesCfi(user.id)); } catch (e) { setMessage(e instanceof Error ? e.message : 'Histórico indisponível.'); } }}>Ver histórico</button>
-        {historico && <ul className="text-xs space-y-1">{historico.length ? historico.map(h => <li key={h.id}>{new Date(h.em).toLocaleString('pt-BR')} · {h.autor} · {h.antes?.nivel || 'anterior'} → {h.depois.nivel}</li>) : <li>Nenhuma alteração de nível registrada.</li>}</ul>}
+        {historico && <ul className="text-xs space-y-1">{historico.length ? historico.map(h => <li key={h.id}>{new Date(h.em).toLocaleString('pt-BR')} · {h.autor} · {h.evento === 'gestor_acessos' ? (h.gestorDepois ? 'Nomeado gestor de acessos' : 'Gestão retirada; admin mantido') : h.evento === 'administracao' ? (h.adminDepois ? 'Promovido a admin' : 'Rebaixado a colaborador') : h.evento === 'cadastro_colaborador' ? 'Colaborador cadastrado em consulta' : `${h.antes?.nivel || 'anterior'} → ${h.depois.nivel}`}</li>) : <li>Nenhuma alteração de nível registrada.</li>}</ul>}
         <p role="status" className="text-xs">{message}</p>
     </fieldset>;
 }
