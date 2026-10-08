@@ -15727,3 +15727,22 @@ Revisão do Codex no #1388 (07/10): a conversa precisa alternar pergunta e respo
 ## 08/10/2026 — Comunicação em lote e convite de vencimento
 
 Contatos por carteira/cadastro, planilha ou lista; prévia por destinatário, lote transacional pausado e ativação separada. Deduplicação por empresa, preservando contatos compartilhados. Core de agenda derivado do DP: assunto, data civil e lembrete na véspera, com anexação no provedor Graph. Vencimento estruturado prevalece; leitura de PDF textual como alternativa, sem inferir emissão/competência. Testes locais com provedores simulados, sem disparos reais.
+
+## 08/10/2026 — E-mail do Consultor DP pelo Graph e origem dos irmãos na auditoria
+
+Paulo (08/10): *"pode corrigir os 2 pontos no CFI"*. Os dois pontos vieram do PR #112 do Consultor DP, que levou o pacote do cliente ao SP Connect.
+
+- **E-mail do DP ao cliente:** nova rota `POST /api/dp-integration/email/enviar` (`soDoDp` + `confirmarEmpresaDaCarteiraDp`). Segue a mesma régua do `/graph` do envio de impostos e do kit do CCI:
+  - remetente = colaborador logado (`escolherRemetente`), com volta para a institucional quando a caixa não existe, avisada na resposta;
+  - BCC do gestor do DP por `DP_EMAIL_BCC` (opcional);
+  - casca da marca com "Departamento Pessoal" e lista do que vai anexo;
+  - destinatário com diagnóstico (`lerDestinatarios`/`recusaDeDestinatario`);
+  - anexos até 3 MB (limite do sendMail com anexo no JSON; acima disso, 413 com o caminho).
+  - Parte pura em `sefaz-backend/dp-email-pacote.js`.
+  - Auditoria em `dp_email_envio_log`: quem, origem, para, remetente, nomes e tamanhos dos anexos (sem conteúdo).
+  - Trava `dpEmailPacote.test.ts`.
+- **`projetoOrigem` dos apps irmãos:** `/api/admin/whatsapp/enviar` e o gateway da EFD-Reinf liam `req.user.projeto`, mas o `crossProjectAuth` preenche `projectId`, então o envio vindo do DP ficava sem origem. Agora leem `projectId`, com `projeto` como reserva.
+  - `whatsapp-routes.js` é arquivo do Connect, idêntico ao do repositório `sp-connect` até a F3: a mesma linha vai para lá.
+- **Revisão do Codex no PR #1391, duas P2:**
+  - **Teto dos anexos medido no base64.** O sendMail aceita até 4 MB de pedido, e o anexo viaja em base64 (+33%), junto com o logo inline e o corpo. Antes, 3 MB de arquivo viravam ~4 MB só de anexo e o Graph devolvia 502. Agora `LIMITE_ANEXOS_BASE64` = 4.000.000 caracteres, a mesma régua do `/graph` dos impostos, o que dá ~2,8 MB de arquivo. A trava confere que o teto, o logo e o maior corpo cabem nos 4 MB.
+  - **Convites de agenda devolvidos.** A rota agora responde `convites` e `avisosConvites`, como o `/graph` dos impostos, e conta o `vencimentos-sp.ics` em `anexos`. A auditoria grava `convites`.
