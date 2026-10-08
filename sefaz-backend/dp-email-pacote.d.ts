@@ -1,4 +1,5 @@
 export const DEPARTAMENTO_DP: string;
+export const LIMITE_ANEXOS_BASE64: number;
 export const LIMITE_ANEXOS_BYTES: number;
 export interface AnexoEmailDp { name: string; contentType: string; contentBytes: string; bytes: number }
 export type PedidoEmailDp =

@@ -18,11 +18,16 @@ import { montarLayoutEmail, textoParaHtml, escaparHtml } from './email-layout.js
 
 export const DEPARTAMENTO_DP = 'Departamento Pessoal';
 /**
- * sendMail com anexo no próprio JSON aceita até ~3 MB de anexos (acima disso
- * o Graph exige sessão de upload). Recusar antes é dizer o caminho; deixar
- * o Graph recusar seria um 413 sem explicação.
+ * O sendMail com anexo no próprio JSON aceita até 4 MB de PEDIDO (acima disso
+ * o Graph exige sessão de upload). O anexo viaja em base64 (+33%) e divide o
+ * pedido com o logo inline, o corpo e um eventual vencimentos-sp.ics. Por
+ * isso o teto é medido no base64, como no /graph do envio de impostos
+ * (4.000.000 caracteres), e equivale a 3.000.000 bytes do arquivo (~2,8 MB).
+ * Recusar antes é dizer o caminho; deixar o Graph recusar seria um 502 sem
+ * explicação (Codex, CFI #1391).
  */
-export const LIMITE_ANEXOS_BYTES = 3 * 1024 * 1024;
+export const LIMITE_ANEXOS_BASE64 = 4_000_000;
+export const LIMITE_ANEXOS_BYTES = (LIMITE_ANEXOS_BASE64 / 4) * 3;
 const MAX_ANEXOS = 10;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
@@ -51,17 +56,18 @@ export function validarPedidoEmailDp(body) {
     const lista = Array.isArray(b.anexos) ? b.anexos : [];
     if (lista.length > MAX_ANEXOS) return { ok: false, status: 400, error: `No máximo ${MAX_ANEXOS} anexos por e-mail.` };
     const anexos = [];
-    let total = 0;
+    let totalBase64 = 0;
     for (const [i, a] of lista.entries()) {
         const b64 = String(a?.base64 || '').replace(/\s+/g, '');
         const name = nomeSeguro(a?.nome);
         if (!name || !b64 || !BASE64.test(b64)) return { ok: false, status: 400, error: `Anexo ${i + 1} sem nome ou com conteúdo inválido.` };
         const bytes = bytesDoBase64(b64);
-        total += bytes;
+        totalBase64 += b64.length;
         anexos.push({ name, contentType: String(a?.mime || '') || 'application/octet-stream', contentBytes: b64, bytes });
     }
-    if (total > LIMITE_ANEXOS_BYTES) {
-        return { ok: false, status: 413, error: `Anexos com ${(total / 1048576).toFixed(1)} MB: o envio direto aceita até 3 MB. Baixe o pacote e anexe pelo Outlook.` };
+    if (totalBase64 > LIMITE_ANEXOS_BASE64) {
+        const total = anexos.reduce((t, a) => t + a.bytes, 0);
+        return { ok: false, status: 413, error: `Anexos com ${(total / 1048576).toFixed(1).replace('.', ',')} MB: o envio direto aceita até ${(LIMITE_ANEXOS_BYTES / 1048576).toFixed(1).replace('.', ',')} MB. Baixe o pacote e anexe pelo Outlook.` };
     }
     return { ok: true, para: lidos.validos, assunto, mensagem, titulo, empresaNome, competencia, anexos };
 }

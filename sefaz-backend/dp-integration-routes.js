@@ -467,9 +467,16 @@ router.post('/email/enviar', soDoDp, async (req, res) => {
             para: pedido.para, copiaPara: bcc, assunto: pedido.assunto,
             remetente, fonteRemetente,
             anexos: pedido.anexos.map((a) => ({ nome: a.name, bytes: a.bytes })),
+            convites: envio.convites || 0,
         }).catch((err) => console.warn('[dp-integration/email] auditoria falhou:', err.message));
-        console.log(`[dp-integration/email] ${cnpj} de ${remetente} (${fonteRemetente}) → ${pedido.para.join(', ')} · ${pedido.anexos.length} anexo(s)`);
-        return res.json({ ok: true, remetente, fonteRemetente, avisoRemetente, copiaPara: bcc, anexos: pedido.anexos.length });
+        // O enviarEmail acrescenta vencimentos-sp.ics quando lê um vencimento num
+        // PDF anexo, e avisa quando não consegue ler: a tela do DP diz as duas
+        // coisas, como o /graph do envio de impostos (Codex, CFI #1391).
+        const convites = envio.convites || 0;
+        const avisosConvites = envio.avisosConvites || [];
+        const totalAnexos = pedido.anexos.length + (convites ? 1 : 0);
+        console.log(`[dp-integration/email] ${cnpj} de ${remetente} (${fonteRemetente}) → ${pedido.para.join(', ')} · ${totalAnexos} anexo(s)`);
+        return res.json({ ok: true, remetente, fonteRemetente, avisoRemetente, copiaPara: bcc, anexos: totalAnexos, convites, avisosConvites });
     } catch (err) {
         console.error('[dp-integration/email]', err);
         return res.status(500).json({ ok: false, error: err.message });
