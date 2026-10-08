@@ -626,6 +626,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 participante: parte?.nome || '—',
                 cfops: cfopsEscriturados.join(' ') || '—',
                 contabil, ...a,
+                creditoOutras: Boolean(d._creditoOutrasDespesas),
             };
         };
         const r = direcao === 'entrada'
@@ -656,7 +657,11 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             { titulo: 'Base ICMS', largura: 10, alinhamento: 'direita' },
             { titulo: 'ICMS', largura: 8, alinhamento: 'direita' },
             { titulo: 'Isentas', largura: 10, alinhamento: 'direita' },
-            { titulo: 'Outras', largura: 10, alinhamento: 'direita' },
+            // 💳 "ICMS Outras" (08/10, FLANACAR): com o crédito de IPI lançado de
+            // outras despesas, "Outras" solto foi lido como OUTRAS DESPESAS. É a
+            // coluna do ICMS que fecha o valor contábil — e o IPI que não integra
+            // a base do ICMS fica nela.
+            { titulo: 'ICMS Outras', largura: 10, alinhamento: 'direita' },
             { titulo: 'IPI', largura: 7, alinhamento: 'direita' },
             // 🚨 O ST GANHOU COLUNA (09/09) — Paulo: *"por que ele puxa IPI e
             // não puxa ICMS ST?"*. Ele nunca é crédito, em regime nenhum, e
@@ -668,7 +673,15 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
         totais: ['', '', `TOTAIS (${linhas.length} notas)`, '', tot.contabil, tot.base, tot.icms, tot.isentos, tot.outras, tot.ipi, tot.st],
         identificacao,
         observacoes: [
-            'Base/Isentas/Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            'Base/Isentas/ICMS Outras alocadas pela tributação de cada item (CST do XML), fechando no valor contábil — mesma régua do Exportar SAGE.',
+            ...(tot.ipi > 0 ? [
+                `IPI creditado incluso em ICMS Outras: ${fmtBRL(tot.ipi)}. O IPI não integra a base do ICMS, então fica na coluna ICMS Outras `
+                + 'para fechar o valor contábil. ICMS Outras NÃO é "outras despesas" da nota.',
+            ] : []),
+            ...(linhas.some((l: any) => l.creditoOutras) ? [
+                'Crédito de IPI/ICMS-ST lançado de outras despesas (ajuste na nota): '
+                + linhas.filter((l: any) => l.creditoOutras).map((l: any) => `nº ${l.numero} ${l.participante}`).join(' · ') + '.',
+            ] : []),
             // 🚨 A RÉGUA VAI JUNTO DO NÚMERO. Sem esta linha, quem comparasse
             // com o livro do E-Fiscal veria Base e ICMS zerados e concluiria
             // que faltou captura — quando o certo é justamente não creditar.
@@ -726,7 +739,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 </select>
                 <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
                 <span className="text-xs text-slate-500">
-                    {linhas.length} nota(s) · contábil {fmtBRL(tot.contabil)} · base {fmtBRL(tot.base)} · isentas {fmtBRL(tot.isentos)} · outras {fmtBRL(tot.outras)}
+                    {linhas.length} nota(s) · contábil {fmtBRL(tot.contabil)} · base {fmtBRL(tot.base)} · isentas {fmtBRL(tot.isentos)} · ICMS outras {fmtBRL(tot.outras)}
                 </span>
             </div>
             {/* A régua VAI JUNTO DO NÚMERO: o sufixo da compra muda com a
@@ -761,6 +774,12 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                     IPI destacado nas entradas — <strong>{fmtBRL(tot.ipiCusto)}</strong> —{' '}
                     {semCreditoIpi.motivo} ({semCreditoIpi.baseLegal}). A coluna IPI é de{' '}
                     <strong>IPI creditado</strong>, por isso sai zerada; o valor contábil fecha igual.
+                </p>
+            )}
+            {tot.ipi > 0 && (
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    IPI creditado incluso em <strong>ICMS Outras</strong>: {fmtBRL(tot.ipi)}. O IPI não integra a base do ICMS,
+                    então fica nessa coluna para fechar o valor contábil. ICMS Outras <strong>não</strong> é "outras despesas" da nota.
                 </p>
             )}
             {tot.st > 0 && (
@@ -1631,7 +1650,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             { titulo: 'Base ICMS', largura: 12, alinhamento: 'direita' },
             { titulo: 'ICMS', largura: 10, alinhamento: 'direita' },
             { titulo: 'Isentas', largura: 12, alinhamento: 'direita' },
-            { titulo: 'Outras', largura: 12, alinhamento: 'direita' },
+            { titulo: 'ICMS Outras', largura: 12, alinhamento: 'direita' },
             { titulo: 'IPI', largura: 8, alinhamento: 'direita' },
             // Mesma coluna que o Livro ganhou em 09/09: o ST nunca é crédito e
             // ficava invisível dentro de Outras. Os dois recortes leem a MESMA
@@ -1691,7 +1710,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
                             <tr><th className="text-left py-1">E/S</th><th className="text-left">CFOP</th><th className="text-right">Notas</th>
                                 <th className="text-right" title="Quantos dos documentos desta linha são CT-e (frete)">CT-e</th>
                                 <th className="text-right">Contábil</th><th className="text-right">Base</th><th className="text-right">ICMS</th>
-                                <th className="text-right">Isentas</th><th className="text-right">Outras</th></tr>
+                                <th className="text-right">Isentas</th><th className="text-right">ICMS Outras</th></tr>
                         </thead>
                         <tbody>
                             {linhas.map((l, i) => (
