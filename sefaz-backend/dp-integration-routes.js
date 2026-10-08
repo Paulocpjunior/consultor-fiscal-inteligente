@@ -31,6 +31,11 @@ import { confirmarEmpresaDaCarteiraDp, AcessoNegado } from './dp-acesso-empresa.
 import { crossProjectAuth, PROJETO } from './require-cross-project-auth.js';
 import { validarPdf, montarPromptHolerites, lerRespostaHolerites, SCHEMA_HOLERITES } from './holerite-extracao.js';
 import { instrucaoMia, validarConversa, montarConteudo, lerResposta } from './dp-assistente-mia.js';
+import { validarPedidoEmailDp, montarEmailPacoteDp } from './dp-email-pacote.js';
+import { enviarEmail } from './graph-provider.js';
+import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
+import { anexoLogo } from './email-layout.js';
+import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
 router.use(express.json());
@@ -410,6 +415,64 @@ router.post('/empresa-completo', requireCrossProjectAuth, async (req, res) => {
     } catch (err) {
         console.error('[dp-integration/empresa-completo]', err);
         return res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── E-mail do DP ao cliente (Graph) ─────────────────────────────────────────
+// POST /api/dp-integration/email/enviar
+// Body: { empresaId, cnpj, empresaNome, titulo, competencia?, para, assunto?,
+//         mensagem, anexos: [{ nome, base64, mime? }] }
+// Mesma régua do CFI (envio-imposto /graph) e do CCI (Paulo, 08/10/2026):
+// remetente = colaborador logado (caixa do domínio; senão a institucional),
+// com volta à institucional se a caixa dele não existir, DITA na resposta;
+// cópia oculta do gestor do DP (DP_EMAIL_BCC); cópia em Itens Enviados. Só
+// para empresa da carteira do usuário no DP (lida com o token dele).
+// Auditoria em dp_email_envio_log: quem, de onde, para quem, nomes e
+// tamanhos dos anexos — nunca o conteúdo.
+router.post('/email/enviar', soDoDp, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    const pedido = validarPedidoEmailDp(req.body);
+    if (!pedido.ok) return res.status(pedido.status).json({ ok: false, error: pedido.error });
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        return res.status(err instanceof AcessoNegado ? 403 : 502).json({ ok: false, error: err.message });
+    }
+    try {
+        const padrao = process.env.GRAPH_REMETENTE || process.env.NOTIF_REMETENTE_EMAIL || 'junior@spassessoriacontabil.com.br';
+        const escolha = escolherRemetente({ emailColaborador: req.user?.email, padrao, dominios: dominiosPermitidos() });
+        const jaNoPara = new Set(pedido.para.map((e) => e.toLowerCase()));
+        const bcc = parseDestinatarios(process.env.DP_EMAIL_BCC).filter((c) => !jaNoPara.has(c.toLowerCase()));
+        const corpoHtml = montarEmailPacoteDp({ titulo: pedido.titulo, empresaNome: pedido.empresaNome, competencia: pedido.competencia, mensagem: pedido.mensagem, anexos: pedido.anexos });
+        const anexos = [...pedido.anexos.map(({ bytes: _b, ...a }) => a), ...anexoLogo()];
+
+        let remetente = escolha.remetente;
+        let fonteRemetente = escolha.fonte;
+        let avisoRemetente = escolha.motivo;
+        let envio = await enviarEmail({ remetente, para: pedido.para, bcc, assunto: pedido.assunto, corpoHtml, anexos });
+        if (!envio.ok && fonteRemetente === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
+            avisoRemetente = `a caixa ${remetente} não pôde enviar; usamos ${padrao}`;
+            remetente = padrao;
+            fonteRemetente = 'padrao';
+            envio = await enviarEmail({ remetente, para: pedido.para, bcc, assunto: pedido.assunto, corpoHtml, anexos });
+        }
+        if (!envio.ok) return res.status(502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
+
+        if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+        await admin.firestore().collection('dp_email_envio_log').add({
+            em: admin.firestore.FieldValue.serverTimestamp(),
+            por: req.user?.email || null, projetoOrigem: req.user?.projectId || null,
+            empresaId: String(req.body?.empresaId || ''), cnpj,
+            para: pedido.para, copiaPara: bcc, assunto: pedido.assunto,
+            remetente, fonteRemetente,
+            anexos: pedido.anexos.map((a) => ({ nome: a.name, bytes: a.bytes })),
+        }).catch((err) => console.warn('[dp-integration/email] auditoria falhou:', err.message));
+        console.log(`[dp-integration/email] ${cnpj} de ${remetente} (${fonteRemetente}) → ${pedido.para.join(', ')} · ${pedido.anexos.length} anexo(s)`);
+        return res.json({ ok: true, remetente, fonteRemetente, avisoRemetente, copiaPara: bcc, anexos: pedido.anexos.length });
+    } catch (err) {
+        console.error('[dp-integration/email]', err);
+        return res.status(500).json({ ok: false, error: err.message });
     }
 });
 

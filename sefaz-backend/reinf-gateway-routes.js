@@ -121,7 +121,7 @@ router.post('/transmitir', autorizar, async (req, res) => {
         await getDb().collection('reinf_gateway_lotes').add({
             em: admin.firestore.FieldValue.serverTimestamp(),
             por: req.user?.email || null,
-            projetoOrigem: req.user?.projeto || 'cfi',
+            projetoOrigem: req.user?.projectId || req.user?.projeto || 'cfi',
             declarante: String(contribuinte?.nrInsc || '').replace(/\D/g, ''),
             tpAmb: amb.tpAmb,
             eventos: assinados.map((x) => extrairEvento(x).id),

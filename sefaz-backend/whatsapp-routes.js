@@ -333,7 +333,8 @@ router.post('/enviar', autorizar, async (req, res) => {
                 departamento, template: template.nome,
                 numeroEnviado: envio.numeroEnviado, messageId: envio.messageId,
                 por: req.user?.email || null,
-                projetoOrigem: req.user?.projeto || (req._ehAdmin ? 'cfi' : null),
+                // crossProjectAuth preenche projectId (como em /conversas/iniciar): o irmão ficava sem origem.
+                projetoOrigem: req.user?.projectId || req.user?.projeto || (req._ehAdmin ? 'cfi' : null),
                 referencia: p.referencia || null,
                 temDocumento: Boolean(template.temDocumento && p.pdfBase64),
             });
