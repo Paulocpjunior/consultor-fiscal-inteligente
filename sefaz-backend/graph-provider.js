@@ -82,6 +82,9 @@ export function invalidarTokenGraph() {
     _tokenCache = { value: null, expiraEm: 0 };
 }
 
+/** Teto do pedido do Graph sendMail com anexos no próprio JSON (acima disso, sessão de upload). */
+export const LIMITE_PEDIDO_SENDMAIL = 4 * 1024 * 1024;
+
 /**
  * Envia um e-mail pela caixa de `remetente` (UPN/e-mail de um usuário do tenant).
  * @param {object} p
@@ -92,7 +95,7 @@ export function invalidarTokenGraph() {
  * @param {string} p.assunto
  * @param {string} p.corpoHtml  corpo em HTML
  * @param {Array<{name: string, contentType: string, contentBytes: string}>} [p.anexos]
- * @returns {Promise<{ok: boolean, error?: string}>}
+ * @returns {Promise<{ok: boolean, error?: string, tamanhoExcedido?: boolean, convites?: number, avisosConvites?: string[]}>}
  */
 export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto, corpoHtml, anexos = [], vencimento, identidade = '' }) {
     try {
@@ -141,13 +144,22 @@ export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto,
             saveToSentItems: true,
         };
 
+        // O sendMail com anexo no próprio JSON aceita até 4 MB de PEDIDO. Quem
+        // chama confere os anexos antes, mas o vencimentos-sp.ics nasce aqui
+        // (um evento por data lida nos PDFs): conferir o pedido FINAL é dizer o
+        // tamanho e o caminho, em vez do 413 cru do Graph (Codex, CFI #1391).
+        const corpo = JSON.stringify(payload);
+        const tamanho = Buffer.byteLength(corpo);
+        if (tamanho > LIMITE_PEDIDO_SENDMAIL) {
+            return { ok: false, tamanhoExcedido: true, error: `E-mail com ${(tamanho / 1048576).toFixed(1).replace('.', ',')} MB com os anexos: o envio direto aceita até 4 MB. Envie os anexos em duas mensagens ou pelo Outlook.` };
+        }
         const resp = await fetch(url, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload),
+            body: corpo,
         });
 
         // sendMail retorna 202 Accepted (sem corpo) quando dá certo.
