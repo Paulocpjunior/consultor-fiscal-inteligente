@@ -1,3 +1,4 @@
+import { legendaComConvite } from './convites-whatsapp.js';
 // ============================================================================
 // sefaz-backend/whatsapp-routes.js  (ESM)
 // Montado em /api/admin/whatsapp pelo server.js.
@@ -2441,7 +2442,8 @@ router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
         const tamanhoBytes = Buffer.byteLength(base64, 'base64');
         const v = validarAnexo({ mime: p.mime, tamanhoBytes, nomeArquivo: p.nomeArquivo });
         if (!v.ok) return res.status(422).json({ ok: false, error: v.erro, acao: v.acao });
-        const legenda = String(p.legenda || '').trim();
+        const convite = await legendaComConvite({ legenda:String(p.legenda || '').trim(), nomeArquivo:v.nome, mime:p.mime, base64, vencimento:p.vencimento, tipo:v.tipo });
+        const legenda = convite.legenda;
 
         // Pelo MESMO número da conversa — o upload de mídia também é por
         // número: subir num e mandar por outro a Meta recusa.
@@ -2496,6 +2498,7 @@ router.post('/conversas/:numero/anexo', requireAuth, async (req, res) => {
             ok: true,
             // A legenda descartada é DITA — texto que some sem aviso faz a
             // pessoa achar que o cliente leu o recado.
+            convites: convite.quantidade, avisosConvites: convite.avisos,
             legendaIgnorada: legendaSeraIgnorada(v.tipo, legenda),
             copiaGuardada: Boolean(storagePath),
             mensagem: { id: envio.messageId, ...msg, midia: { ...midia, baixada: Boolean(storagePath) }, erroEntrega: null },

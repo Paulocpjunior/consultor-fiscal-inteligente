@@ -1113,6 +1113,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
     }, [thread]);
 
     const [anexando, setAnexando] = useState(false);
+    const [vencimentoAnexo, setVencimentoAnexo] = useState('');
+    useEffect(()=>setVencimentoAnexo(''),[sel?.numero]);
     const inputAnexo = useRef<HTMLInputElement>(null);
     const mandarAnexo = async (arquivo: File | null) => {
         if (!arquivo || !sel || anexando) return;
@@ -1129,6 +1131,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                 base64, nomeArquivo: arquivo.name,
                 mime: arquivo.type || 'application/octet-stream',
                 legenda: texto.trim() || undefined,
+                vencimento: vencimentoAnexo || undefined,
             });
             if (!r.ok) {
                 if ((r as any).emConducaoPor) patchSel({ atribuidoA: (r as any).emConducaoPor });
@@ -1137,6 +1140,8 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
             }
             setMensagens((m) => [...m, r.mensagem]);
             setTexto('');
+            setVencimentoAnexo('');
+            if (r.avisosConvites?.length) setErroEnvio(r.avisosConvites.join(' '));
             if (r.legendaIgnorada) setErroEnvio('Anexo enviado — mas a legenda NÃO foi junto: áudio não aceita legenda no WhatsApp.');
             if (r.copiaGuardada === false) setErroEnvio('Anexo enviado ao cliente, mas a cópia no histórico falhou — ele pode não abrir aqui depois.');
             if (!sel.atribuidoA) patchSel({ atribuidoA: meuEmail });
@@ -5213,6 +5218,7 @@ const SpConnect: React.FC<{ currentUser: { role: string; email?: string } }> = (
                                             </div>
                                         </div>
                                     )}
+                                    {sel.canal !== 'instagram' && <label className="text-xs block mb-2">Vencimento do documento (opcional; PDF legível é conferido automaticamente)<input aria-label="Vencimento do documento" type="date" value={vencimentoAnexo} onChange={e=>setVencimentoAnexo(e.target.value)} disabled={anexando} className="ml-2 border rounded p-1 bg-transparent" /><span className="block text-slate-500">Com vencimento, o documento leva um link para adicionar à agenda na legenda.</span></label>}
                                     <div className="flex items-end gap-2">
                                         <input ref={inputAnexo} type="file" className="hidden"
                                             onChange={(e) => mandarAnexo(e.target.files?.[0] || null)} />

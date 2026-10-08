@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { LOTES, CONTATOS, normalizarContatos, montarLote, salvarLote, alterarLote } from './comunicacao-lotes.js';
 import { secretsMatch } from './cron-secret.js';
 import { tickComunicacao } from './comunicacao-agenda.js';
 import { prepararComunicacao } from './comunicacao-envio.js';
@@ -116,4 +118,29 @@ router.post('/agendas/:id/estado', rota(async (req, res) => {
     });
     res.json({ ok: true });
 }));
+router.get('/contatos', rota(async (req, res) => {
+    const departamento = String(req.query.departamento || 'fiscal');
+    exigir(DEPARTAMENTOS.includes(departamento), 'Departamento inválido.');
+    const snap = await db().collection(CONTATOS).where('departamento','==',departamento).limit(2001).get();
+    res.json({ ok:true, contatos:snap.docs.slice(0,2000).map(d=>({...d.data(),id:d.id})), truncado:snap.size>2000 });
+}));
+router.post('/contatos', rota(async (req,res) => {
+    exigir(DEPARTAMENTOS.includes(req.body.departamento), 'Departamento inválido.');
+    const {contatos,duplicados}=normalizarContatos(req.body.contatos);
+    const store=db(), batch=store.batch();
+    for(const c of contatos){const id=createHash('sha256').update(req.body.departamento+'|'+c.cnpj+'|'+c.empresa+'|'+c.para).digest('hex');batch.set(store.collection(CONTATOS).doc(id),{...c,departamento:req.body.departamento,atualizadoPor:req.user.email,atualizadoEm:new Date().toISOString()},{merge:true});}
+    await batch.commit();res.json({ok:true,quantidade:contatos.length,duplicados});
+}));
+router.get('/lotes', rota(async(req,res)=>{
+    const departamento=String(req.query.departamento||'fiscal');exigir(DEPARTAMENTOS.includes(departamento),'Departamento inválido.');
+    const snap=await db().collection(LOTES).where('departamento','==',departamento).limit(201).get();
+    res.json({ok:true,lotes:snap.docs.slice(0,200).map(d=>({...d.data(),id:d.id})),truncado:snap.size>200});
+}));
+router.post('/lotes/previa',rota(async(req,res)=>{
+    idValido(req.body.modeloId);const modelo=(await db().collection(MODELOS).doc(req.body.modeloId).get()).data();
+    const r=montarLote(req.body,modelo);
+    res.json({ok:true,revisao:modelo.revisao,duplicados:r.duplicados,previas:r.agendas.map(a=>({para:a.para,destinatario:a.destinatario,valores:a.valores,...(modelo.canal==='email'?previaEmail(modelo,a.valores):{corpo:modelo.whatsapp.corpo.replace(/\{\{\s*(\d+)\s*\}\}/g,(_,n)=>a.valores[modelo.variaveis[Number(n)-1]])})}))});
+}));
+router.post('/lotes',rota(async(req,res)=>{idValido(req.body.modeloId);idValido(req.body.pedidoId);res.json({ok:true,...await salvarLote(db(),req.body,req.user)});}));
+router.post('/lotes/:id/estado',rota(async(req,res)=>{idValido(req.params.id);await alterarLote(db(),req.params.id,req.body.status,req.user);res.json({ok:true});}));
 export default router;

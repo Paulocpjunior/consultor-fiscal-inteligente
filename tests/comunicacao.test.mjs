@@ -45,7 +45,7 @@ test('diária, semanal, única e ano bissexto', () => {
 function banco() {
     const data = new Map();
     let lock = Promise.resolve();
-    const doc = key => ({ id: key.split('/').at(-1), key, get: async () => ({ exists: data.has(key), data: () => structuredClone(data.get(key)) }) });
+    const doc = key => ({ id: key.split('/').at(-1), key, get: async () => ({ exists: data.has(key), data: () => structuredClone(data.get(key)), ref: doc(key) }) });
     const db = { collection: col => ({ doc: id => doc(`${col}/${id}`) }), runTransaction: async fn => {
         const anterior = lock; let liberar; lock = new Promise(r => { liberar = r; }); await anterior;
         const writes = [];
@@ -85,3 +85,40 @@ test('data final vencida encerra a agenda sem enviar', async () => {
     await executarOcorrencia(db, ref, new Date('2028-01-01T12:00Z'), async () => async () => { enviados++; return { ok: true }; });
     assert.equal(enviados, 0); assert.equal(data.get(ref.key).status, 'concluido');
 });
+
+const { normalizarContatos, montarLote, salvarLote, alterarLote, LOTES } = await import('../sefaz-backend/comunicacao-lotes.js');
+const loteEntrada = { ...entrada, pedidoId: 'pedido1', modeloRevisao:1, contatos: [
+    { para: 'Um@example.com', empresa: 'Empresa A', cnpj: '12345678000190' },
+    { para: 'um@example.com', empresa: 'Empresa A', cnpj: '12345678000190' },
+    { para: 'um@example.com', empresa: 'Empresa B', cnpj: '22345678000190' },
+] };
+test('lote deduplica por empresa, preserva contatos compartilhados e personaliza sem misturar clientes', () => {
+    const r = montarLote(loteEntrada, modelo, agora);
+    assert.equal(r.agendas.length, 2); assert.equal(r.duplicados, 1);
+    assert.equal(r.agendas[0].valores.cliente, 'Empresa A');
+    assert.equal(r.agendas[1].valores.cliente, 'Empresa B');
+    assert.ok(r.agendas.every(a => a.status === 'pausado'));
+    assert.throws(() => normalizarContatos([{para:'a@x.com;b@x.com'}]));
+    assert.throws(() => normalizarContatos(Array(401).fill({para:'a@x.com'})));
+    assert.throws(() => normalizarContatos([{para:'a@x.com',cnpj:'123'}]));
+});
+test('lote transacional salva pausado, repetição do pedido não duplica e ativação exige modelo e data vigentes', async () => {
+    const {db,data} = banco(); const autor = {uid:'admin',email:'admin@example.com'};
+    await Promise.all([salvarLote(db,loteEntrada,autor,agora),salvarLote(db,loteEntrada,autor,agora)]);
+    assert.equal(data.get(`${LOTES}/pedido1`).quantidade, 2);
+    assert.equal([...data.keys()].filter(k=>k.startsWith(`${AGENDAS}/pedido1_`)).length,2);
+    await assert.rejects(salvarLote(db,{...loteEntrada,valores:{documentos:'Outro'}},autor,agora),/outros dados/);
+    await alterarLote(db,'pedido1','ativo',autor,agora);
+    assert.equal(data.get(`${AGENDAS}/pedido1_0`).status,'ativo');
+    await alterarLote(db,'pedido1','pausado',autor,agora);
+    data.set(`${MODELOS}/modelo1`,{...modelo,revisao:2});
+    await assert.rejects(alterarLote(db,'pedido1','ativo',autor,agora),/Modelo mudou/);
+    assert.equal(data.get(`${AGENDAS}/pedido1_0`).status,'pausado');
+    data.set(`${MODELOS}/modelo1`,modelo);
+    await assert.rejects(alterarLote(db,'pedido1','ativo',autor,tick),/Horário passou/);
+    data.set(`${AGENDAS}/pedido1_1`,{...data.get(`${AGENDAS}/pedido1_1`),status:'processando'});
+    await assert.rejects(alterarLote(db,'pedido1','cancelado',autor,agora),/em execução/);
+    assert.equal(data.get(`${AGENDAS}/pedido1_0`).status,'pausado');
+});
+
+test('salvar exige a revisão conferida, antes de criar destinatários', async()=>{const {db,data}=banco();await assert.rejects(salvarLote(db,{...loteEntrada,modeloRevisao:0},{uid:'admin',email:'admin@example.com'},agora),/Confira novamente/);assert.equal(data.has(`${LOTES}/pedido1`),false);});

@@ -297,6 +297,8 @@ export interface EnvioGraphResultado extends RitoResultado {
     avisoRemetente?: string | null;
     copiaPara?: string[];
     anexouPdf?: boolean;
+    convites?: number;
+    avisosConvites?: string[];
 }
 
 /**
@@ -435,11 +437,12 @@ export function mensagemEnvioWhatsapp(r: EnvioWhatsappResultado): string {
 export function mensagemEnvioServidor(r: EnvioGraphResultado): string {
     const partes = [`E-mail ENVIADO para ${r.para || 'o cliente'}`];
     if (r.anexouPdf) partes.push('com a guia em anexo');
+    if (r.convites) partes.push(`e convite de agenda (${r.convites} vencimento(s))`);
     if (r.remetente) partes.push(`pela caixa ${r.remetente}`);
     const base = `${partes.join(' ')}.`;
     const copia = r.copiaPara?.length ? ` Cópia oculta a ${r.copiaPara.join(', ')}.` : '';
     const aviso = r.avisoRemetente ? ` ⚠ ${r.avisoRemetente}.` : '';
-    return `${base}${copia}${aviso} A cópia fica em Itens Enviados da caixa remetente.`;
+    return `${base}${copia}${aviso}${r.avisosConvites?.length ? ' Atenção: '+r.avisosConvites.join(' ') : ''} A cópia fica em Itens Enviados da caixa remetente.`;
 }
 
 

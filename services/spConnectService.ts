@@ -138,8 +138,8 @@ export async function abrirMidia(numero: string, mensagemId: string): Promise<
 }
 
 /** Envia anexo (dentro da janela de 24h; o backend trava tamanho e tipo). */
-export const enviarAnexo = (numero: string, p: { base64: string; nomeArquivo: string; mime: string; legenda?: string }) =>
-    req<{ mensagem: MensagemInbox; legendaIgnorada?: boolean; copiaGuardada?: boolean; acao?: string; janelaFechada?: boolean; emConducaoPor?: string }>(
+export const enviarAnexo = (numero: string, p: { base64: string; nomeArquivo: string; mime: string; legenda?: string; vencimento?: string }) =>
+    req<{ mensagem: MensagemInbox; convites?: number; avisosConvites?: string[]; legendaIgnorada?: boolean; copiaGuardada?: boolean; acao?: string; janelaFechada?: boolean; emConducaoPor?: string }>(
         `/api/admin/whatsapp/conversas/${encodeURIComponent(numero)}/anexo`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
 

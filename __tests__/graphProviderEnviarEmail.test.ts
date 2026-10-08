@@ -153,4 +153,14 @@ describe('graph-provider enviarEmail', () => {
         expect(r.ok).toBe(false);
         expect(r.error).toContain('403');
     });
+    it('envia documento e agenda com vencimento estruturado na mesma chamada', async () => {
+        const r = await enviarEmail({ remetente:'admin@example.com',para:'cliente@example.com',assunto:'DAS Empresa A',corpoHtml:'Guia',vencimento:'2026-10-20',identidade:'cnpj/das/2026-09',anexos:[{name:'das.pdf',contentType:'application/pdf',contentBytes:'QUJD'}] });
+        expect(r.ok).toBe(true);
+        const anexos=payloadDaUltimaChamada().message.attachments;
+        expect(anexos.map((a:any)=>a.name)).toEqual(['das.pdf','vencimentos-sp.ics']);
+        const ics=Buffer.from(anexos[1].contentBytes,'base64').toString();
+        expect(ics).toContain('SUMMARY:DAS Empresa A');
+        expect(ics).toContain('DTSTART;VALUE=DATE:20261020');
+    });
+
 });
