@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { resumirCausasIssZerado, divergenciaRegimePelaNota } from './iss-zerado-causa.js';
-import { issDoDocumento, issRetidoDoDocumento, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { issDoDocumento, issRetidoDoDocumento, direcaoEfetivaDoc, docCancelado } from './xml-metadata-helper.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -87,7 +87,8 @@ export function acumularIssPorEmpresa(documentos, resolverEmpresaId) {
 
     for (const d of documentos || []) {
         if (!ehNfse(d)) continue;
-        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+        // Cancelada por EVENTO também sai (a régua é `docCancelado` — 08/10).
+        if (docCancelado(d) || CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
         const empresaId = resolverEmpresaId ? resolverEmpresaId(d) : d.empresaId;
         if (!empresaId) continue;
         const v = d.valores || {};

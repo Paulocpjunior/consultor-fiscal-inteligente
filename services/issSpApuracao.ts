@@ -20,7 +20,7 @@ import type { DocumentoFiscal, IssConfig } from '../types';
 // `valores.iss → valorIss → issDevido → totais.vISS` estava escrita aqui E no
 // `iss-carteira.js`, e três relatórios liam só a primeira — a do import pelo
 // NAVEGADOR, que é a minoria das notas.
-import { issDoDocumento, issRetidoDoDocumento, direcaoEfetivaDoc } from '../sefaz-backend/xml-metadata-helper.js';
+import { issDoDocumento, issRetidoDoDocumento, direcaoEfetivaDoc, docCancelado } from '../sefaz-backend/xml-metadata-helper.js';
 
 /** Código IBGE de São Paulo capital — única praça coberta (Paulo, 05/08). */
 export const COD_MUN_SP_CAPITAL = '3550308';
@@ -169,7 +169,11 @@ export function apurarIssSp(
         // 🚨 A direção sai da RÉGUA, nunca do campo gravado — ela decide aqui
         // entre DUAS guias (ISS próprio × ISS retido como tomadora).
         if (direcaoEfetivaDoc(d) !== 'saida') continue;      // ISS próprio é do que a empresa PRESTOU
-        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+        // 🚨 08/10 (WALDESA 0005-02, 09/2026): a régua é `docCancelado` — status,
+        // cStat E o EVENTO de cancelamento. Só o `status` deixava a nota
+        // cancelada por evento (status segue "autorizado") somando no ISS:
+        // 5 notas, R$ 191,32 a mais, pegos pela conferência do PDF da guia.
+        if (docCancelado(d) || CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
 
         const x: any = d as any;
         const v: any = d.valores || {};
@@ -216,7 +220,11 @@ export function apurarIssSp(
         const tipo = String((d as any).tipoDoc || d.tipo || '');
         if (!/NFSe/i.test(tipo)) continue;
         if (direcaoEfetivaDoc(d) !== 'entrada') continue;   // serviço TOMADO
-        if (CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
+        // 🚨 08/10 (WALDESA 0005-02, 09/2026): a régua é `docCancelado` — status,
+        // cStat E o EVENTO de cancelamento. Só o `status` deixava a nota
+        // cancelada por evento (status segue "autorizado") somando no ISS:
+        // 5 notas, R$ 191,32 a mais, pegos pela conferência do PDF da guia.
+        if (docCancelado(d) || CANCELADOS.has(String(d.status || '').toLowerCase())) continue;
 
         tomadasNoMes++;
         const x: any = d as any;

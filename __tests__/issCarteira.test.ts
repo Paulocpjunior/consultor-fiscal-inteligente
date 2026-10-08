@@ -305,6 +305,8 @@ describe('acumularIssPorEmpresa — as DUAS formas do documento', () => {
     it('cancelada e não-NFS-e ficam de fora', () => {
         expect(acumularIssPorEmpresa([
             { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 10, status: 'cancelado' },
+            // cancelada por EVENTO: o status segue "autorizado" (08/10, WALDESA)
+            { empresaId: 'e1', tipoDoc: 'NFSe', direcao: 'saida', valorIss: 10, status: 'autorizado', eventos: [{ tpEvento: '110111', cStat: '135' }] },
             { empresaId: 'e1', tipoDoc: 'NFe', direcao: 'saida', valorIss: 10 },
         ], resolver)).toEqual([]);
     });
