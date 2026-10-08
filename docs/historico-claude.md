@@ -9,6 +9,13 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📒 LIVRO: "Outras" → "ICMS Outras" (08/10)** (Paulo, FLANACAR NF 419011 após o
+  crédito de IPI: leu os 4,19 em "Outras" como outras despesas que ficaram). É a
+  coluna de ICMS que fecha o contábil; o IPI fora da base fica nela (igual LTJ NF
+  102). Paulo escolheu opção 1: manter a régua (`alocarTributacaoIcms` intacta),
+  renomear cabeçalho no Livro e Resumo por CFOP e dizer "IPI creditado incluso em
+  ICMS Outras" + notas com crédito de outras despesas (tela e PDF).
+
 - **💳 CRÉDITO DE IPI/ICMS-ST EM "OUTRAS DESPESAS" (08/10)** (Paulo, FLANACAR:
   NF-e 419011 da HSCAR, devolução, vOutro 4,19, IPI 0,00, infCpl "VALOR DO IPI
   R$4,19"; RC SEFAZ/SP 2020/2013 e SC COSIT 159/2019). Decisão do Paulo: NO
