@@ -739,6 +739,9 @@ router.get('/iss-carteira', authUser, async (req, res) => {
             db.collection('documentos_fiscais')
                 .where('competencia', '==', competencia)
                 .select('empresaId', 'empresaCnpj', 'tipoDoc', 'tipo', 'direcao', 'status',
+                    // a régua do cancelamento (docCancelado): nota cancelada por
+                    // EVENTO segue com status "autorizado" (08/10, WALDESA)
+                    'cStat', 'eventos', 'cancelamentoDeclarado',
                     'valorIss', 'issDevido', 'issRetido', 'valorIssRetido',
                     'valores.iss', 'valores.issRetido', 'valores.valorIssRetido', 'valores.valorIss',
                     // `totais.vISSRetido` é a forma do ABRASF — faltava, e sem

@@ -9,6 +9,18 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🚫 ISS SOMAVA NOTA CANCELADA POR EVENTO (08/10)** (Paulo, WALDESA 0005-02
+  09/2026: guia de ISS prestados travou — apuração 7.850,09 × PDF 7.658,77;
+  diferença 191,32 = ISS das NFS-e 224, 225, 226, 251 e 273, canceladas). A
+  conferência do PDF (#1389) pegou na 1ª guia real. Causa: `apurarIssSp` e
+  `iss-carteira` checavam só `status`; cancelamento por EVENTO mantém
+  "autorizado". Agora `docCancelado(d) ||` (a régua da Central de XMLs); a
+  projeção do painel de carteira (`nfse-sp-routes`) ganhou cStat/eventos/
+  cancelamentoDeclarado. Travas: casos novos em `issSpApuracao.test.ts` e
+  `issCarteira.test.ts` (vermelhos no antigo) e a VARREDURA
+  `canceladoPelaRegua.test.ts` (quem testa `CANCELADOS.has(String(x.status`
+  tem de chamar `docCancelado(` ou declarar o motivo).
+
 - **🧾 VALOR DO PDF DA GUIA × APURAÇÃO (08/10)** (Paulo: *"sim, faz a leitura do
   valor do pdf da guia"*). Sem leiaute conferido de cada prefeitura, a pergunta
   é a que vale para QUALQUER guia: o valor apurado (o do e-mail) aparece

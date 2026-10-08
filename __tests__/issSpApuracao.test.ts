@@ -73,6 +73,20 @@ describe('apuração do ISS próprio', () => {
         expect(a.apta).toBe(false);
     });
 
+    it('🚨 08/10 WALDESA: nota cancelada por EVENTO (status segue "autorizado") também sai do ISS', () => {
+        // Cinco notas canceladas por evento somavam R$ 191,32 a mais e a
+        // conferência do PDF da guia travou o envio (7.850,09 × 7.658,77).
+        const a = apurarIssSp([
+            nfse(),
+            nfse({ id: 'ev', numero: '225', status: 'autorizado', valores: { baseCalculo: 1625, iss: 65 },
+                eventos: [{ tpEvento: '110111', cStat: '135' }] }),
+            nfse({ id: 'decl', numero: '226', valores: { baseCalculo: 500, iss: 20 },
+                cancelamentoDeclarado: { em: '2026-10-01T10:00:00Z', por: 'x@y' } }),
+        ], '2026-07');
+        expect(a.notas.map((n: any) => n.id)).toEqual(['n1']);
+        expect(a.aRecolher).toBe(240);
+    });
+
     it('competência sem nota avisa em vez de dizer "nada a pagar"', () => {
         const a = apurarIssSp([], '2026-07');
         expect(a.avisos.join(' ')).toMatch(/confirme se a captura do mês já rodou/);
@@ -308,6 +322,11 @@ describe('ISS retido COMO TOMADORA é outra obrigação', () => {
 
     it('nota cancelada não conta como retenção', () => {
         const a = apurarIssSp([tomada({ valorIssRetido: 500, status: 'cancelado' })], '2026-08');
+        expect(a.tomado.totalRetido).toBe(0);
+    });
+
+    it('tomada cancelada por EVENTO também não conta como retenção', () => {
+        const a = apurarIssSp([tomada({ valorIssRetido: 500, eventos: [{ tpEvento: '110111' }] })], '2026-08');
         expect(a.tomado.totalRetido).toBe(0);
     });
 });
