@@ -9,6 +9,18 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏛️ IE DE SUBSTITUTO POR UF → E250 MENSAL (08/10)** (Paulo, FLANACAR, IE ST em todos
+  os estados; exemplo PVA PR 09/2026: E210 recol 6.345,59 · E250 002 / 100048 / venc
+  09/10/2026 / MES_REF 092026). Antes o E250 só saía com `obrigacoesStPorUf` digitado
+  POR competência e COD_OR fixo '000'. Agora: `st-cadastro-uf.js` (puro: tabela 5.4
+  001/002/090/999, dia 1–28 do mês seguinte, sem ajuste de feriado), doc
+  `empresa_st_por_uf/{empresaId}` via `st-cadastro-routes.js` (`/api/sped-st-por-uf`,
+  GET/PUT, histórico), carregado em `coletarDadosEmpresa` (lucro) e mesclado — o
+  lançado na competência vence. E250 usa `o.codOr || '000'`. Tela
+  `IeSubstitutoPorUf` na aba Ajustes E111. PENDENTE: registro 0015 (UF_ST/IE_ST) não é
+  gerado — a IE já fica no cadastro; só entra com leiaute/regra do PVA conferidos.
+  Trava `stCadastroUf`.
+
 - **📒 LIVRO: "Outras" → "ICMS Outras" (08/10)** (Paulo, FLANACAR NF 419011 após o
   crédito de IPI: leu os 4,19 em "Outras" como outras despesas que ficaram). É a
   coluna de ICMS que fecha o contábil; o IPI fora da base fica nela (igual LTJ NF

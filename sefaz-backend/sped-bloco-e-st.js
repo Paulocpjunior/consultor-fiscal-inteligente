@@ -260,8 +260,11 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
             const o = obrigacoesPorUf[g.uf] || {};
             if (o.dtVcto && o.codRec) {
                 // Mesmos 9 campos do E116 (IND_OBR…MES_REF), espelho do bloco próprio.
+                // COD_OR (tabela 5.4): o do CADASTRO de IE de substituto por UF
+                // (08/10 — FLANACAR, exemplo real do PVA: 002). O lançamento da
+                // competência sem código segue como sempre saiu.
                 linhas.push([
-                    'E250', '000', dec(ap.icmsRecolher), o.dtVcto, o.codRec, '', '', '', '',
+                    'E250', o.codOr || '000', dec(ap.icmsRecolher), o.dtVcto, o.codRec, '', '', '', '',
                     // 🚨 CAMPO 10 — MES_REF, **OBRIGATÓRIO** desde jan/2011 e
                     // que saía VAZIO (29/08, auditoria do de-para).
                     //
@@ -278,11 +281,20 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
                     // do registro 0000"*.
                     mesRefDoPeriodo(dtIni),
                 ]);
+                if (o.origem === 'cadastro') {
+                    avisos.push(
+                        `ST de ${g.uf}: E250 de R$ ${dec(ap.icmsRecolher)} pelo cadastro de IE de substituto `
+                        + `(recolhimento mensal) — COD_OR ${o.codOr}, receita ${o.codRec}, vencimento `
+                        + `${o.dtVcto.slice(0, 2)}/${o.dtVcto.slice(2, 4)}/${o.dtVcto.slice(4)} (dia fixo, sem ajuste `
+                        + 'de fim de semana ou feriado — confira a regra da UF).',
+                    );
+                }
             } else {
                 avisos.push(
                     `ST de ${g.uf}: R$ ${dec(ap.icmsRecolher)} a recolher, mas o E250 não foi gerado — `
                     + 'falta o vencimento e o código de receita da GNRE dessa UF. '
-                    + 'Cadastre em SPED Fiscal → aba Ajustes E111 → "ICMS-ST a recolher por UF" '
+                    + 'Cadastre a IE de substituto da UF em SPED Fiscal → aba Ajustes E111 → "IE de substituto por UF" '
+                    + '(vale todo mês) ou lance só nesta competência em "ICMS-ST a recolher por UF" '
                     + '(ou lance a obrigação no PVA antes de transmitir).',
                 );
             }

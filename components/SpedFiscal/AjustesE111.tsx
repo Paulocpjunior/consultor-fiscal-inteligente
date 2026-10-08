@@ -21,6 +21,7 @@ import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
 // 🧭 O DIFAL de aquisição DENTRO da apuração (art. 117) mora aqui, ao lado dos
 // códigos estaduais que ele precisa — é onde a pessoa já vem lançar o E111.
 import DifalArt117 from './DifalArt117';
+import IeSubstitutoPorUf from './IeSubstitutoPorUf';
 // A tabela de receitas da GNRE para a EC 87/15 — sugestão no cadastro, nunca default.
 import { CODIGOS_RECEITA_GNRE_EC87, faltasDaObrigacaoDifal, codigoReceitaPorOperacao } from '../../sefaz-backend/difal-ec87-saida.js';
 import { auth } from '../../services/firebaseConfig';
@@ -270,6 +271,11 @@ const AjustesE111: React.FC<Props> = ({ empresas, onShowToast }) => {
                     </div>
                 </div>
             </div>
+
+            {/* 🏛️ Cadastro FIXO (08/10, FLANACAR): o E250 do ST sai sozinho todo mês. */}
+            {empresaId && (
+                <IeSubstitutoPorUf empresaId={empresaId} uf={uf} competencia={competencia} onShowToast={onShowToast} />
+            )}
 
             {empresaId && carregado === chave && !loading && (
                 <div className="p-5 rounded-xl space-y-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
