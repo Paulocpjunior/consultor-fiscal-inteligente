@@ -55,6 +55,7 @@ import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc
 // já estava aqui quando o mês foi fechado?".
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
 import { docContaNoLivro } from './xml-metadata-helper.js';
+import { aplicarCreditoOutrasDespesas } from './credito-outras-despesas.js';
 // 🏛️ Bloco B — ISS do DF (11/09, LEGACY): B001|0 + B470 em quem é de Brasília.
 import { buildBlocoB, apurarIssBlocoB, avisosDoBlocoB } from './sped-fiscal-blocoB.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
@@ -154,6 +155,10 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     const totalAntesDaLapide = notas.length;
     notas = notas.filter(docContaNoLivro);
     const retiradasDoAcervo = totalAntesDaLapide - notas.length;
+    // 💳 CRÉDITO DE IPI / ICMS-ST LANÇADO EM "OUTRAS DESPESAS" (08/10): o
+    // ajuste carimbado no documento move o valor para o IPI/ST do item ANTES
+    // de qualquer bloco ler a nota — C100/C170/C190 e E510/E520 saem dele.
+    notas = notas.map(aplicarCreditoOutrasDespesas);
 
     // ═══════════════════════════════════════════════════════════════════════
     // 🔒 O ARQUIVO SAI DO ACERVO QUE O FIM DE MÊS CONGELOU (26/08)
@@ -347,6 +352,16 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
     // ─── 6. Warnings ───
     const warnings = [];
     warnings.push(...avisosDoFechamento);
+    {
+        // ST creditado de outras despesas: entra no C100/C170/C190, mas o
+        // VL_DEVOL_ST do E210 NÃO é alimentado automaticamente — dito.
+        const stCreditado = notas.reduce((t, n) => t + (Number(n._creditoOutrasDespesas?.st) || 0), 0);
+        const comAjuste = notas.filter((n) => n._creditoOutrasDespesas).length;
+        if (comAjuste) warnings.push(`💳 ${comAjuste} nota(s) de entrada com crédito de IPI/ICMS-ST lançado em outras despesas (ajuste carimbado no documento).`);
+        if (stCreditado > 0) {
+            warnings.push(`💳 ICMS-ST de R$ ${stCreditado.toFixed(2)} creditado de outras despesas: o E210 (VL_DEVOL_ST) NÃO é preenchido automaticamente — confira a apuração do ST antes de transmitir.`);
+        }
+    }
     if (periodoArquivo?.aviso) warnings.push(`🏁 ${periodoArquivo.aviso}`);
     warnings.push(...recortePeriodo.avisos);
     warnings.push(...avisosDoBlocoB({ uf: empresa?.dadosFiscais?.uf, apuracao: blocoB }));
@@ -560,7 +575,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                             db.collection('sped_ajustes_apuracao').doc(`${empresaId}_${comp}`).get(),
                         ]);
                         const notasMes = snapNotas.docs.map((d) => ({ id: d.id, ...d.data() }))
-                            .filter(docContaNoLivro);
+                            .filter(docContaNoLivro)
+                            .map(aplicarCreditoOutrasDespesas);
                         const cls = classificarAjustes(
                             snapAj.exists ? (snapAj.data().ajustes || []) : [],
                             (empresa.dadosFiscais?.uf || '').toUpperCase(),

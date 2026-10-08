@@ -9,6 +9,18 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **💳 CRÉDITO DE IPI/ICMS-ST EM "OUTRAS DESPESAS" (08/10)** (Paulo, FLANACAR:
+  NF-e 419011 da HSCAR, devolução, vOutro 4,19, IPI 0,00, infCpl "VALOR DO IPI
+  R$4,19"; RC SEFAZ/SP 2020/2013 e SC COSIT 159/2019). Decisão do Paulo: NO
+  PRÓPRIO DOCUMENTO. `credito-outras-despesas.js` (puro): `validarAjusteCreditoOutras`
+  (só entrada, motivo ≥ 15, por item ≤ vOutro do item, total ≤ vOutro da nota) e
+  `aplicarCreditoOutrasDespesas` (vOutro → vIPI com cstIpi 00 / vICMSST; vNF
+  intacto; original não muda). Aplicado em `coletarDadosEmpresa` (SPED, e na cadeia
+  do saldo), `exportarParaIobSage` e Relatórios. Rota `credito-outras-routes.js`
+  (`/api/credito-outras-despesas/:docId`, POST/DELETE, histórico carimbado, recusa
+  competência FECHADA). Tela: `CreditoOutrasDespesasBloco` no detalhe da nota.
+  E210 VL_DEVOL_ST NÃO é alimentado: aviso no SPED. Trava `creditoOutrasDespesas`.
+
 - **🚫 ISS SOMAVA NOTA CANCELADA POR EVENTO (08/10)** (Paulo, WALDESA 0005-02
   09/2026: guia de ISS prestados travou — apuração 7.850,09 × PDF 7.658,77;
   diferença 191,32 = ISS das NFS-e 224, 225, 226, 251 e 273, canceladas). A

@@ -77,6 +77,17 @@
 <section>
     <h2>🆕 O que mudou agora (08/10) — leia esta parte primeiro</h2>
 
+    <h3>💳 <strong>Crédito de IPI e ICMS-ST que o fornecedor informou em "Outras despesas"</strong></h3>
+    <p>Na devolução, o fornecedor pode informar o IPI (ou o ICMS-ST) no campo "Outras despesas", e não no campo do imposto
+    (Resposta à Consulta SEFAZ/SP 2020/2013 e SC COSIT 159/2019). Quem recebe a nota tem direito ao crédito. Abra a nota de
+    entrada na Central de XMLs: o bloco <strong>💳 Crédito de IPI / ICMS-ST lançado em Outras despesas</strong> aparece
+    quando a nota tem valor em outras despesas, com um alerta se as informações adicionais citam IPI ou ST. Informe o valor
+    de cada item e o motivo, e grave. Na escrituração, o valor sai de "Outras despesas" e entra como IPI (CST 00, entrada com
+    crédito) ou ICMS-ST do item: SPED (C100, C170, C190, E510 e E520), arquivo do SAGE, Livro e Resumo por CFOP. O total da
+    nota não muda e o XML original fica guardado como veio. O ajuste registra quem lançou e quando, e pode ser desfeito.
+    Competência fechada no Fim de Mês não aceita o ajuste: reabra antes. O E210 (devolução de ST) não é preenchido sozinho;
+    o SPED avisa para conferir.</p>
+
     <h3>🚫 <strong>ISS: nota cancelada por evento não soma mais na apuração</strong></h3>
     <p>A apuração de ISS da aba ISS (e o painel "ISS da carteira") conferia o cancelamento só pelo status da nota. A nota
     cancelada por <strong>evento</strong> continua com status "autorizado" e seguia somando no ISS, enquanto a Central de
