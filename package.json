@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "precommit": "npm run typecheck && npm run lint:strict",
     "test:ebef:api": "node scripts/test-ebef-api.mjs",
-    "test:comunicacao": "node --test tests/comunicacao.test.mjs"
+    "test:comunicacao": "node --test tests/comunicacao.test.mjs tests/convites-vencimento.test.cjs tests/convites-whatsapp.test.mjs"
   },
   "keywords": [],
   "author": "",

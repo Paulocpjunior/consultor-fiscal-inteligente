@@ -1,0 +1,26 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import ComunicacaoLote from '../components/ComunicacaoLote';
+jest.mock('../services/authService',()=>({getCurrentUser:()=>({id:'admin'})}));
+jest.mock('../services/xmlFiscalService',()=>({getEmpresasParaPerfilCliente:async()=>[{id:'a',nome:'Empresa A',cnpj:'12345678000190',email:'a@example.com'},{id:'b',nome:'Empresa B',cnpj:'22345678000190',email:'b@example.com'}]}));
+jest.mock('../services/carteiraService',()=>({listarCarteiras:async()=>[{empresaId:'a',colaboradorNome:'Ana'},{empresaId:'b',colaboradorNome:'Beto'}]}));
+test('carregar base não autoriza destinatários e selecionar carteira não inclui outra carteira',async()=>{
+ Object.defineProperty(global.crypto,'randomUUID',{configurable:true,value:()=> 'pedido-teste'});
+ const api=jest.fn(async(path:string)=>path.includes('/lotes?')?{lotes:[]}:{previas:[],duplicados:0,revisao:1});
+ render(<ComunicacaoLote departamento="fiscal" modelos={[{id:'m',nome:'Documentos',canal:'email',variaveis:[]}]} api={api} atualizar={async()=>{}}/>);
+ fireEvent.click(screen.getByText('Carregar empresas e contatos cadastrados'));
+ await screen.findByLabelText('Selecionar Empresa A');
+ expect((screen.getByLabelText('Selecionar Empresa A') as HTMLInputElement).checked).toBe(false);
+ fireEvent.change(screen.getByLabelText('Filtrar carteira'),{target:{value:'Ana'}});
+ fireEvent.click(screen.getByText('Selecionar somente visíveis'));
+ expect((screen.getByLabelText('Selecionar Empresa A') as HTMLInputElement).checked).toBe(true);
+ fireEvent.change(screen.getByLabelText('Filtrar carteira'),{target:{value:'Beto'}});
+ fireEvent.click(screen.getByText('Selecionar somente visíveis'));
+ fireEvent.change(screen.getByLabelText('Filtrar carteira'),{target:{value:''}});
+ expect((screen.getByLabelText('Selecionar Empresa A') as HTMLInputElement).checked).toBe(false);
+ expect((screen.getByLabelText('Selecionar Empresa B') as HTMLInputElement).checked).toBe(true);
+ fireEvent.change(screen.getByLabelText('Modelo'),{target:{value:'m'}});
+ fireEvent.click(screen.getByText('Conferir mensagens do lote'));
+ await waitFor(()=>expect(api).toHaveBeenCalledWith('/lotes/previa',expect.objectContaining({contatos:[expect.objectContaining({para:'b@example.com'})]})));
+ expect(api.mock.calls.some(([path])=>path.includes('/estado'))).toBe(false);
+});

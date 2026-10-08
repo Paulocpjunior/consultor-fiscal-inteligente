@@ -1,3 +1,5 @@
+import { lerPdfVencimentos } from './convites-pdf.js';
+import * as convites from './convites-vencimento.cjs';
 // ============================================================================
 // sefaz-backend/graph-provider.js
 // Integração com o Microsoft Graph API (Microsoft 365 da SP).
@@ -92,8 +94,10 @@ export function invalidarTokenGraph() {
  * @param {Array<{name: string, contentType: string, contentBytes: string}>} [p.anexos]
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto, corpoHtml, anexos = [] }) {
+export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto, corpoHtml, anexos = [], vencimento, identidade = '' }) {
     try {
+        const agenda = await convites.anexarConvites({ assunto, anexos, vencimento, identidade, lerPdf: lerPdfVencimentos });
+        anexos = agenda.anexos;
         const token = await getAccessToken();
 
         const destinatarios = (Array.isArray(para) ? para : [para])
@@ -148,7 +152,7 @@ export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto,
 
         // sendMail retorna 202 Accepted (sem corpo) quando dá certo.
         if (resp.status === 202) {
-            return { ok: true };
+            return { ok: true, convites: agenda.quantidade, avisosConvites: agenda.avisos };
         }
         const txt = await resp.text();
         return { ok: false, error: `Graph sendMail ${resp.status}: ${txt.slice(0, 300)}` };

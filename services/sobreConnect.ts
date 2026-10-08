@@ -27,7 +27,7 @@ import { temNovidadeNaoLida, versaoVistaEm, marcarVistaEm } from './novidadesSer
  * nova em `REVISOES` e esta constante acompanha, NO MESMO PR. Entregar sem
  * avisar é quase não entregar.
  */
-export const SOBRE_VERSAO = '2026-10-01';
+export const SOBRE_VERSAO = '2026-10-08';
 
 const CHAVE_LOCAL = 'spconnect_sobre_lido';
 
@@ -317,6 +317,7 @@ export const MANUAL: PassoManual[] = [
 
 // ─── Histórico de atualizações (mais nova PRIMEIRO) ─────────────────────────
 export const REVISOES: Revisao[] = [
+    { data: '2026-10-08', itens: ['Documentos com vencimento informado ou identificado em PDF textual levam link de agenda na legenda. Campo opcional de vencimento acima da mensagem. Arquivos sem texto legível exigem conferência; nenhuma data de emissão vira prazo.'] },
     {
         data: '2026-10-01',
         itens: [

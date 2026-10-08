@@ -217,7 +217,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
         let remetente = escolha.remetente;
         let fonteRemetente = escolha.fonte;
         let avisoRemetente = escolha.motivo;
-        let envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+        let envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos, vencimento, identidade: `${empresaCnpj}|${tipo}|${competencia}` });
 
         if (!envio.ok && fonteRemetente === 'colaborador' && ehErroDeCaixaInexistente(envio.error)) {
             // A caixa do colaborador não existe/não envia — a guia do cliente
@@ -225,7 +225,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             avisoRemetente = `a caixa ${remetente} não pôde enviar; usamos ${padrao}`;
             remetente = padrao;
             fonteRemetente = 'padrao';
-            envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos });
+            envio = await enviarEmail({ remetente, para: paraLista, bcc, assunto: assuntoFinal, corpoHtml, anexos, vencimento, identidade: `${empresaCnpj}|${tipo}|${competencia}` });
         }
         if (!envio.ok) return res.status(502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
 
@@ -247,6 +247,7 @@ router.post('/enviar-graph', requireAuth, async (req, res) => {
             remetente, fonteRemetente, avisoRemetente,
             copiaPara: bcc, anexouPdf: Boolean(pdfLimpo || pdfsLimpos.length),
             guiasAnexadas: (pdfLimpo ? 1 : 0) + pdfsLimpos.length,
+            convites: envio.convites || 0, avisosConvites: envio.avisosConvites || [],
             ...rito,
         });
     } catch (e) {

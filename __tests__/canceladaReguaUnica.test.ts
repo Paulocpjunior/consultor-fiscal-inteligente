@@ -41,6 +41,7 @@ const EXTENSOES = ['.ts', '.tsx', '.js'];
  * Exceção se declara aqui — nunca apagando a varredura.
  */
 const PERMITIDO: Record<string, string> = {
+    'components/ComunicacaoLote.tsx': 'status do LOTE DE COMUNICAÇÃO, não de documento fiscal',
     // É a régua. O campo cru é um dos três sinais que ela combina.
     'sefaz-backend/xml-metadata-helper.js': 'é o arquivo DONO da régua',
     // Grava o campo a partir do XML — escrita, não leitura de situação.

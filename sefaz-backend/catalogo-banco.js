@@ -146,6 +146,8 @@ export const CATALOGO_BANCO = [
     // Desenho em docs/desenho-modulo-comunicacao.md. Rules: default deny
     // (só o backend escreve). As duas primeiras existiam SEM linha aqui —
     // registradas na F1 junto com as do webhook.
+    { colecao: 'comunicacao_lotes', grupo: 'Comunicação', funcionalidade: 'Lotes revisados, pausados e ativados por administradores; somente backend' },
+    { colecao: 'comunicacao_contatos', grupo: 'Comunicação', funcionalidade: 'Base de destinatários por departamento; somente backend' },
     { colecao: 'comunicacao_modelos_revisoes', grupo: 'Comunicação', funcionalidade: 'Revisões imutáveis dos modelos, somente backend' },
     { colecao: 'comunicacao_agendas_historico', grupo: 'Comunicação', funcionalidade: 'Histórico de ativação, pausa e cancelamento, somente backend' },
     { colecao: 'comunicacao_modelos', grupo: 'Comunicação', funcionalidade: 'Templates por departamento com revisões, gerenciados por admin' },
