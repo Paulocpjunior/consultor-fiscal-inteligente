@@ -56,6 +56,8 @@ import { participanteDoDocumento, ehEmissaoPropriaDoc } from './participante-doc
 import { recortarPeloFechamento, avisosDoRecorte } from './acervo-do-fechamento.js';
 import { docContaNoLivro } from './xml-metadata-helper.js';
 import { aplicarCreditoOutrasDespesas } from './credito-outras-despesas.js';
+import { obrigacoesStDoCadastro, mesclarObrigacoesSt } from './st-cadastro-uf.js';
+import { COLECAO_ST_POR_UF } from './st-cadastro-store.js';
 // 🏛️ Bloco B — ISS do DF (11/09, LEGACY): B001|0 + B470 em quem é de Brasília.
 import { buildBlocoB, apurarIssBlocoB, avisosDoBlocoB } from './sped-fiscal-blocoB.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
@@ -750,6 +752,20 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
             console.warn(`[sped-fiscal] ajustes E111 falharam: ${err.message}`);
             warnings.push(`Ajustes de apuração (E111) não puderam ser lidos (${err.message}) — o arquivo sai SEM eles. Confira antes de transmitir.`);
             ajustesApuracao = [];
+        }
+        // 🏛️ IE DE SUBSTITUTO POR UF (08/10, FLANACAR): quem tem IE de ST na UF
+        // de destino recolhe por apuração TODO MÊS, com a mesma regra. O
+        // cadastro fixo da empresa gera a obrigação do E250 de cada competência;
+        // o lançado NA competência continua vencendo (exceção do mês).
+        try {
+            const snapSt = await db.collection(COLECAO_ST_POR_UF).doc(empresaId).get();
+            if (snapSt.exists) {
+                const doCadastro = obrigacoesStDoCadastro(snapSt.data(), periodoFim);
+                for (const e of doCadastro.erros) warnings.push(`IE de substituto por UF: ${e}`);
+                obrigacoesStPorUf = mesclarObrigacoesSt(obrigacoesStPorUf, doCadastro.obrigacoes);
+            }
+        } catch (err) {
+            warnings.push(`Cadastro de IE de substituto por UF não pôde ser lido (${err.message}) — o E250 sai só com o lançado na competência. Confira antes de transmitir.`);
         }
     }
 
