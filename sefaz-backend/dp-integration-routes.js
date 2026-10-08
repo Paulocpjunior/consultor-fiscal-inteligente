@@ -457,7 +457,7 @@ router.post('/email/enviar', soDoDp, async (req, res) => {
             fonteRemetente = 'padrao';
             envio = await enviarEmail({ remetente, para: pedido.para, bcc, assunto: pedido.assunto, corpoHtml, anexos });
         }
-        if (!envio.ok) return res.status(502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
+        if (!envio.ok) return res.status(envio.tamanhoExcedido ? 413 : 502).json({ ok: false, error: envio.error || 'Falha ao enviar o e-mail.' });
 
         if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
         await admin.firestore().collection('dp_email_envio_log').add({

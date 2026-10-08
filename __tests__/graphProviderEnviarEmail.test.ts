@@ -163,4 +163,14 @@ describe('graph-provider enviarEmail', () => {
         expect(ics).toContain('DTSTART;VALUE=DATE:20261020');
     });
 
+    it('pedido final acima de 4 MB (anexos + .ics gerado aqui) é recusado antes do Graph, com o tamanho e o caminho', async () => {
+        // 3.200.000 bytes viram ~4,07 MiB em base64: o Graph recusaria o pedido inteiro.
+        const grande = Buffer.alloc(3_200_000, 1).toString('base64');
+        const r: any = await enviarEmail({ remetente: 'junior@sp.com.br', para: 'cliente@empresa.com.br', assunto: 'Pacote', corpoHtml: '<p>oi</p>', anexos: [{ name: 'p.zip', contentType: 'application/zip', contentBytes: grande }] });
+        expect(r).toMatchObject({ ok: false, tamanhoExcedido: true, error: expect.stringMatching(/até 4 MB/) });
+        expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/sendMail'))).toBe(false);
+        // Abaixo do teto segue normalmente.
+        const ok = await enviarEmail({ remetente: 'junior@sp.com.br', para: 'cliente@empresa.com.br', assunto: 'Pacote', corpoHtml: '<p>oi</p>', anexos: [{ name: 'p.zip', contentType: 'application/zip', contentBytes: Buffer.alloc(2_900_000, 1).toString('base64') }] });
+        expect(ok.ok).toBe(true);
+    });
 });

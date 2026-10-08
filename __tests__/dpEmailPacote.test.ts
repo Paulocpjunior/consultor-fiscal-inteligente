@@ -35,7 +35,8 @@ describe('validarPedidoEmailDp', () => {
     });
 
     it('o teto cabe no pedido de 4 MB do sendMail junto com o logo inline e o corpo (Codex, CFI #1391)', () => {
-        // O que conta para o Graph é o JSON do pedido: anexos em base64 + logo + corpo + .ics.
+        // O que conta para o Graph é o JSON do pedido: anexos em base64 + logo + corpo. O .ics nasce
+        // depois, no enviarEmail, que confere o pedido FINAL (graphProviderEnviarEmail.test.ts).
         const logo = readFileSync(join(__dirname, '..', 'sefaz-backend', 'assets', 'sp-logo-email-2x.png')).toString('base64').length;
         const corpo = montarEmailPacoteDp({ titulo: 'x'.repeat(150), empresaNome: 'x'.repeat(150), competencia: '2026-09', mensagem: 'x'.repeat(10000), anexos: Array.from({ length: 10 }, () => ({ name: 'x'.repeat(120) })) }).length;
         expect(Buffer.alloc(LIMITE_ANEXOS_BYTES).toString('base64').length).toBeLessThanOrEqual(LIMITE_ANEXOS_BASE64);

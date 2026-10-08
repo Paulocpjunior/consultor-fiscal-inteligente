@@ -15746,3 +15746,8 @@ Paulo (08/10): *"pode corrigir os 2 pontos no CFI"*. Os dois pontos vieram do PR
 - **Revisão do Codex no PR #1391, duas P2:**
   - **Teto dos anexos medido no base64.** O sendMail aceita até 4 MB de pedido, e o anexo viaja em base64 (+33%), junto com o logo inline e o corpo. Antes, 3 MB de arquivo viravam ~4 MB só de anexo e o Graph devolvia 502. Agora `LIMITE_ANEXOS_BASE64` = 4.000.000 caracteres, a mesma régua do `/graph` dos impostos, o que dá ~2,8 MB de arquivo. A trava confere que o teto, o logo e o maior corpo cabem nos 4 MB.
   - **Convites de agenda devolvidos.** A rota agora responde `convites` e `avisosConvites`, como o `/graph` dos impostos, e conta o `vencimentos-sp.ics` em `anexos`. A auditoria grava `convites`.
+- **Revisão do Codex depois do merge do #1391 (P2):** o `vencimentos-sp.ics` é gerado dentro do `enviarEmail`, depois da validação, com um evento por data lida nos PDFs. Um anexo perto do teto somado a um calendário grande ainda podia passar dos 4 MB.
+  - O `enviarEmail` (`graph-provider.js`) agora confere o pedido final já serializado contra `LIMITE_PEDIDO_SENDMAIL` (4 MiB). Acima disso, recusa antes do Graph com o tamanho e o caminho, e devolve `tamanhoExcedido`.
+  - A rota do DP responde 413 nesse caso.
+  - Vale para todos os chamadores do `enviarEmail`.
+  - A trava fica em `graphProviderEnviarEmail.test.ts`.
