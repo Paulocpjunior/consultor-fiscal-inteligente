@@ -24,6 +24,7 @@ import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
 import { creditoSimplesDoItem, temCreditoSimplesDeclarado } from '../sefaz-backend/credito-icms-simples.js';
 import { dataEntradaDoDocumento } from '../sefaz-backend/data-entrada-escrituracao.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
+import { aplicarCreditoOutrasDespesas } from '../sefaz-backend/credito-outras-despesas.js';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
 
@@ -1125,7 +1126,10 @@ export function exportarParaIobSage(params: ExportarParams): ExportarResult {
             motivo: MOTIVO_ENTRADA_DO_EMITENTE,
         });
         return false;
-    });
+    })
+        // 💳 Crédito de IPI/ST lançado em outras despesas (08/10): o .FML sai
+        // com o valor no IPI/ST do item, igual ao SPED.
+        .map((d) => aplicarCreditoOutrasDespesas(d));
     if (ufPorParticipante) definirUfPorParticipante(ufPorParticipante);
     const codConsumidor = String(codigoParticipanteConsumidor || '').trim().slice(0, 20);
     // UF da empresa: sai da chave de uma nota PRÓPRIA de saída (cUF do

@@ -122,6 +122,7 @@ import { ctesSemCstInformado, fraseDaConsequenciaDoLote } from '../../services/c
 import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.js';
 // 🧭 O detalhamento do DIFAL de saída (EC 87/15) — mesma seleção do E300/E310.
 import { detalharDifalPorUf } from '../../sefaz-backend/difal-ec87-saida.js';
+import { aplicarCreditoOutrasDespesas } from '../../sefaz-backend/credito-outras-despesas.js';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -265,7 +266,10 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             const cnpj = alvo.cnpj.replace(/\D/g, '');
             setDocs(todos
                 .filter(d => d.empresaId === alvo.id || String(d.empresaCnpj || '').replace(/\D/g, '') === cnpj)
-                .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao })));
+                .map(d => ({ ...d, direcao: (direcaoEfetivaDoc(d) as any) || d.direcao }))
+                // 💳 Crédito de IPI/ST lançado em outras despesas (08/10): o Livro
+                // e o Resumo leem a nota como a escrituração (SPED/SAGE) a lê.
+                .map(d => aplicarCreditoOutrasDespesas(d)));
             setRecorteKey(`${alvo.id}|${competencia}`);
         } catch (err: any) {
             setDocs(null);

@@ -46,6 +46,7 @@ import { ehConhecimentoDeTransporte } from '../../sefaz-backend/sped-selecao-doc
 import { cteEntraNaEscrituracao } from '../../sefaz-backend/cte-tomador.js';
 import { cfopDoCte } from '../../sefaz-backend/cte-escrituracao.js';
 import { escrituracaoDoItem, resumoEscrituracaoItens, chaveDoItem } from '../../sefaz-backend/escrituracao-item.js';
+import CreditoOutrasDespesasBloco from './CreditoOutrasDespesasBloco';
 
 interface Props {
     documento: DocumentoFiscal;
@@ -1141,6 +1142,11 @@ const XmlDocumentoDetalhe: React.FC<Props> = ({ documento: d, onClose, currentUs
                         </div>
                     );
                 })()}
+
+                {/* 💳 Crédito de IPI/ICMS-ST que veio em outras despesas (08/10). */}
+                {direcaoDoDoc === 'entrada' && ehMercadoria && !jaRetirada && (
+                    <CreditoOutrasDespesasBloco documento={d} onSalvo={onRetirado} onShowToast={onShowToast} />
+                )}
 
                 {/* ═══ 📅 DATA DE ENTRADA (ESCRITURAÇÃO) ═══════════════════════
                     Paulo, 29/09, com o print do SAGE ("Emissão 30/07/2026 · Entrada
