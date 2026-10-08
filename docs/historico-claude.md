@@ -9,6 +9,18 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾 VALOR DO PDF DA GUIA × APURAÇÃO (08/10)** (Paulo: *"sim, faz a leitura do
+  valor do pdf da guia"*). Sem leiaute conferido de cada prefeitura, a pergunta
+  é a que vale para QUALQUER guia: o valor apurado (o do e-mail) aparece
+  impresso no PDF? `services/valorNaGuiaPdf.ts` (`conferirValorNaGuia`,
+  `valoresMonetariosDoTexto` — formato BR): confere · diverge (trava o envio,
+  lista os valores do PDF) · ilegível (PDF imagem ou sem valor em reais: avisa,
+  não trava, não aprova). Texto pelo pdfjs (`extrairTextoPdfBase64` em
+  nftsPdfParserService). Ligado aos DOIS botões da aba ISS (próprio e retido).
+  ⚠️ Testado com texto simulado de DAMSP — falta um PDF REAL (SP e Vargem
+  Grande) para confirmar que o pdfjs não quebra "1.290,33" em pedaços.
+  Trava: `valorNaGuiaPdf.test.ts`.
+
 - **🏢 LISTA DE XMLs POR FILIAL (07/10)** (Paulo, WALDESA — 4 filiais: *"mesmo
   fazendo a seleção da empresa, ela puxa as notas de todas as filiais"*). A
   `XmlDocumentosList` casava pela RAIZ (decisão de 24/07, caso VINATEX: nota

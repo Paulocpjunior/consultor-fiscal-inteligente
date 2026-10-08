@@ -474,3 +474,11 @@ export function montarNotaDeGemini(
     nota.aviso = avisos.join('. ');
     return { nota, pendencia: null };
 }
+
+/** O mesmo extrator, para um PDF que a tela já guardou em base64 (guia anexada). */
+export async function extrairTextoPdfBase64(base64: string, nome = 'guia.pdf'): Promise<NftsPdfTexto> {
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return extrairTextoPdf(new File([bytes], nome, { type: 'application/pdf' }));
+}

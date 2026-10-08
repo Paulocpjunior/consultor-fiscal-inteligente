@@ -23,6 +23,8 @@ import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import { vencimentoDaGuia, type VencimentoDaGuia } from '../../services/prazosMunicipaisService';
 import { relerIssRetidoDoXml } from '../../services/nfseIssRetidoService';
 import VarreduraIssRetido from './VarreduraIssRetido';
+import { conferirValorNaGuia, type ConferenciaValorGuia } from '../../services/valorNaGuiaPdf';
+import { extrairTextoPdfBase64 } from '../../services/nftsPdfParserService';
 import { precisaReleituraIssRetido } from '../../sefaz-backend/nfse-iss-retido-releitura.js';
 
 interface SaudeCaptura {
@@ -86,6 +88,9 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     // ↩ Guia do ISS RETIDO como tomadora (02/10): anexo PRÓPRIO — é outra guia,
     // e anexá-la no slot do ISS próprio mandaria o PDF errado com o valor errado.
     const [pdfGuiaRetido, setPdfGuiaRetido] = useState<{ base64: string; nome: string } | null>(null);
+    /** 🧾 08/10: o valor apurado aparece impresso no PDF anexado? (null = conferindo) */
+    const [confPdf, setConfPdf] = useState<ConferenciaValorGuia | null>(null);
+    const [confPdfRetido, setConfPdfRetido] = useState<ConferenciaValorGuia | null>(null);
     // Saúde do trilho de captura — sem ela, "0 notas" e "não conseguimos
     // buscar" ficam idênticos na tela, e o colaborador só descobre tentando.
     const [saude, setSaude] = useState<SaudeCaptura | null>(null);
@@ -248,6 +253,36 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const anexarPdf = (e: React.ChangeEvent<HTMLInputElement>) => lerPdf(e, setPdfGuia);
     const anexarPdfRetido = (e: React.ChangeEvent<HTMLInputElement>) => lerPdf(e, setPdfGuiaRetido);
 
+    // 🧾 Confere o PDF anexado contra o valor que vai no e-mail — de novo a
+    // cada PDF novo ou apuração nova. Falha de leitura vira "ilegível", nunca
+    // "confere".
+    const conferirPdf = (pdf: { base64: string; nome: string } | null, valor: number | undefined,
+        guardar: (c: ConferenciaValorGuia | null) => void) => {
+        guardar(null);
+        if (!pdf || valor === undefined) return () => {};
+        let vivo = true;
+        extrairTextoPdfBase64(pdf.base64, pdf.nome)
+            .then((t) => { if (vivo) guardar(conferirValorNaGuia(t.paginas, valor, { textoInsuficiente: t.textoInsuficiente })); })
+            .catch((e: any) => { if (vivo) guardar({ situacao: 'ilegivel', motivo: `não consegui abrir o PDF (${e?.message || e})` }); });
+        return () => { vivo = false; };
+    };
+    React.useEffect(() => conferirPdf(pdfGuia, apuracao?.aRecolher, setConfPdf), [pdfGuia, apuracao?.aRecolher]);
+    React.useEffect(() => conferirPdf(pdfGuiaRetido, apuracao?.tomado?.totalRetido, setConfPdfRetido), [pdfGuiaRetido, apuracao?.tomado?.totalRetido]);
+    /** Envio travado pela conferência: conferindo ainda, ou PDF com outro valor. */
+    const travaPdf = (pdf: unknown, conf: ConferenciaValorGuia | null) => !!pdf && (conf === null || conf.situacao === 'diverge');
+    const LinhaConfPdf: React.FC<{ conf: ConferenciaValorGuia | null; pdf: unknown }> = ({ conf, pdf }) => {
+        if (!pdf) return null;
+        if (!conf) return <p className="text-[11px] text-slate-500">🧾 Conferindo o valor impresso no PDF…</p>;
+        if (conf.situacao === 'confere') return <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✅ O PDF traz {brl(conf.valor)} — confere com a apuração.</p>;
+        if (conf.situacao === 'diverge') return (
+            <p className="text-[11px] font-bold text-red-700 dark:text-red-400">
+                ⛔ Envio travado: o PDF anexado não traz {brl(conf.valor)}, que é o valor da apuração (e do e-mail).
+                Valores no PDF: {conf.valoresNoPdf.map(brl).join(' · ')}. Confira a apuração ou anexe a guia certa.
+            </p>
+        );
+        return <p className="text-[11px] text-amber-700 dark:text-amber-400">⚠ Não deu para conferir o valor da guia: {conf.motivo}. Confira à mão antes de enviar.</p>;
+    };
+
     /**
      * Envia UMA das duas guias de ISS. `retido` = a do ISS retido como
      * tomadora: tipo "ISS RETIDO" (o `guia-iss.js` a reconhece como a guia do
@@ -256,6 +291,8 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
     const enviarAoCliente = async (qual: 'proprio' | 'retido' = 'proprio') => {
         if (!apuracao || !empresa) return;
         const pdf = qual === 'retido' ? pdfGuiaRetido : pdfGuia;
+        const conf = qual === 'retido' ? confPdfRetido : confPdf;
+        if (travaPdf(pdf, conf)) { onShowToast?.('O valor do PDF anexado não confere com a apuração — veja o aviso abaixo do botão.'); return; }
         if (!pdf) { onShowToast?.('Anexe o PDF da guia emitida no portal antes de enviar.'); return; }
         // Sem o calendário do município não há vencimento a declarar ao cliente.
         if (!vencGuia?.achou) { onShowToast?.(vencGuia?.motivo || 'Vencimento ainda não consultado — aguarde ou apure de novo.'); return; }
@@ -765,13 +802,14 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                                     <input type="file" accept="application/pdf" onChange={anexarPdfRetido} className="hidden" />
                                 </label>
                                 <button onClick={() => void enviarAoCliente('retido')}
-                                    disabled={enviando || !pdfGuiaRetido || !retidoAptoParaEnvio(apuracao.tomado) || !vencGuia?.achou}
+                                    disabled={enviando || !pdfGuiaRetido || !retidoAptoParaEnvio(apuracao.tomado) || !vencGuia?.achou || travaPdf(pdfGuiaRetido, confPdfRetido)}
                                     title={motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado))
                                         || 'Envia a guia do ISS RETIDO pelo servidor, com o PDF anexado, gestor em cópia oculta e cópia no SharePoint.'}
                                     className="px-4 py-2 text-sm font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
                                     {enviando ? 'Enviando…' : `📤 Enviar guia do ISS retido (${brl(apuracao.tomado.totalRetido)})`}
                                 </button>
                             </div>
+                            <LinhaConfPdf conf={confPdfRetido} pdf={pdfGuiaRetido} />
                             {motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado)) && (
                                 <p className="text-[11px] text-indigo-700 dark:text-indigo-400 mt-1">
                                     ⚠ {motivoDoBotaoRetidoDesligado(!!pdfGuiaRetido, retidoAptoParaEnvio(apuracao.tomado))}
@@ -793,7 +831,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                             📎 {pdfGuia ? pdfGuia.nome : 'Anexar PDF da guia'}
                             <input type="file" accept="application/pdf" onChange={anexarPdf} className="hidden" />
                         </label>
-                        <button onClick={() => void enviarAoCliente('proprio')} disabled={enviando || !pdfGuia || !apuracao.apta || !vencGuia?.achou}
+                        <button onClick={() => void enviarAoCliente('proprio')} disabled={enviando || !pdfGuia || !apuracao.apta || !vencGuia?.achou || travaPdf(pdfGuia, confPdf)}
                             title={motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })
                                 || 'Envia pelo servidor, com o PDF anexado, gestor em cópia oculta, cópia no SharePoint e baixa da obrigação.'}
                             className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
@@ -809,6 +847,7 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         PDF e **não dizia isso** — e botão apagado sem motivo
                         se lê como "não existe". É a lição de 20/08 (o campo do
                         cérebro do CFOP que "parecia desabilitado"). */}
+                    <LinhaConfPdf conf={confPdf} pdf={pdfGuia} />
                     {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido }) && (
                         <p className="text-[11px] text-amber-700 dark:text-amber-400">
                             ⚠ {motivoDoBotaoDesligado(!!pdfGuia, apuracao.apta, { aRecolher: apuracao.aRecolher, retido: apuracao.tomado?.totalRetido })}
