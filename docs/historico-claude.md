@@ -9,6 +9,14 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📧 DESTINATÁRIO CRU NO GRAPH (09/10)** (APATEL, envio do DAS: Graph 400
+  ErrorInvalidRecipients — 'magda@apatel.com.br francisco@apatel.com.br' como UM
+  destinatário). `/api/admin/das/enviar-cliente` (server.js) mandava `emailDest` cru;
+  envio-imposto e fim-de-mes já usavam `lerDestinatarios`. Corrigido na rota (recusa
+  nomeada via `recusaDeDestinatario`) E na porta: `enviarEmail` (graph-provider) lê
+  para/cc/bcc por `listaDeEnvio` (helper) — separa espaço/vírgula/; e devolve endereço
+  torto nomeado sem enviar. Trava `destinatariosNaPortaDoGraph` (payload com fetch mock).
+
 - **🏛️ IE DE SUBSTITUTO POR UF → E250 MENSAL (08/10)** (Paulo, FLANACAR, IE ST em todos
   os estados; exemplo PVA PR 09/2026: E210 recol 6.345,59 · E250 002 / 100048 / venc
   09/10/2026 / MES_REF 092026). Antes o E250 só saía com `obrigacoesStPorUf` digitado

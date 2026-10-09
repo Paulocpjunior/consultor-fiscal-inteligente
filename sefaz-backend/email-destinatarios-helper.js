@@ -128,3 +128,22 @@ export function parseDestinatarios(raw, fallback) {
     if (lista.length === 0 && fallback && EMAIL_RE.test(fallback)) return [fallback];
     return lista;
 }
+
+/**
+ * 🚨 A ÚLTIMA PORTA ANTES DO GRAPH (09/10, APATEL: "magda@… francisco@…"
+ * separados por ESPAÇO chegaram como UM destinatário pelo envio do DAS, e o
+ * Graph recusou a mensagem inteira com ErrorInvalidRecipients). Cada rota lia
+ * o campo do seu jeito — e a que não lia mandava o cru. Aqui o `enviarEmail`
+ * lê TODO campo (string, lista ou lista de strings com vários endereços) pela
+ * mesma régua, venha de onde vier.
+ *
+ * Política de ENVIO: endereço torto não é descartado calado — volta nomeado.
+ *
+ * @param {string|string[]|undefined} campo
+ * @returns {{lista: string[], invalidos: Array<{valor: string, motivo: string}>}}
+ */
+export function listaDeEnvio(campo) {
+    const entradas = (Array.isArray(campo) ? campo : [campo]).filter((x) => x != null && String(x).trim());
+    const lidos = lerDestinatarios(entradas.join(';'));
+    return { lista: lidos.validos, invalidos: lidos.invalidos };
+}

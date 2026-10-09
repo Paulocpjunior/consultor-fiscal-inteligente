@@ -8,3 +8,7 @@ export interface DestinatariosLidos {
 
 export function lerDestinatarios(raw?: string): DestinatariosLidos;
 export function recusaDeDestinatario(lidos: DestinatariosLidos): string | null;
+export function listaDeEnvio(campo?: string | string[] | null): {
+    lista: string[];
+    invalidos: Array<{ valor: string; motivo: string }>;
+};
