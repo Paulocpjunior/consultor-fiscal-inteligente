@@ -104,7 +104,7 @@ import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
 import { montarEmailGuia, anexoLogo } from './sefaz-backend/email-layout.js';
-import { parseDestinatarios } from './sefaz-backend/email-destinatarios-helper.js';
+import { parseDestinatarios, lerDestinatarios, recusaDeDestinatario } from './sefaz-backend/email-destinatarios-helper.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './sefaz-backend/graph-remetente.js';
 import { sanitizeError, respondeErro, errorMiddleware } from './sefaz-backend/sanitize-error.js';
 import { gerarObrigacoesPorEmpresa } from './sefaz-backend/calendario-obrigacoes.js';
@@ -1306,6 +1306,16 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         } = req.body || {};
         if (!empresaCnpj || !empresaNome) return res.status(400).json({ error: 'empresaCnpj e empresaNome obrigatorios' });
         if (!emailDest || !String(emailDest).includes('@')) return res.status(400).json({ error: 'E-mail do cliente invalido ou ausente' });
+        // 🚨 O CAMPO CRU IA DIRETO AO GRAPH (09/10, APATEL: "magda@… francisco@…"
+        // separados por ESPAÇO viraram UM destinatário e o Graph recusou a
+        // mensagem inteira — ErrorInvalidRecipients). O envio das outras guias
+        // e o Fim de Mês já passavam pelo leitor; o DAS era o único que não.
+        const lidosDas = lerDestinatarios(emailDest);
+        const recusaDas = recusaDeDestinatario(lidosDas);
+        if (recusaDas) return res.status(400).json({ error: recusaDas });
+        const paraDas = lidosDas.validos;
+        const paraTexto = paraDas.join(', ');
+        const jaNoParaDas = new Set(paraDas.map((e) => e.toLowerCase()));
         if (!mensagem) return res.status(400).json({ error: 'Mensagem obrigatoria' });
 
         const acesso = await podeAcessarCnpj(req.user, empresaCnpj);
@@ -1334,7 +1344,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         // DAS_ENVIO_BCC (lista separada por virgula; DAS_ENVIO_CC aceito por
         // compatibilidade); nao duplica quando o gestor ja e o destinatario.
         const copiaGestor = parseDestinatarios(process.env.DAS_ENVIO_BCC || process.env.DAS_ENVIO_CC, 'alexandre@spassessoriacontabil.com.br')
-            .filter(cc => cc.toLowerCase() !== String(emailDest).trim().toLowerCase());
+            .filter(cc => !jaNoParaDas.has(cc.toLowerCase()));
         const anexos = pdfLimpo ? [{
             name: pdfFileName || `das_${String(empresaCnpj).replace(/\D/g, '')}_${competencia || 'competencia'}.pdf`,
             contentType: 'application/pdf',
@@ -1355,7 +1365,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
 
         let envio = await enviarEmail({
             remetente,
-            para: emailDest,
+            para: paraDas,
             bcc: copiaGestor,
             assunto: assuntoFinal,
             corpoHtml,
@@ -1367,7 +1377,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
             fonteRemetente = 'padrao';
             envio = await enviarEmail({
                 remetente,
-                para: emailDest,
+                para: paraDas,
                 bcc: copiaGestor,
                 assunto: assuntoFinal,
                 corpoHtml,
@@ -1390,7 +1400,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 valor: Number(valor || 0),
                 vencimento: vencimento || null,
                 canal: 'email',
-                para: emailDest,
+                para: paraTexto,
                 copiaPara: copiaGestor,
                 // Quem apareceu como remetente pro cliente — a auditoria
                 // precisa disso pra responder "quem mandou?" sem adivinhar.
@@ -1407,7 +1417,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 await db.collection('das_emitidos').doc(dasId).set({
                     ultimoEnvioCliente: {
                         canal: 'email',
-                        para: emailDest,
+                        para: paraTexto,
                         copiaPara: copiaGestor,
                         anexouPdf: Boolean(pdfLimpo),
                         enviadoPor: req.user?.email || req.user?.uid || null,
@@ -1430,7 +1440,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
                 tipo: 'DAS',
                 competencia: competencia || null,
                 canal: 'email-graph',
-                para: emailDest,
+                para: paraTexto,
                 copiaPara: copiaGestor,
                 pdfBase64: pdfLimpo,
                 pdfFileName: pdfFileName || null,
@@ -1442,7 +1452,7 @@ app.post('/api/admin/das/enviar-cliente', requireAuth, async (req, res) => {
         }
 
         return res.json({
-            ok: true, canal: 'email', para: emailDest, copiaPara: copiaGestor,
+            ok: true, canal: 'email', para: paraTexto, copiaPara: copiaGestor,
             remetente, fonteRemetente, avisoRemetente,
             anexouPdf: Boolean(pdfLimpo), rito,
         });

@@ -1,4 +1,5 @@
 import { lerPdfVencimentos } from './convites-pdf.js';
+import { listaDeEnvio } from './email-destinatarios-helper.js';
 import * as convites from './convites-vencimento.cjs';
 // ============================================================================
 // sefaz-backend/graph-provider.js
@@ -103,21 +104,29 @@ export async function enviarEmail({ remetente, para, cc = [], bcc = [], assunto,
         anexos = agenda.anexos;
         const token = await getAccessToken();
 
-        const destinatarios = (Array.isArray(para) ? para : [para])
-            .filter(Boolean)
-            .map(addr => ({ emailAddress: { address: addr } }));
+        // Todo campo passa pela MESMA régua (09/10, APATEL): "a@x b@y" num
+        // campo só virava UM destinatário e o Graph recusava a mensagem
+        // inteira. Endereço torto volta NOMEADO, nunca descartado calado.
+        const lidoPara = listaDeEnvio(para);
+        const lidoCc = listaDeEnvio(cc);
+        const lidoBcc = listaDeEnvio(bcc);
+        const tortos = [...lidoPara.invalidos, ...lidoCc.invalidos, ...lidoBcc.invalidos];
+        if (tortos.length) {
+            return {
+                ok: false,
+                error: `Destinatário inválido: ${tortos.map((i) => `"${i.valor}" (${i.motivo})`).join(' · ')} `
+                    + 'Corrija o e-mail no cadastro e tente de novo.',
+            };
+        }
+        const comoGraph = (lista) => lista.map((addr) => ({ emailAddress: { address: addr } }));
+        const destinatarios = comoGraph(lidoPara.lista);
 
         if (destinatarios.length === 0) {
             return { ok: false, error: 'Nenhum destinatário informado' };
         }
 
-        const copias = (Array.isArray(cc) ? cc : [cc])
-            .filter(Boolean)
-            .map(addr => ({ emailAddress: { address: addr } }));
-
-        const copiasOcultas = (Array.isArray(bcc) ? bcc : [bcc])
-            .filter(Boolean)
-            .map(addr => ({ emailAddress: { address: addr } }));
+        const copias = comoGraph(lidoCc.lista);
+        const copiasOcultas = comoGraph(lidoBcc.lista);
 
         // Graph: POST /users/{remetente}/sendMail
         const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(remetente)}/sendMail`;
