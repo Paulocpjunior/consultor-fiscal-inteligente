@@ -9,6 +9,21 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾🔁 NFS-e SP "CAPTURA INCERTA" EM MÊS ANTIGO (09/10)** (Paulo/Eunice, LANCHONETE JO-BRAS
+  07/2026: etapa 1 travada — zero NFS-e sem prova; rodada do portal só cobre ~40 dias
+  (`periodosJanelaPorMes`) e o "forçar captura" manda body {} → nenhum caminho para mês
+  antigo). (1) `sem-emissao-nfse.js` (marca `rotinaParametros.nfsePropria`, autor/motivo;
+  `efeitoDaMarcaNfse`): `aplicarIssNaRotina` recebe `marcaNfse` — zero declarado não piora a
+  captura, NFS-e com marca = ALERTA; `podeMarcarSemNfse` → `bloqueioDaEtapa` → botão no
+  FimDeMesBloco; rota `/api/admin/rotina-fiscal/empresa-sem-nfse`; card mostra marca +
+  desfazer; iss.situacao 'sem-nfse-declarado'. (2) `capturarEmpresaNoMes` +
+  `periodoDoMesEncerrado` (orchestrator; login extraído em `abrirSessaoPortal`; respeita
+  `nfsesp_portal_locks`; NÃO grava em `nfsesp_portal_cron_logs` — rastro em
+  `nfsesp_capturas_empresa_mes`), rota admin `/api/admin/sefaz/nfsesp-capturar-empresa-mes`,
+  botão `CapturarNfseSpMes` no IssSpPanel. `zeroConfiavelDaEmpresa`: porPeriodo inteiro,
+  limpo e POSTERIOR à última rodada prova o mês mesmo com falha na rodada. Etapa 5 da
+  lanchonete era pasta SharePoint ausente → ♻️ Refazer o rito. Trava `nfseSpMesEncerrado`.
+
 - **📧 DESTINATÁRIO CRU NO GRAPH (09/10)** (APATEL, envio do DAS: Graph 400
   ErrorInvalidRecipients — 'magda@apatel.com.br francisco@apatel.com.br' como UM
   destinatário). `/api/admin/das/enviar-cliente` (server.js) mandava `emailDest` cru;

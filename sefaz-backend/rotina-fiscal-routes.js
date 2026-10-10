@@ -79,6 +79,7 @@ import { ladoDaContraparte } from './participante-doc-helper.js';
 import { montarPainelIssCarteira, acumularIssPorEmpresa } from './iss-carteira.js';
 import { saudeNfseSp, zeroConfiavelParaCompetencia } from './nfse-sp-saude.js';
 import { conferirMarcaSemSaida } from './sem-emissao-saida.js';
+import { conferirMarcaSemNfse } from './sem-emissao-nfse.js';
 
 /** SP capital. Fora da praça o ISS é de outra prefeitura, com outro portal. */
 const COD_MUN_SP_CAPITAL = '3550308';
@@ -607,6 +608,39 @@ router.post('/empresa-sem-saida', requireAuth, async (req, res) => {
         return res.json({ ok: true, ...conf.valor });
     } catch (e) {
         console.error('[rotina-fiscal/empresa-sem-saida]', e);
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── 🧾 Empresa que NÃO EMITE NFS-e (09/10) ─────────────────────────────────
+// Paulo, LANCHONETE JO-BRAS: comércio que só emite NF-e/NFC-e ficava travado
+// em "NFS-e de SP com captura incerta" em mês fora da janela do portal. Marca
+// (ou desfaz) no CADASTRO, com autor, data e motivo — régua em
+// `sem-emissao-nfse.js`.
+router.post('/empresa-sem-nfse', requireAuth, async (req, res) => {
+    try {
+        const { empresaId, naoEmite, motivo } = req.body || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'Informe a empresa.' });
+        if (!(await podeAcessarEmpresaId(req.user, empresaId)).ok) {
+            return res.status(403).json({ ok: false, error: 'Esta empresa não está na sua carteira.' });
+        }
+        const conf = conferirMarcaSemNfse({
+            naoEmite, motivo, quem: req.user?.email || req.user?.uid || null, agoraIso: new Date().toISOString(),
+        });
+        if (!conf.ok) return res.status(400).json({ ok: false, error: conf.erro });
+        const db = getDb();
+        let ref = db.collection('simples_empresas').doc(String(empresaId));
+        let snap = await ref.get();
+        if (!snap.exists) { ref = db.collection('lucro_empresas').doc(String(empresaId)); snap = await ref.get(); }
+        if (!snap.exists) return res.status(404).json({ ok: false, error: 'Empresa não encontrada.' });
+        await ref.update({
+            'rotinaParametros.nfsePropria': conf.valor.nfsePropria,
+            'rotinaParametros.nfsePropriaMarca': conf.valor.nfsePropriaMarca,
+        });
+        console.log(`[rotina-fiscal] empresa ${empresaId} nfsePropria=${conf.valor.nfsePropria} por ${conf.valor.nfsePropriaMarca.por}`);
+        return res.json({ ok: true, ...conf.valor });
+    } catch (e) {
+        console.error('[rotina-fiscal/empresa-sem-nfse]', e);
         return res.status(500).json({ ok: false, error: e.message });
     }
 });

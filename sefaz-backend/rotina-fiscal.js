@@ -42,6 +42,7 @@ import { OBRIGACOES_FORA_DO_FISCAL, departamentoDaObrigacao } from './catalogo-o
 import { podeDeclararCobertura, coberturaDeclarada } from './obrigacao-fora-do-catalogo.js';
 import { podeDeclararSemMovimento, aplicarSemMovimentoDeclarado } from './sem-movimento-declarado.js';
 import { marcaSemEmissaoDeSaida, aplicarSemEmissaoNaCaptura } from './sem-emissao-saida.js';
+import { marcaSemEmissaoDeNfse, efeitoDaMarcaNfse, textoDaMarcaNfse } from './sem-emissao-nfse.js';
 
 export const ETAPAS_ROTINA = [
     { id: 'captura',    ordem: 1, nome: 'Capturar notas',        onde: 'Central de XMLs → Captura' },
@@ -775,7 +776,10 @@ export function montarRotinaFiscal({
     }
 
     // ── ISS de SP capital, DENTRO da linha ──────────────────────────────────
-    const ajusteIss = aplicarIssNaRotina({ iss, envios, captura: eCaptura, validacao: eValidacao, guias: eGuias, semEmissaoDeSaida: !!marcaSemSaida });
+    const ajusteIss = aplicarIssNaRotina({
+        iss, envios, captura: eCaptura, validacao: eValidacao, guias: eGuias,
+        semEmissaoDeSaida: !!marcaSemSaida, marcaNfse: marcaSemEmissaoDeNfse(empresa?.rotinaParametros),
+    });
     eCaptura = ajusteIss.captura;
     eValidacao = ajusteIss.validacao;
     eGuias = ajusteIss.guias;
@@ -883,8 +887,11 @@ export function montarRotinaFiscal({
  * consegue fechar vira ruído, e ruído a equipe aprende a ignorar. Âmbar já
  * impede o "mês fechado" e mantém a empresa no funil.
  */
-export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias, semEmissaoDeSaida = false }) {
+export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias, semEmissaoDeSaida = false, marcaNfse = null }) {
     if (!iss || iss.aplicavel !== true) return { captura, validacao, guias, iss: null };
+    // 🧾 "Não emite NFS-e" (09/10, LANCHONETE JO-BRAS): o zero de NFS-e de quem
+    // só emite NF-e/NFC-e é a resposta declarada; NFS-e aparecendo é ALERTA.
+    const efeitoNfse = efeitoDaMarcaNfse(iss, marcaNfse);
 
     const aRecolher = Number(iss.aRecolher || 0);
     const tomado = Number(iss.tomadoRetido || 0);
@@ -905,7 +912,7 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
             'NFS-e de SP NÃO capturada: empresa sem CCM.',
             'Cadastre o CCM em Dados fiscais (SP capital). Sem ele a varredura do portal nem tenta a empresa — '
             + 'o ISS do mês fica invisível e "zero nota" não significa nada.');
-    } else if (iss.situacao === 'captura-incerta' && !(semEmissaoDeSaida && Number(iss.notas || 0) === 0)) {
+    } else if (iss.situacao === 'captura-incerta' && !(semEmissaoDeSaida && Number(iss.notas || 0) === 0) && !efeitoNfse.zeroDeclarado) {
         // 🚫 Empresa marcada como SEM emissão de saída: o "zero NFS-e emitida"
         // é a resposta declarada, não captura incerta (02/10). Com nota emitida
         // sem valor gravado (notas > 0), a incerteza é outra e continua.
@@ -913,6 +920,17 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
             'NFS-e de SP com captura incerta neste mês.',
             iss.acao || 'A captura da NFS-e do mês não teve sucesso — rode a captura antes de concluir qualquer coisa sobre o ISS.');
     }
+
+    if (efeitoNfse.conflito) {
+        eCaptura = piorar(eCaptura,
+            `${Number(iss.notas || 0)} NFS-e emitida(s), mas a ${textoDaMarcaNfse(marcaNfse)}.`,
+            'A marca está errada ou a empresa passou a emitir nota de serviço: confira as notas e desfaça a marca no card da Rotina.');
+    }
+    eCaptura = {
+        ...eCaptura,
+        podeMarcarSemNfse: efeitoNfse.podeMarcar && !semEmissaoDeSaida,
+        ...(marcaNfse ? { semNfseMarcada: marcaNfse } : {}),
+    };
 
     // — 2. validação —
     let eValidacao = validacao;
@@ -946,7 +964,8 @@ export function aplicarIssNaRotina({ iss, envios = [], captura, validacao, guias
         validacao: eValidacao,
         guias: eGuias,
         iss: {
-            situacao: iss.situacao || null,
+            // Zero NFS-e declarado pela marca não é mais "captura sem sucesso".
+            situacao: efeitoNfse.zeroDeclarado && iss.situacao === 'captura-incerta' ? 'sem-nfse-declarado' : (iss.situacao || null),
             notas: Number(iss.notas || 0),
             aRecolher,
             // ISS de optante do Simples e de SUP fixo não vira guia por

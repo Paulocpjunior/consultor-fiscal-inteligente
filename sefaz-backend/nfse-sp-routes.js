@@ -20,7 +20,7 @@ import { importarCsvNfseSp } from './nfse-sp-csv-importer.js';
 import { parseCsvNfseBarueri, ehCsvNfseBarueri, ehTxtLoteBarueri } from './nfse-barueri-csv-parser.js';
 import { importarCsvNfseBarueri, conferirPosseDoCsvBarueri } from './nfse-barueri-csv-importer.js';
 import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
-import { sincronizarNfseSpViaPortal } from './nfse-sp-portal-orchestrator.js';
+import { sincronizarNfseSpViaPortal, capturarEmpresaNoMes } from './nfse-sp-portal-orchestrator.js';
 import { loadSessaoManual, saveSessaoManual } from './nfse-sp-portal-client.js';
 import { requireAuth as authUser, requireAdmin } from './require-admin.js';
 import { secretsMatch } from './cron-secret.js';
@@ -562,6 +562,25 @@ router.post('/nfsesp-portal-cron-now', authUser, json(), async (req, res) => {
         });
     } catch (e) {
         return res.status(500).json({ erro: e.message });
+    }
+});
+
+// 🔁 Captura de UMA empresa num MÊS ENCERRADO (09/10, LANCHONETE JO-BRAS):
+// a rodada automática só alcança os últimos ~40 dias, e o mês que ficou fora
+// dela não tinha como provar o "zero NFS-e". Admin; responde ao fim (login +
+// dois downloads, ~1-2 min) para a tela dizer o resultado, não "iniciado".
+router.post('/nfsesp-capturar-empresa-mes', authUser, json(), async (req, res) => {
+    try {
+        if (req.user?.role !== 'admin') return res.status(403).json({ ok: false, erro: 'Apenas administradores' });
+        const empresaId = String(req.body?.empresaId || '').trim();
+        const anoMes = String(req.body?.anoMes || '').trim();
+        if (!empresaId) return res.status(400).json({ ok: false, erro: 'Informe a empresa.' });
+        const r = await capturarEmpresaNoMes({ empresaId, anoMes, capturadoPor: req.user?.email || null });
+        console.log(`[nfsesp-capturar-empresa-mes] ${empresaId} ${anoMes} por ${req.user?.email}: ${JSON.stringify(r).slice(0, 300)}`);
+        return res.status(r.erro && r.ok === false && r.anoMes === undefined ? 400 : 200).json(r);
+    } catch (e) {
+        console.error('[nfsesp-capturar-empresa-mes]', e);
+        return res.status(500).json({ ok: false, erro: e.message });
     }
 });
 

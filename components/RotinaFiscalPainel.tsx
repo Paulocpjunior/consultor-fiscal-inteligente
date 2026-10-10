@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CredencialEmailFaixa from './CredencialEmailFaixa';
 import RotinaParametrosBloco from './RotinaParametrosBloco';
 import { manifestarUmaChave, manifestacaoGravada, manifestacaoComPrazoEncerrado, motivoDaManifestacaoNaoGravada } from '../services/manifestoService';
-import { carregarRotinaFiscal, marcarSemEmissaoDeSaida, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
+import { carregarRotinaFiscal, marcarSemEmissaoDeSaida, marcarSemEmissaoDeNfse, type PainelRotina, type RotinaEmpresa, type EtapaRotina } from '../services/rotinaFiscalService';
 import FronteiraProcessoPanel from './FronteiraProcessoPanel';
 import FimDeMesBloco from './FimDeMesBloco';
 // 🔒 A PROJEÇÃO DO BLOQUEIO VEM DO DONO — montá-la aqui à mão foi o defeito da
@@ -423,6 +423,33 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                         );
                                     })()}
 
+                                    {/* 🧾 Empresa marcada como NÃO emite NFS-e (09/10):
+                                        a marca aparece no card, com quem marcou,
+                                        e se desfaz daqui mesmo. */}
+                                    {(() => {
+                                        const marca = r.etapas.find((e) => e.id === 'captura')?.semNfseMarcada;
+                                        if (!marca || !r.empresa?.id) return null;
+                                        return (
+                                            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                                                🧾 Não emite NFS-e
+                                                {marca.por ? ` · marcado por ${marca.por}` : ''}
+                                                {marca.motivo ? ` — "${marca.motivo}"` : ''}
+                                                {' '}
+                                                <button
+                                                    className="underline text-blue-700 dark:text-blue-300"
+                                                    onClick={async () => {
+                                                        if (!window.confirm('Desfazer a marca "não emite NFS-e"? O zero de NFS-e volta a exigir prova da captura.')) return;
+                                                        const res = await marcarSemEmissaoDeNfse({ empresaId: r.empresa!.id, naoEmite: false });
+                                                        if (!res.ok) { window.alert(res.error || 'Não consegui desfazer.'); return; }
+                                                        carregarRef.current?.(competencia);
+                                                    }}
+                                                >
+                                                    desfazer
+                                                </button>
+                                            </p>
+                                        );
+                                    })()}
+
                                     {/* ISS de SP capital: guia do município, que
                                         não fecha no DAS nem no DARF. Aparece
                                         SEMPRE que a empresa é de SP capital —
@@ -446,6 +473,8 @@ const RotinaFiscalPainel: React.FC<Props> = ({ onIrPara, ehAdmin }) => {
                                                 <span className="text-amber-700 dark:text-amber-400">
                                                     empresa sem CCM — a captura da NFS-e nem roda, então não se sabe se há ISS.
                                                 </span>
+                                            ) : r.iss.situacao === 'sem-nfse-declarado' ? (
+                                                <span>empresa marcada como não emite NFS-e — zero nota de serviço é a resposta declarada.</span>
                                             ) : r.iss.situacao === 'captura-incerta' ? (
                                                 <span className="text-amber-700 dark:text-amber-400">
                                                     captura do mês sem sucesso — “zero nota” aqui não significa “sem ISS”.

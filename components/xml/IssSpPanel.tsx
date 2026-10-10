@@ -26,6 +26,7 @@ import VarreduraIssRetido from './VarreduraIssRetido';
 import { conferirValorNaGuia, type ConferenciaValorGuia } from '../../services/valorNaGuiaPdf';
 import { extrairTextoPdfBase64 } from '../../services/nftsPdfParserService';
 import { precisaReleituraIssRetido } from '../../sefaz-backend/nfse-iss-retido-releitura.js';
+import CapturarNfseSpMes from './CapturarNfseSpMes';
 
 interface SaudeCaptura {
     farol: 'ok' | 'atencao' | 'quebrado';
@@ -560,6 +561,11 @@ const IssSpPanel: React.FC<{ currentUser: User | null; onShowToast?: (m: string)
                         {carregando ? 'Apurando…' : '🔎 Apurar ISS'}
                     </button>
                 </div>
+
+                {/* 🔁 Mês encerrado fora da janela do portal (09/10, LANCHONETE JO-BRAS). */}
+                {empresa && currentUser?.role === 'admin' && (
+                    <CapturarNfseSpMes empresaId={empresa.id} competencia={competencia} onCapturado={() => void apurar()} />
+                )}
 
                 {empresa && (
                     <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">

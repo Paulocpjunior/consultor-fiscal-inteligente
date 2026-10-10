@@ -154,6 +154,9 @@ export function bloqueioDaEtapa(e) {
         // 🚫 E a porta do "não emite saída" (02/10): entradas chegaram, saída
         // nenhuma, e é só isso que segura a etapa 1.
         podeMarcarSemSaida: typeof e.podeMarcarSemSaida === 'boolean' ? e.podeMarcarSemSaida : null,
+        // 🧾 E a do "não emite NFS-e" (09/10): só quando o que segura é o
+        // zero de NFS-e de SP sem prova de captura.
+        podeMarcarSemNfse: typeof e.podeMarcarSemNfse === 'boolean' ? e.podeMarcarSemNfse : null,
         // As obrigações NOMEADAS: é essa lista que a declaração precisa
         // mencionar, e é ela que a leitura compara depois.
         propostas: Array.isArray(e.propostas) ? e.propostas : null,

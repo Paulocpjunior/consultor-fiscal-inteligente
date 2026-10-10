@@ -81,6 +81,8 @@ export interface Bloqueio {
     podeDeclararSemMovimento: boolean | null;
     /** 🚫 Marcar "não emite nota de saída" resolve ESTE bloqueio? (02/10) */
     podeMarcarSemSaida: boolean | null;
+    /** 🧾 Marcar "não emite NFS-e" resolve ESTE bloqueio? (09/10) */
+    podeMarcarSemNfse: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — o que a declaração cobre. */
     propostas: string[] | null;
     /** As causas do rito, nomeadas pelo dono do painel de envios. */

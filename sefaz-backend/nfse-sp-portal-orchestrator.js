@@ -89,6 +89,37 @@ export function periodosJanelaPorMes(hoje = new Date(), dias = 40) {
     return periodos;
 }
 
+/**
+ * O período do MÊS INTEIRO de uma competência já encerrada (09/10).
+ *
+ * A captura de uma empresa num mês passado só serve se baixar o mês inteiro
+ * (é isso que prova o zero — `periodoCobreMesInteiro`). Mês corrente ou futuro
+ * não é "mês passado": a janela automática já cobre o corrente, e baixar um
+ * pedaço dele gravaria um mês que ainda não acabou.
+ *
+ * @param {string} anoMes 'AAAA-MM'
+ * @param {Date} [hoje]
+ * @returns {{ok: true, periodo: {dataInicio: string, dataFim: string, anoMes: string}} | {ok: false, erro: string}}
+ */
+export function periodoDoMesEncerrado(anoMes, hoje = new Date()) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(anoMes || ''));
+    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return { ok: false, erro: 'Competência no formato AAAA-MM.' };
+    const ano = Number(m[1]);
+    const mes = Number(m[2]) - 1;
+    const atual = hoje.getFullYear() * 12 + hoje.getMonth();
+    if (ano * 12 + mes >= atual) {
+        return { ok: false, erro: 'Só mês já encerrado — o mês corrente a captura automática já baixa todo dia.' };
+    }
+    return {
+        ok: true,
+        periodo: {
+            dataInicio: fmtDataPt(new Date(ano, mes, 1)),
+            dataFim: fmtDataPt(new Date(ano, mes + 1, 0)),
+            anoMes: `${m[1]}-${m[2]}`,
+        },
+    };
+}
+
 // ─── Lock por CNPJ ────────────────────────────────────────────────────────
 
 async function tentaLockCnpj(cnpj) {
@@ -257,6 +288,122 @@ async function sincronizarPrestador({ session, prestador, empresa, periodo }) {
 
 // ─── Orquestração completa ────────────────────────────────────────────────
 
+// ─── Sessão do portal (login + tela de exportação) ───────────────────────
+// Um lugar só para o login — a rodada geral e a captura de UMA empresa num mês
+// (09/10) entram pela mesma porta, com a mesma ordem de tentativas.
+async function abrirSessaoPortal(log) {
+    const certs = await loadCertificate();
+    // Estratégia de login (em ordem):
+    // 1. Headless (Chromium com cert A1) — 100% automático
+    // 2. Cookies manuais (admin colou via UI) — fallback emergencial
+    // 3. mTLS direto — fallback derradeiro
+    let cookies;
+    try {
+        const headless = await loginHeadlessPortalSp();
+        cookies = headless.cookies;
+        log.metodoLogin = 'headless';
+        console.log(`[nfsesp-portal] login headless ok (${Object.keys(cookies).length} cookies)`);
+    } catch (headlessErr) {
+        // HeadlessLoginError carrega tipo (manutencao | timeout-rede |
+        // selector-mudou | cert-rejeitado | desconhecido) e tentativas.
+        // Persistimos no log do cron pra metrica honesta de causa-raiz —
+        // sem isso, painel so dizia "login falhou" sem distinguir
+        // "portal em manutencao" (esperar) de "DOM mudou" (atualizar
+        // selectors) de "cert rejeitado" (renovar cert).
+        log.headlessErroTipo = headlessErr.tipo || 'desconhecido';
+        log.headlessTentativas = headlessErr.tentativas || 1;
+        console.warn(`[nfsesp-portal] login headless falhou: tipo=${log.headlessErroTipo} tentativas=${log.headlessTentativas} msg=${headlessErr.message} — tentando cookies manuais`);
+        try {
+            const manual = await loadSessaoManual();
+            cookies = manual.cookies;
+            log.metodoLogin = 'cookies-manuais';
+            console.log(`[nfsesp-portal] usando cookies manuais (atualizados ${manual.atualizadoEm?.toDate?.()?.toISOString?.()})`);
+        } catch (manualErr) {
+            console.warn(`[nfsesp-portal] cookies manuais indisponíveis (${manualErr.message}) — tentando mTLS direto`);
+            const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
+            cookies = login.cookies;
+            log.metodoLogin = 'mtls-direto';
+            console.log('[nfsesp-portal] login mTLS direto ok');
+        }
+    }
+    const tela = await carregarTelaExportacao({
+        cookies,
+        pfxBuffer: certs.pfxBuffer,
+        password: certs.password,
+    });
+    return { session: { cookies: tela.cookies, tokens: tela.tokens }, prestadores: tela.prestadores };
+}
+
+/**
+ * 🔁 CAPTURA DE UMA EMPRESA NUM MÊS ENCERRADO (09/10, LANCHONETE JO-BRAS).
+ *
+ * A rodada automática só alcança os últimos ~40 dias; o mês que ficou fora
+ * dela não tinha como ser provado, e o "zero NFS-e" da empresa travava o Fim
+ * de Mês para sempre. Aqui: login pela MESMA porta, só o prestador desta
+ * empresa, só o mês pedido (inteiro). O registro por mês
+ * (`nfsesp_portal_state.porPeriodo`) é gravado por `sincronizarPrestador` —
+ * é ele que prova o mês.
+ *
+ * ⚠️ NÃO grava em `nfsesp_portal_cron_logs`: aquilo é a RODADA GERAL, e a
+ * saúde da carteira inteira é lida dali — uma captura de uma empresa só não
+ * pode passar por "a última rodada". O rastro vai em `nfsesp_capturas_empresa_mes`.
+ * ⚠️ O lock por CNPJ é respeitado: lock ativo devolve recusa dita, nunca contorno.
+ *
+ * @param {{empresaId: string, anoMes: string, capturadoPor?: string}} p
+ */
+export async function capturarEmpresaNoMes({ empresaId, anoMes, capturadoPor } = {}) {
+    const per = periodoDoMesEncerrado(anoMes);
+    if (!per.ok) return { ok: false, erro: per.erro };
+    const db = fa().firestore();
+    let snap = await db.collection('simples_empresas').doc(String(empresaId || '')).get();
+    let colecao = 'simples_empresas';
+    if (!snap.exists) { snap = await db.collection('lucro_empresas').doc(String(empresaId || '')).get(); colecao = 'lucro_empresas'; }
+    if (!snap.exists) return { ok: false, erro: 'Empresa não encontrada.' };
+    const d = snap.data() || {};
+    const ccm = ccmSpDaEmpresa(d);
+    const cnpj = String(d.cnpj || '').replace(/\D/g, '');
+    if (!ccm) return { ok: false, erro: 'Empresa sem CCM — cadastre em Dados Fiscais antes de capturar a NFS-e de SP.' };
+    if (cnpj.length !== 14) return { ok: false, erro: 'Empresa sem CNPJ válido no cadastro.' };
+    const empresa = { id: snap.id, cnpj, ccm, nome: d.razaoSocial || d.nome || '', colecao };
+
+    const log = { iniciadoEm: new Date().toISOString(), capturadoPor: capturadoPor || null };
+    const aberta = await abrirSessaoPortal(log);
+    const prest = aberta.prestadores.find((x) => x.ccm === ccm);
+    if (!prest) {
+        return {
+            ok: false,
+            erro: `O CCM ${ccm} não aparece entre os prestadores autorizados ao escritório no portal de SP `
+                + '— confira o CCM em Dados Fiscais e a autorização do escritório no portal.',
+        };
+    }
+    if (!(await tentaLockCnpj(cnpj))) {
+        return {
+            ok: false,
+            erro: 'Esta empresa foi capturada no portal de SP há menos de 1 hora (trava por CNPJ). Tente de novo mais tarde.',
+        };
+    }
+    const r = await sincronizarPrestador({ session: aberta.session, prestador: prest, empresa, periodo: per.periodo });
+    const resultado = {
+        ok: !r.prestador?.erro && !r.tomador?.erro,
+        anoMes: per.periodo.anoMes,
+        prestadas: r.prestador?.totalNotas ?? null,
+        tomadas: r.tomador?.totalNotas ?? null,
+        erroPrestadas: r.prestador?.erro || null,
+        erroTomadas: r.tomador?.erro || null,
+        metodoLogin: log.metodoLogin || null,
+    };
+    try {
+        await db.collection('nfsesp_capturas_empresa_mes').add({
+            empresaId: empresa.id, cnpj, ccm, ...resultado,
+            capturadoPor: capturadoPor || null,
+            em: new Date().toISOString(),
+        });
+    } catch (e) {
+        console.warn('[nfsesp-portal/empresa-mes] rastro falhou:', e.message);
+    }
+    return resultado;
+}
+
 /**
  * Pipeline cron: login do escritório → enumera prestadores autorizados no
  * portal → cruza com empresas do Firestore (por CCM) → pra cada bate
@@ -299,46 +446,9 @@ export async function sincronizarNfseSpViaPortal({ periodo, capturadoPor } = {})
 
     let session;
     try {
-        const certs = await loadCertificate();
-        // Estratégia de login (em ordem):
-        // 1. Headless (Chromium com cert A1) — 100% automático
-        // 2. Cookies manuais (admin colou via UI) — fallback emergencial
-        // 3. mTLS direto — fallback derradeiro
-        let cookies;
-        try {
-            const headless = await loginHeadlessPortalSp();
-            cookies = headless.cookies;
-            log.metodoLogin = 'headless';
-            console.log(`[nfsesp-portal] login headless ok (${Object.keys(cookies).length} cookies)`);
-        } catch (headlessErr) {
-            // HeadlessLoginError carrega tipo (manutencao | timeout-rede |
-            // selector-mudou | cert-rejeitado | desconhecido) e tentativas.
-            // Persistimos no log do cron pra metrica honesta de causa-raiz —
-            // sem isso, painel so dizia "login falhou" sem distinguir
-            // "portal em manutencao" (esperar) de "DOM mudou" (atualizar
-            // selectors) de "cert rejeitado" (renovar cert).
-            log.headlessErroTipo = headlessErr.tipo || 'desconhecido';
-            log.headlessTentativas = headlessErr.tentativas || 1;
-            console.warn(`[nfsesp-portal] login headless falhou: tipo=${log.headlessErroTipo} tentativas=${log.headlessTentativas} msg=${headlessErr.message} — tentando cookies manuais`);
-            try {
-                const manual = await loadSessaoManual();
-                cookies = manual.cookies;
-                log.metodoLogin = 'cookies-manuais';
-                console.log(`[nfsesp-portal] usando cookies manuais (atualizados ${manual.atualizadoEm?.toDate?.()?.toISOString?.()})`);
-            } catch (manualErr) {
-                console.warn(`[nfsesp-portal] cookies manuais indisponíveis (${manualErr.message}) — tentando mTLS direto`);
-                const login = await loginPortalSp({ pfxBuffer: certs.pfxBuffer, password: certs.password });
-                cookies = login.cookies;
-                log.metodoLogin = 'mtls-direto';
-                console.log('[nfsesp-portal] login mTLS direto ok');
-            }
-        }
-        const tela = await carregarTelaExportacao({
-            cookies,
-            pfxBuffer: certs.pfxBuffer,
-            password: certs.password,
-        });
-        session = { cookies: tela.cookies, tokens: tela.tokens };
+        const aberta = await abrirSessaoPortal(log);
+        const tela = { prestadores: aberta.prestadores };
+        session = aberta.session;
         log.prestadoresAutorizados = tela.prestadores.length;
         console.log(`[nfsesp-portal] tela exportação ok. ${tela.prestadores.length} prestadores autorizados.`);
 

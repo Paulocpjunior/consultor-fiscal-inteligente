@@ -37,7 +37,7 @@ import {
 // fechar e reabrir — a leitura continua vindo por props.
 import { registrarEnvioForaDoApp, meiosForaDoApp, type MeioForaDoApp } from '../services/envioImpostoService';
 // 📋 A porta da COBERTURA declarada — a obrigação que o catálogo não cobre.
-import { declararCoberturaForaDoCatalogo, declararSemMovimento, marcarSemEmissaoDeSaida } from '../services/rotinaFiscalService';
+import { declararCoberturaForaDoCatalogo, declararSemMovimento, marcarSemEmissaoDeSaida, marcarSemEmissaoDeNfse } from '../services/rotinaFiscalService';
 
 interface Props {
     empresaId: string;
@@ -158,6 +158,10 @@ const FimDeMesBloco: React.FC<Props> = ({
     // e é só isso que segura a etapa 1 (quem decide é o backend).
     const bloqueioSemSaida = bloqueios.find((b) => b.id === 'captura' && b.podeMarcarSemSaida === true);
     const marcarSemSaida = bloqueioSemSaida ? <MarcarSemSaida empresaId={empresaId} onMudou={onMudou} /> : null;
+    // 🧾 A porta do "não emite NFS-e" (09/10, LANCHONETE JO-BRAS): só quando o
+    // que segura a etapa 1 é o zero de NFS-e de SP sem prova de captura.
+    const bloqueioSemNfse = bloqueios.find((b) => b.id === 'captura' && b.podeMarcarSemNfse === true);
+    const marcarSemNfse = bloqueioSemNfse ? <MarcarSemNfse empresaId={empresaId} onMudou={onMudou} /> : null;
     const pre = { pode: bloqueiosDoPainel.length === 0 };
 
     // ── FECHADA ─────────────────────────────────────────────────────────────
@@ -261,7 +265,7 @@ const FimDeMesBloco: React.FC<Props> = ({
                         {ocupado ? 'Fechando…' : '🔒 Dar fim de mês novamente'}
                     </button>
                 ) : (
-                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida} />
+                    <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida ?? marcarSemNfse} />
                 )}
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
             </div>
@@ -322,14 +326,14 @@ const FimDeMesBloco: React.FC<Props> = ({
                     {ocupado ? 'Fechando…' : '🔒 Dar fim de mês'}
                 </button>
                 {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
-                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida} />}
+                {bloqueiosDaRecusa.length > 0 && <Bloqueios bloqueios={bloqueiosDaRecusa} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida ?? marcarSemNfse} />}
             </div>
         );
     }
 
     return (
         <div className="space-y-1">
-            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida} />
+            <Bloqueios bloqueios={bloqueios} onIrPara={onIrPara} declarar={declarar} declararCobertura={declararCobertura} declararSemMovimento={declararSemMov ?? marcarSemSaida ?? marcarSemNfse} />
             {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
         </div>
     );
@@ -678,6 +682,54 @@ const MarcarSemSaida: React.FC<{ empresaId: string; onMudou?: () => void }> = ({
                 <button onClick={salvar} disabled={salvando}
                     className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50">
                     {salvando ? 'Gravando…' : 'Marcar: não emite saída'}
+                </button>
+                <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const MarcarSemNfse: React.FC<{ empresaId: string; onMudou?: () => void }> = ({ empresaId, onMudou }) => {
+    const [aberto, setAberto] = useState(false);
+    const [motivo, setMotivo] = useState('');
+    const [erro, setErro] = useState<string | null>(null);
+    const [salvando, setSalvando] = useState(false);
+    const salvar = async () => {
+        setSalvando(true); setErro(null);
+        try {
+            const r = await marcarSemEmissaoDeNfse({ empresaId, naoEmite: true, motivo });
+            if (!r.ok) { setErro(r.error || 'Não consegui marcar.'); return; }
+            setAberto(false); setMotivo('');
+            onMudou?.();
+        } catch (e: any) {
+            setErro(e?.message || 'Falha ao marcar.');
+        } finally { setSalvando(false); }
+    };
+    if (!aberto) {
+        return (
+            <button onClick={() => setAberto(true)}
+                className="text-[11px] px-2 py-1 rounded border border-slate-400 text-slate-700 dark:text-slate-200">
+                🧾 Esta empresa não emite NFS-e (nota de serviço) — marcar
+            </button>
+        );
+    }
+    return (
+        <div className="rounded-lg border border-slate-300 dark:border-slate-600 p-2 space-y-2">
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-semibold">Marcar que esta empresa não emite NFS-e</span> — ela emite NF-e/NFC-e, mas nunca
+                nota de serviço (ex.: comércio, lanchonete). Vale para todos os meses e fica gravado o seu nome. O "zero NFS-e" passa a
+                ser a resposta declarada; se aparecer NFS-e emitida, a Rotina avisa. As NFS-e tomadas (ISS retido) continuam cobradas.
+            </p>
+            <input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Motivo (ex.: lanchonete — só NFC-e)"
+                className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
+            {erro && <p className="text-[11px] text-red-600 dark:text-red-400">{erro}</p>}
+            <div className="flex gap-2">
+                <button onClick={salvar} disabled={salvando}
+                    className="text-[11px] px-3 py-1.5 rounded bg-slate-700 text-white disabled:opacity-50">
+                    {salvando ? 'Gravando…' : 'Marcar: não emite NFS-e'}
                 </button>
                 <button onClick={() => setAberto(false)} className="text-[11px] px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600">
                     Cancelar

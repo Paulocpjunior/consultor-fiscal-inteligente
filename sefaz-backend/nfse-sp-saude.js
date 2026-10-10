@@ -221,6 +221,16 @@ export function periodoCobreMesInteiro(periodo) {
  * @returns {{confiavel: boolean, via: string, motivo: string|null}}
  */
 export function zeroConfiavelDaEmpresa({ saude = null, logs = [], state = null, cnpj, competencia } = {}) {
+    // 🔁 A CAPTURA DO MÊS feita DEPOIS da última rodada (09/10, LANCHONETE
+    // JO-BRAS — "Capturar NFS-e SP desta competência"): o download do mês
+    // inteiro, limpo e mais novo que a rodada, prova o mês por si. A falha da
+    // rodada geral (que nem cobria esse mês) não desmente uma prova posterior.
+    const perMes = state?.porPeriodo?.[competencia];
+    const ultimaRodadaTs = ms((logs || [])[0]?.iniciadoEm || (logs || [])[0]?.executadoEm);
+    if (perMes && perMes.mesInteiro === true && !perMes.erroPrestadas && !perMes.erroTomadas
+        && ms(perMes.em) > ultimaRodadaTs) {
+        return { confiavel: true, via: 'periodo-da-empresa', motivo: null };
+    }
     const falha = empresaComFalhaNaCaptura(logs, cnpj);
     if (falha) {
         return {
