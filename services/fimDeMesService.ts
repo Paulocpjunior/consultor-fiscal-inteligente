@@ -45,6 +45,8 @@ export interface BloqueioFimDeMes {
     podeDeclararSemMovimento?: boolean | null;
     /** 🚫 Marcar "esta empresa não emite nota de saída" resolve ESTE bloqueio? (02/10) */
     podeMarcarSemSaida?: boolean | null;
+    /** 🧾 Marcar "esta empresa não emite NFS-e" resolve ESTE bloqueio? (09/10) */
+    podeMarcarSemNfse?: boolean | null;
     /** As obrigações fora do catálogo, NOMEADAS — é o que a declaração cobre. */
     propostas?: string[] | null;
     /**
