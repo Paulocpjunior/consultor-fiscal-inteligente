@@ -15817,3 +15817,16 @@ Paulo (08/10): *"pode corrigir os 2 pontos no CFI"*. Os dois pontos vieram do PR
   - A rota do DP responde 413 nesse caso.
   - Vale para todos os chamadores do `enviarEmail`.
   - A trava fica em `graphProviderEnviarEmail.test.ts`.
+
+## 11/10/2026 — DCTFWeb do Consultor DP: semáforo, DARF e transmissão pelo túnel (T1-DP)
+
+Paulo, no Consultor DP: *"a REINF e a DCTFWeb têm a parte que cabe ao DP sim"* e *"pode seguir com dctfweb do DP"* (11/10).
+
+- **T1-DP** (`dctfweb-transmissao-regras.js`): o dono da transmissão continua sendo o fiscal (T1, 12/08). A exceção: quem é do `dp-folha` transmite quando o semáforo diz `pronto`, ou seja, eSocial recebido e Reinf e MIT recebidos ou sem movimento. Nesse caso não fecha competência alheia incompleta. Com pendência ou incerteza, a decisão e a justificativa do T3 voltam ao fiscal. Sem semáforo, o DP fica barrado como antes.
+- **`transmitirComRegras`** (`dctfweb-routes.js`): a transmissão com T1/T3/T5, o antes × depois e a auditoria saíram da rota `/transmitir` para uma função. A tela do CFI e o túnel do DP usam a mesma régua. `dctfweb_transmissoes` ganha `origem` (cfi ou dp) e `dono`. `montarSemaforoInsumos` é exportado.
+- **Túnel** (`dp-integration-routes.js`, `soDoDp` + carteira do DP):
+  - `POST /dctfweb/insumos`: o semáforo;
+  - `POST /dctfweb/darf`: DARF em andamento (GERARGUIAANDAMENTO313) ou da declaração ativa (GERARGUIA31). Só passa a resposta do SERPRO com PDF; mock é recusado;
+  - `POST /dctfweb/transmitir`: o perfil (role e departamentos) vem do `users` do CFI pelo e-mail do token (`perfilCfiPorEmail`). Sem cadastro, ou com dois cadastros com o mesmo e-mail, a resposta é 403 com o motivo.
+  - A parte pura fica em `dp-dctfweb.js`. Auditoria em `dp_dctfweb_log` (catalogada), sem o PDF.
+- **Travas:** T1-DP em `dctfwebTransmissaoRegras.test.ts`; período, perfil e DARF em `dpDctfweb.test.ts`.

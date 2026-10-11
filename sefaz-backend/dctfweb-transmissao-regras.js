@@ -26,20 +26,47 @@ export const DEPARTAMENTO_DONO = 'fiscal';
 const departamentosDe = (user) => (Array.isArray(user?.departamentos) ? user.departamentos : [])
     .map((d) => String(d || '').trim().toLowerCase());
 
+/** Departamento da folha (cadastro central): transmite só com os três insumos confirmados (T1-DP). */
+export const DEPARTAMENTO_FOLHA = 'dp-folha';
+
 /**
  * T1 — quem pode transmitir/retificar a DCTFWeb.
  *
  * Admin sempre passa (é quem destrava o escritório quando falta gente). Quem não
  * é do fiscal enxerga tudo — o veto é só no ATO de transmitir, porque é ele que
  * fecha a competência alheia.
+ *
+ * T1-DP (Paulo, 11/10/2026: "a DCTFWeb tem a parte que cabe ao DP"): quem é do
+ * DP/Folha transmite QUANDO O SEMÁFORO DIZ 'pronto' — o eSocial fechado (o
+ * insumo dele) e o Reinf e o MIT recebidos ou sem movimento. Aí transmitir não
+ * fecha competência alheia incompleta: não há o que esperar de ninguém. Com
+ * qualquer pendência ou incerteza, a decisão (e a justificativa do T3) volta ao
+ * fiscal — o DP não fecha com justificativa a declaração dos outros.
+ * `selos` vem do semáforo; sem ele, o DP fica de fora (não dá pra afirmar).
  */
-export function podeTransmitirDctfweb(user) {
+export function podeTransmitirDctfweb(user, { selos = null, veredito = null } = {}) {
     if (user?.role === 'admin' || user?.isAdmin === true) {
         return { pode: true, motivo: 'admin', dono: 'admin' };
     }
     const deps = departamentosDe(user);
     if (deps.includes(DEPARTAMENTO_DONO)) {
         return { pode: true, motivo: 'departamento fiscal', dono: DEPARTAMENTO_DONO };
+    }
+    if (deps.includes(DEPARTAMENTO_FOLHA) && selos) {
+        if (veredito === 'pronto') {
+            return { pode: true, motivo: 'DP/Folha com os três insumos confirmados', dono: DEPARTAMENTO_FOLHA };
+        }
+        const faltam = (selos || []).filter((x) => x && x.estado !== 'recebido' && x.estado !== 'sem-movimento')
+            .map((x) => `${x.rotulo} (${x.estado})`);
+        return {
+            pode: false,
+            dono: DEPARTAMENTO_DONO,
+            motivo: 'O DP transmite a DCTFWeb só com os três insumos confirmados'
+                + (faltam.length ? ` — falta confirmar: ${faltam.join(', ')}.` : '.')
+                + ' Com pendência, quem decide (e justifica) é o departamento FISCAL.',
+            acao: 'Feche o eSocial (S-1299) se for o caso, ou fale com o fiscal responsável. '
+                + 'Se o que você precisa é a GUIA, ela sai sem transmitir: use "Gerar DARF" com a declaração em andamento.',
+        };
     }
     return {
         pode: false,

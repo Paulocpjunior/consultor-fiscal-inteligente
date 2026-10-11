@@ -37,6 +37,33 @@ describe('T1 — o dono da transmissão é o fiscal', () => {
     });
 });
 
+describe('T1-DP — o DP transmite só com os três insumos confirmados (Paulo, 11/10/2026)', () => {
+    const selos = (reinf: string, mit: string, esocial = 'recebido') => [
+        { rotulo: '👥 DP/Folha — eSocial', estado: esocial }, { rotulo: '📊 Contábil — EFD-Reinf', estado: reinf }, { rotulo: '🧾 Fiscal — MIT', estado: mit },
+    ];
+
+    it('sem o semáforo, o DP segue barrado como antes', () => {
+        expect(podeTransmitirDctfweb({ departamentos: ['dp-folha'] }).pode).toBe(false);
+    });
+
+    it('semáforo pronto (Reinf sem movimento, MIT recebido): o DP transmite', () => {
+        const r = podeTransmitirDctfweb({ departamentos: ['dp-folha'] }, { selos: selos('sem-movimento', 'recebido'), veredito: 'pronto' });
+        expect(r).toMatchObject({ pode: true, dono: 'dp-folha' });
+    });
+
+    it('com pendência ou incerteza, volta ao fiscal e diz o que falta', () => {
+        const r = podeTransmitirDctfweb({ departamentos: ['dp-folha'] }, { selos: selos('pendente', 'indeterminado'), veredito: 'incompleto' });
+        expect(r.pode).toBe(false);
+        expect(r.motivo).toMatch(/EFD-Reinf \(pendente\).*MIT \(indeterminado\)/);
+        expect(r.motivo).toMatch(/FISCAL/);
+        expect(r.acao).toMatch(/Gerar DARF/);
+    });
+
+    it('outro departamento não ganha a exceção do DP', () => {
+        expect(podeTransmitirDctfweb({ departamentos: ['contabil'] }, { selos: selos('recebido', 'recebido'), veredito: 'pronto' }).pode).toBe(false);
+    });
+});
+
 describe('T3 — insumo pendente exige justificativa gravada', () => {
     it('semáforo completo não pede nada', () => {
         expect(checarJustificativa({ veredito: 'pronto' }).ok).toBe(true);
