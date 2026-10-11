@@ -136,112 +136,145 @@ router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
 // declaração em andamento com o insumo que chegou depois, e o fluxo (consulta o
 // XML → assina → TRANSDECLARACAO310) a entrega. O que muda é o rito em volta —
 // motivo obrigatório e auditoria com os débitos ANTES e DEPOIS.
-router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
-    try {
-        const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = req.body || {};
-        if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
-        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
-        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+/**
+ * A transmissão com as travas T1/T3/T5, a auditoria e o antes × depois. Usada
+ * pela tela do CFI (/transmitir) e pelo túnel do Consultor DP
+ * (/api/dp-integration/dctfweb/transmitir): as duas portas aplicam a MESMA
+ * régua, senão uma vira o atalho da outra. `user` precisa de role e
+ * departamentos (o túnel lê o perfil do CFI pelo e-mail do token).
+ * Devolve { status, json } — quem chama só responde.
+ */
+export async function transmitirComRegras({ user, body = {}, db, origem = 'cfi' }) {
+    const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = body;
+    const {
+        podeTransmitirDctfweb, checarJustificativa, checarRetificadora, compararDebitos,
+    } = await import('./dctfweb-transmissao-regras.js');
 
-        const {
-            podeTransmitirDctfweb, checarJustificativa, checarRetificadora, compararDebitos,
-        } = await import('./dctfweb-transmissao-regras.js');
+    const cnpj = limparCnpj(empresaCnpj);
+    const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
 
-        // T1 — dono da transmissão.
-        const dono = podeTransmitirDctfweb(req.user);
-        if (!dono.pode) return res.status(403).json({ error: dono.motivo, acao: dono.acao, dono: dono.dono });
-
-        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
-        const cnpj = limparCnpj(empresaCnpj);
-        const competencia = `${anoPA}-${String(mesPA).padStart(2, '0')}`;
-        const docId = `${cnpj}_${anoPA}${String(mesPA).padStart(2, '0')}_${categoria || 'GERAL_MENSAL'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-        let declaracao = null;
+    // T2 — semáforo dos insumos (lido UMA vez: a trava do DP e a justificativa olham o mesmo estado).
+    let semaforo = null;
+    const lerSemaforo = async () => {
         try {
-            const snap = await db.collection('dctfweb_declaracoes').doc(docId).get();
-            declaracao = snap.exists ? snap.data() : null;
-        } catch { declaracao = null; }
+            const { vereditoInsumos } = await import('./dctfweb-insumos.js');
+            const base = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId: origem === 'cfi' ? empresaId : null });
+            return { ...base, ...vereditoInsumos(base.selos) };
+        } catch (e) {
+            // Semáforo caído NÃO trava o fiscal — trancar a entrega porque um serviço
+            // piscou seria o dano maior (mesma régua do gate de departamento).
+            console.warn('[dctfweb/transmitir] semáforo indisponível, seguindo:', e.message);
+            return null;
+        }
+    };
 
-        const ehRetificadora = req.body?.retificadora === true;
-        if (ehRetificadora) {
-            // T5 — pré-condições.
-            const chk = checarRetificadora({ declaracao, motivo: req.body?.motivo });
-            if (!chk.ok) return res.status(400).json({ error: chk.erro });
-        } else if (declaracao?.transmitidoEm || String(declaracao?.situacao || '').toUpperCase() === 'ATIVA') {
-            // Transmitir de novo SEM dizer que é retificadora seria retificar às
-            // escondidas. O app obriga a nomear o ato.
-            return res.status(409).json({
+    // T1 — dono da transmissão. O DP só passa com o semáforo 'pronto' (T1-DP).
+    let dono = podeTransmitirDctfweb(user);
+    if (!dono.pode && (user?.departamentos || []).map((d) => String(d).toLowerCase()).includes('dp-folha')) {
+        semaforo = await lerSemaforo();
+        dono = podeTransmitirDctfweb(user, { selos: semaforo?.selos || null, veredito: semaforo?.veredito || null });
+    }
+    if (!dono.pode) {
+        return { status: 403, json: { error: dono.motivo, acao: dono.acao, dono: dono.dono, veredito: semaforo?.veredito, selos: semaforo?.selos } };
+    }
+
+    const docId = `${cnpj}_${anoPA}${String(mesPA).padStart(2, '0')}_${categoria || 'GERAL_MENSAL'}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    let declaracao = null;
+    try {
+        const snap = await db.collection('dctfweb_declaracoes').doc(docId).get();
+        declaracao = snap.exists ? snap.data() : null;
+    } catch { declaracao = null; }
+
+    const ehRetificadora = body?.retificadora === true;
+    if (ehRetificadora) {
+        // T5 — pré-condições.
+        const chk = checarRetificadora({ declaracao, motivo: body?.motivo });
+        if (!chk.ok) return { status: 400, json: { error: chk.erro } };
+    } else if (declaracao?.transmitidoEm || String(declaracao?.situacao || '').toUpperCase() === 'ATIVA') {
+        // Transmitir de novo SEM dizer que é retificadora seria retificar às
+        // escondidas. O app obriga a nomear o ato.
+        return {
+            status: 409,
+            json: {
                 error: 'Esta competência já foi transmitida'
                     + (declaracao?.transmitidoPor ? ` por ${declaracao.transmitidoPor}` : '')
                     + (declaracao?.transmitidoEm ? ` em ${declaracao.transmitidoEm}` : '')
                     + '. Transmitir de novo é RETIFICADORA — use o botão de retificar e escreva o motivo.',
                 jaTransmitida: true,
-            });
-        }
+            },
+        };
+    }
 
-        // T2/T3 — semáforo dos insumos + justificativa gravada.
-        let semaforo = null;
-        try {
-            const { vereditoInsumos } = await import('./dctfweb-insumos.js');
-            const base = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId });
-            semaforo = { ...base, ...vereditoInsumos(base.selos) };
-        } catch (e) {
-            // Semáforo caído NÃO trava — trancar a entrega porque um serviço
-            // piscou seria o dano maior (mesma régua do gate de departamento).
-            console.warn('[dctfweb/transmitir] semáforo indisponível, seguindo:', e.message);
-        }
-        const just = checarJustificativa({
-            veredito: semaforo?.veredito,
-            confirmou: req.body?.confirmarInsumosPendentes === true,
-            justificativa: req.body?.justificativa,
-        });
-        if (!just.ok) {
-            return res.status(409).json({
+    // T3 — justificativa gravada quando há insumo pendente.
+    if (!semaforo) semaforo = await lerSemaforo();
+    const just = checarJustificativa({
+        veredito: semaforo?.veredito,
+        confirmou: body?.confirmarInsumosPendentes === true,
+        justificativa: body?.justificativa,
+    });
+    if (!just.ok) {
+        return {
+            status: 409,
+            json: {
                 error: just.erro,
                 bloqueado: true,
                 veredito: semaforo?.veredito,
                 frase: semaforo?.frase,
                 selos: semaforo?.selos,
-                pendentes: (semaforo?.selos || []).filter((s) => s.estado === 'pendente').map((s) => s.rotulo),
-            });
-        }
+                pendentes: (semaforo?.selos || []).filter((x) => x.estado === 'pendente').map((x) => x.rotulo),
+            },
+        };
+    }
 
-        // ANTES: o que a declaração cobra hoje. Sem isso a retificadora não tem
-        // com o que ser comparada depois.
-        let debitosAntes = [];
-        try {
-            const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
-            if (d?.lido) debitosAntes = d.debitos;
-        } catch { /* auditoria não pode derrubar a entrega */ }
+    // ANTES: o que a declaração cobra hoje. Sem isso a retificadora não tem
+    // com o que ser comparada depois.
+    let debitosAntes = [];
+    try {
+        const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
+        if (d?.lido) debitosAntes = d.debitos;
+    } catch { /* auditoria não pode derrubar a entrega */ }
 
-        const resultado = await transmitirDeclaracao({
-            empresaId, empresaCnpj, anoPA, mesPA, categoria,
-            transmitidoPor: req.user?.email || req.user?.uid || null,
+    const resultado = await transmitirDeclaracao({
+        empresaId, empresaCnpj, anoPA, mesPA, categoria,
+        transmitidoPor: user?.email || user?.uid || null,
+    });
+
+    let comparacao = null;
+    try {
+        const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
+        if (d?.lido) comparacao = compararDebitos(debitosAntes, d.debitos);
+    } catch { /* idem */ }
+
+    try {
+        await db.collection('dctfweb_transmissoes').add({
+            em: admin.firestore.FieldValue.serverTimestamp(),
+            por: user?.email || user?.uid || null,
+            departamentos: (user?.departamentos || []).join(',') || null,
+            origem,
+            dono: dono.dono || null,
+            empresaCnpj: cnpj, competencia, categoria: categoria || 'GERAL_MENSAL',
+            retificadora: ehRetificadora,
+            motivo: ehRetificadora ? String(body?.motivo || '').trim() : null,
+            justificativaInsumos: just.justificativa || null,
+            vereditoInsumos: semaforo?.veredito || null,
+            pendentes: (semaforo?.selos || []).filter((x) => x.estado === 'pendente').map((x) => x.rotulo),
+            numeroRecibo: resultado?.numeroRecibo || null,
+            debitosAntes, comparacao,
         });
+    } catch (e) { console.warn('[dctfweb/transmitir] auditoria falhou:', e.message); }
 
-        let comparacao = null;
-        try {
-            const d = await listarDebitosDeclaracao({ empresaCnpj: cnpj, anoPA, mesPA, categoria });
-            if (d?.lido) comparacao = compararDebitos(debitosAntes, d.debitos);
-        } catch { /* idem */ }
+    return { status: 200, json: { ...resultado, retificadora: ehRetificadora, comparacao } };
+}
 
-        try {
-            await db.collection('dctfweb_transmissoes').add({
-                em: admin.firestore.FieldValue.serverTimestamp(),
-                por: req.user?.email || req.user?.uid || null,
-                departamentos: (req.user?.departamentos || []).join(',') || null,
-                empresaCnpj: cnpj, competencia, categoria: categoria || 'GERAL_MENSAL',
-                retificadora: ehRetificadora,
-                motivo: ehRetificadora ? String(req.body?.motivo || '').trim() : null,
-                justificativaInsumos: just.justificativa || null,
-                vereditoInsumos: semaforo?.veredito || null,
-                pendentes: (semaforo?.selos || []).filter((s) => s.estado === 'pendente').map((s) => s.rotulo),
-                numeroRecibo: resultado?.numeroRecibo || null,
-                debitosAntes, comparacao,
-            });
-        } catch (e) { console.warn('[dctfweb/transmitir] auditoria falhou:', e.message); }
-
-        res.json({ ...resultado, retificadora: ehRetificadora, comparacao });
+router.post('/transmitir', requireAuth, express.json(), async (req, res) => {
+    try {
+        const { empresaId, empresaCnpj, anoPA, mesPA } = req.body || {};
+        if (!empresaId || !empresaCnpj || !anoPA || !mesPA) return res.status(400).json({ error: 'empresaId+empresaCnpj+anoPA+mesPA' });
+        const carteira = await podeAcessarCnpj(req.user, empresaCnpj);
+        if (!carteira.ok) return res.status(carteira.status).json({ error: carteira.error });
+        const db = admin.apps.length ? admin.firestore() : (admin.initializeApp({ credential: admin.credential.applicationDefault() }), admin.firestore());
+        const r = await transmitirComRegras({ user: req.user, body: req.body, db, origem: 'cfi' });
+        res.status(r.status).json(r.json);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -685,7 +718,7 @@ router.post('/cron', async (req, res) => {
  * dois têm que ler o MESMO estado, senão o painel diz uma coisa e a trava
  * outra (lição do card 4: painel com conta própria diverge).
  */
-async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId }) {
+export async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId }) {
     const [anoPA, mesPA] = competencia.split('-').map(Number);
     const [esocialR, mitR, lotesR, docsR] = await Promise.allSettled([
             (async () => {

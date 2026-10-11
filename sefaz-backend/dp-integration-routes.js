@@ -35,6 +35,9 @@ import { validarPedidoEmailDp, montarEmailPacoteDp } from './dp-email-pacote.js'
 import { enviarEmail } from './graph-provider.js';
 import { escolherRemetente, dominiosPermitidos, ehErroDeCaixaInexistente } from './graph-remetente.js';
 import { anexoLogo } from './email-layout.js';
+import { montarSemaforoInsumos, transmitirComRegras } from './dctfweb-routes.js';
+import { gerarDarf } from './dctfweb-orchestrator.js';
+import { periodoDaCompetencia, perfilCfiPorEmail, respostaDarfDp } from './dp-dctfweb.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
@@ -322,6 +325,99 @@ router.post('/esocial/envio/consulta', soDoDp, async (req, res) => {
         return res.json({ ...retorno, protocolo: retorno.protocolo || protocolo, situacao: situacaoDoLote(retorno.cdResposta), tpAmb, httpStatus: r.status });
     } catch (err) {
         console.error('[dp-integration/esocial/envio/consulta]', err);
+        return res.status(502).json({ error: err.message });
+    }
+});
+
+// DCTFWeb do DP (Paulo, 11/10/2026: "a DCTFWeb tem a parte que cabe ao DP")
+// POST /api/dp-integration/dctfweb/insumos    Body: { empresaId, cnpj, competencia }
+// POST /api/dp-integration/dctfweb/darf       Body: { empresaId, cnpj, competencia, emAndamento }
+// POST /api/dp-integration/dctfweb/transmitir Body: { empresaId, cnpj, competencia, confirmarInsumosPendentes?,
+//                                                     justificativa?, retificadora?, motivo? }
+//
+// Só o Consultor DP, só nas empresas da carteira (dp-acesso-empresa.js). O
+// semáforo e a transmissão são os MESMOS da tela do CFI (dctfweb-routes.js):
+// o túnel não tem régua própria. O DARF sai em andamento (GERARGUIAANDAMENTO313)
+// ou da declaração ativa (GERARGUIA31); a auditoria (dp_dctfweb_log) guarda
+// quem, empresa, competência e o que saiu — nunca o PDF.
+function dbCfi() {
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    return admin.firestore();
+}
+async function travasDctfwebDp(req, res) {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return null;
+    const competencia = String(req.body?.competencia || '');
+    const periodo = periodoDaCompetencia(competencia);
+    if (!periodo) { res.status(400).json({ error: 'competencia obrigatória no formato YYYY-MM' }); return null; }
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
+        return null;
+    }
+    return { cnpj, competencia, ...periodo, db: dbCfi() };
+}
+function auditarDctfwebDp(dados) {
+    return dbCfi().collection('dp_dctfweb_log').add({ em: admin.firestore.FieldValue.serverTimestamp(), ...dados })
+        .catch((err) => console.warn('[dp-integration/dctfweb] auditoria falhou:', err.message));
+}
+
+router.post('/dctfweb/insumos', soDoDp, async (req, res) => {
+    const t = await travasDctfwebDp(req, res);
+    if (!t) return;
+    try {
+        const r = await montarSemaforoInsumos(t.db, { cnpj: t.cnpj, competencia: t.competencia, empresaId: null });
+        return res.json({ ok: true, ...r });
+    } catch (err) {
+        console.error('[dp-integration/dctfweb/insumos]', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/dctfweb/darf', soDoDp, async (req, res) => {
+    const t = await travasDctfwebDp(req, res);
+    if (!t) return;
+    if (typeof req.body?.emAndamento !== 'boolean') {
+        return res.status(400).json({ error: 'emAndamento (true = declaração em andamento; false = declaração ativa) é obrigatório.' });
+    }
+    try {
+        const r = await gerarDarf({ empresaCnpj: t.cnpj, anoPA: t.anoPA, mesPA: t.mesPA, categoria: 'GERAL_MENSAL', emAndamento: req.body.emAndamento });
+        const resposta = respostaDarfDp(r, { emAndamento: req.body.emAndamento });
+        await auditarDctfwebDp({
+            operacao: 'darf', por: req.user?.email || null, empresaIdDp: req.body.empresaId, cnpj: t.cnpj, competencia: t.competencia,
+            emAndamento: req.body.emAndamento, ok: resposta.ok, valor: resposta.valor ?? null, numeroDocumento: resposta.numeroDocumento || null,
+            vencimento: resposta.vencimento || null, erro: resposta.ok ? null : resposta.error,
+        });
+        return res.status(resposta.ok ? 200 : 502).json(resposta);
+    } catch (err) {
+        console.error('[dp-integration/dctfweb/darf]', err);
+        return res.status(502).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/dctfweb/transmitir', soDoDp, async (req, res) => {
+    const t = await travasDctfwebDp(req, res);
+    if (!t) return;
+    try {
+        const { perfil, motivo } = await perfilCfiPorEmail(t.db, req.user?.email);
+        if (!perfil) return res.status(403).json({ error: motivo });
+        const b = req.body || {};
+        const r = await transmitirComRegras({
+            user: perfil, db: t.db, origem: 'dp',
+            body: {
+                empresaCnpj: t.cnpj, anoPA: t.anoPA, mesPA: t.mesPA, categoria: 'GERAL_MENSAL',
+                confirmarInsumosPendentes: b.confirmarInsumosPendentes === true, justificativa: b.justificativa,
+                retificadora: b.retificadora === true, motivo: b.motivo,
+            },
+        });
+        await auditarDctfwebDp({
+            operacao: b.retificadora === true ? 'retificadora' : 'transmissao', por: perfil.email, empresaIdDp: b.empresaId, cnpj: t.cnpj,
+            competencia: t.competencia, httpStatus: r.status, numeroRecibo: r.json?.numeroRecibo || null, erro: r.status === 200 ? null : r.json?.error || null,
+        });
+        return res.status(r.status).json(r.json);
+    } catch (err) {
+        console.error('[dp-integration/dctfweb/transmitir]', err);
         return res.status(502).json({ error: err.message });
     }
 });
