@@ -38,6 +38,8 @@ import { anexoLogo } from './email-layout.js';
 import { montarSemaforoInsumos, transmitirComRegras } from './dctfweb-routes.js';
 import { gerarDarf } from './dctfweb-orchestrator.js';
 import { periodoDaCompetencia, perfilCfiPorEmail, respostaDarfDp } from './dp-dctfweb.js';
+import { invokeIntegraContador, getSerproConfig } from './serpro-client.js';
+import { SERVICO_PAGAMENTOS, montarFiltroPagamentos, lerRetornoPagamentos } from './dp-pagamentos.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
@@ -419,6 +421,49 @@ router.post('/dctfweb/transmitir', soDoDp, async (req, res) => {
     } catch (err) {
         console.error('[dp-integration/dctfweb/transmitir]', err);
         return res.status(502).json({ error: err.message });
+    }
+});
+
+// DARF pago — "Pagamento de guias" do Consultor DP (12/10/2026)
+// POST /api/dp-integration/pagamentos/consultar
+// Body: { empresaId, cnpj, numerosDocumento?: string[], dataInicial?, dataFinal?,
+//         codigosReceita?: string[], primeiroDaPagina?, tamanhoDaPagina? }
+//
+// PAGTOWEB/PAGAMENTOS71 do Integra Contador (leiaute em dp-pagamentos.js). Só o
+// Consultor DP entra, e só nas empresas da carteira do usuário. Pedido sem
+// número de documento nem intervalo de datas é recusado. Documento não
+// localizado volta como "não localizado", nunca como "não pago"; resposta
+// simulada (SERPRO_DRY_RUN) volta ok=false. A auditoria (dp_pagamentos_log)
+// guarda quem, empresa, filtro e quantos localizados — nunca os valores.
+router.post('/pagamentos/consultar', soDoDp, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    const filtro = montarFiltroPagamentos(req.body || {});
+    if (filtro.erro) return res.status(400).json({ error: filtro.erro });
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        return res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
+    }
+    const auditar = (dados) => dbCfi().collection('dp_pagamentos_log').add({
+        em: admin.firestore.FieldValue.serverTimestamp(), por: req.user?.email || null, empresaIdDp: req.body?.empresaId || null, cnpj,
+        numerosDocumento: filtro.numerosDocumento, intervalo: filtro.dados.intervaloDataArrecadacao || null, ...dados,
+    }).catch((err) => console.warn('[dp-integration/pagamentos] auditoria falhou:', err.message));
+    try {
+        const r = await invokeIntegraContador({ ...SERVICO_PAGAMENTOS, contribuinteCnpj: cnpj, dados: filtro.dados });
+        const resposta = lerRetornoPagamentos(r, {
+            numerosDocumento: filtro.numerosDocumento, tamanhoDaPagina: filtro.dados.tamanhoDaPagina, dryRun: getSerproConfig().dryRun,
+        });
+        await auditar({
+            ok: resposta.ok, fonte: resposta.fonte, localizados: resposta.ok ? resposta.documentos.length : null,
+            erro: resposta.ok ? null : resposta.error,
+        });
+        return res.status(resposta.ok ? 200 : 502).json(resposta);
+    } catch (err) {
+        console.error('[dp-integration/pagamentos/consultar]', err);
+        const mensagens = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
+        await auditar({ ok: false, fonte: 'serpro', localizados: null, erro: err.message, httpStatus: err?.status || null });
+        return res.status(502).json({ ok: false, fonte: 'serpro', error: err.message, mensagens });
     }
 });
 

@@ -15830,3 +15830,13 @@ Paulo, no Consultor DP: *"a REINF e a DCTFWeb têm a parte que cabe ao DP sim"* 
   - `POST /dctfweb/transmitir`: o perfil (role e departamentos) vem do `users` do CFI pelo e-mail do token (`perfilCfiPorEmail`). Sem cadastro, ou com dois cadastros com o mesmo e-mail, a resposta é 403 com o motivo.
   - A parte pura fica em `dp-dctfweb.js`. Auditoria em `dp_dctfweb_log` (catalogada), sem o PDF.
 - **Travas:** T1-DP em `dctfwebTransmissaoRegras.test.ts`; período, perfil e DARF em `dpDctfweb.test.ts`.
+
+## 12/10/2026 — DARF pago para o Consultor DP: PAGTOWEB/PAGAMENTOS71 pelo túnel
+
+Paulo, no Consultor DP: *"senão pode trabalhar no CFI"* (11/10). O "Pagamento de guias" do DP dava baixa no DARF à mão; agora pode conferir o que a Receita registrou como arrecadado.
+
+- **Leiaute conferido na fonte (12/10)**, e não chutado: documentação oficial do Integra Contador, "Integra Pagamento › PAGTOWEB › Consulta Pagamento" e o exemplo de retorno (apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-pagamento/pagtoweb/servicos/consulta_pagamento/). `PAGTOWEB`/`PAGAMENTOS71`, versão `1.0`, ação `/Consultar`. Entrada: `numeroDocumentoLista` (até 17 posições), `codigoReceitaLista` (até 4), `intervaloDataArrecadacao` {dataInicial, dataFinal}, `tamanhoDaPagina` (máx. 100) e `primeiroDaPagina` (começa em 0). Saída: `dados` = lista de DocumentoArrecadacaoIC. Os exemplos de entrada da página têm vírgulas e dois-pontos faltando; o JSON sai pelo `JSON.stringify` do `serpro-client`, nunca copiado de lá. O `COMPARRECADACAO72` citado no `DARF_ACTIVATION.md` é outro serviço (comprovante em PDF).
+- **`dp-pagamentos.js`** (puro): `montarFiltroPagamentos` (exige número do documento ou intervalo de datas, para não puxar o histórico inteiro) e `lerRetornoPagamentos`. Ausente ≠ zero: multa/juros null continuam null; resposta sem lista volta ok=false; documento não localizado é "não localizado", nunca "não pago" (a arrecadação leva dias para aparecer); documento devolvido sem ter sido pedido fica fora com aviso; `SERPRO_DRY_RUN` volta `fonte: 'dry_run'` e ok=false.
+- **Túnel** `POST /api/dp-integration/pagamentos/consultar` (`soDoDp` + carteira do DP). Auditoria em `dp_pagamentos_log` (catalogada): quem, empresa, filtro e quantos localizados, nunca os valores.
+- **Pré-requisito:** o produto PAGTOWEB contratado na conta SERPRO e a procuração do cliente cobrindo o serviço; sem isso o SERPRO responde erro de negócio e o DP recebe a mensagem.
+- **Trava:** `dpPagamentos.test.ts` (14 casos, com o exemplo oficial de retorno).
