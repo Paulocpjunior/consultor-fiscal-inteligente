@@ -15853,3 +15853,14 @@ Paulo, no Consultor DP: *"segue com 1,2,3"* (12/10), item 2 = comprovante de arr
 ## 12/10/2026 — Consulta de DARF pago para a Contabilidade
 
 Rota exclusiva `/api/cci-integration/pagamentos/consultar`, com token de projetos-app-sp e confirmação de carteira no backend do CCI (CCI_URL). Reutiliza dp-pagamentos.js e SERPRO sem ampliar a rota do DP. Auditoria cci_pagamentos_log catalogada, sem valores ou mensagens brutas. CCI_URL exige origem HTTPS fixa; redirecionamentos não recebem token. Publicação autorizada em 12/10; homologação real depende de contratação PAGTOWEB e procuração.
+
+## 12/10/2026 — Alerta de DARF do Consultor DP sem pagamento (cron + PAGAMENTOS71)
+
+Paulo, no Consultor DP: *"podemos seguir com o P2 e o alerta de darf nao pago no CFI"* (12/10).
+
+- **De onde saem os DARF:** só da auditoria do próprio CFI (`dp_dctfweb_log`, operacao `darf`, ok, com número e vencimento). O CFI continua sem acesso de servidor ao banco do DP. DARF registrado à mão no DP (sem passar pelo túnel) fica fora.
+- **`dp-darf-nao-pago.js`** (puro): um alvo por CNPJ + competência, com todos os números emitidos (reemissão com juros); consulta só depois do vencimento, uma vez por dia, até 60 dias; pago encerra (número novo reabre). "Não localizado" só depois de 3 dias úteis (feriados nacionais); antes é "aguardando". Antes do alerta, consulta também por período de arrecadação (do mês seguinte à competência até hoje) e aceita guia paga com outro número pelo período de apuração (dele ou de um desmembramento). Página cheia (100) no período: o alerta sai com a ressalva. Sem vencimento na emissão, fica de fora.
+- **Cron** `POST /api/admin/sefaz/dp-darf-nao-pago-cron` (`dp-darf-nao-pago-cron.js`, x-cron-secret, heartbeat em `dp_darf_cron_logs`, no vigia de saúde). Situação em `dp_darf_situacao/{cnpj}_{competência}`. Falha do SERPRO ou `SERPRO_DRY_RUN` não muda a situação: grava só o erro. No máximo 60 consultas por rodada (o resto fica para o dia seguinte, contado como adiado).
+- **Leitura pelo DP:** `POST /api/dp-integration/pagamentos/situacao-darf` (`soDoDp` + carteira), só lê `dp_darf_situacao` do CNPJ.
+- **Agendamento:** `dp-darf-nao-pago-cron`, `20 10 * * 1-5`, em `scripts/setup-cloud-schedulers.sh`. **Pendente do Paulo:** rodar o script no Cloud Shell depois do deploy para criar o job.
+- **Travas:** `dpDarfNaoPago.test.ts` (alvos, quando consultar, carência com feriado, classificação, documento e resposta ao DP; roda com TZ variado); `cronsComHeartbeat.test.ts` com o cron novo.

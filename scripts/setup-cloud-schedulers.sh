@@ -35,6 +35,7 @@
 #   cert-alerta-cron-diario         0 7 * * 1-5        Avisa certificado vencendo
 #   sharepoint-cron-alertas         30 8 * * 1-5       Avisa documentos novos no SharePoint
 #   captura-resumo-diario           0 9 * * 1-5        Resumo diário das capturas via procuração e-CAC
+#   dp-darf-nao-pago-cron           20 10 * * 1-5      DARF do Consultor DP vencido sem pagamento na Receita (PAGTOWEB)
 #
 # Idempotente: `describe` → se existe `update`, senão `create`.
 #
@@ -334,6 +335,15 @@ upsert_job \
     "0 9 * * 1-5" \
     "/api/admin/sefaz/captura-resumo-cron" \
     "Resumo diario por email das capturas NFe via procuracao e-CAC"
+
+# DARF do Consultor DP sem pagamento (12/10/2026): confere na Receita
+# (PAGTOWEB/PAGAMENTOS71) os DARF da DCTFWeb emitidos pelo DP que venceram,
+# e o DP avisa no painel de prazos. Uma consulta por DARF por dia útil.
+upsert_job \
+    "dp-darf-nao-pago-cron" \
+    "20 10 * * 1-5" \
+    "/api/admin/sefaz/dp-darf-nao-pago-cron" \
+    "DARF do Consultor DP vencido e sem pagamento localizado na Receita"
 
 # Legalização virou APP PRÓPRIO (repo `legalizacao`, serviço Cloud Run
 # `legalizacao`) — o job legalizacao-cron-diario é criado pelo

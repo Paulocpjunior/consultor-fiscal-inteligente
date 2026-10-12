@@ -13,6 +13,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import sefazCertRouter from './sefaz-backend/cert-manager.js';
 import sefazCertAlertaCronRouter from './sefaz-backend/cert-alerta-cron.js';
+import dpDarfNaoPagoCronRouter from './sefaz-backend/dp-darf-nao-pago-cron.js';
 import sefazCapturaResumoCronRouter from './sefaz-backend/captura-resumo-cron.js';
 import saeNfceCronRouter from './sefaz-backend/sefaz-sp-nfce-cron.js';
 import distdfeAutxmlRouter from './sefaz-backend/distdfe-autxml-routes.js';
@@ -364,6 +365,7 @@ app.use('/api/agent', agentLimiter);
 // ── Routers (montados DEPOIS do middleware de segurança/limite) ─────────
 app.use('/api/admin/sefaz', sefazCertRouter);
 app.use('/api/admin/sefaz', sefazCertAlertaCronRouter);
+app.use('/api/admin/sefaz', dpDarfNaoPagoCronRouter); // alerta de DARF do DP sem pagamento (dp-darf-nao-pago.js)
 app.use('/api/admin/sefaz', sefazCapturaResumoCronRouter);
 app.use('/api/admin/sefaz', saeNfceCronRouter);
 app.use('/api/admin/sefaz', distdfeAutxmlRouter);

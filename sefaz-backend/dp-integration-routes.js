@@ -39,6 +39,7 @@ import { montarSemaforoInsumos, transmitirComRegras } from './dctfweb-routes.js'
 import { gerarDarf } from './dctfweb-orchestrator.js';
 import { periodoDaCompetencia, perfilCfiPorEmail, respostaDarfDp } from './dp-dctfweb.js';
 import { invokeIntegraContador, getSerproConfig } from './serpro-client.js';
+import { situacoesParaDp } from './dp-darf-nao-pago.js';
 import {
     SERVICO_PAGAMENTOS, SERVICO_COMPROVANTE, montarFiltroPagamentos, lerRetornoPagamentos, lerComprovante, normalizarNumeroDocumento,
 } from './dp-pagamentos.js';
@@ -466,6 +467,31 @@ router.post('/pagamentos/consultar', soDoDp, async (req, res) => {
         const mensagens = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
         await auditar({ ok: false, fonte: 'serpro', localizados: null, erro: err.message, httpStatus: err?.status || null });
         return res.status(502).json({ ok: false, fonte: 'serpro', error: err.message, mensagens });
+    }
+});
+
+// Situação dos DARF do DP conferida pelo cron (dp-darf-nao-pago-cron.js)
+// POST /api/dp-integration/pagamentos/situacao-darf   Body: { empresaId, cnpj }
+//
+// Só lê dp_darf_situacao (nada vai à Receita aqui): o que o cron gravou para o
+// CNPJ, da competência mais recente para trás. Mesmas travas: só o DP, só
+// empresas da carteira do usuário.
+router.post('/pagamentos/situacao-darf', soDoDp, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        return res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
+    }
+    try {
+        // Pelo id ({cnpj}_{competência}), gravado sempre com o CNPJ só em dígitos.
+        const id = admin.firestore.FieldPath.documentId();
+        const snap = await dbCfi().collection('dp_darf_situacao').where(id, '>=', `${cnpj}_`).where(id, '<', `${cnpj}_\uf8ff`).get();
+        return res.json({ ok: true, situacoes: situacoesParaDp(snap.docs.map((d) => d.data())) });
+    } catch (err) {
+        console.error('[dp-integration/pagamentos/situacao-darf]', err);
+        return res.status(500).json({ ok: false, error: err.message });
     }
 });
 
