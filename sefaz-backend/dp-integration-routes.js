@@ -39,7 +39,9 @@ import { montarSemaforoInsumos, transmitirComRegras } from './dctfweb-routes.js'
 import { gerarDarf } from './dctfweb-orchestrator.js';
 import { periodoDaCompetencia, perfilCfiPorEmail, respostaDarfDp } from './dp-dctfweb.js';
 import { invokeIntegraContador, getSerproConfig } from './serpro-client.js';
-import { SERVICO_PAGAMENTOS, montarFiltroPagamentos, lerRetornoPagamentos } from './dp-pagamentos.js';
+import {
+    SERVICO_PAGAMENTOS, SERVICO_COMPROVANTE, montarFiltroPagamentos, lerRetornoPagamentos, lerComprovante, normalizarNumeroDocumento,
+} from './dp-pagamentos.js';
 import { parseDestinatarios } from './email-destinatarios-helper.js';
 
 const router = express.Router();
@@ -446,7 +448,7 @@ router.post('/pagamentos/consultar', soDoDp, async (req, res) => {
         return res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
     }
     const auditar = (dados) => dbCfi().collection('dp_pagamentos_log').add({
-        em: admin.firestore.FieldValue.serverTimestamp(), por: req.user?.email || null, empresaIdDp: req.body?.empresaId || null, cnpj,
+        em: admin.firestore.FieldValue.serverTimestamp(), operacao: 'consulta', por: req.user?.email || null, empresaIdDp: req.body?.empresaId || null, cnpj,
         numerosDocumento: filtro.numerosDocumento, intervalo: filtro.dados.intervaloDataArrecadacao || null, ...dados,
     }).catch((err) => console.warn('[dp-integration/pagamentos] auditoria falhou:', err.message));
     try {
@@ -463,6 +465,41 @@ router.post('/pagamentos/consultar', soDoDp, async (req, res) => {
         console.error('[dp-integration/pagamentos/consultar]', err);
         const mensagens = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
         await auditar({ ok: false, fonte: 'serpro', localizados: null, erro: err.message, httpStatus: err?.status || null });
+        return res.status(502).json({ ok: false, fonte: 'serpro', error: err.message, mensagens });
+    }
+});
+
+// Comprovante de arrecadação (PDF) — guia paga no "Pagamento de guias" do DP
+// POST /api/dp-integration/pagamentos/comprovante
+// Body: { empresaId, cnpj, numeroDocumento }
+//
+// PAGTOWEB/COMPARRECADACAO72 (leiaute em dp-pagamentos.js). Mesmas travas da
+// consulta: só o DP, só empresas da carteira. Só passa PDF de verdade; o PDF
+// não é gravado aqui e a auditoria (dp_pagamentos_log, operacao 'comprovante')
+// guarda quem, empresa, documento e o resultado.
+router.post('/pagamentos/comprovante', soDoDp, async (req, res) => {
+    const cnpj = validarCnpj(req, res);
+    if (!cnpj) return;
+    const numeroDocumento = normalizarNumeroDocumento(req.body?.numeroDocumento);
+    if (!numeroDocumento) return res.status(400).json({ error: 'numeroDocumento obrigatório (até 17 posições).' });
+    try {
+        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+    } catch (err) {
+        return res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
+    }
+    const auditar = (dados) => dbCfi().collection('dp_pagamentos_log').add({
+        em: admin.firestore.FieldValue.serverTimestamp(), operacao: 'comprovante', por: req.user?.email || null,
+        empresaIdDp: req.body?.empresaId || null, cnpj, numerosDocumento: [numeroDocumento], ...dados,
+    }).catch((err) => console.warn('[dp-integration/pagamentos] auditoria falhou:', err.message));
+    try {
+        const r = await invokeIntegraContador({ ...SERVICO_COMPROVANTE, contribuinteCnpj: cnpj, dados: { numeroDocumento } });
+        const resposta = lerComprovante(r, { dryRun: getSerproConfig().dryRun });
+        await auditar({ ok: resposta.ok, fonte: resposta.fonte, erro: resposta.ok ? null : resposta.error });
+        return res.status(resposta.ok ? 200 : 502).json(resposta);
+    } catch (err) {
+        console.error('[dp-integration/pagamentos/comprovante]', err);
+        const mensagens = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
+        await auditar({ ok: false, fonte: 'serpro', erro: err.message, httpStatus: err?.status || null });
         return res.status(502).json({ ok: false, fonte: 'serpro', error: err.message, mensagens });
     }
 });

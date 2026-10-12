@@ -8,7 +8,7 @@
  */
 // @ts-nocheck — módulo .js do backend
 import {
-    SERVICO_PAGAMENTOS, montarFiltroPagamentos, lerRetornoPagamentos, normalizarNumeroDocumento,
+    SERVICO_PAGAMENTOS, SERVICO_COMPROVANTE, montarFiltroPagamentos, lerRetornoPagamentos, lerComprovante, normalizarNumeroDocumento,
 } from '../sefaz-backend/dp-pagamentos.js';
 
 const docOficial = {
@@ -132,3 +132,30 @@ describe('DARF pago pelo túnel do DP › retorno', () => {
         expect(r.avisos.join(' ')).toMatch(/valor total/);
     });
 });
+
+describe('comprovante de arrecadação (COMPARRECADACAO72)', () => {
+    // Início real de um PDF em base64 ("%PDF-1.7"), como no exemplo oficial.
+    const pdf = 'JVBERi0xLjcNJeLjz9MNCjEgMCBvYmoNPDwv';
+
+    it('serviço e versão do leiaute oficial', () => {
+        expect(SERVICO_COMPROVANTE).toEqual({ idSistema: 'PAGTOWEB', idServico: 'COMPARRECADACAO72', versaoSistema: '1.0' });
+    });
+
+    it('aceita as duas formas documentadas: {pdf} (exemplo) e a string base64 (tabela)', () => {
+        expect(lerComprovante({ status: 200, dados: { pdf }, mensagens: [] })).toEqual({ ok: true, fonte: 'serpro', pdfBase64: pdf, mensagens: [] });
+        expect(lerComprovante({ status: 200, dados: `${pdf.slice(0, 10)}\n${pdf.slice(10)}`, mensagens: [] }).pdfBase64).toBe(pdf);
+    });
+
+    it('o que não é PDF não passa, com a mensagem do SERPRO', () => {
+        const r = lerComprovante({ status: 200, dados: { pdf: 'PGh0bWw+' }, mensagens: [{ codigo: 'Aviso-PAGTOWEB-1', texto: 'Documento não encontrado.' }] });
+        expect(r).toMatchObject({ ok: false, fonte: 'serpro' });
+        expect(r.error).toMatch(/Documento não encontrado/);
+        expect(lerComprovante({ status: 200, dados: null, mensagens: [] }).ok).toBe(false);
+    });
+
+    it('modo simulado nunca devolve comprovante', () => {
+        expect(lerComprovante({ status: 200, dados: { _dryRun: true }, mensagens: [] })).toMatchObject({ ok: false, fonte: 'dry_run' });
+        expect(lerComprovante({ status: 200, dados: { pdf }, mensagens: [] }, { dryRun: true }).ok).toBe(false);
+    });
+});
+
