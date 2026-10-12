@@ -15864,3 +15864,9 @@ Paulo, no Consultor DP: *"podemos seguir com o P2 e o alerta de darf nao pago no
 - **Leitura pelo DP:** `POST /api/dp-integration/pagamentos/situacao-darf` (`soDoDp` + carteira), só lê `dp_darf_situacao` do CNPJ.
 - **Agendamento:** `dp-darf-nao-pago-cron`, `20 10 * * 1-5`, em `scripts/setup-cloud-schedulers.sh`. **Pendente do Paulo:** rodar o script no Cloud Shell depois do deploy para criar o job.
 - **Travas:** `dpDarfNaoPago.test.ts` (alvos, quando consultar, carência com feriado, classificação, documento e resposta ao DP; roda com TZ variado); `cronsComHeartbeat.test.ts` com o cron novo.
+
+## 12/10/2026 — Esteiras: actions em Node 24 e Ubuntu 24.04 fixo
+
+- O GitHub avisou que as actions em Node 20 vão parar e que o `ubuntu-latest` passa a ser o Ubuntu 26 em 19/10/2026.
+- Os workflows (deploy-app, deploy-proxy, deploy-firestore, audit-deps) passam a usar checkout@v5, setup-node@v5, setup-java@v5, google-github-actions/auth@v3 e setup-gcloud@v3, todas em Node 24 (conferido no `action.yml` oficial).
+- `runs-on: ubuntu-24.04`, para a troca do Ubuntu virar decisão e não surpresa. Nada muda para quem usa.
