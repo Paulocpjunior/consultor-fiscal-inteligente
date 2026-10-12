@@ -78,6 +78,7 @@ import sistemaBancoRouter from './sefaz-backend/sistema-banco-routes.js';
 import auditoriaDonoRouter from './sefaz-backend/auditoria-dono-routes.js';
 import nfpComplianceRouter from './sefaz-backend/nfp-compliance-routes.js';
 import dpIntegrationRouter from './sefaz-backend/dp-integration-routes.js';
+import cciPagamentosRouter from './sefaz-backend/cci-pagamentos-routes.js';
 import sharepointAutoSyncRouter from './sefaz-backend/sharepoint-auto-sync.js';
 import efdReinfRouter from './sefaz-backend/efd-reinf-routes.js';
 import reinfRetencoesPjRouter from './sefaz-backend/reinf-retencoes-pj-routes.js';
@@ -428,6 +429,7 @@ app.use('/api/admin/sistema', sistemaBancoRouter);
 app.use('/api/admin/auditoria-dono', auditoriaDonoRouter);
 app.use('/api/admin/nfp-compliance', nfpComplianceRouter);
 app.use('/api/dp-integration', dpIntegrationRouter);
+app.use('/api/cci-integration', cciPagamentosRouter);
 app.use('/api/admin/sharepoint', sharepointAutoSyncRouter);
 app.use('/api/admin/efd-reinf', efdReinfRouter);
 // Integração com o Consultor Contábil (EFD-Reinf): as NFS-e tomadas com

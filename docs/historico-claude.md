@@ -15849,3 +15849,7 @@ Paulo, no Consultor DP: *"segue com 1,2,3"* (12/10), item 2 = comprovante de arr
 - **Túnel** `POST /api/dp-integration/pagamentos/comprovante` (`soDoDp` + carteira do DP). O PDF não é gravado no CFI. A auditoria vai para `dp_pagamentos_log` com `operacao: 'comprovante'` (a consulta passa a gravar `operacao: 'consulta'`); catálogo atualizado.
 - **Trava:** `dpPagamentos.test.ts` (18 casos).
 
+
+## 12/10/2026 — Consulta de DARF pago para a Contabilidade
+
+Rota exclusiva `/api/cci-integration/pagamentos/consultar`, com token de projetos-app-sp e confirmação de carteira no backend do CCI (CCI_URL). Reutiliza dp-pagamentos.js e SERPRO sem ampliar a rota do DP. Auditoria cci_pagamentos_log catalogada, sem valores ou mensagens brutas. CCI_URL exige origem HTTPS fixa; redirecionamentos não recebem token. Publicação autorizada em 12/10; homologação real depende de contratação PAGTOWEB e procuração.
