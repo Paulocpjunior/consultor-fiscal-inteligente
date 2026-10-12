@@ -74,7 +74,7 @@ const AtivarEmpresaScreen: React.FC<Props> = ({ currentUser, atual, onAtivar, on
         <div className="min-h-screen flex items-start justify-center px-4 py-10" style={{ background: 'var(--bg-page)' }}>
             <div className="w-full max-w-2xl">
                 <div className="flex flex-col items-center gap-3 mb-6">
-                    <Logo className="h-14 w-auto" />
+                    <Logo className="h-14 w-14" />
                     <div className="text-center">
                         <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
                             {atual ? 'Trocar de empresa' : 'Ative uma empresa para começar'}

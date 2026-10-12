@@ -85,24 +85,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{background:"var(--bg-page)"}}>
-            <div className="w-full max-w-md rounded-2xl overflow-hidden animate-fade-in" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)"}}>
-                <div className="p-8 text-center" style={{background:"var(--accent-hover)"}}>
-                    <div className="flex justify-center mb-4">
-                        <Logo variant="light" className="h-20 w-auto" />
+            <div className="w-full max-w-md rounded-3xl overflow-hidden animate-fade-in shadow-[0_8px_30px_rgba(0,0,0,0.08)]" style={{background:"var(--bg-card)",border:"1px solid var(--border-subtle)"}}>
+                <div className="px-8 pt-10 pb-6 text-center" style={{background:"var(--bg-card)"}}>
+                    <div className="flex justify-center mb-5">
+                        <Logo className="h-20 w-20 shadow-sm" />
                     </div>
-                    <h1 className="text-2xl font-bold text-[var(--text-primary)]" style={{fontFamily:"Cormorant Garamond,serif"}}>{spConnect ? 'SP Connect' : 'Consultor Fiscal Inteligente'}</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">{spConnect ? 'SP Connect' : 'Consultor Fiscal Inteligente'}</h1>
                     <p className="text-sm mt-2" style={{color:"var(--text-muted)"}}>{spConnect ? 'Atendimento WhatsApp · SP Assessoria Contábil' : 'Acesso Exclusivo SP Assessoria Contábil'}</p>
 
                     <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
                         <span
-                            className="inline-flex items-center gap-1 bg-white/15 text-[var(--text-primary)] text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full backdrop-blur-sm border border-white/20"
+                            className="inline-flex items-center gap-1 bg-[var(--bg-subtle)] text-[var(--text-secondary)] text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 rounded-full border border-[var(--border-subtle)]"
                             title={`Build: ${formatBuildDate(APP_BUILD_TIME)}`}
                         >
                             Versão {rotuloVersao()}
                         </span>
                         <span
                             className="inline-flex items-center gap-1 text-[10px] font-mono px-2.5 py-1 rounded-full border"
-                            style={{background:"var(--accent-soft-border)",borderColor:"var(--accent-soft-border)",color:"var(--text-primary)"}}
+                            style={{background:"var(--accent-soft)",borderColor:"var(--accent-soft-border)",color:"var(--text-secondary)"}}
                             title={`Release técnico — gerado em ${formatBuildDate(APP_BUILD_TIME)}`}
                         >
                             Release {APP_RELEASE}
@@ -110,8 +110,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                     </div>
                 </div>
                 
-                <div className="p-8" style={{background:"var(--bg-elevated)"}}>
-                    <h2 className="text-xl font-bold mb-6 text-center" style={{color:"var(--text-primary)",fontFamily:"Cormorant Garamond,serif"}}>
+                <div className="px-8 pb-8 pt-2" style={{background:"var(--bg-card)"}}>
+                    <h2 className="text-lg font-semibold tracking-tight mb-6 text-center" style={{color:"var(--text-primary)"}}>
                         {isRegistering ? 'Criar Nova Conta Online' : 'Acesso ao Sistema'}
                     </h2>
                     
@@ -123,7 +123,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                                     type="text" 
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
+                                    className="w-full p-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:!border-blue-500 transition-shadow font-normal" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                     placeholder="Seu nome completo"
                                     required={isRegistering}
                                 />
@@ -137,7 +137,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                                 autoComplete="username"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
+                                className="w-full p-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:!border-blue-500 transition-shadow font-normal" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                 placeholder="nome@spassessoriacontabil.com.br"
                                 required
                             />
@@ -150,7 +150,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                                 autoComplete={isRegistering ? 'new-password' : 'current-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-3 rounded-lg focus:outline-none font-normal" style={{background:"var(--bg-card)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
+                                className="w-full p-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:!border-blue-500 transition-shadow font-normal" style={{background:"var(--bg-elevated)",border:"1px solid var(--border-default)",color:"var(--text-primary)"}}
                                 placeholder="••••••••"
                                 required
                             />
@@ -201,7 +201,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                         <button 
                             type="submit" 
                             disabled={isLoading}
-                            className="w-full py-3 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex justify-center items-center gap-2" style={{background:"var(--accent)"}}
+                            className="w-full py-3 text-white font-medium rounded-xl bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
                         >
                             {isLoading ? (
                                 <>
@@ -224,7 +224,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, spConnect = f
                     </div>
                 </div>
                 
-                <div className="p-4 flex flex-col items-center gap-2" style={{background:"var(--accent-soft)",borderTop:"1px solid var(--border-subtle)"}}>
+                <div className="p-4 flex flex-col items-center gap-2" style={{background:"var(--bg-elevated)",borderTop:"1px solid var(--border-subtle)"}}>
                     <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${isFirebaseConfigured ? 'text-[var(--success)]' : 'text-[var(--warning)]'}`}>
                         {isFirebaseConfigured ? (
                             <>

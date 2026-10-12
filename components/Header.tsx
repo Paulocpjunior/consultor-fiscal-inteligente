@@ -44,7 +44,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onMenuClick, descri
             <Logo />
           </Tooltip>
           <div>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl leading-tight" style={{color:"var(--text-primary)",fontFamily:"Cormorant Garamond,serif",fontWeight:"300"}}>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight leading-tight" style={{color:"var(--text-primary)"}}>
               Consultor Fiscal
             </h1>
             <p className="text-xs sm:text-sm font-medium tracking-wider uppercase" style={{color:"var(--accent)"}}>

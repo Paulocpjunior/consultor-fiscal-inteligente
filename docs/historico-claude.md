@@ -15870,3 +15870,12 @@ Paulo, no Consultor DP: *"podemos seguir com o P2 e o alerta de darf nao pago no
 - O GitHub avisou que as actions em Node 20 vão parar e que o `ubuntu-latest` passa a ser o Ubuntu 26 em 19/10/2026.
 - Os workflows (deploy-app, deploy-proxy, deploy-firestore, audit-deps) passam a usar checkout@v5, setup-node@v5, setup-java@v5, google-github-actions/auth@v3 e setup-gcloud@v3, todas em Node 24 (conferido no `action.yml` oficial).
 - `runs-on: ubuntu-24.04`, para a troca do Ubuntu virar decisão e não surpresa. Nada muda para quem usa.
+
+## 12/10/2026 — Visual no estilo da Apple (mesmo do Consultor DP)
+
+Paulo: *"quero usar algo parecido com o que a Apple usa: letra, tipografia, símbolos, logo"* (pedido feito no Consultor DP e estendido ao CFI).
+
+- **Fonte:** pilha do sistema (`-apple-system`, SF Pro…) com a Inter embutida de reserva (`@fontsource-variable/inter`, importada no `index.tsx` antes do CSS). Saem DM Sans e Cormorant Garamond (e o link do Google Fonts do `index.html`); o CSP de fonte já aceitava `'self'`.
+- **Cores e cantos** no `tailwind.config.js` (Tailwind 3, sem migrar): `slate` e `gray` = neutros da Apple; `blue`, `indigo` e `sky` = o mesmo azul (#0071e3 no botão, 4,6:1 com branco). Raios um pouco maiores. Os tokens do `index.css` (`--bg-page`, `--accent`…) seguem os mesmos tons; tema escuro em preto puro com camadas #1c1c1e/#2c2c2e.
+- **Logo:** arquivo oficial `public/logo-sp.png` num quadrado branco arredondado (ícone de app); `favicon.png` e `apple-touch-icon.png` no `index.html`, `theme-color` #f5f5f7/#000000. O `sp-logo.png` antigo fica (guias, PDF). O `/connect` agora TROCA o apple-touch-icon e o theme-color do index pelos do SP Connect (e devolve na saída), em vez de só criar quando faltava.
+- **Login:** cartão claro `rounded-3xl`, campos `rounded-xl` com foco azul, botão `bg-blue-600`; lógica e textos iguais. O título do cabeçalho deixou a Cormorant.
