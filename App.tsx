@@ -279,8 +279,19 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!MODO_SP_CONNECT || typeof document === 'undefined') return;
         const criados: HTMLElement[] = [];
+        // O index.html traz ícone e theme-color do CFI: no /connect são TROCADOS (e devolvidos na saída).
+        const trocados: Array<[Element, string, string | null]> = [];
+        const trocar = (el: Element, attr: string, valor: string) => {
+            trocados.push([el, attr, el.getAttribute(attr)]);
+            el.setAttribute(attr, valor);
+        };
         const por = (rel: string, href: string, extra?: Record<string, string>) => {
-            if (document.querySelector(`link[rel="${rel}"]`)) return;
+            const existente = document.querySelector(`link[rel="${rel}"]`);
+            if (existente) {
+                trocar(existente, 'href', href);
+                Object.entries(extra || {}).forEach(([k, v]) => trocar(existente, k, v));
+                return;
+            }
             const el = document.createElement('link');
             el.rel = rel;
             el.href = href;
@@ -290,7 +301,9 @@ const App: React.FC = () => {
         };
         por('manifest', '/connect.webmanifest');
         por('apple-touch-icon', '/connect-icon-192.png', { sizes: '192x192' });
-        if (!document.querySelector('meta[name="theme-color"]')) {
+        const temas = document.querySelectorAll('meta[name="theme-color"]');
+        temas.forEach((m) => trocar(m, 'content', '#0e3bfa'));
+        if (temas.length === 0) {
             const m = document.createElement('meta');
             m.name = 'theme-color';
             m.content = '#0e3bfa';
@@ -298,7 +311,10 @@ const App: React.FC = () => {
             criados.push(m);
         }
         document.title = 'SP Connect — Atendimento WhatsApp';
-        return () => { criados.forEach((el) => el.remove()); };
+        return () => {
+            criados.forEach((el) => el.remove());
+            trocados.reverse().forEach(([el, attr, antes]) => (antes === null ? el.removeAttribute(attr) : el.setAttribute(attr, antes)));
+        };
     }, []);
 
     useEffect(() => {
@@ -728,7 +744,7 @@ const App: React.FC = () => {
     if (!isAuthResolved) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{background:"var(--bg-page)"}}>
-                <Logo className="h-20 w-auto" />
+                <Logo className="h-20 w-20" />
                 <LoadingSpinner />
                 <p className="text-sm" style={{color:"var(--text-muted)"}}>Verificando sessão…</p>
             </div>
@@ -767,7 +783,7 @@ const App: React.FC = () => {
                                 CFI, dos guias e do e-mail ao cliente — o
                                 atendente do RH/DP tem que reconhecer o app como
                                 da SP, não como "mais uma ferramenta". */}
-                            <Logo className="h-8 w-auto shrink-0" />
+                            <Logo className="h-8 w-8" />
                             <div className="min-w-0 border-l border-slate-200 dark:border-slate-700 pl-2.5">
                                 <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-tight">SP Connect</p>
                                 <p className="text-[10px] text-slate-400 leading-tight">WhatsApp API Oficial · +55 11 3337-1554</p>
@@ -914,7 +930,7 @@ const App: React.FC = () => {
 
     return (
       <EmpresaAtivaProvider empresa={empresaAtiva} onTrocar={() => setTrocandoEmpresa(true)} onAtivar={ativarEmpresa}>
-        <div className="min-h-screen transition-colors bg-slate-50 dark:bg-[var(--bg-page)]" style={{fontFamily:"'DM Sans',sans-serif"}}>
+        <div className="min-h-screen transition-colors bg-[var(--bg-page)] font-sans">
             <div className="container mx-auto px-4 max-w-screen-2xl">
                 <Header
                     theme={theme}

@@ -7,6 +7,7 @@
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* --- Animacoes e Feedback Visual --- */
@@ -66,32 +67,32 @@ body {
  * ──────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Fundos */
-  --bg-page:       #F8FAFC;
+  /* Fundos — tons da Apple (12/10/2026): página #f5f5f7, cartão branco */
+  --bg-page:       #F5F5F7;
   --bg-card:       #FFFFFF;
-  --bg-elevated:   #F1F5F9;
-  --bg-subtle:     rgba(15,23,42,0.04);
+  --bg-elevated:   #FBFBFD;
+  --bg-subtle:     rgba(0,0,0,0.04);
 
   /* Texto */
-  --text-primary:    #0F172A;
-  --text-secondary:  #475569;
-  --text-muted:      #94A3B8;
+  --text-primary:    #1D1D1F;
+  --text-secondary:  #515154;
+  --text-muted:      #6E6E73;
   --text-on-accent:  #FFFFFF;
 
   /* Bordas */
-  --border-default:  #E2E8F0;
-  --border-subtle:   rgba(15,23,42,0.06);
+  --border-default:  #D2D2D7;
+  --border-subtle:   rgba(0,0,0,0.06);
 
-  /* Cores semanticas */
-  --accent:        #1E40AF;
-  --accent-hover:  #1E3A8A;
+  /* Cores semanticas — azul da Apple (#0071e3: 4,6:1 com texto branco) */
+  --accent:        #0071E3;
+  --accent-hover:  #0066CC;
   --danger:        #DC2626;
   --success:       #059669;
   --warning:       #D97706;
 
   /* Soft backgrounds — pra badges, pills, hover states */
-  --accent-soft:   rgba(30,64,175,0.10);
-  --accent-soft-border: rgba(30,64,175,0.25);
+  --accent-soft:   rgba(0,113,227,0.10);
+  --accent-soft-border: rgba(0,113,227,0.25);
   --danger-soft:   rgba(220,38,38,0.10);
   --warning-soft:  rgba(217,119,6,0.10);
   --warning-soft-border: rgba(217,119,6,0.25);
@@ -109,32 +110,32 @@ body {
 }
 
 html.dark {
-  /* Fundos — suavizados (era #020026, agora mais confortavel visualmente) */
-  --bg-page:       #0B1020;
-  --bg-card:       rgba(255,255,255,0.04);
-  --bg-elevated:   rgba(255,255,255,0.06);
-  --bg-subtle:     rgba(220,225,240,0.04);
+  /* Fundos — tema escuro da Apple: preto puro com camadas cinza */
+  --bg-page:       #000000;
+  --bg-card:       #1C1C1E;
+  --bg-elevated:   #2C2C2E;
+  --bg-subtle:     rgba(255,255,255,0.04);
 
-  /* Texto — transparencias menos azuladas, mais neutras */
-  --text-primary:    #E8EAF7;
-  --text-secondary:  rgba(220,225,240,0.70);
-  --text-muted:      rgba(220,225,240,0.45);
+  /* Texto — neutros, sem tom azulado */
+  --text-primary:    #F5F5F7;
+  --text-secondary:  rgba(235,235,245,0.70);
+  --text-muted:      rgba(235,235,245,0.50);
   --text-on-accent:  #FFFFFF;
 
   /* Bordas */
-  --border-default:  rgba(220,225,240,0.10);
-  --border-subtle:   rgba(220,225,240,0.06);
+  --border-default:  rgba(255,255,255,0.12);
+  --border-subtle:   rgba(255,255,255,0.07);
 
-  /* Cores semanticas — accent azul mais brilhante pra contrastar com fundo escuro */
-  --accent:        #5B7FFF;
-  --accent-hover:  #7B9BFF;
+  /* Cores semanticas — o azul do tema escuro da Apple */
+  --accent:        #0A84FF;
+  --accent-hover:  #47A1FF;
   --danger:        #FF4466;
   --success:       #00C896;
   --warning:       #F5A623;
 
   /* Soft backgrounds — pra badges, pills, hover states */
-  --accent-soft:   rgba(91,127,255,0.15);
-  --accent-soft-border: rgba(91,127,255,0.25);
+  --accent-soft:   rgba(10,132,255,0.15);
+  --accent-soft-border: rgba(10,132,255,0.30);
   --danger-soft:   rgba(255,68,102,0.10);
   --warning-soft:  rgba(245,166,35,0.10);
   --warning-soft-border: rgba(245,166,35,0.25);
@@ -149,7 +150,8 @@ html.dark {
 }
 
 body {
-  font-family: 'DM Sans', sans-serif;
+  /* Pilha da Apple (SF no Mac/iPhone; Inter embutida nos outros) — definida no tailwind.config.js. */
+  font-family: theme('fontFamily.sans');
   background: var(--bg-page);
   color: var(--text-primary);
   transition: background-color 0.2s ease, color 0.2s ease;

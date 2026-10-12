@@ -266,7 +266,7 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
                         <div>
                             <div className="flex items-center gap-3 mb-2">
                                 {/* Logo em variante clara para contraste sobre o gradiente azul */}
-                                <Logo variant="light" className="h-14 w-auto" />
+                                <Logo className="h-14 w-14" />
                                 <div className="pl-3 border-l border-sky-500/50">
                                     <h1 className="text-2xl font-bold leading-tight">Relatório Gerencial</h1>
                                     <p className="text-sky-200 text-sm tracking-wider font-medium">SIMPLES NACIONAL</p>
@@ -533,7 +533,7 @@ const SimplesNacionalClienteView: React.FC<SimplesNacionalClienteViewProps> = ({
 
                 <footer className="bg-slate-50 dark:bg-slate-900/50 p-8 text-center border-t border-slate-200 dark:border-slate-700 mt-4">
                      <div className="flex items-center justify-center gap-2 mb-3 opacity-70 grayscale hover:grayscale-0 transition-all">
-                        <Logo className="h-8 w-auto text-slate-600 dark:text-slate-400" />
+                        <Logo className="h-8 w-8" />
                      </div>
                     <p className="text-xs text-slate-400 dark:text-slate-500">
                         Documento gerado em {(new Date() as any).toLocaleDateString('pt-BR')} • SP Assessoria Contábil

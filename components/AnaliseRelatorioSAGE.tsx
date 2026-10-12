@@ -178,7 +178,7 @@ const AnaliseRelatorioSAGE: React.FC<AnaliseRelatorioSAGEProps> = ({ onShowToast
                         </svg>
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold" style={{ fontFamily: 'Cormorant Garamond,serif' }}>
+                        <h2 className="text-lg font-semibold tracking-tight">
                             Análise Relatório SAGE
                         </h2>
                         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>

@@ -5,6 +5,8 @@ import App from './App';
 import { DialogProvider } from './components/dialog/DialogProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import { initSentry } from './services/sentry';
+// Inter de reserva (Windows/Android/Linux), embutida no bundle — no Mac/iPhone a fonte é a do sistema (SF).
+import '@fontsource-variable/inter';
 import './index.css';
 
 // Inicializa Sentry ANTES de montar — pra capturar erros do proprio mount.
