@@ -15840,3 +15840,12 @@ Paulo, no Consultor DP: *"senão pode trabalhar no CFI"* (11/10). O "Pagamento d
 - **Túnel** `POST /api/dp-integration/pagamentos/consultar` (`soDoDp` + carteira do DP). Auditoria em `dp_pagamentos_log` (catalogada): quem, empresa, filtro e quantos localizados, nunca os valores.
 - **Pré-requisito:** o produto PAGTOWEB contratado na conta SERPRO e a procuração do cliente cobrindo o serviço; sem isso o SERPRO responde erro de negócio e o DP recebe a mensagem.
 - **Trava:** `dpPagamentos.test.ts` (14 casos, com o exemplo oficial de retorno).
+
+## 12/10/2026 — Comprovante de arrecadação (PAGTOWEB/COMPARRECADACAO72) para o Consultor DP
+
+Paulo, no Consultor DP: *"segue com 1,2,3"* (12/10), item 2 = comprovante de arrecadação em PDF na guia paga.
+
+- **Leiaute conferido na fonte (12/10)**: "Integra Pagamento › PAGTOWEB › Emite Comprovante Pagamento" e o exemplo de retorno. `PAGTOWEB`/`COMPARRECADACAO72`, versão `1.0`, `/Consultar`, entrada `{ numeroDocumento }` (obrigatório, até 17 bytes). **A página se contradiz:** a tabela de saída diz `dados` = PDF em base64 (string), o exemplo traz `dados` = `{"pdf": "<base64>"}`. `lerComprovante` aceita as duas formas e só passa conteúdo que começa como PDF (`JVBER`); o resto volta ok=false com a mensagem do SERPRO. `SERPRO_DRY_RUN` volta `fonte: 'dry_run'`.
+- **Túnel** `POST /api/dp-integration/pagamentos/comprovante` (`soDoDp` + carteira do DP). O PDF não é gravado no CFI. A auditoria vai para `dp_pagamentos_log` com `operacao: 'comprovante'` (a consulta passa a gravar `operacao: 'consulta'`); catálogo atualizado.
+- **Trava:** `dpPagamentos.test.ts` (18 casos).
+

@@ -203,3 +203,28 @@ export function lerRetornoPagamentos(r, { numerosDocumento = [], tamanhoDaPagina
         mensagens,
     };
 }
+
+// ─── Comprovante de arrecadação ─────────────────────────────────────────────
+// Leiaute oficial (12/10/2026), "Integra Pagamento › PAGTOWEB › Emite
+// Comprovante Pagamento": PAGTOWEB/COMPARRECADACAO72, versão "1.0", /Consultar;
+// entrada { numeroDocumento } (obrigatório, até 17 bytes). A tabela de saída diz
+// "dados = PDF codificado em Base64 (String)", mas o exemplo oficial traz
+// dados = {"pdf": "<base64>"}. As duas formas são aceitas e o conteúdo é
+// conferido: só passa base64 que começa como PDF ("%PDF" → "JVBER").
+
+export const SERVICO_COMPROVANTE = { idSistema: 'PAGTOWEB', idServico: 'COMPARRECADACAO72', versaoSistema: '1.0' };
+
+/** Resposta do invokeIntegraContador → { ok, fonte, pdfBase64 } ou ok=false com o motivo. */
+export function lerComprovante(r, { dryRun = false } = {}) {
+    const mensagens = Array.isArray(r?.mensagens) ? r.mensagens : [];
+    if (dryRun || r?.dados?._dryRun) {
+        return { ok: false, fonte: 'dry_run', error: 'O Consultor Fiscal está em modo simulado (SERPRO_DRY_RUN): nenhum comprovante foi emitido.', mensagens };
+    }
+    const bruto = typeof r?.dados === 'string' ? r.dados : typeof r?.dados?.pdf === 'string' ? r.dados.pdf : '';
+    const pdfBase64 = bruto.replace(/\s/g, '');
+    if (!pdfBase64.startsWith('JVBER')) {
+        const msgs = mensagens.map((m) => m?.texto || '').filter(Boolean).join(' ');
+        return { ok: false, fonte: 'serpro', error: `O SERPRO não devolveu o PDF do comprovante${msgs ? `: ${msgs}` : '.'}`, mensagens };
+    }
+    return { ok: true, fonte: 'serpro', pdfBase64, mensagens };
+}
