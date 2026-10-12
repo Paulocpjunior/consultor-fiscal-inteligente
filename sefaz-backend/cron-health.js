@@ -33,6 +33,7 @@ export const CRON_LOG_COLLECTIONS = [
     { collection: 'autxml_harvest_cron_logs',   label: 'Saída NF-e via autXML',        tsField: 'executadoEm', maxIdleHoras: 48 },
     { collection: 'cofre_arquivo_cron_logs',    label: 'Cofre → arquivo no SharePoint', tsField: 'executadoEm', maxIdleHoras: 48 },
     { collection: 'captura_resumo_cron_logs',   label: 'Resumo diário da captura',     tsField: 'executadoEm', maxIdleHoras: 48 },
+    { collection: 'dp_darf_cron_logs',          label: 'DP: DARF sem pagamento',       tsField: 'executadoEm', maxIdleHoras: 96 },
     { collection: 'sharepoint_alertas_cron_logs', label: 'Alertas de docs no SharePoint', tsField: 'executadoEm', maxIdleHoras: 48 },
 ];
 

@@ -16,6 +16,7 @@ const CRONS = [
     { arquivo: 'sefaz-backend/distdfe-autxml-routes.js', rota: '/autxml-harvest-cron', colecao: 'autxml_harvest_cron_logs' },
     { arquivo: 'sefaz-backend/xml-email-ingestor-routes.js', rota: '/xml-email-arquivo-sp-cron', colecao: 'cofre_arquivo_cron_logs' },
     { arquivo: 'sefaz-backend/captura-resumo-cron.js', rota: '/captura-resumo-cron', colecao: 'captura_resumo_cron_logs' },
+    { arquivo: 'sefaz-backend/dp-darf-nao-pago-cron.js', rota: '/dp-darf-nao-pago-cron', colecao: 'dp_darf_cron_logs' },
     { arquivo: 'server.js', rota: '/api/admin/sharepoint/cron-alertas', colecao: 'sharepoint_alertas_cron_logs' },
 ];
 
