@@ -1316,8 +1316,8 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
   UI: `CronCapturaBanner` toast/banner com `fraseDaRodada` (resumo do backend
   ou `resumoDaRodada`); `XmlErros` coluna Origem = `fonte`, resumo no bloco
   expandido, dica reescrita. Travas: `rodadaCompletaJanela.test.ts` (12) +
-  caso manual em `cronRetomada.test.ts`. Regra minha: não fazer deploy nas
-  janelas 06:00–06:45, 12:00–12:45 e 18:00–18:45 (capturas intra-dia).
+  caso manual em `cronRetomada.test.ts`. (Havia aqui uma regra de "janela sem
+  deploy" — REMOVIDA em 13/10 a pedido do Paulo: deploy aprovado é feito NA HORA.)
 
 - **📤 CENTRAL DE DAS: "JÁ ENVIEI ESTA GUIA POR FORA" — UM A UM OU EM LOTE**
   (25/09, Paulo: *"como fica a baixa do status da guia enviado ao cliente,
