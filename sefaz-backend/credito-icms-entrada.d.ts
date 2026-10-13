@@ -17,7 +17,7 @@ export function entradaGeraCreditoIcms(ctx?: CreditoIcmsEntradaCtx): CreditoIcms
 /** Simples ou NÃO contribuinte do IPI declarado no cadastro: o IPI da compra é CUSTO. */
 export function entradaGeraCreditoIpi(ctx?: CreditoIcmsEntradaCtx): CreditoIcmsEntradaResposta;
 
-/** Famílias de CFOP (sufixo) cujo IPI é custo pelo destino: uso/consumo. */
+/** Famílias de CFOP (sufixo) cujo IPI é custo pelo destino: uso/consumo e ativo imobilizado. */
 export const IPI_CUSTO_POR_DESTINO: Readonly<Record<string, string>>;
 /** O IPI do item de entrada é custo pelo CFOP de lançamento (uso/consumo)? */
 export function ipiCustoPeloDestino(cfopLancado: string | null | undefined): { custo: boolean; motivo: string | null; baseLegal: string | null };

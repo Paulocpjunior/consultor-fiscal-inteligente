@@ -181,15 +181,22 @@ export function entradaGeraCreditoIpi({ regime, direcao, contribuinteIpi } = {})
  * Famílias (sufixo do CFOP, a faixa 1/2/3 só diz de onde veio):
  *   556 · 557 — uso ou consumo (compra / transferência)
  *   407       — uso ou consumo com ST
+ *   551 · 552 — ativo imobilizado (compra / transferência)
+ *   406       — ativo imobilizado com ST
  *
- * ⚠️ O ATIVO IMOBILIZADO (551 · 552 · 406) NÃO ENTRA por dedução: é a mesma
- * forma de decisão do CST (cst-correlacao.js, 18/08) — família nova só com a
- * resposta do Paulo. Até lá o IPI do ativo segue como o cadastro mandar.
+ * ✅ O ATIVO ENTROU EM 13/10, POR DECISÃO DELE — perguntado se o IPI do ativo
+ * também é custo, Paulo respondeu: **"sim, ativo também é custo"**. É a mesma
+ * forma de decisão do CST (cst-correlacao.js, 18/08): família nova só com a
+ * resposta de quem decide.
  */
 export const IPI_CUSTO_POR_DESTINO = Object.freeze({
     556: 'uso ou consumo',
     557: 'uso ou consumo (transferência)',
     407: 'uso ou consumo com ST',
+    // Paulo, 13/10: "sim, ativo também é custo".
+    551: 'ativo imobilizado',
+    552: 'ativo imobilizado (transferência)',
+    406: 'ativo imobilizado com ST',
 });
 
 /**
