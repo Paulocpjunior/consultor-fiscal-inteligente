@@ -127,15 +127,22 @@ export function entradaGeraCreditoIcms({ regime, direcao } = {}) {
  * Mesma forma da irmã do ICMS, e de propósito: as duas respondem sobre a MESMA
  * nota, e um `if` de tela para uma delas seria a divergência de sempre.
  *
- * ⚠️ Só o SIMPLES entra. Fora dele, quem se credita de IPI é o contribuinte do
- * imposto — régua que existe no cadastro (`contribuinteIpi`) e que decide o
- * E500/E520 do SPED. Ligá-la aqui sem caso real mudaria o livro de todo
- * comércio do Lucro por analogia, que é o que esta casa não faz.
+ * Duas causas de "sem crédito", nesta ordem:
+ *  · SIMPLES — o optante não se credita de IPI (LC 123);
+ *  · NÃO CONTRIBUINTE DO IPI declarado no CADASTRO (`contribuinteIpi = 'nao'`,
+ *    "comércio/serviço — IPI da compra é custo"). 🚨 13/10, Paulo, WALDESA
+ *    0005-02 (Lucro, comércio): NF 4484116 da WEG com IPI 136,52 saía na coluna
+ *    IPI do Livro como CRÉDITO, embora o cadastro dissesse que é custo — a régua
+ *    só olhava o regime. É o caso real que faltava para ligar o campo aqui.
  *
- * @param {{regime?: string, direcao?: string}} ctx
+ * ⚠️ AUSÊNCIA NÃO É PROVA: `contribuinteIpi` em branco mantém o crédito — só a
+ * declaração "não" o tira. Comércio que nunca preencheu o campo continua como
+ * estava; quem cobra o campo é o farol de cadastro, não um palpite daqui.
+ *
+ * @param {{regime?: string, direcao?: string, contribuinteIpi?: string}} ctx
  * @returns {{credita: boolean, motivo: string|null, baseLegal: string|null}}
  */
-export function entradaGeraCreditoIpi({ regime, direcao } = {}) {
+export function entradaGeraCreditoIpi({ regime, direcao, contribuinteIpi } = {}) {
     if (String(direcao || '') === 'saida') {
         return { credita: true, motivo: null, baseLegal: null };
     }
@@ -148,6 +155,14 @@ export function entradaGeraCreditoIpi({ regime, direcao } = {}) {
             motivo: 'optante do Simples Nacional não se credita de IPI — '
                 + 'ele é CUSTO da mercadoria e já está dentro da coluna Outras',
             baseLegal: 'LC 123/2006, art. 13, II e art. 23',
+        };
+    }
+    if (String(contribuinteIpi || '').trim().toLowerCase().startsWith('na')) {
+        return {
+            credita: false,
+            motivo: 'empresa cadastrada como NÃO contribuinte do IPI (comércio/serviço) — o IPI da compra é '
+                + 'CUSTO da mercadoria e já está dentro da coluna ICMS Outras',
+            baseLegal: 'RIPI (Decreto 7.212/2010), art. 225 — o crédito é do estabelecimento industrial ou equiparado',
         };
     }
     return { credita: true, motivo: null, baseLegal: null };

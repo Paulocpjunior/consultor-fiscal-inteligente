@@ -142,6 +142,8 @@ export interface CtxCorrelacao {
      * não afirma sem saber): tirar crédito de quem tem direito é o erro caro.
      */
     regimeTributario?: string | null;
+    /** "Contribuinte de IPI" do cadastro: 'nao' = IPI da compra é custo (13/10). */
+    contribuinteIpi?: string | null;
 }
 
 export interface LinhaCfop {

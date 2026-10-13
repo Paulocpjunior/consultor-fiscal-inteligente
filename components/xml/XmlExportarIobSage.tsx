@@ -198,6 +198,8 @@ const XmlExportarIobSage: React.FC<Props> = ({ currentUser, onShowToast }) => {
                         colecao: empresaSelecionada.fonte === 'simples'
                             ? 'simples_empresas' : 'lucro_empresas',
                     }) as { regime: string }).regime,
+                    // IPI da compra é CUSTO de quem não é contribuinte (13/10).
+                    contribuinteIpi: (df as { contribuinteIpi?: string } | null)?.contribuinteIpi || null,
                 });
                 const cod = String(df?.codigoParticipanteConsumidor || '');
                 setCodigoConsumidor(cod);
