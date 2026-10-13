@@ -9,6 +9,9 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏭 IPI DO ATIVO IMOBILIZADO É CUSTO (13/10)** — Paulo: "sim, ativo também é custo".
+  `IPI_CUSTO_POR_DESTINO` ganhou 551/552/406 (além de 556/557/407). Mesmo trilho do #1412.
+
 - **🏭 IPI DE USO/CONSUMO É CUSTO MESMO P/ CONTRIBUINTE (13/10)** (Paulo, FASTWELD 0001-34, NF
   86620 ACOS IGUATEMI, CFOP lanç. 1556, IPI 6,86 creditado no Livro). `ipiCustoPeloDestino`
   (credito-icms-entrada.js; famílias 556/557/407; RIPI art. 226, I). Livro/Resumo/SAGE:

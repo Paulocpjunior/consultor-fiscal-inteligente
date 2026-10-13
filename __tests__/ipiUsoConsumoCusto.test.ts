@@ -37,12 +37,12 @@ const livro = (d: any) => alocarTributacaoIcms(d.itens, d.totais.vNF, ctxAlocaca
 const dados = { empresa: { cnpj: '02942184000134', colecao: 'lucro_empresas', regimeTributario: 'Lucro Real', dadosFiscais: { uf: 'SP', contribuinteIpi: 'sim', naturezaAtividade: 'industria' } } };
 
 describe('a régua do destino', () => {
-    it.each(['1556', '2556', '1557', '1407', '2407'])('%s (uso/consumo): IPI é custo', (c) => {
+    it.each(['1556', '2556', '1557', '1407', '2407', '1551', '2551', '1552', '1406', '2406'])('%s (uso/consumo ou ativo): IPI é custo', (c) => {
         const r = ipiCustoPeloDestino(c);
         expect(r.custo).toBe(true);
         expect(r.baseLegal).toMatch(/RIPI.*226/);
     });
-    it.each(['1101', '2101', '1102', '1401', '1551', '5556', ''])('%s: não é custo pelo destino', (c) => {
+    it.each(['1101', '2101', '1102', '1401', '1403', '5556', '5551', ''])('%s: não é custo pelo destino', (c) => {
         expect(ipiCustoPeloDestino(c).custo).toBe(false);
     });
 });

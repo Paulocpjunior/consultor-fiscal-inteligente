@@ -705,7 +705,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
             // 🏭 Contribuinte do IPI: o IPI das compras de USO/CONSUMO é custo
             // pelo destino (13/10, FASTWELD) — dito, como o das outras causas.
             ...(!semCreditoIpi.credita || !tot.ipiCusto ? [] : [
-                `IPI das compras para uso ou consumo: ${fmtBRL(tot.ipiCusto)} — não gera crédito de IPI `
+                `IPI das compras para uso, consumo ou ativo imobilizado: ${fmtBRL(tot.ipiCusto)} — não gera crédito de IPI `
                 + `(${IPI_USO_CONSUMO_BASE}); é CUSTO e já está dentro de ICMS Outras. A coluna IPI traz só o creditado.`,
             ]),
             // O ST nunca é crédito, em regime NENHUM — a coluna existe para ele
@@ -780,7 +780,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 afirmar crédito. */}
             {semCreditoIpi.credita && tot.ipiCusto > 0 && (
                 <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    IPI das compras para uso ou consumo — <strong>{fmtBRL(tot.ipiCusto)}</strong> — não gera crédito de IPI
+                    IPI das compras para uso, consumo ou ativo imobilizado — <strong>{fmtBRL(tot.ipiCusto)}</strong> — não gera crédito de IPI
                     ({IPI_USO_CONSUMO_BASE}): é custo e já está dentro de ICMS Outras. A coluna IPI traz só o creditado.
                 </p>
             )}
@@ -1697,7 +1697,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
                 // — a frase fixa do Simples mentiria sobre o comércio do Lucro.
                 motivoIpiCusto.credita
                     // Contribuinte do IPI: o custo veio das compras de uso/consumo (13/10).
-                    ? `IPI das compras para uso ou consumo: ${fmtBRL(totCfop.ipiCusto)} — não gera crédito de IPI `
+                    ? `IPI das compras para uso, consumo ou ativo imobilizado: ${fmtBRL(totCfop.ipiCusto)} — não gera crédito de IPI `
                         + `(${IPI_USO_CONSUMO_BASE}); é custo e já está dentro de ICMS Outras.`
                     : `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — ${motivoIpiCusto.motivo} `
                         + `(${motivoIpiCusto.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
