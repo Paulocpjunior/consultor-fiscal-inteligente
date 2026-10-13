@@ -958,6 +958,49 @@ function normalizarStatusParcelamento(raw) {
     return 'ativo';
 }
 
+// ─── Status da obrigação na lista da análise ───────────────────────────────
+
+const MOTIVO_NAO_VERIFICADA_PADRAO = 'A consulta não pôde ser feita agora: a obrigação não foi verificada.';
+
+/**
+ * Status de UMA obrigação a partir da resposta da consulta dela.
+ * Consulta que não foi feita ou não pôde ser feita (ok diferente de true:
+ * 'nao_oferecido_serpro', 'indisponivel', erro) vira 'nao_verificada' COM o
+ * motivo — nunca 'pendente' (ninguém viu pendência) nem 'entregue' (ninguém
+ * viu entrega). Farol honesto: ausência de sinal não é pendência nem prontidão.
+ */
+export function statusDaObrigacao(r) {
+    if (!r || r.ok !== true) {
+        const erro = typeof r?.erro === 'string' ? r.erro.trim() : '';
+        const motivo = erro || (r?.situacao === 'nao_oferecido_serpro' ? SERPRO_NAO_OFERECE : MOTIVO_NAO_VERIFICADA_PADRAO);
+        return { status: 'nao_verificada', motivo };
+    }
+    if (r.entregue || r.regular) return { status: 'entregue' };
+    if (r.gerado && r.pago) return { status: 'entregue' };
+    return { status: 'pendente' };
+}
+
+/**
+ * Resposta de consulta + o status da obrigação, SEM remover campo nenhum
+ * (o túnel do Consultor DP lê ok/entregue/regular/situacao/erro como antes).
+ */
+export function comStatusDaObrigacao(r) {
+    const { status, motivo } = statusDaObrigacao(r);
+    return { ...(r || {}), statusObrigacao: status, ...(motivo ? { motivo } : {}) };
+}
+
+/** Contagem da lista: 'nao_verificada' NÃO conta como pendente. */
+export function resumoDasObrigacoes(obrigacoes) {
+    const lista = Array.isArray(obrigacoes) ? obrigacoes : [];
+    const conta = (...st) => lista.filter((o) => st.includes(o?.status)).length;
+    return {
+        total: lista.length,
+        entregues: conta('entregue'),
+        pendentes: conta('pendente', 'atrasada'),
+        naoVerificadas: conta('nao_verificada'),
+    };
+}
+
 // ─── Análise Completa (parametrizada por regime) ───────────────────────────
 
 export async function analisarEmpresaCompleta(cnpj, regime = 'lucro_presumido', opts = {}) {
@@ -984,30 +1027,35 @@ export async function analisarEmpresaCompleta(cnpj, regime = 'lucro_presumido', 
         consultarParcelamentos(cnpjNum),
     ];
 
-    // Regime-specific obligation queries
+    // Regime-specific obligation queries. A sigla vai junto também na falha:
+    // consulta que estoura vira 'nao_verificada' com o nome da obrigação.
     const obrigQueries = [];
+    const obrig = (sigla, competencia, consulta) => consulta.then(
+        (r) => ({ sigla, competencia, ...r }),
+        (err) => ({ sigla, competencia, ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err?.message) }),
+    );
 
     if (regime !== 'mei') {
         obrigQueries.push(
-            consultarDctfWeb(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'DCTFWeb', competencia: competenciaAnterior, ...r })),
-            consultarESocial(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'eSocial', competencia: competenciaAnterior, ...r })),
-            consultarFgtsDigital(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'FGTS Digital', competencia: competenciaAnterior, ...r })),
+            obrig('DCTFWeb', competenciaAnterior, consultarDctfWeb(cnpjNum, competenciaAnterior)),
+            obrig('eSocial', competenciaAnterior, consultarESocial(cnpjNum, competenciaAnterior)),
+            obrig('FGTS Digital', competenciaAnterior, consultarFgtsDigital(cnpjNum, competenciaAnterior)),
         );
     }
 
     if (regime === 'simples_nacional') {
         obrigQueries.push(
-            consultarDas(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'DAS', competencia: competenciaAnterior, ...r })),
-            consultarDefis(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'DEFIS', competencia: anoCalendarioAnterior, ...r })),
+            obrig('DAS', competenciaAnterior, consultarDas(cnpjNum, competenciaAnterior)),
+            obrig('DEFIS', anoCalendarioAnterior, consultarDefis(cnpjNum, anoCalendarioAnterior)),
         );
     }
 
     if (regime === 'lucro_presumido' || regime === 'lucro_real') {
         obrigQueries.push(
-            consultarEcd(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'ECD', competencia: anoCalendarioAnterior, ...r })),
-            consultarEcf(cnpjNum, anoCalendarioAnterior).then(r => ({ sigla: 'ECF', competencia: anoCalendarioAnterior, ...r })),
-            consultarSpedContribuicoes(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'SPED Contribuicoes', competencia: competenciaAnterior, ...r })),
-            consultarSpedFiscal(cnpjNum, competenciaAnterior).then(r => ({ sigla: 'SPED Fiscal', competencia: competenciaAnterior, ...r })),
+            obrig('ECD', anoCalendarioAnterior, consultarEcd(cnpjNum, anoCalendarioAnterior)),
+            obrig('ECF', anoCalendarioAnterior, consultarEcf(cnpjNum, anoCalendarioAnterior)),
+            obrig('SPED Contribuicoes', competenciaAnterior, consultarSpedContribuicoes(cnpjNum, competenciaAnterior)),
+            obrig('SPED Fiscal', competenciaAnterior, consultarSpedFiscal(cnpjNum, competenciaAnterior)),
         );
     }
 
@@ -1023,13 +1071,17 @@ export async function analisarEmpresaCompleta(cnpj, regime = 'lucro_presumido', 
     // Build obrigacoes from individual system queries
     const obrigacoes = obrigResults.map(r => {
         if (r.status === 'fulfilled') return r.value;
-        return { sigla: '?', ok: false, entregue: false, situacao: 'indisponivel' };
-    }).map(o => ({
-        nome: o.sigla === 'DAS' ? 'DAS Simples Nacional' : o.sigla,
-        sigla: o.sigla,
-        competencia: o.competencia || competenciaAnterior,
-        status: o.entregue ? 'entregue' : o.regular ? 'entregue' : o.gerado ? (o.pago ? 'entregue' : 'pendente') : 'pendente',
-    }));
+        return { sigla: '?', ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(r.reason?.message) };
+    }).map(o => {
+        const { status, motivo } = statusDaObrigacao(o);
+        return {
+            nome: o.sigla === 'DAS' ? 'DAS Simples Nacional' : o.sigla,
+            sigla: o.sigla,
+            competencia: o.competencia || competenciaAnterior,
+            status,
+            ...(motivo ? { motivo } : {}),
+        };
+    });
 
     return {
         ok: true,
@@ -1039,7 +1091,7 @@ export async function analisarEmpresaCompleta(cnpj, regime = 'lucro_presumido', 
         situacaoFiscal: extrair(situacaoR),
         dividaAtiva: extrair(dividaR),
         certidoes: extrair(certidoesR),
-        obrigacoes: { ok: true, obrigacoes },
+        obrigacoes: { ok: true, obrigacoes, resumo: resumoDasObrigacoes(obrigacoes) },
         parcelamentos: extrair(parcelamentosR),
     };
 }

@@ -2732,6 +2732,8 @@ export interface NfpObrigacao {
     periodicidade: 'mensal' | 'trimestral' | 'anual' | 'eventual';
     competencia?: string;
     status: NfpStatusObrigacao;
+    /** Por que a consulta automática não verificou (só com status 'nao_verificada'). */
+    motivo?: string;
     dataEntrega?: string;
     prazoLegal?: string;
     observacao?: string;

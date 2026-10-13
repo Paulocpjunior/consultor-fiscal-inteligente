@@ -44,7 +44,10 @@ const ObrigacoesTab: React.FC<Props> = ({
         const colors: Record<NfpStatusObrigacao, string> = {
             entregue: 'var(--success)', pendente: 'var(--warning)', atrasada: 'var(--danger)', dispensada: 'var(--text-muted)', nao_verificada: 'var(--border-default)',
         };
-        return <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, background: colors[s] + '22', color: colors[s], border: `1px solid ${colors[s]}44` }}>{s.replace('_', ' ')}</span>;
+        const rotulos: Record<NfpStatusObrigacao, string> = {
+            entregue: 'entregue', pendente: 'pendente', atrasada: 'atrasada', dispensada: 'dispensada', nao_verificada: 'não verificada',
+        };
+        return <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, background: colors[s] + '22', color: colors[s], border: `1px solid ${colors[s]}44` }}>{rotulos[s] || s}</span>;
     };
 
     const renderObrigacaoCard = (o: NfpObrigacao) => {
@@ -69,14 +72,23 @@ const ObrigacoesTab: React.FC<Props> = ({
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         {statusBadge(o.status)}
-                        <select value={o.status} onChange={e => updateObrigacao(o.id, { status: e.target.value as NfpStatusObrigacao })} style={{ ...inputStyle, width: 'auto', fontSize: '0.8rem' }}>
-                            <option value="entregue">Entregue</option><option value="pendente">Pendente</option><option value="atrasada">Atrasada</option><option value="dispensada">Dispensada</option><option value="nao_verificada">Nao verificada</option>
+                        <select value={o.status} onChange={e => {
+                            const status = e.target.value as NfpStatusObrigacao;
+                            // O motivo é da consulta automática: some quando alguém define o status.
+                            updateObrigacao(o.id, { status, motivo: status === 'nao_verificada' ? o.motivo : undefined });
+                        }} style={{ ...inputStyle, width: 'auto', fontSize: '0.8rem' }}>
+                            <option value="entregue">Entregue</option><option value="pendente">Pendente</option><option value="atrasada">Atrasada</option><option value="dispensada">Dispensada</option><option value="nao_verificada">Não verificada</option>
                         </select>
                         {custom && (
                             <button onClick={() => removeObrigacao(o.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '1.2rem' }}>x</button>
                         )}
                     </div>
                 </div>
+                {o.status === 'nao_verificada' && o.motivo && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Não verificada pela consulta automática: {o.motivo} Não conta como pendência.
+                    </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                     <label style={labelSmall}>Competencia<input value={o.competencia || ''} onChange={e => updateObrigacao(o.id, { competencia: e.target.value })} placeholder="MM/AAAA" style={inputStyle} /></label>
                     <label style={labelSmall}>Data Entrega<input type="date" value={o.dataEntrega || ''} onChange={e => updateObrigacao(o.id, { dataEntrega: e.target.value })} style={inputStyle} /></label>

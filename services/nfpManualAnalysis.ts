@@ -123,6 +123,22 @@ export interface GerarPlanoAcaoInput {
 }
 
 /**
+ * Contagem das obrigações para os cards: 'nao_verificada' NÃO conta como
+ * pendente (não foi verificado) nem como entregue.
+ */
+export function contarObrigacoes(obrigacoes: Pick<NfpObrigacao, 'status'>[] | undefined): {
+    total: number; entregues: number; pendentes: number; naoVerificadas: number;
+} {
+    const lista = obrigacoes || [];
+    return {
+        total: lista.length,
+        entregues: lista.filter(o => o.status === 'entregue').length,
+        pendentes: lista.filter(o => o.status === 'pendente' || o.status === 'atrasada').length,
+        naoVerificadas: lista.filter(o => o.status === 'nao_verificada').length,
+    };
+}
+
+/**
  * Gera o plano de ação a partir dos apontamentos de uma análise, seja ela
  * preenchida manualmente pelo colaborador ou por varredura automática
  * (SERPRO/certificado). Mesmas regras de gravidade e prazo nos dois fluxos,
