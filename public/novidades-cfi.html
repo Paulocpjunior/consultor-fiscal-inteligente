@@ -77,6 +77,16 @@
 <section>
     <h2>🆕 O que mudou agora (13/10) — leia esta parte primeiro</h2>
 
+    <h3>📥 <strong>Bloco K: importar o apontamento do TXT do SPED do cliente</strong></h3>
+    <p>O sistema do cliente já gera o SPED com o Bloco K; agora a aba Bloco K lê esse arquivo em vez de exigir digitação linha a
+    linha. Escolha a empresa e a competência e clique em <strong>"📥 Importar do SPED (TXT)"</strong>: o CFI lê o saldo de estoque
+    (K200), a baixa de estoque (K220), as ordens de produção (K230) e os insumos consumidos (K235) e preenche a tela. Confira e
+    clique em <strong>💾 Gravar apontamento</strong>. Arquivo de outro CNPJ ou de outra competência é recusado. Linha sem quantidade
+    fica na tela para completar e não vira zero. Registros do bloco K que o CFI não gera (K280, K290 etc.) são listados para
+    lançar no PVA. Também corrigido: as datas do K220/K230/K235 saíam no arquivo como AAAA-MM-DD; agora saem como DDMMAAAA,
+    que é o que o PVA aceita.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → 🏭 Bloco K (produção) → "📥 Importar do SPED (TXT)".</p>
+
     <h3>🏭 <strong>Livro de Entradas: IPI da compra é custo para quem não é contribuinte do IPI</strong></h3>
     <p>Empresa do Lucro marcada no cadastro como <strong>"Contribuinte de IPI: Não — comércio/serviço (IPI da compra é
     custo)"</strong> ainda tinha o IPI destacado pelo fornecedor lançado na coluna IPI do Livro, que é a de IPI creditado. Só o
