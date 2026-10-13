@@ -9,6 +9,15 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏭 IPI CUSTO DE NÃO CONTRIBUINTE (13/10)** (Paulo, WALDESA 0005-02, Lucro/comércio, NF
+  4484116 WEG: IPI 136,52 na coluna IPI do Livro como crédito, embora o cadastro diga
+  "Contribuinte de IPI: Não — IPI da compra é custo"). `entradaGeraCreditoIpi` só tirava o
+  crédito do Simples. Agora recebe `contribuinteIpi`: 'nao' → sem crédito (RIPI art. 225),
+  em branco mantém (ausência ≠ prova). Passa por `CfopCtx`/`CtxCorrelacao` →
+  `ctxAlocacaoDoDoc` (Livro, Resumo por CFOP, SAGE). Frase fixa "optante do Simples" do
+  Resumo trocada pelo motivo do dono. ST já era custo (coluna só nomeia). SPED: E500 já
+  respeitava o campo; C170/C190 seguem o documento. Trava `ipiCustoNaoContribuinte`.
+
 - **🧾🔁 NFS-e SP "CAPTURA INCERTA" EM MÊS ANTIGO (09/10)** (Paulo/Eunice, LANCHONETE JO-BRAS
   07/2026: etapa 1 travada — zero NFS-e sem prova; rodada do portal só cobre ~40 dias
   (`periodosJanelaPorMes`) e o "forçar captura" manda body {} → nenhum caminho para mês
