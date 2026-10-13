@@ -19,7 +19,7 @@ import {
 import { ladoDaContraparte } from '../sefaz-backend/participante-doc-helper.js';
 // 🚨 O livro creditava ICMS de optante do Simples e ignorava o CST informado
 // na nota — as duas coisas medidas na MV LIDER 08/2026 (09/09).
-import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi } from '../sefaz-backend/credito-icms-entrada.js';
+import { colunaDoCstInformado, entradaGeraCreditoIcms, entradaGeraCreditoIpi, ipiCustoPeloDestino } from '../sefaz-backend/credito-icms-entrada.js';
 import { chaveDoItem } from '../sefaz-backend/escrituracao-item.js';
 import { creditoSimplesDoItem, temCreditoSimplesDeclarado } from '../sefaz-backend/credito-icms-simples.js';
 import { dataEntradaDoDocumento } from '../sefaz-backend/data-entrada-escrituracao.js';
@@ -631,6 +631,12 @@ export interface CtxAlocacaoIcms {
      */
     semCreditoIpi?: boolean;
     /**
+     * 🏭 Itens cujo IPI é CUSTO pelo DESTINO (CFOP de lançamento de uso/consumo
+     * — `ipiCustoPeloDestino`, 13/10, FASTWELD), mesmo em contribuinte do IPI.
+     * Chave = `chaveDoItem(it)`.
+     */
+    ipiCustoItens?: Record<string, true> | null;
+    /**
      * 🧾 Crédito do Simples (LC 123, art. 23) POR ITEM — base, alíquota e ICMS
      * que o item de fornecedor optante dá de crédito, já conferidos contra o
      * CFOP de lançamento (comercialização/industrialização) pelo dono
@@ -665,7 +671,14 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
     // livro e do .FML) — só na entrada, e só quando há crédito declarado ou
     // informado (sem ele nem se correlaciona o CFOP).
     const snPorItem: Record<string, { vBC: number; vICMS: number; aliq: number }> = {};
+    // 🏭 IPI de uso/consumo é custo pelo CFOP de LANÇAMENTO (13/10, FASTWELD).
+    const ipiCustoPorItem: Record<string, true> = {};
     if (direcao === 'entrada') {
+        for (const it of (d?.itens || []) as any[]) {
+            if (!(Number(it?.vIPI) > 0)) continue;
+            const cfopLancado = cfopParaEscriturar(it?.cfop, 'entrada', ctxEmpresa || undefined, d, it);
+            if (ipiCustoPeloDestino(cfopLancado).custo) ipiCustoPorItem[chaveDoItem(it)] = true;
+        }
         for (const it of (d?.itens || []) as any[]) {
             if (!temCreditoSimplesDeclarado(d, it)) continue;
             const cfopLancado = cfopParaEscriturar(it?.cfop, 'entrada', ctxEmpresa || undefined, d, it);
@@ -678,6 +691,7 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
         cstEscrituradoItens: Object.keys(porItem).length ? porItem : null,
         semCreditoIcms: !credito.credita,
         semCreditoIpi: !creditoIpi.credita,
+        ipiCustoItens: Object.keys(ipiCustoPorItem).length ? ipiCustoPorItem : null,
         creditoSimplesItens: Object.keys(snPorItem).length ? snPorItem : null,
     };
 }
@@ -705,6 +719,7 @@ export function alocarTributacaoIcms(
     const semCredito = ctx?.semCreditoIcms === true;
     const semCreditoIpi = ctx?.semCreditoIpi === true;
     let base = 0, icms = 0, isentos = 0, outras = 0, ipi = 0, st = 0;
+    let ipiCustoDestino = 0;
     for (const it of itens) {
         const valorItem = r2((it.vProd || 0) - (it.vDesc || 0));
         const cst = String(it.cst || '').replace(/\D/g, '');
@@ -713,7 +728,9 @@ export function alocarTributacaoIcms(
         // uso/consumo (90 → Outras, sem crédito) do item que segue tributado.
         const doItem = ctx?.cstEscrituradoItens?.[chaveDoItem(it)];
         const colunaInformada = doItem ? colunaDoCstInformado(doItem) : colunaDaNota;
-        ipi += it.vIPI || 0;
+        // 🏭 Item de uso/consumo: o IPI é custo pelo destino (13/10, FASTWELD).
+        if (ctx?.ipiCustoItens?.[chaveDoItem(it)]) ipiCustoDestino += it.vIPI || 0;
+        else ipi += it.vIPI || 0;
         st += (it as any).vICMSST || 0;
         // 🧾 Fornecedor do Simples com crédito (art. 23): o destaque do CSOSN é
         // zero, e base/ICMS do crédito vêm do dono — o resto da régua é a mesma.
@@ -747,7 +764,7 @@ export function alocarTributacaoIcms(
     // credita ela sai ZERADA, e o valor vai DITO como custo. Nenhum total muda:
     // o IPI já está dentro de Outras (o contábil da nota o inclui, e o `resto`
     // abaixo o joga lá). O que muda é o livro parar de afirmar crédito.
-    const ipiCusto = semCreditoIpi ? ipi : 0;
+    const ipiCusto = r2((semCreditoIpi ? ipi : 0) + ipiCustoDestino);
     if (semCreditoIpi) ipi = 0;
     // Fecha no contábil: IPI/frete/seguro/despesas/ST entram em OUTRAS.
     const resto = r2(contabilAlvo - (base + isentos + outras));

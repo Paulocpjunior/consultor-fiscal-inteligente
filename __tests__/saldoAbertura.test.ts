@@ -190,7 +190,11 @@ describe('🚨 a cronologia está LIGADA de ponta a ponta', () => {
         expect(orq).toMatch(/somarIcmsPorDirecao\(notasMes, 'saida', ctxCronologia\)/);
         expect(orq).toMatch(/somarIcmsPorDirecao\(notasMes, 'entrada', ctxCronologia\)/);
         expect(orq).toMatch(/const ctxCronologia = \{ empresa, regimeEscrituracao \}/);
-        expect(orq).toMatch(/somarImpostoPorDirecao\(notasMes, 'entrada', 'vIPI', 'vIPI'\)/);
+        // 13/10: o crédito de IPI da cadeia passa pela MESMA régua do E520
+        // (`notasComIpiDoArquivo` — uso/consumo e quem não se credita saem zero).
+        expect(orq).toMatch(/somarImpostoPorDirecao\(notasComIpiDoArquivo\(notasMes, ctxCronologia\), 'entrada', 'vIPI', 'vIPI'\)/);
+        const blocoE = ler('sefaz-backend/sped-fiscal-blocoE.js');
+        expect(blocoE).toMatch(/somarImpostoPorDirecao\(notasIpi, 'entrada', 'vIPI', 'vIPI'\)/);
     });
 
     it('a rota nasceu COM a tela — aba 🧮 no card SPED (rota sem botão é código morto)', () => {

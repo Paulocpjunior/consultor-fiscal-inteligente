@@ -35,7 +35,7 @@ import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-m
 // 🚨 O CRÉDITO DE ICMS DA ENTRADA É DE QUEM ESCRITURA (11/09, ELS · Simples):
 // o C170/C190 copiavam o destaque do FORNECEDOR — o Livro do CFI já lia esta
 // régua desde 09/09 e o SPED não. Ver `creditoIcmsDoItem`.
-import { entradaGeraCreditoIcms, entradaGeraCreditoIpi, colunaDoCstInformado } from './credito-icms-entrada.js';
+import { entradaGeraCreditoIcms, entradaGeraCreditoIpi, ipiCustoPeloDestino, colunaDoCstInformado } from './credito-icms-entrada.js';
 // 🧾 Crédito do Simples (LC 123, art. 23) e o CST do declarante no lugar do
 // CSOSN — o mesmo dono lido pelo Livro/Resumo e pelo arquivo do SAGE.
 import { creditoSimplesDoItem, cstDeEntradaDoCsosn, avisosDoCreditoSimples, temCreditoSimplesDeclarado } from './credito-icms-simples.js';
@@ -194,7 +194,10 @@ export function ipiDoItemNoArquivo(item, nota) {
         direcao,
         contribuinteIpi: nota?._dados?.empresa?.dadosFiscais?.contribuinteIpi ?? null,
     });
-    if (r.credita) return { ...bruto, semCredito: false };
+    // 🏭 Contribuinte do IPI: o item de USO/CONSUMO não credita — o CFOP de
+    // lançamento (o mesmo do C170/C190) decide (13/10, FASTWELD, CFOP 1556).
+    const cfopLancado = convertCfopParaEntrada(item?.cfop || item?.CFOP || '0000', direcao, nota?._dados, nota, item);
+    if (r.credita && !ipiCustoPeloDestino(cfopLancado).custo) return { ...bruto, semCredito: false };
     return { vBC: 0, aliq: 0, vIPI: 0, semCredito: true };
 }
 

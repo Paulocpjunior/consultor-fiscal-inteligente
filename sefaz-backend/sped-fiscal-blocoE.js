@@ -45,7 +45,7 @@ import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
 // 🚨 O ICMS do E110 é a Σ do que o BLOCO C ESCRITUROU — o dono é
 // `somarIcmsNoArquivo` (11/09, LEGACY: E110 c.06 com 4.569,96 sobre C190
 // zerados). Somar `vICMS` cru aqui de novo é a segunda leitura do mesmo item.
-import { convertCfopParaEntrada, somarIcmsNoArquivo } from './sped-fiscal-blocoC.js';
+import { convertCfopParaEntrada, somarIcmsNoArquivo, ipiDoItemNoArquivo } from './sped-fiscal-blocoC.js';
 import { somarIcmsDoBlocoD } from './sped-fiscal-blocoD.js';
 
 const ZERO = '0,00';
@@ -375,9 +375,38 @@ export function buildBlocoE(dados) {
  *   IND_APUR_IPI(0=mensal), VL_SD_ANT_IPI, VL_DEB_IPI, VL_CRED_IPI,
  *   VL_OD_IPI, VL_OC_IPI, VL_SC_IPI, VL_SD_IPI.
  */
+/**
+ * 🏭 O CRÉDITO DE IPI DAS ENTRADAS COMO O C190 O ESCREVE (13/10, FASTWELD).
+ *
+ * O E520 somava o IPI CRU das entradas — inclusive o de compra para uso ou
+ * consumo (CFOP 1556), que não gera crédito (RIPI art. 226, I) e que o
+ * C170/C190 já escrevem zero pelo dono `ipiDoItemNoArquivo`. Crédito no E520
+ * maior que a soma dos C190 é a apuração afirmando crédito que o livro nega.
+ * Devolve as notas com o IPI do item trocado pelo do ARQUIVO, só nas entradas
+ * (a mesma régua de crédito de toda a casa); a saída não muda.
+ */
+export function notasComIpiDoArquivo(notas, dados) {
+    return (notas || []).map((nota) => {
+        if (direcaoEfetivaDoc(nota) !== 'entrada' || !Array.isArray(nota?.itens)) return nota;
+        const n = nota._dados ? nota : { ...nota, _dados: dados };
+        let soma = 0;
+        const itens = nota.itens.map((it) => {
+            const r = ipiDoItemNoArquivo(it, n);
+            soma += r.vIPI;
+            return {
+                ...it, vIPI: r.vIPI, _vIPIDocumento: it.vIPI,
+                ...(r.semCredito ? { vBcIpi: 0, vBCIPI: 0 } : {}),
+            };
+        });
+        return { ...nota, itens, totais: { ...(nota.totais || {}), vIPI: Math.round(soma * 100) / 100 } };
+    });
+}
+
 function buildE500E520(dados) {
     const vlDeb = somarImpostoPorDirecao(dados.notas, 'saida', 'vIPI', 'vIPI');
-    const vlCred = somarImpostoPorDirecao(dados.notas, 'entrada', 'vIPI', 'vIPI');
+    // Crédito pelo IPI do ARQUIVO (13/10): uso/consumo e quem não se credita saem zero.
+    const notasIpi = notasComIpiDoArquivo(dados.notas, dados);
+    const vlCred = somarImpostoPorDirecao(notasIpi, 'entrada', 'vIPI', 'vIPI');
     // Saldo anterior TAMBÉM segura o bloco de pé: mês sem movimento de IPI mas
     // com crédito vindo da competência anterior precisa do E520 para o saldo
     // não SUMIR da corrente de transporte — sumir calado é o defeito que este
@@ -413,7 +442,7 @@ function buildE500E520(dados) {
     // arquivo real). Reaproveita o MESMO convertCfop do C190: o E510 é o C190
     // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
     // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
-    const e510 = montarLinhasE510(dados.notas, {
+    const e510 = montarLinhasE510(notasIpi, {
         convertCfop: (cfop, direcao, notaDados, nota, item) => convertCfopParaEntrada(cfop, direcao, notaDados, nota, item),
     });
     if (Array.isArray(dados.warnings)) dados.warnings.push(...e510.avisos);
