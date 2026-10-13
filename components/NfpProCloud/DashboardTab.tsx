@@ -11,6 +11,7 @@
 import React from 'react';
 import type { NfpAnaliseEmpresa } from '../../types';
 import { DashCard, formatCurrency, btnStyleSave } from './_common';
+import { contarObrigacoes } from '../../services/nfpManualAnalysis';
 
 interface Props {
     analise: NfpAnaliseEmpresa | null;
@@ -28,7 +29,8 @@ const DashboardTab: React.FC<Props> = ({ analise, exportingPdf, onExportPdf }) =
     const certPos = analise.certidoes.filter(c => c.status === 'positiva').length;
     const certPEN = analise.certidoes.filter(c => c.status === 'positiva_efeitos_negativa').length;
     const certIndisp = analise.certidoes.filter(c => c.status === 'indisponivel' || c.status === 'nao_consultada').length;
-    const obrigPend = analise.obrigacoes.filter(o => o.status === 'pendente' || o.status === 'atrasada').length;
+    // 'nao_verificada' não conta como pendente: consulta não feita não é pendência.
+    const { pendentes: obrigPend, naoVerificadas: obrigNaoVerif } = contarObrigacoes(analise.obrigacoes);
     const acoesAtivas = analise.acoes.filter(a => a.status === 'em_andamento').length;
     const planoAlta = analise.planoAcao.filter(p => p.gravidade === 'alta' && p.status !== 'concluida').length;
     const trabalhistas = analise.apontamentosTrabalhistas || [];
@@ -73,7 +75,7 @@ const DashboardTab: React.FC<Props> = ({ analise, exportingPdf, onExportPdf }) =
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                 <DashCard title="Débitos Abertos" value={String(debitosAbertos.length)} sub={formatCurrency(debitosAbertos.reduce((s, d) => s + (d.valorAtualizado || d.valorOriginal), 0))} color="var(--danger)" />
                 <DashCard title="Certidões Negativas" value={`${certNeg}/${analise.certidoes.length}`} sub={certPos > 0 ? `${certPos} positiva(s)` : certIndisp > 0 ? `${certIndisp} indisponivel(is)` : certPEN > 0 ? `${certPEN} PEN` : 'Sem impedimentos'} color={certPos > 0 ? 'var(--danger)' : certIndisp > 0 ? 'var(--text-muted)' : 'var(--success)'} />
-                <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
+                <DashCard title="Obrigações Pendentes" value={String(obrigPend)} sub={`de ${analise.obrigacoes.length} totais${obrigNaoVerif > 0 ? ` · ${obrigNaoVerif} não verificada(s)` : ''}`} color={obrigPend > 0 ? 'var(--warning)' : 'var(--success)'} />
                 <DashCard title="Ações em Andamento" value={String(acoesAtivas)} sub={`de ${analise.acoes.length} totais`} color={acoesAtivas > 0 ? 'var(--warning)' : 'var(--success)'} />
                 <DashCard title="Plano de Ação (Alta)" value={String(planoAlta)} sub={`de ${analise.planoAcao.length} itens`} color={planoAlta > 0 ? 'var(--danger)' : 'var(--success)'} />
                 <DashCard title="Parcelamentos Ativos" value={String(analise.parcelamentos.filter(p => p.status === 'ativo').length)} sub={formatCurrency(analise.parcelamentos.filter(p => p.status === 'ativo').reduce((s, p) => s + p.valorTotal, 0))} color="var(--accent)" />

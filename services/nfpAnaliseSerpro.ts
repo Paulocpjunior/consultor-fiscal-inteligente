@@ -169,16 +169,23 @@ export function mapearRespostaSerpro(input: MapearSerproInput): MapearSerproOutp
         certidoesKeys.add(key);
     }
 
-    // Populate obrigacoes
+    // Populate obrigacoes. Casa pela sigla OU pelo nome: o backend manda
+    // 'SPED Fiscal' / 'SPED Contribuicoes' / 'FGTS Digital' onde a base usa
+    // EFD / EFD-C / FGTS. Consulta não feita chega 'nao_verificada' com o
+    // motivo — e assim fica (nunca vira pendente nem entregue).
     const obrigacoes: NfpObrigacao[] = obrigacoesBase.map(o => {
-        const match = resp.obrigacoes?.obrigacoes?.find((ro: any) =>
-            (ro.sigla || '').toUpperCase() === o.sigla.toUpperCase()
-        );
+        const respObrigacoes: any[] = resp.obrigacoes?.obrigacoes || [];
+        const match = respObrigacoes.find((ro: any) => normKey(ro.sigla) === normKey(o.sigla))
+            || respObrigacoes.find((ro: any) => normKey(ro.nome) && normKey(ro.nome) === normKey(o.nome));
         const anterior = findObrigacaoAnterior(baseAnalise.obrigacoes || [], o, match);
+        const status: NfpStatusObrigacao = (match?.status as NfpStatusObrigacao) || anterior?.status || 'nao_verificada';
+        const motivo = status !== 'nao_verificada' ? undefined
+            : match ? (match.motivo || undefined) : (anterior?.motivo || undefined);
         return {
             id: anterior?.id || uid(), empresaId: activeEmpresaId,
             nome: o.nome, sigla: o.sigla, esfera: o.esfera, periodicidade: o.periodicidade,
-            status: (match?.status as NfpStatusObrigacao) || anterior?.status || 'nao_verificada',
+            status,
+            motivo,
             competencia: match?.competencia || anterior?.competencia || undefined,
             dataEntrega: match?.dataEntrega || anterior?.dataEntrega || undefined,
             prazoLegal: match?.prazoLegal || anterior?.prazoLegal || undefined,

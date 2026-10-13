@@ -16,6 +16,7 @@ import {
     consultarESocial,
     consultarDctfWeb,
     consultarCrfFgtsSerpro,
+    comStatusDaObrigacao,
 } from './nfp-compliance-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
@@ -598,13 +599,16 @@ router.post('/empresa-completo', requireCrossProjectAuth, async (req, res) => {
             consultarCrfFgtsSerpro(cnpj),
         ]);
 
+        // statusObrigacao (+ motivo) é ACRÉSCIMO: os campos de antes ficam. Consulta
+        // não feita (ok:false — 'nao_oferecido_serpro', 'indisponivel') é
+        // 'nao_verificada', nunca 'pendente'.
         return res.json({
             cnpj,
             competencia,
             consultadoEm: new Date().toISOString(),
-            fgts: fgts.status === 'fulfilled' ? fgts.value : { ok: false, erro: fgts.reason?.message },
-            esocial: esocial.status === 'fulfilled' ? esocial.value : { ok: false, erro: esocial.reason?.message },
-            dctfweb: dctfweb.status === 'fulfilled' ? dctfweb.value : { ok: false, erro: dctfweb.reason?.message },
+            fgts: comStatusDaObrigacao(fgts.status === 'fulfilled' ? fgts.value : { ok: false, erro: fgts.reason?.message }),
+            esocial: comStatusDaObrigacao(esocial.status === 'fulfilled' ? esocial.value : { ok: false, erro: esocial.reason?.message }),
+            dctfweb: comStatusDaObrigacao(dctfweb.status === 'fulfilled' ? dctfweb.value : { ok: false, erro: dctfweb.reason?.message }),
             crfFgts: crf.status === 'fulfilled' ? crf.value : { ok: false, erro: crf.reason?.message },
         });
     } catch (err) {
