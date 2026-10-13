@@ -18,6 +18,7 @@ import type { User } from '../../types';
 import type { EmpresaXmlOption } from '../../services/xmlFiscalService';
 import { useEmpresaAtivaId } from '../../services/empresaAtivaContext';
 import EmpresaAtivaFixa from '../../components/EmpresaAtivaFixa';
+import { lerBlocoKDoSped } from '../../sefaz-backend/bloco-k-importacao.js';
 
 interface Props {
     currentUser: User | null;
@@ -70,7 +71,7 @@ const competenciaAtual = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const BlocoK: React.FC<Props> = ({ onShowToast }) => {
+const BlocoK: React.FC<Props> = ({ empresas, onShowToast }) => {
     // A EMPRESA É A ATIVA DA SESSÃO — este painel não pergunta de novo
     // (Paulo, 15/08: *"tira os seletores internos"*).
     const empresaId = useEmpresaAtivaId();
@@ -83,6 +84,30 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
     const [existe, setExiste] = useState(false);
 
     const token = async () => (await import('firebase/auth')).getAuth().currentUser?.getIdToken();
+    // 📥 Importar do TXT do SPED (13/10, WALDESA): o sistema do cliente já gera
+    // o bloco K — a tela é preenchida com ele, e quem GRAVA é a pessoa.
+    const [avisosImport, setAvisosImport] = useState<string[]>([]);
+    const importarTxt = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !empresaId) return;
+        // SPED é ISO-8859-1/Windows-1252: lido como UTF-8, o acento do código vira lixo.
+        const texto = new TextDecoder('windows-1252').decode(await file.arrayBuffer());
+        const cnpjEmpresa = String(empresas.find((x) => x.id === empresaId)?.cnpj || '');
+        const r = lerBlocoKDoSped(texto, { cnpjEmpresa, competencia });
+        if (!r.ok) { onShowToast?.(r.erro); setAvisosImport([r.erro]); return; }
+        const temAlgo = estoques.length || producao.length || movimentacoes.length;
+        if (temAlgo && !window.confirm('A tela já tem apontamento. Substituir pelo que veio no arquivo?')) return;
+        setEstoques(r.estoques);
+        setMovimentacoes(r.movimentacoes);
+        setProducao(r.producao);
+        setAvisosImport(r.avisos);
+        const k235 = r.producao.reduce((t, p) => t + p.insumos.length, 0);
+        onShowToast?.(
+            `📥 ${file.name}: ${r.estoques.length} K200 · ${r.movimentacoes.length} K220 · ${r.producao.length} K230 · ${k235} K235. `
+            + 'Confira e clique em 💾 Gravar apontamento.',
+        );
+    };
 
     const carregar = async () => {
         if (!empresaId) { onShowToast?.('Escolha a empresa.'); return; }
@@ -122,7 +147,7 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
     };
 
     useEffect(() => {
-        setExiste(false); setEstoques([]); setProducao([]); setMovimentacoes([]);
+        setExiste(false); setEstoques([]); setProducao([]); setMovimentacoes([]); setAvisosImport([]);
     }, [empresaId, competencia]);
 
     const salvar = async () => {
@@ -209,11 +234,21 @@ const BlocoK: React.FC<Props> = ({ onShowToast }) => {
                         className="px-4 py-2 text-sm font-bold rounded-lg bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-40">
                         {carregando ? 'Carregando…' : '🔎 Carregar'}
                     </button>
+                    <label className={`px-4 py-2 text-sm font-bold rounded-lg border border-sky-500 text-sky-700 dark:text-sky-300 cursor-pointer hover:bg-sky-50 dark:hover:bg-sky-900/30 ${!empresaId ? 'opacity-40 pointer-events-none' : ''}`}
+                        title="TXT do SPED Fiscal (EFD ICMS/IPI) gerado pelo sistema do cliente — lê K200, K220, K230 e K235 da competência">
+                        📥 Importar do SPED (TXT)
+                        <input type="file" accept=".txt,text/plain" className="hidden" onChange={(e) => void importarTxt(e)} />
+                    </label>
                     <button onClick={salvar} disabled={salvando || !empresaId}
                         className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
                         {salvando ? 'Gravando…' : '💾 Gravar apontamento'}
                     </button>
                 </div>
+                {avisosImport.length > 0 && (
+                    <ul className="mt-2 text-[11px] list-disc pl-4 text-amber-700 dark:text-amber-400">
+                        {avisosImport.map((a) => <li key={a}>{a}</li>)}
+                    </ul>
+                )}
 
                 {empresaId && !carregando && !existe && !estoques.length && !producao.length && !movimentacoes.length && (
                     <p className="text-[11px] mt-3 text-amber-700 dark:text-amber-400">

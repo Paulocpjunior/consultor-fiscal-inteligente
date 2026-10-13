@@ -9,6 +9,15 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📥 BLOCO K IMPORTADO DO TXT + DATA DO K (13/10)** (Paulo, WALDESA: "habilitar a importação
+  do arquivo"; escolheu TXT do SPED). `bloco-k-importacao.js` (puro, roda no navegador):
+  `lerBlocoKDoSped` lê 0000 (CNPJ/DT_INI — recusa outro CNPJ/competência), K200/K220/K230/K235
+  (K235 no K230 anterior), conta e diz K que o CFI não gera; qtd ausente fica ''. Botão
+  "📥 Importar do SPED (TXT)" no `BlocoK.tsx` (TextDecoder windows-1252) preenche a tela; quem
+  grava é a pessoa. 🚨 Achado: K220/K230/K235 saíam com data ISO (`|K220|2026-09-15|`) — tela
+  grava do <input type=date> e o gerador escrevia crua. `dataDoK` em `sped-fiscal-blocoK.js`
+  converte (DDMMAAAA passa). Trava `blocoKImportacaoTxt`.
+
 - **🏭 IPI CUSTO DE NÃO CONTRIBUINTE (13/10)** (Paulo, WALDESA 0005-02, Lucro/comércio, NF
   4484116 WEG: IPI 136,52 na coluna IPI do Livro como crédito, embora o cadastro diga
   "Contribuinte de IPI: Não — IPI da compra é custo"). `entradaGeraCreditoIpi` só tirava o

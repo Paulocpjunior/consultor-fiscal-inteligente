@@ -18,6 +18,23 @@
 import * as fmt from './sped-fiscal-format.js';
 import { exigenciaBlocoK, montarBlocoK } from './sped-bloco-k.js';
 
+/** Os campos de DATA do apontamento (índice no array: 0 é o REG). */
+const CAMPOS_DATA = { K220: [1], K230: [1, 2], K235: [1] };
+const ehCampoDeData = (reg, i) => (CAMPOS_DATA[reg] || []).includes(i);
+
+/**
+ * A data do apontamento na forma do SPED (DDMMAAAA). Já em DDMMAAAA passa
+ * direto (veio do TXT importado ou de gravação antiga); AAAA-MM-DD é traduzida;
+ * vazio fica vazio (o DT_FIN_OP de ordem em aberto é vazio por definição).
+ */
+export function dataDoK(v) {
+    const t = String(v ?? '').trim();
+    if (!t) return '';
+    if (/^\d{8}$/.test(t)) return t;
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    return m ? `${m[3]}${m[2]}${m[1]}` : fmt.formatDate(t);
+}
+
 /** Campos que são QUANTIDADE no bloco K — 3 casas, como no H010. */
 const CASAS_QTD = 3;
 
@@ -79,11 +96,16 @@ export function buildBlocoK(dados) {
     if (Array.isArray(dados?.warnings)) dados.warnings.push(...avisos);
     for (const a of avisos) console.warn(`[bloco-K] ${a}`);
 
-    return linhas.map((campos) => fmt.buildLine(campos.map((v, i) => (
+    return linhas.map((campos) => fmt.buildLine(campos.map((v, i) => {
+        // 🚨 AS DATAS DO APONTAMENTO SAÍAM EM AAAA-MM-DD (13/10, achado ao
+        // ligar a importação do TXT da WALDESA): a tela grava a data do
+        // <input type="date"> e o K220/K230/K235 a escreviam crua —
+        // `|K220|2026-09-15|…|`, que o PVA recusa (data é DDMMAAAA).
+        if (ehCampoDeData(campos[0], i)) return dataDoK(v);
         // A quantidade é o único campo numérico dos registros gerados aqui:
         // K200 campo 04 e K230 campo 06 e K235 campo 04.
-        typeof v === 'number' && i > 0 && campos[0] !== 'K990'
+        return typeof v === 'number' && i > 0 && campos[0] !== 'K990'
             ? fmt.formatValue(v, CASAS_QTD)
-            : v
-    ))));
+            : v;
+    })));
 }
