@@ -117,7 +117,9 @@ export function montarLinhasE510(notas, deps = {}) {
             // IPI 4.389,15 = E510 VL_CONT 142.785,85). O IPI é "por fora" e entra
             // no valor contábil do livro (entrada = custo pago; saída = total da
             // nota). Somar só vProd deixava o bloco A MENOR.
-            g.vlCont += num(item.vProd ?? item.valor) + vIpi; // VL_CONT_IPI
+            // O IPI que virou CUSTO (uso/consumo, 13/10) continua no valor
+            // contábil — só sai do VL_IPI, que é o creditado.
+            g.vlCont += num(item.vProd ?? item.valor) + num(item._vIPIDocumento ?? item.vIPI); // VL_CONT_IPI
             g.vlBc += num(item.vBcIpi);                        // VL_BC_IPI (Σ base, provado = C170)
             g.vlIpi += vIpi;                                   // VL_IPI (Σ, amarra com E520)
         }

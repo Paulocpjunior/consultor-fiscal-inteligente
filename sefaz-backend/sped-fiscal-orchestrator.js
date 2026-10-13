@@ -22,7 +22,7 @@ import {
     buildBlocoG, buildBloco1,
 } from './sped-fiscal-blocos-vazios.js';
 import { buildBlocoD } from './sped-fiscal-blocoD.js';
-import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao } from './sped-fiscal-blocoE.js';
+import { buildBlocoE, somarIcmsPorDirecao, somarImpostoPorDirecao, notasComIpiDoArquivo } from './sped-fiscal-blocoE.js';
 // 🧮 A cronologia do saldo credor: abertura do SPED ENTREGUE + transporte
 // calculado com a MESMA matemática do E110/E520.
 import { resolverSaldoAnterior, competenciasEntre } from './saldo-abertura.js';
@@ -591,7 +591,8 @@ export async function coletarDadosEmpresa({ empresaId, competencia, competenciaI
                             },
                             ipi: {
                                 debitos: somarImpostoPorDirecao(notasMes, 'saida', 'vIPI', 'vIPI'),
-                                creditos: somarImpostoPorDirecao(notasMes, 'entrada', 'vIPI', 'vIPI'),
+                                // O crédito da cadeia pela MESMA régua do E520 (13/10): uso/consumo não credita.
+                                creditos: somarImpostoPorDirecao(notasComIpiDoArquivo(notasMes, ctxCronologia), 'entrada', 'vIPI', 'vIPI'),
                             },
                         };
                     }

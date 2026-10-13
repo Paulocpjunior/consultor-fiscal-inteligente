@@ -169,6 +169,47 @@ export function entradaGeraCreditoIpi({ regime, direcao, contribuinteIpi } = {})
 }
 
 /**
+ * 🏭 O IPI DE COMPRA PARA USO E CONSUMO É CUSTO — mesmo para quem É contribuinte
+ * do IPI (13/10, Paulo, FASTWELD 0001-34: NF 86620 da ACOS ESPECIAIS IGUATEMI,
+ * CFOP de lançamento 1556, IPI 6,86 saindo na coluna IPI do Livro como crédito).
+ *
+ * O crédito do IPI é do insumo — matéria-prima, produto intermediário e
+ * material de embalagem empregados na industrialização (RIPI, art. 226, I). O
+ * que entra para USO OU CONSUMO não gera crédito: o IPI pago é custo. Quem diz
+ * o destino é o CFOP DE LANÇAMENTO do item (o mesmo do livro e do SPED).
+ *
+ * Famílias (sufixo do CFOP, a faixa 1/2/3 só diz de onde veio):
+ *   556 · 557 — uso ou consumo (compra / transferência)
+ *   407       — uso ou consumo com ST
+ *
+ * ⚠️ O ATIVO IMOBILIZADO (551 · 552 · 406) NÃO ENTRA por dedução: é a mesma
+ * forma de decisão do CST (cst-correlacao.js, 18/08) — família nova só com a
+ * resposta do Paulo. Até lá o IPI do ativo segue como o cadastro mandar.
+ */
+export const IPI_CUSTO_POR_DESTINO = Object.freeze({
+    556: 'uso ou consumo',
+    557: 'uso ou consumo (transferência)',
+    407: 'uso ou consumo com ST',
+});
+
+/**
+ * O IPI deste item de ENTRADA é custo pelo DESTINO (CFOP de lançamento)?
+ * @param {string} cfopLancado  CFOP de entrada já correlacionado (1xxx/2xxx/3xxx)
+ * @returns {{custo: boolean, motivo: string|null, baseLegal: string|null}}
+ */
+export function ipiCustoPeloDestino(cfopLancado) {
+    const c = String(cfopLancado || '').replace(/\D/g, '');
+    if (c.length !== 4 || !'123'.includes(c[0])) return { custo: false, motivo: null, baseLegal: null };
+    const rotulo = IPI_CUSTO_POR_DESTINO[c.slice(1)];
+    if (!rotulo) return { custo: false, motivo: null, baseLegal: null };
+    return {
+        custo: true,
+        motivo: `compra para ${rotulo} (CFOP ${c}) não gera crédito de IPI — o IPI pago é CUSTO, mesmo para contribuinte do IPI`,
+        baseLegal: 'RIPI (Decreto 7.212/2010), art. 226, I — o crédito é de matéria-prima, produto intermediário e embalagem',
+    };
+}
+
+/**
  * O ICMS-ST retido pelo fornecedor NUNCA é crédito de quem recebe.
  *
  * Não há parâmetro de regime porque não há exceção: o ST é imposto já recolhido

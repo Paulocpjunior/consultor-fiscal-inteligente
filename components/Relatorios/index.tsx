@@ -123,6 +123,8 @@ import { resumoEscrituracaoItens } from '../../sefaz-backend/escrituracao-item.j
 // 🧭 O detalhamento do DIFAL de saída (EC 87/15) — mesma seleção do E300/E310.
 import { detalharDifalPorUf } from '../../sefaz-backend/difal-ec87-saida.js';
 import { aplicarCreditoOutrasDespesas } from '../../sefaz-backend/credito-outras-despesas.js';
+/** Base legal do IPI de uso/consumo como custo — a mesma do dono (`ipiCustoPeloDestino`). */
+const IPI_USO_CONSUMO_BASE = 'RIPI, art. 226, I — o crédito é de matéria-prima, produto intermediário e embalagem';
 
 const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> }> = [
     {
@@ -700,6 +702,12 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 + `(${semCreditoIpi.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
                 + 'o valor já está dentro de Outras e o valor contábil fecha igual.',
             ]),
+            // 🏭 Contribuinte do IPI: o IPI das compras de USO/CONSUMO é custo
+            // pelo destino (13/10, FASTWELD) — dito, como o das outras causas.
+            ...(!semCreditoIpi.credita || !tot.ipiCusto ? [] : [
+                `IPI das compras para uso ou consumo: ${fmtBRL(tot.ipiCusto)} — não gera crédito de IPI `
+                + `(${IPI_USO_CONSUMO_BASE}); é CUSTO e já está dentro de ICMS Outras. A coluna IPI traz só o creditado.`,
+            ]),
             // O ST nunca é crédito, em regime NENHUM — a coluna existe para ele
             // parar de ficar invisível dentro de Outras, não para creditar.
             ...(tot.st ? [
@@ -770,6 +778,12 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 impostos entravam direto como custo"*. Os dois JÁ estavam em
                 Outras; o que faltava era o livro DIZER, e a coluna IPI parar de
                 afirmar crédito. */}
+            {semCreditoIpi.credita && tot.ipiCusto > 0 && (
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    IPI das compras para uso ou consumo — <strong>{fmtBRL(tot.ipiCusto)}</strong> — não gera crédito de IPI
+                    ({IPI_USO_CONSUMO_BASE}): é custo e já está dentro de ICMS Outras. A coluna IPI traz só o creditado.
+                </p>
+            )}
             {!semCreditoIpi.credita && tot.ipiCusto > 0 && (
                 <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                     IPI destacado nas entradas — <strong>{fmtBRL(tot.ipiCusto)}</strong> —{' '}
@@ -1681,9 +1695,13 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             ...(totCfop.ipiCusto ? [
                 // O motivo vem do DONO (Simples ou não contribuinte do IPI, 13/10)
                 // — a frase fixa do Simples mentiria sobre o comércio do Lucro.
-                `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — ${motivoIpiCusto.motivo} `
-                + `(${motivoIpiCusto.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
-                + 'o valor já está dentro de ICMS Outras.',
+                motivoIpiCusto.credita
+                    // Contribuinte do IPI: o custo veio das compras de uso/consumo (13/10).
+                    ? `IPI das compras para uso ou consumo: ${fmtBRL(totCfop.ipiCusto)} — não gera crédito de IPI `
+                        + `(${IPI_USO_CONSUMO_BASE}); é custo e já está dentro de ICMS Outras.`
+                    : `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — ${motivoIpiCusto.motivo} `
+                        + `(${motivoIpiCusto.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
+                        + 'o valor já está dentro de ICMS Outras.',
             ] : []),
             ...(totCfop.st ? [
                 `ICMS ST retido pelo fornecedor: ${fmtBRL(totCfop.st)} — ${ST_NAO_CREDITA.motivo} `

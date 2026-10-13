@@ -9,6 +9,14 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏭 IPI DE USO/CONSUMO É CUSTO MESMO P/ CONTRIBUINTE (13/10)** (Paulo, FASTWELD 0001-34, NF
+  86620 ACOS IGUATEMI, CFOP lanç. 1556, IPI 6,86 creditado no Livro). `ipiCustoPeloDestino`
+  (credito-icms-entrada.js; famílias 556/557/407; RIPI art. 226, I). Livro/Resumo/SAGE:
+  `ctxAlocacaoDoDoc.ipiCustoItens` por item (cfopParaEscriturar) → `alocarTributacaoIcms` soma em
+  ipiCusto. SPED: `ipiDoItemNoArquivo` checa o CFOP lançado; E520/E510 via `notasComIpiDoArquivo`
+  (blocoE; `_vIPIDocumento` mantém o VL_CONT do E510); cadeia do saldo idem. ATIVO (551/552/406)
+  NÃO entrou — pendente de decisão do Paulo. Trava `ipiUsoConsumoCusto`.
+
 - **🏭 IPI CUSTO TAMBÉM NO SPED (13/10)** (Paulo, WALDESA 0005-02: "no livro de entrada saiu,
   no PVA continua" — PVA Total IPI 3.606,03 × Livro CFI 0,00). `ipiDoItemNoArquivo` em
   `sped-fiscal-blocoC.js` (dono do IPI do arquivo, irmã de `icmsDoItemNoArquivo`): entrada sem
