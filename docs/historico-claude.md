@@ -9,6 +9,13 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏭 IPI CUSTO TAMBÉM NO SPED (13/10)** (Paulo, WALDESA 0005-02: "no livro de entrada saiu,
+  no PVA continua" — PVA Total IPI 3.606,03 × Livro CFI 0,00). `ipiDoItemNoArquivo` em
+  `sped-fiscal-blocoC.js` (dono do IPI do arquivo, irmã de `icmsDoItemNoArquivo`): entrada sem
+  crédito pela régua `entradaGeraCreditoIpi` (Simples ou `contribuinteIpi='nao'`) → VL_BC_IPI,
+  ALIQ_IPI, VL_IPI 0 no C170, VL_IPI 0 no C190 e no C100 (`semCreditoIpi` impede o `pick` de cair
+  no total do documento). VL_OPR intacto (IPI = custo). Trava `ipiCustoNoSpedFiscal`.
+
 - **📥 BLOCO K IMPORTADO DO TXT + DATA DO K (13/10)** (Paulo, WALDESA: "habilitar a importação
   do arquivo"; escolheu TXT do SPED). `bloco-k-importacao.js` (puro, roda no navegador):
   `lerBlocoKDoSped` lê 0000 (CNPJ/DT_INI — recusa outro CNPJ/competência), K200/K220/K230/K235
