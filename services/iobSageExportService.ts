@@ -322,6 +322,12 @@ export interface CfopCtx {
      * comportamento antigo quando o regime não é conhecido.
      */
     regimeTributario?: string | null;
+    /**
+     * "Contribuinte de IPI" do cadastro (Dados Fiscais): 'nao' tira o crédito de
+     * IPI da entrada — o IPI da compra é custo (13/10, WALDESA). Em branco
+     * mantém o crédito: ausência não é prova.
+     */
+    contribuinteIpi?: string | null;
 }
 
 export function cfopParaEscriturar(
@@ -646,7 +652,7 @@ export function ctxAlocacaoDoDoc(d: any, ctxEmpresa?: CfopCtx | null): CtxAlocac
     const direcao = direcaoEfetivaDoc(d);
     const regime = ctxEmpresa?.regimeTributario ?? null;
     const credito = entradaGeraCreditoIcms({ regime, direcao });
-    const creditoIpi = entradaGeraCreditoIpi({ regime, direcao });
+    const creditoIpi = entradaGeraCreditoIpi({ regime, direcao, contribuinteIpi: ctxEmpresa?.contribuinteIpi ?? null });
     const porItem: Record<string, string> = {};
     const mapa = d?.escrituracaoItens;
     if (mapa && typeof mapa === 'object') {

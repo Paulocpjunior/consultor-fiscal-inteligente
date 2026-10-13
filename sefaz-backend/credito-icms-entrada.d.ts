@@ -2,6 +2,8 @@ export interface CreditoIcmsEntradaCtx {
     /** Vocabulário de regime-tributario.js: SIMPLES · LUCRO_PRESUMIDO · … */
     regime?: string | null;
     direcao?: string | null;
+    /** Cadastro (Dados Fiscais): 'sim' | 'nao' | '' — "nao" tira o crédito de IPI da entrada. */
+    contribuinteIpi?: string | null;
 }
 
 export interface CreditoIcmsEntradaResposta {
@@ -12,7 +14,7 @@ export interface CreditoIcmsEntradaResposta {
 
 export function entradaGeraCreditoIcms(ctx?: CreditoIcmsEntradaCtx): CreditoIcmsEntradaResposta;
 
-/** Optante do Simples também não se credita de IPI: ele é CUSTO (LC 123 art. 13, II e 23). */
+/** Simples ou NÃO contribuinte do IPI declarado no cadastro: o IPI da compra é CUSTO. */
 export function entradaGeraCreditoIpi(ctx?: CreditoIcmsEntradaCtx): CreditoIcmsEntradaResposta;
 
 /** O ICMS-ST retido pelo fornecedor nunca é crédito de quem recebe — em regime nenhum. */

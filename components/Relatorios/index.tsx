@@ -555,9 +555,9 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
     // A irmã do IPI: mesma pergunta, mesmo dono. Um `if` de tela para uma
     // delas seria a divergência de sempre.
     const semCreditoIpi = useMemo(
-        () => entradaGeraCreditoIpi({ regime: regimeEscrituracao, direcao }) as
+        () => entradaGeraCreditoIpi({ regime: regimeEscrituracao, direcao, contribuinteIpi: cadastroFiscal?.contribuinteIpi || null }) as
             { credita: boolean; motivo: string | null; baseLegal: string | null },
-        [regimeEscrituracao, direcao],
+        [regimeEscrituracao, direcao, cadastroFiscal?.contribuinteIpi],
     );
 
     const { linhas, excluidas } = useMemo(() => {
@@ -582,6 +582,7 @@ const AbaLivro: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
                 parametrosCfop: cerebroAtivo(parametrosCfop),
                 regimeTributario: regimeEscrituracao,
+                contribuinteIpi: cadastroFiscal?.contribuinteIpi || null,
             }));
             const parte: any = contraparteDoc(d);
             // O CFOP DO LIVRO DE ENTRADAS É O DA ENTRADA — não o do fornecedor.
@@ -1617,6 +1618,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
                 cfopOverrides: cadastroFiscal?.cfopOverrides,
                 parametrosCfop: cerebroAtivo(parametrosCfop),
                 regimeTributario: regimeEscrituracao,
+                contribuinteIpi: cadastroFiscal?.contribuinteIpi || null,
             },
         ),
         [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao],
@@ -1624,6 +1626,12 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
     const linhas = useMemo(
         () => (soFretes ? todasAsLinhas.filter(l => (l.ctes || 0) > 0) : todasAsLinhas),
         [todasAsLinhas, soFretes],
+    );
+    // Por que o IPI da entrada é custo (Simples ou não contribuinte) — do dono.
+    const motivoIpiCusto = useMemo(
+        () => entradaGeraCreditoIpi({ regime: regimeEscrituracao, direcao: 'entrada', contribuinteIpi: cadastroFiscal?.contribuinteIpi || null }) as
+            { credita: boolean; motivo: string | null; baseLegal: string | null },
+        [regimeEscrituracao, cadastroFiscal?.contribuinteIpi],
     );
     const totCfop = useMemo(() => linhas.reduce(
         (t, l) => ({ ipiCusto: t.ipiCusto + (l.ipiCusto || 0), st: t.st + (l.st || 0) }),
@@ -1671,9 +1679,11 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
             'Nas ENTRADAS o CFOP é o CORRELACIONADO (o XML da compra traz o do fornecedor) — natureza da atividade '
             + `"${natureza.natureza}" (${ORIGEM_NATUREZA[natureza.origem] || natureza.origem}).`,
             ...(totCfop.ipiCusto ? [
-                `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — optante do Simples Nacional não se `
-                + 'credita de IPI (LC 123/2006, art. 13, II e art. 23). A coluna IPI é de IPI CREDITADO, por '
-                + 'isso sai ZERADA; o valor já está dentro de Outras.',
+                // O motivo vem do DONO (Simples ou não contribuinte do IPI, 13/10)
+                // — a frase fixa do Simples mentiria sobre o comércio do Lucro.
+                `IPI destacado nas entradas: ${fmtBRL(totCfop.ipiCusto)} — ${motivoIpiCusto.motivo} `
+                + `(${motivoIpiCusto.baseLegal}). A coluna IPI é de IPI CREDITADO, por isso sai ZERADA; `
+                + 'o valor já está dentro de ICMS Outras.',
             ] : []),
             ...(totCfop.st ? [
                 `ICMS ST retido pelo fornecedor: ${fmtBRL(totCfop.st)} — ${ST_NAO_CREDITA.motivo} `
