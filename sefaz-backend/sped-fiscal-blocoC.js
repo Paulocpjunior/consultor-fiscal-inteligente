@@ -35,7 +35,7 @@ import { docCancelado, ehNotaPropriaDeEntrada, direcaoEfetivaDoc } from './xml-m
 // 🚨 O CRÉDITO DE ICMS DA ENTRADA É DE QUEM ESCRITURA (11/09, ELS · Simples):
 // o C170/C190 copiavam o destaque do FORNECEDOR — o Livro do CFI já lia esta
 // régua desde 09/09 e o SPED não. Ver `creditoIcmsDoItem`.
-import { entradaGeraCreditoIcms, colunaDoCstInformado } from './credito-icms-entrada.js';
+import { entradaGeraCreditoIcms, entradaGeraCreditoIpi, colunaDoCstInformado } from './credito-icms-entrada.js';
 // 🧾 Crédito do Simples (LC 123, art. 23) e o CST do declarante no lugar do
 // CSOSN — o mesmo dono lido pelo Livro/Resumo e pelo arquivo do SAGE.
 import { creditoSimplesDoItem, cstDeEntradaDoCsosn, avisosDoCreditoSimples, temCreditoSimplesDeclarado } from './credito-icms-simples.js';
@@ -169,6 +169,36 @@ export function icmsDoItemNoArquivo(item, nota) {
 }
 
 /**
+ * 🏭 Base, alíquota e IPI do item COMO VÃO PARA O ARQUIVO (13/10, WALDESA).
+ *
+ * Paulo: *"o IPI, no livro de entrada ele saiu, mas no PVA ele continua"* —
+ * o Livro já tirava o crédito de quem NÃO é contribuinte do IPI (#1407), e o
+ * C100/C170/C190 seguiam copiando o destaque do FORNECEDOR: o livro que o PVA
+ * imprime mostrava Total IPI 3.606,03 contra 0,00 no Livro do CFI. É a MESMA
+ * classe do ICMS do Simples (ELS, 11/09): na entrada sem crédito, o imposto do
+ * documento do fornecedor é CUSTO — está no VL_OPR, não no campo do imposto.
+ *
+ * Quem decide é o dono (`entradaGeraCreditoIpi`): Simples, ou "Contribuinte de
+ * IPI: Não" no cadastro. Em branco, o arquivo continua como sempre.
+ */
+export function ipiDoItemNoArquivo(item, nota) {
+    const bruto = {
+        vBC: parseFloat(item?.vBCIPI ?? item?.vBcIpi ?? 0) || 0,
+        aliq: parseFloat(item?.aliqIPI ?? 0) || 0,
+        vIPI: parseFloat(item?.vIPI || 0) || 0,
+    };
+    const direcao = direcaoEfetivaDoc(nota);
+    if (direcao !== 'entrada') return { ...bruto, semCredito: false };
+    const r = entradaGeraCreditoIpi({
+        regime: regimeDoArquivo(nota?._dados),
+        direcao,
+        contribuinteIpi: nota?._dados?.empresa?.dadosFiscais?.contribuinteIpi ?? null,
+    });
+    if (r.credita) return { ...bruto, semCredito: false };
+    return { vBC: 0, aliq: 0, vIPI: 0, semCredito: true };
+}
+
+/**
  * Soma os campos fiscais dos itens da nota.
  * Usado como fonte única de verdade pra VL_BC_ICMS/VL_ICMS/etc no C100,
  * garantindo que C100 = Σ C190 sempre (PVA valida essa igualdade).
@@ -179,6 +209,7 @@ function somarTotaisDosItens(nota) {
     let vProd = 0, vBC = 0, vICMS = 0, vBCST = 0, vICMSST = 0;
     let vIPI = 0, vPIS = 0, vCOFINS = 0;
     let semCredito = false;
+    let semCreditoIpi = false;
     for (const item of (nota && nota.itens) || []) {
         // Base e ICMS pelo MESMO dono do C170/C190 — a entrada sem crédito
         // sai zero nos três, senão o C100 desmentiria os próprios filhos.
@@ -189,11 +220,14 @@ function somarTotaisDosItens(nota) {
         vICMS += icms.vICMS;
         vBCST += parseFloat(item.vBCST || 0);
         vICMSST += parseFloat(item.vICMSST || 0);
-        vIPI += parseFloat(item.vIPI || 0);
+        // IPI pelo MESMO dono do C170/C190 (13/10): entrada sem crédito sai zero.
+        const ipi = ipiDoItemNoArquivo(item, nota);
+        if (ipi.semCredito) semCreditoIpi = true;
+        vIPI += ipi.vIPI;
         vPIS += parseFloat(item.vPIS || 0);
         vCOFINS += parseFloat(item.vCOFINS || 0);
     }
-    return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS, semCredito };
+    return { vProd, vBC, vICMS, vBCST, vICMSST, vIPI, vPIS, vCOFINS, semCredito, semCreditoIpi };
 }
 
 /**
@@ -707,7 +741,9 @@ function buildC100(nota, dados) {
         soCancelavel(fmt.formatValue(i.semCredito ? i.vICMS : pick(i.vICMS, 'vICMS'), 2)), // VL_ICMS
         soNfe(soCancelavel(fmt.formatValue(pick(i.vBCST, 'vBCST'), 2))),
         soNfe(soCancelavel(fmt.formatValue(pick(i.vICMSST, 'vST'), 2))),
-        soNfe(soCancelavel(fmt.formatValue(pick(i.vIPI, 'vIPI'), 2))),
+        // Sem crédito de IPI o zero dos itens É a resposta — cair no total do
+        // documento traria de volta o destaque do fornecedor (13/10).
+        soNfe(soCancelavel(fmt.formatValue(i.semCreditoIpi ? i.vIPI : pick(i.vIPI, 'vIPI'), 2))),
         soNfe(soCancelavel(fmt.formatValue(pick(i.vPIS, 'vPIS'), 2))),
         soNfe(soCancelavel(fmt.formatValue(pick(i.vCOFINS, 'vCOFINS'), 2))),
         '',   // VL_PIS_ST
@@ -773,6 +809,7 @@ function buildC170(item, nItem, nota) {
     const cstFmt = cstDoItemNoArquivo(item, cfopLancado, nota);
     // Base/alíquota/ICMS pelo dono — a entrada sem crédito sai ZERO (ELS, 11/09).
     const icms = icmsDoItemNoArquivo(item, nota);
+    const ipiC170 = ipiDoItemNoArquivo(item, nota);
 
     return fmt.buildLine([
         'C170',
@@ -798,9 +835,10 @@ function buildC170(item, nItem, nota) {
         '0',  // IND_APUR: 0=Mensal
         '',   // CST_IPI
         '',   // COD_ENQ
-        fmt.formatValue(item.vBCIPI, 2),
-        fmt.formatValue(item.aliqIPI, 2),
-        fmt.formatValue(item.vIPI, 2),
+        // IPI pelo dono (13/10): entrada sem crédito sai base, alíquota e IPI zero.
+        fmt.formatValue(ipiC170.vBC, 2),
+        fmt.formatValue(ipiC170.aliq, 2),
+        fmt.formatValue(ipiC170.vIPI, 2),
         '',   // CST_PIS
         fmt.formatValue(item.vBCPIS, 2),
         fmt.formatValue(item.aliqPIS, 2),
@@ -929,7 +967,7 @@ function buildC190sFromNota(nota) {
         g.vlIcms += icms.vICMS;
         g.vlBcIcmsSt += parseFloat(item.vBCST || 0);
         g.vlIcmsSt += parseFloat(item.vICMSST || 0);
-        g.vlIpi += parseFloat(item.vIPI || 0);
+        g.vlIpi += ipiDoItemNoArquivo(item, nota).vIPI;
 
         // Valor da redução de BC (obrigatório quando CST 20 ou 70).
         // Fórmula correta: vBC × pRedBC / (100 - pRedBC).

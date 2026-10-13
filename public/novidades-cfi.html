@@ -77,6 +77,14 @@
 <section>
     <h2>🆕 O que mudou agora (13/10) — leia esta parte primeiro</h2>
 
+    <h3>🏭 <strong>SPED Fiscal: IPI de quem não é contribuinte sai zerado também no arquivo</strong></h3>
+    <p>O Livro de Entradas do CFI já tratava como custo o IPI da compra de empresa marcada "Contribuinte de IPI: Não", mas o
+    SPED continuava levando o IPI do fornecedor no C100, C170 e C190. No PVA, o livro mostrava "Total IPI" diferente do CFI
+    (na WALDESA 0005-02, R$ 3.606,03 contra R$ 0,00). Agora o arquivo segue a mesma regra do Livro: nas entradas sem crédito de
+    IPI, o IPI sai 0,00 nesses registros e o valor continua no valor da operação (VL_OPR), como custo. Com o campo em branco, o
+    arquivo sai como antes. Gere o SPED de novo para o PVA mostrar o total certo.</p>
+    <p><strong>Onde:</strong> SPED Fiscal → Gerar SPED Fiscal (a regra vem de Empresas → Dados Fiscais → "Contribuinte de IPI").</p>
+
     <h3>📥 <strong>Bloco K: importar o apontamento do TXT do SPED do cliente</strong></h3>
     <p>O sistema do cliente já gera o SPED com o Bloco K; agora a aba Bloco K lê esse arquivo em vez de exigir digitação linha a
     linha. Escolha a empresa e a competência e clique em <strong>"📥 Importar do SPED (TXT)"</strong>: o CFI lê o saldo de estoque
