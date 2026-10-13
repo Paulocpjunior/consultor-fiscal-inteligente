@@ -10,10 +10,23 @@
 //   - Parcelamentos vigentes   (PGFN   / CONSULTARPARCELAMENTO)
 //   - Análise completa         (todas acima em paralelo)
 //
+// Consultas do Consultor DP (/api/dp-integration/*), conferidas em produção em
+// 13/10/2026 com as credenciais reais:
+//   - DCTFWeb: o RECIBO (DCTFWEB/CONSRECIBO32, categoria GERAL_MENSAL, anoPA e
+//     mesPA) — o CONSDECCOMPLETA33 com { periodoApuracao } era recusado
+//     ([EntradaIncorreta-DCTFWEB-MG07] "Ano PA é obrigatório"…);
+//   - eSocial (ESOCIAL/CONSULTARFECHAMENTO), FGTS Digital (FGTS/
+//     CONSULTARRECOLHIMENTO) e CRF (FGTS/CONSULTARCRF) NÃO EXISTEM no catálogo
+//     do Integra Contador ([EntradaIncorreta-ICGERENCIADOR-052]). Não se chama
+//     mais: eSocial e FGTS respondem "não oferecido" (ok:false, com o motivo) e
+//     a CRF vai direto à consulta pública da Caixa.
+//
 // Suporta SERPRO_DRY_RUN=1 para desenvolvimento sem chamar API real.
 // ============================================================================
 
 import { invokeIntegraContador } from './serpro-client.js';
+import { getDctfwebProvider } from './dctfweb-provider.js';
+import { consultarCrfFgtsPublica } from './cnd-publica-provider.js';
 import { consultarNfseRecebidas } from './nfse-sp-client.js';
 import admin from 'firebase-admin';
 
@@ -179,15 +192,7 @@ function mockObrigacoes(cnpj) {
 // ─── Mocks individuais por sistema (SERPRO_DRY_RUN=1) ──────────────────────
 
 function mockDctfWeb() {
-    return { ok: true, entregue: true, situacao: 'ENTREGUE', dataEntrega: '2025-04-15' };
-}
-
-function mockESocial() {
-    return { ok: true, entregue: true, situacao: 'FECHAMENTO_TRANSMITIDO', dataEntrega: '2025-04-14' };
-}
-
-function mockFgtsDigital() {
-    return { ok: true, regular: false, depositoDevido: 3200.00, depositoRealizado: 2800.00 };
+    return { ok: true, entregue: true, situacao: 'TRANSMITIDA', dataEntrega: '2025-04-15' };
 }
 
 function mockSpedFiscal() {
@@ -234,85 +239,94 @@ function computarCompAnterior(comp) {
 
 // ─── Consultas individuais por sistema SERPRO ──────────────────────────────
 
+/** Resposta das consultas que o Integra Contador não tem (ICGERENCIADOR-052, 13/10/2026). */
+export const SERPRO_NAO_OFERECE = 'O SERPRO (Integra Contador) não oferece esta consulta.';
+
+// Texto do SERPRO para a tela: sem CNPJ/CPF nem sequência longa de dígitos.
+const semDocumento = (t) => String(t || '')
+    .replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11,}/g, '[omitido]')
+    .trim();
+const codigoLimpo = (c) => String(c || '').trim().replace(/^\[|\]$/g, '');
+// Mensagem de erro de negócio (não aviso): o SERPRO devolve o código entre colchetes, ex. [EntradaIncorreta-DCTFWEB-MG07].
+const ehErroDeNegocio = (m) => /^(Erro|EntradaIncorreta|AcessoNegado)/i.test(codigoLimpo(m?.codigo));
+const mensagensParaTela = (msgs) => msgs
+    .map((m) => `${codigoLimpo(m?.codigo) ? `[${codigoLimpo(m.codigo)}] ` : ''}${semDocumento(m?.texto)}`.trim())
+    .filter(Boolean)
+    .join('; ');
+
+/**
+ * Recibo da DCTFWeb (CONSRECIBO32) → o status que o Consultor DP já lê
+ * ({ ok, entregue, situacao, dataEntrega, erro }). PDF do recibo = transmitida;
+ * 200 sem PDF = sem recibo (não transmitida); 200 sem PDF com mensagem de erro
+ * de negócio = ok:false com os códigos; modo mock nunca vira "sem recibo".
+ */
+export function statusDoReciboDctfweb(r) {
+    if (r?.fonte && r.fonte !== 'serpro') {
+        return { ok: false, entregue: false, situacao: 'indisponivel', dataEntrega: null, erro: `DCTFWeb em modo ${r.fonte}: o recibo não foi consultado na Receita.` };
+    }
+    if (r?.pdfBase64) return { ok: true, entregue: true, situacao: 'TRANSMITIDA', dataEntrega: null };
+    const msgs = Array.isArray(r?.mensagens) ? r.mensagens : [];
+    if (msgs.some(ehErroDeNegocio)) {
+        return {
+            ok: false, entregue: false, situacao: 'indisponivel', dataEntrega: null,
+            erro: `A Receita recusou a consulta do recibo da DCTFWeb: ${mensagensParaTela(msgs)}.`,
+            codigos: [...new Set(msgs.map((m) => codigoLimpo(m?.codigo)).filter(Boolean))],
+        };
+    }
+    const avisos = mensagensParaTela(msgs);
+    return { ok: true, entregue: false, situacao: 'SEM_RECIBO', dataEntrega: null, ...(avisos ? { avisos } : {}) };
+}
+
+/** Erro do CONSRECIBO32 → ok:false com os códigos do SERPRO (sem CNPJ na mensagem). */
+export function erroDoReciboDctfweb(err) {
+    const msgs = Array.isArray(err?.serproMessages) ? err.serproMessages : [];
+    if (!msgs.length) return { ok: false, entregue: false, situacao: 'indisponivel', dataEntrega: null, erro: mensagemErroLimpa(err?.message) };
+    return {
+        ok: false, entregue: false, situacao: 'indisponivel', dataEntrega: null,
+        erro: `A Receita recusou a consulta do recibo da DCTFWeb: ${mensagensParaTela(msgs)}.`,
+        codigos: [...new Set(msgs.map((m) => codigoLimpo(m?.codigo)).filter(Boolean))],
+    };
+}
+
+/**
+ * Status da DCTFWeb (Geral Mensal) da competência pelo RECIBO de transmissão —
+ * o mesmo consultarRecibo (CONSRECIBO32) que a tela do CFI já usa com sucesso.
+ */
 export async function consultarDctfWeb(cnpj, competencia) {
     console.log(TAG, 'consultarDctfWeb', cnpj, competencia);
     if (DRY_RUN) {
         console.log(TAG, 'DRY_RUN ativo — retornando mock DCTFWeb');
         return mockDctfWeb();
     }
+    const m = /^(\d{4})-(\d{2})$/.exec(String(competencia || ''));
+    if (!m) return { ok: false, entregue: false, situacao: 'indisponivel', dataEntrega: null, erro: 'Competência inválida: use AAAA-MM.' };
     try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'DCTFWEB',
-            idServico: 'CONSDECCOMPLETA33',
-            contribuinteCnpj: cnpj,
-            dados: { periodoApuracao: competencia.replace('-', '') },
-        });
-        return {
-            ok: true,
-            entregue: !!(resp?.situacao || '').match(/ENTREG/i),
-            situacao: resp?.situacao || 'INDETERMINADA',
-            dataEntrega: resp?.dataEntrega || resp?.dataTransmissao || null,
-        };
+        const r = await getDctfwebProvider().consultarRecibo({ empresaCnpj: cnpj, anoPA: m[1], mesPA: m[2], categoria: 'GERAL_MENSAL' });
+        return statusDoReciboDctfweb(r);
     } catch (err) {
         console.error(TAG, 'Erro consultarDctfWeb:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
+        return erroDoReciboDctfweb(err);
     }
 }
 
-export async function consultarESocial(cnpj, competencia) {
-    console.log(TAG, 'consultarESocial', cnpj, competencia);
-    if (DRY_RUN) {
-        console.log(TAG, 'DRY_RUN ativo — retornando mock eSocial');
-        return mockESocial();
-    }
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'ESOCIAL',
-            idServico: 'CONSULTARFECHAMENTO',
-            contribuinteCnpj: cnpj,
-            dados: { periodoApuracao: competencia.replace('-', '') },
-        });
-        const sit = resp?.situacao || resp?.statusFechamento || '';
-        return {
-            ok: true,
-            entregue: !!(sit).match(/TRANSMITID|FECHAD|ENTREG/i),
-            situacao: sit || 'INDETERMINADA',
-            dataEntrega: resp?.dataFechamento || resp?.dataTransmissao || null,
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarESocial:', err.message);
-        return { ok: false, entregue: false, situacao: 'indisponivel', erro: mensagemErroLimpa(err.message) };
-    }
+/**
+ * Fechamento do eSocial: o Integra Contador NÃO tem essa consulta
+ * (ESOCIAL/CONSULTARFECHAMENTO = ICGERENCIADOR-052). Não chama o SERPRO (cada
+ * chamada é cobrada e só devolvia erro). O fechamento real é o S-1299 que o
+ * Consultor DP registra (dp-fechamento-esocial.js, no semáforo da DCTFWeb).
+ */
+export async function consultarESocial(_cnpj, _competencia) {
+    return { ok: false, entregue: false, situacao: 'nao_oferecido_serpro', dataEntrega: null, erro: SERPRO_NAO_OFERECE };
 }
 
-export async function consultarFgtsDigital(cnpj, competencia) {
-    console.log(TAG, 'consultarFgtsDigital', cnpj, competencia);
-    if (DRY_RUN) {
-        console.log(TAG, 'DRY_RUN ativo — retornando mock FGTS Digital');
-        return mockFgtsDigital();
-    }
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'FGTS',
-            idServico: 'CONSULTARRECOLHIMENTO',
-            contribuinteCnpj: cnpj,
-            dados: { periodoApuracao: competencia.replace('-', '') },
-        });
-        const devido = Number(resp?.valorDevido || resp?.depositoDevido || 0);
-        const realizado = Number(resp?.valorRecolhido || resp?.depositoRealizado || 0);
-        return {
-            ok: true,
-            regular: realizado >= devido,
-            depositoDevido: devido,
-            depositoRealizado: realizado,
-        };
-    } catch (err) {
-        console.error(TAG, 'Erro consultarFgtsDigital:', err.message);
-        const msgLimpa = /ICGERENCIADOR-052|sistema ou serviço inválida/i.test(String(err.message || ''))
-            ? 'FGTS Digital não disponível no plano SERPRO contratado'
-            : 'FGTS Digital indisponível no momento';
-        return { ok: false, regular: false, depositoDevido: 0, depositoRealizado: 0, situacao: 'indisponivel', erro: msgLimpa };
-    }
+/**
+ * FGTS Digital: o Integra Contador NÃO tem essa consulta
+ * (FGTS/CONSULTARRECOLHIMENTO = ICGERENCIADOR-052). Não chama o SERPRO. Os
+ * campos numéricos ficam (o DP os espera), mas com ok:false e regular:false:
+ * zero aqui é "não consultado", nunca "nada devido".
+ */
+export async function consultarFgtsDigital(_cnpj, _competencia) {
+    return { ok: false, regular: false, depositoDevido: 0, depositoRealizado: 0, situacao: 'nao_oferecido_serpro', erro: SERPRO_NAO_OFERECE };
 }
 
 async function consultarSpedFiscal(cnpj, competencia) {
@@ -572,7 +586,7 @@ function extrairCertidao(settled, esfera, orgao, tipo) {
             numero: v.numero,
             dataEmissao: v.dataEmissao,
             pdfBase64: v.pdfBase64,
-            fonte: 'serpro',
+            fonte: v.fonte || 'serpro',
         };
     }
     const reason = settled.status === 'rejected'
@@ -627,34 +641,14 @@ async function consultarCndFederalSerpro(cnpj) {
 
 /**
  * CRF (Certificado de Regularidade do FGTS) — Caixa Econômica Federal.
- * SERPRO idSistema: FGTS / CONSULTARCRF
+ * O Integra Contador NÃO tem a CRF (FGTS/CONSULTARCRF = ICGERENCIADOR-052,
+ * medido em 13/10/2026): vai direto à consulta pública da Caixa, que já era o
+ * fallback. O nome fica (o túnel do DP e a plataforma chamam por ele).
  */
 export async function consultarCrfFgtsSerpro(cnpj) {
-    console.log(TAG, 'consultarCrfFgtsSerpro', cnpj);
-    try {
-        const resp = await invokeIntegraContador({
-            idSistema: 'FGTS',
-            idServico: 'CONSULTARCRF',
-            contribuinteCnpj: cnpj,
-            dados: {},
-        });
-        return parseCndResponse(resp);
-    } catch (err) {
-        console.error(TAG, 'CRF FGTS SERPRO erro:', err.message);
-        // Fallback: try via CERTIDOES
-        try {
-            const resp2 = await invokeIntegraContador({
-                idSistema: 'CERTIDOES',
-                idServico: 'EMITIRCRF',
-                contribuinteCnpj: cnpj,
-                dados: {},
-            });
-            return parseCndResponse(resp2);
-        } catch (err2) {
-            console.error(TAG, 'CRF FGTS fallback erro:', err2.message);
-            return { ok: false, erro: err2.message };
-        }
-    }
+    console.log(TAG, 'consultarCrfFgtsSerpro (consulta pública da Caixa)');
+    const crf = await consultarCrfFgtsPublica(cnpj);
+    return { ...crf, ok: crf.status !== 'indisponivel' };
 }
 
 /**

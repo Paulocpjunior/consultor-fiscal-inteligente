@@ -17,7 +17,6 @@ import {
     consultarDctfWeb,
     consultarCrfFgtsSerpro,
 } from './nfp-compliance-provider.js';
-import { consultarCndsPublicas } from './cnd-publica-provider.js';
 import { getDctfwebProvider } from './dctfweb-provider.js';
 import { montarRespostaDebitosDctfweb } from './dp-dctfweb-debitos.js';
 import { montarPedidoIdentificadores, montarPedidoDownload, lerRetornoIdentificadores, lerRetornoDownload } from './esocial-download.js';
@@ -81,31 +80,20 @@ router.post('/fgts/recolhimento', requireCrossProjectAuth, async (req, res) => {
 });
 
 // FGTS - Consulta CRF (Certificado de Regularidade)
-// Tenta SERPRO primeiro; se falhar, cai no fallback de consulta pública (Caixa).
+// O Integra Contador NÃO tem a CRF (FGTS/CONSULTARCRF devolve ICGERENCIADOR-052,
+// medido em produção em 13/10/2026): vai direto à consulta pública da Caixa,
+// que já era o fallback, com o link do portal para a consulta manual.
 // POST /api/dp-integration/fgts/crf
 // Body: { cnpj }
 router.post('/fgts/crf', requireCrossProjectAuth, async (req, res) => {
     const cnpj = validarCnpj(req, res);
     if (!cnpj) return;
-    let result;
     try {
-        result = await consultarCrfFgtsSerpro(cnpj);
-    } catch {
-        result = { ok: false, status: 'indisponivel' };
+        return res.json(await consultarCrfFgtsSerpro(cnpj));
+    } catch (err) {
+        console.warn('[dp-integration/fgts/crf] consulta pública falhou:', err.message);
+        return res.json({ ok: false, status: 'indisponivel', motivo: 'Consulta pública da Caixa indisponível.', fonte: 'consulta_publica' });
     }
-    // Se SERPRO falhou ou indisponivel, tenta consulta pública
-    if (!result?.ok || result?.status === 'indisponivel' || result?.status === 'nao_consultada') {
-        try {
-            const publicas = await consultarCndsPublicas(cnpj);
-            const crfPub = (publicas?.certidoes || []).find(c => c.tipo?.includes('CRF') || c.esfera === 'fgts');
-            if (crfPub && crfPub.status !== 'indisponivel') {
-                return res.json({ ...crfPub, fonte: 'consulta_publica' });
-            }
-        } catch (err) {
-            console.warn('[dp-integration/fgts/crf] fallback publico falhou:', err.message);
-        }
-    }
-    return res.json(result || { ok: false, status: 'indisponivel' });
 });
 
 // eSocial - Status de fechamento mensal
@@ -355,13 +343,16 @@ async function travasDctfwebDp(req, res) {
     const competencia = String(req.body?.competencia || '');
     const periodo = periodoDaCompetencia(competencia);
     if (!periodo) { res.status(400).json({ error: 'competencia obrigatória no formato YYYY-MM' }); return null; }
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     try {
-        await confirmarEmpresaDaCarteiraDp({ token: (req.headers.authorization || '').replace(/^Bearer\s+/i, ''), empresaId: req.body?.empresaId, cnpj });
+        await confirmarEmpresaDaCarteiraDp({ token, empresaId: req.body?.empresaId, cnpj });
     } catch (err) {
         res.status(err instanceof AcessoNegado ? 403 : 502).json({ error: err.message });
         return null;
     }
-    return { cnpj, competencia, ...periodo, db: dbCfi() };
+    // `dp`: o token do usuário e a empresa JÁ conferida na carteira — é com eles que
+    // o semáforo lê o S-1299 no Firestore do DP. Nada mais do corpo vira prova.
+    return { cnpj, competencia, ...periodo, db: dbCfi(), dp: { token, empresaId: req.body.empresaId } };
 }
 function auditarDctfwebDp(dados) {
     return dbCfi().collection('dp_dctfweb_log').add({ em: admin.firestore.FieldValue.serverTimestamp(), ...dados })
@@ -372,7 +363,7 @@ router.post('/dctfweb/insumos', soDoDp, async (req, res) => {
     const t = await travasDctfwebDp(req, res);
     if (!t) return;
     try {
-        const r = await montarSemaforoInsumos(t.db, { cnpj: t.cnpj, competencia: t.competencia, empresaId: null });
+        const r = await montarSemaforoInsumos(t.db, { cnpj: t.cnpj, competencia: t.competencia, empresaId: null, dp: t.dp });
         return res.json({ ok: true, ...r });
     } catch (err) {
         console.error('[dp-integration/dctfweb/insumos]', err);
@@ -409,7 +400,7 @@ router.post('/dctfweb/transmitir', soDoDp, async (req, res) => {
         if (!perfil) return res.status(403).json({ error: motivo });
         const b = req.body || {};
         const r = await transmitirComRegras({
-            user: perfil, db: t.db, origem: 'dp',
+            user: perfil, db: t.db, origem: 'dp', dp: t.dp,
             body: {
                 empresaCnpj: t.cnpj, anoPA: t.anoPA, mesPA: t.mesPA, categoria: 'GERAL_MENSAL',
                 confirmarInsumosPendentes: b.confirmarInsumosPendentes === true, justificativa: b.justificativa,

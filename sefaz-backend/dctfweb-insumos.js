@@ -8,7 +8,9 @@
 // input de outro departamento.
 //
 // REGRA DA CASA que manda aqui: NENHUMA etapa se marca à mão — toda prova vem
-// de dado real. As provas: eSocial = CONSULTARFECHAMENTO do SERPRO; MIT =
+// de dado real. As provas: eSocial = S-1299 aceito que o Consultor DP
+// transmitiu e registrou (dp-fechamento-esocial.js; o ESOCIAL/
+// CONSULTARFECHAMENTO do SERPRO não existe no catálogo — 13/10/2026); MIT =
 // SITUACAOENC315; Reinf = auditoria do NOSSO gateway (reinf_gateway_lotes) +
 // as retenções que o próprio CFI apura nas NFS-e tomadas.
 //
@@ -30,9 +32,13 @@ export const DEPARTAMENTO_INSUMO = {
     mit: { departamento: 'fiscal', rotulo: '🧾 Fiscal — MIT' },
 };
 
-/** Selo do eSocial a partir da consulta SERPRO de fechamento. */
+/**
+ * Selo do eSocial a partir da consulta de fechamento (S-1299). A consulta diz
+ * a própria `fonte` e, quando falta o fechamento, o `motivo` (ex.: "S-1299 não
+ * encontrado no DP para 09/2026"); `nrRecibo` entra no detalhe do recebido.
+ */
 export function seloEsocial(consulta) {
-    const base = { ...DEPARTAMENTO_INSUMO.esocial, fonte: 'SERPRO (fechamento eSocial)' };
+    const base = { ...DEPARTAMENTO_INSUMO.esocial, fonte: consulta?.fonte || 'SERPRO (fechamento eSocial)' };
     if (!consulta || consulta.ok === false) {
         return {
             ...base,
@@ -44,8 +50,16 @@ export function seloEsocial(consulta) {
         return {
             ...base,
             estado: 'recebido',
-            detalhe: `Fechamento (S-1299) transmitido${consulta.dataEntrega ? ` em ${consulta.dataEntrega}` : ''} — folha dentro da DCTFWeb.`,
+            detalhe: `Fechamento (S-1299) transmitido${consulta.nrRecibo ? `, recibo ${consulta.nrRecibo}` : ''}${consulta.dataEntrega ? ` em ${consulta.dataEntrega}` : ''} — folha dentro da DCTFWeb.`,
             quando: consulta.dataEntrega || null,
+        };
+    }
+    if (consulta.motivo) {
+        return {
+            ...base,
+            estado: 'pendente',
+            detalhe: `${consulta.motivo} Cobrar o DP antes de fechar a DCTFWeb. `
+                + 'Empresa comprovadamente sem folha: confirmar com o DP antes de seguir.',
         };
     }
     return {

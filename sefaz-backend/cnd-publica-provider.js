@@ -214,6 +214,16 @@ const URLS_PORTAIS = {
 };
 
 /**
+ * Só a CRF do FGTS (Caixa), com o link do portal. É a consulta da CRF do
+ * Consultor DP (/api/dp-integration/fgts/crf) e da análise: o Integra Contador
+ * NÃO tem FGTS/CONSULTARCRF (ICGERENCIADOR-052, medido em 13/10/2026).
+ */
+export async function consultarCrfFgtsPublica(cnpj) {
+    const crf = await consultarCrfFgts(cnpjLimpo(cnpj));
+    return { ...crf, portalUrl: URLS_PORTAIS.crf_fgts };
+}
+
+/**
  * Consulta todas as CNDs públicas em paralelo.
  * Sempre inclui portalUrl pra consulta manual quando indisponivel.
  */

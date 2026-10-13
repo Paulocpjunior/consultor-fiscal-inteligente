@@ -144,7 +144,7 @@ router.post('/sincronizar', requireAuth, express.json(), async (req, res) => {
  * departamentos (o túnel lê o perfil do CFI pelo e-mail do token).
  * Devolve { status, json } — quem chama só responde.
  */
-export async function transmitirComRegras({ user, body = {}, db, origem = 'cfi' }) {
+export async function transmitirComRegras({ user, body = {}, db, origem = 'cfi', dp = null }) {
     const { empresaId, empresaCnpj, anoPA, mesPA, categoria } = body;
     const {
         podeTransmitirDctfweb, checarJustificativa, checarRetificadora, compararDebitos,
@@ -158,7 +158,9 @@ export async function transmitirComRegras({ user, body = {}, db, origem = 'cfi' 
     const lerSemaforo = async () => {
         try {
             const { vereditoInsumos } = await import('./dctfweb-insumos.js');
-            const base = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId: origem === 'cfi' ? empresaId : null });
+            // `dp` (token do usuário do DP + empresaId já conferido na carteira) vem
+            // do túnel, NUNCA do corpo: é o que lê o S-1299 no Firestore do DP.
+            const base = await montarSemaforoInsumos(db, { cnpj, competencia, empresaId: origem === 'cfi' ? empresaId : null, dp });
             return { ...base, ...vereditoInsumos(base.selos) };
         } catch (e) {
             // Semáforo caído NÃO trava o fiscal — trancar a entrega porque um serviço
@@ -707,9 +709,11 @@ router.post('/cron', async (req, res) => {
 // GET /api/admin/dctfweb/insumos?cnpj=&competencia=YYYY-MM[&empresaId=]
 //
 // SEMÁFORO DE INSUMOS POR DEPARTAMENTO (Paulo, 10/08): a DCTFWeb consolida
-// eSocial (DP/Folha, via Folhamatic), Reinf (Contábil) e MIT (Fiscal) — e quem
+// eSocial (DP/Folha), Reinf (Contábil) e MIT (Fiscal) — e quem
 // transmite precisa VER o que já entrou. Prova por dado real, nunca checkbox:
-// eSocial e MIT pelo SERPRO; Reinf pela auditoria do gateway + as retenções
+// eSocial pelo S-1299 aceito que o Consultor DP registrou (lido no Firestore do
+// DP com o token do usuário — dp-fechamento-esocial.js; o SERPRO não tem essa
+// consulta); MIT pelo SERPRO; Reinf pela auditoria do gateway + as retenções
 // que o CFI apura nas NFS-e tomadas. Núcleo puro: dctfweb-insumos.js.
 // ────────────────────────────────────────────────────────────────────────────
 /**
@@ -718,12 +722,16 @@ router.post('/cron', async (req, res) => {
  * dois têm que ler o MESMO estado, senão o painel diz uma coisa e a trava
  * outra (lição do card 4: painel com conta própria diverge).
  */
-export async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId }) {
+export async function montarSemaforoInsumos(db, { cnpj, competencia, empresaId, dp = null }) {
     const [anoPA, mesPA] = competencia.split('-').map(Number);
     const [esocialR, mitR, lotesR, docsR] = await Promise.allSettled([
+            // eSocial: o fechamento (S-1299) que o Consultor DP registrou, lido com o
+            // token do usuário do DP. Sem ele (tela do CFI), indeterminado com o motivo.
             (async () => {
-                const { consultarESocial } = await import('./nfp-compliance-provider.js');
-                return consultarESocial(cnpj, competencia);
+                const { consultarFechamentoEsocialDp, fechamentoSemLeituraDoDp } = await import('./dp-fechamento-esocial.js');
+                return dp?.token
+                    ? consultarFechamentoEsocialDp({ token: dp.token, empresaId: dp.empresaId, cnpj, competencia, fetchImpl: dp.fetchImpl })
+                    : fechamentoSemLeituraDoDp();
             })(),
             consultarApuracaoMit({ empresaCnpj: cnpj, anoPA, mesPA }),
             (async () => {
