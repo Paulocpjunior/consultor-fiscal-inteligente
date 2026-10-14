@@ -7,7 +7,10 @@
  */
 import { getAuth } from 'firebase/auth';
 
-export interface LinhaStUf { uf: string; ie: string; codOr: string; codRec: string; diaVencimento: number }
+/** `forma` ausente = mensal (o cadastro de 08/10); por operação não tem dia (null). */
+export interface LinhaStUf {
+    uf: string; ie: string; codOr: string; codRec: string; forma?: 'mensal' | 'operacao'; diaVencimento: number | null;
+}
 export interface CadastroStUf {
     ufs: Record<string, Omit<LinhaStUf, 'uf'>>;
     atualizadoPor: string | null;

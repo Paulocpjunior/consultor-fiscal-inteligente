@@ -29,7 +29,7 @@ const saidaPr = (vST: number) => ({
 describe('o cadastro confere antes de gravar', () => {
     it('a linha do exemplo real passa', () => {
         expect(validarCadastroStUf([PR])).toEqual({
-            ok: true, ufs: { PR: { ie: '9012345678', codOr: '002', codRec: '100048', diaVencimento: 9 } },
+            ok: true, ufs: { PR: { ie: '9012345678', codOr: '002', codRec: '100048', forma: 'mensal', diaVencimento: 9 } },
         });
     });
 
