@@ -9,6 +9,14 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾 DARF DOS RETIDOS POR CÓDIGO (14/10)** (Paulo, contribuinte 62827860 09/2026: DCTFWeb
+  170806/595207/596007/597907 e o avulso oferecia só 1708/5952 — CSRF 1.482,10 inteira num 5952;
+  IRRF de cliente em 8045 nem era lido). `decidirEmissaoRetidos` recebe `debitosDctfweb`
+  (= `camposUsadosDctfweb`) e devolve um avulso por código (4 díg.) em
+  `CODIGOS_DARF_AVULSO_RETIDOS` (1708, 8045, 5952, 5960, 5979, 5987); fora da lista vai em
+  `foraDoAvulso` (dito); INSS no numerado; sem débitos, por família (antigo). Backend
+  `RECEITAS_RETIDAS_AVULSO` ampliado; normalizer: 8045 = IRRF. Trava `darfRetidosPorCodigo`.
+
 - **🏭 IPI DO ATIVO IMOBILIZADO É CUSTO (13/10)** — Paulo: "sim, ativo também é custo".
   `IPI_CUSTO_POR_DESTINO` ganhou 551/552/406 (além de 556/557/407). Mesmo trilho do #1412.
 
