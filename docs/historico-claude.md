@@ -9,6 +9,11 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📅 RETIDOS VENCEM DIA 20 (14/10)** (Paulo, CASA DA CRIANÇA BETINHO 09/2026: DARF 5960/5979
+  com pagar até 30/10 e multa 25,93). `RECEITAS_DIA_20` (darf-payload-builder.js) sem 5960/5979/8045
+  → "último dia útil". Incluídos (Lei 10.833 art. 35) e o código passa a ser checado ANTES do nome
+  do tributo (PIS/COFINS retido ≠ faturamento dia 25). Trava `vencimentoRetidosDia20`.
+
 - **🧾 DARF DOS RETIDOS POR CÓDIGO (14/10)** (Paulo, contribuinte 62827860 09/2026: DCTFWeb
   170806/595207/596007/597907 e o avulso oferecia só 1708/5952 — CSRF 1.482,10 inteira num 5952;
   IRRF de cliente em 8045 nem era lido). `decidirEmissaoRetidos` recebe `debitosDctfweb`
