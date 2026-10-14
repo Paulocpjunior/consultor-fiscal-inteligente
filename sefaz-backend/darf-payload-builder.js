@@ -45,8 +45,12 @@ const RECEITAS_TRIMESTRAIS = new Set(['2089', '0220', '2372', '6012']);
 // 10) e IPI-importação (0676, desembaraço) NÃO entram aqui.
 const RECEITAS_DIA_25 = new Set(['8109', '2172', '6912', '5856', '5123', '0668', '1097']);
 // IRRF (retenção): vencimento até o último dia útil do 2º decêndio do mês
-// seguinte — na prática dia 20, antecipado se não útil.
-const RECEITAS_DIA_20 = new Set(['1708', '0561', '0588', '3208', '5952', '5987']);
+// seguinte — na prática dia 20, antecipado se não útil. A CSRF retida vence
+// igual (Lei 10.833/2003, art. 35): 5952 (agregado), 5960 (COFINS), 5979
+// (PIS) e 5987 (CSLL). 🚨 14/10: 5960, 5979 e o IRRF 8045 caíam no "último
+// dia útil" — o DARF saía com pagamento em 30/10 e o Sicalc somava MULTA de
+// 10 dias (785,85 + 25,93) sobre uma guia do dia 20.
+const RECEITAS_DIA_20 = new Set(['1708', '8045', '0561', '0588', '3208', '5952', '5960', '5979', '5987']);
 
 export function ultimoDiaDoMes(ano, mes) {
     return new Date(Date.UTC(ano, mes, 0)).getUTCDate();
@@ -104,6 +108,11 @@ export function calcularVencimentoDarf(competencia, tributo, periodicidade = 'tr
     if (mes > 12) { mes = 1; ano += 1; }
     const raiz = String(codigoReceita || '').replace(/\D/g, '').slice(0, 4);
     const t = String(tributo || '').toUpperCase();
+    // O CÓDIGO vence o nome do tributo: o PIS/COFINS RETIDO (5979/5960) se
+    // chama "PIS"/"COFINS" e vence dia 20, não dia 25 como o de faturamento.
+    if (RECEITAS_DIA_20.has(raiz)) {
+        return ajustarDiaUtil(ano, mes, 20, 'antecipar');
+    }
     if (RECEITAS_DIA_25.has(raiz) || t === 'PIS' || t === 'COFINS') {
         return ajustarDiaUtil(ano, mes, 25, 'antecipar');
     }

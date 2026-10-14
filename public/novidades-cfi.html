@@ -77,6 +77,13 @@
 <section>
     <h2>🆕 O que mudou agora (14/10) — leia esta parte primeiro</h2>
 
+    <h3>📅 <strong>DARF de PIS/COFINS retidos (5979/5960) e IRRF 8045: vencimento dia 20, sem multa</strong></h3>
+    <p>Os DARF avulsos dos códigos 5960 (COFINS retida), 5979 (PIS retido) e 8045 (IRRF) saíam com "pagar até" o último dia
+    útil do mês e o Sicalc somava multa de mora (ex.: 785,85 + 25,93). Esses retidos vencem no dia 20 do mês seguinte, como o
+    5952 e o 1708 (Lei 10.833/2003, art. 35). Agora saem com o vencimento certo e sem multa quando emitidos no prazo. DARF já
+    emitido com multa deve ser emitido de novo.</p>
+    <p><strong>Onde:</strong> EFD-Reinf → Conferir Reinf × DCTFWeb → 🧾 DARF dos retidos → "Emitir DARF avulso".</p>
+
     <h3>🧾 <strong>DARF dos retidos: um DARF por código declarado na DCTFWeb (e o IRRF 8045)</strong></h3>
     <p>Na conferência Reinf × DCTFWeb, o botão "Emitir DARF avulso" juntava toda a CSRF num DARF 5952, mesmo quando a DCTFWeb
     trazia débitos separados de 5952 (CSRF), 5960 (COFINS) e 5979 (PIS). Também só oferecia o IRRF 1708. Agora sai <strong>um
