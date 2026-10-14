@@ -25,7 +25,8 @@
 // ============================================================================
 
 import { classificarAjustes } from './sped-ajustes-apuracao.js';
-import { docCancelado, direcaoEfetivaDoc } from './xml-metadata-helper.js';
+import { docCancelado, direcaoEfetivaDoc, dataDeclaradaDoDocumento } from './xml-metadata-helper.js';
+import { codigoReceitaStPorOperacao } from './st-cadastro-uf.js';
 // A UF do destinatário chega em DUAS formas (aninhada × `ufDest` achatado) —
 // quem as concilia é o dono, nunca uma leitura nova.
 import { ufDoDestinatarioDoc } from './participante-doc-helper.js';
@@ -57,22 +58,37 @@ const CANCELADOS = new Set(['cancelado', 'cancelada', 'denegado', 'denegada', 'i
  *
  * @returns {{grupos: object[], semUf: string[]}}
  */
+/**
+ * O ST RETIDO de UMA saída — a régua única de "esta nota tem retenção, e para
+ * qual UF". Quem soma por UF (E210) e quem lista por nota (E250 por operação)
+ * leem daqui, para os dois nunca discordarem sobre quais notas entram.
+ *
+ * @returns {null | {rotulo: string, vST: number, uf: string}}  uf '' = ilegível
+ */
+function retencaoStDoDoc(notaCrua) {
+    if (direcaoEfetivaDoc(notaCrua) !== 'saida') return null;
+    if (docCancelado(notaCrua)) return null;
+    if (CANCELADOS.has(String(notaCrua?.situacao || '').toLowerCase())) return null;
+    const vST = num(notaCrua?.totais?.vST) || num(notaCrua?.totais?.vICMSST)
+        || (notaCrua?.itens || []).reduce((s, i) => s + num(i?.vICMSST), 0);
+    if (vST <= 0) return null;
+    return {
+        rotulo: String(notaCrua?.numero || notaCrua?.chave || '(sem número)'),
+        vST: r2(vST),
+        uf: ufDoDestinatarioDoc(notaCrua) || '',
+    };
+}
+
 export function agruparStPorUf(notas, ufEmpresa) {
     const porUf = new Map();
     const semUf = [];
 
     for (const notaCrua of notas || []) {
-        if (direcaoEfetivaDoc(notaCrua) !== 'saida') continue;
-        if (docCancelado(notaCrua)) continue;
-        if (CANCELADOS.has(String(notaCrua?.situacao || '').toLowerCase())) continue;
-
-        const vST = num(notaCrua?.totais?.vST) || num(notaCrua?.totais?.vICMSST)
-            || (notaCrua?.itens || []).reduce((s, i) => s + num(i?.vICMSST), 0);
-        if (vST <= 0) continue;
-
-        const uf = ufDoDestinatarioDoc(notaCrua);
+        const ret = retencaoStDoDoc(notaCrua);
+        if (!ret) continue;
+        const { uf, vST } = ret;
         if (!uf) {
-            semUf.push(String(notaCrua?.numero || notaCrua?.chave || '(sem número)'));
+            semUf.push(ret.rotulo);
             continue;
         }
 
@@ -86,6 +102,32 @@ export function agruparStPorUf(notas, ufEmpresa) {
         grupos: Array.from(porUf.values()).sort((a, b) => a.uf.localeCompare(b.uf)),
         semUf,
     };
+}
+
+/**
+ * 🧾 AS OPERAÇÕES COM ST DE UMA UF, nota a nota (14/10, FASTWELD) — a base do
+ * E250 POR OPERAÇÃO de quem não tem IE de substituto no destino.
+ *
+ * A data é a de emissão, lida pelo DONO (`dataDeclaradaDoDocumento`); nota sem
+ * data legível vai NOMEADA em `semData` e impede o E250 por operação — guia
+ * sem vencimento não se declara.
+ *
+ * @returns {{operacoes: Array<{numero: string, dataIso: string, vST: number}>, semData: string[]}}
+ */
+export function operacoesStDaUf(notas, uf) {
+    const alvo = String(uf || '').toUpperCase();
+    const operacoes = [];
+    const semData = [];
+    for (const notaCrua of notas || []) {
+        const ret = retencaoStDoDoc(notaCrua);
+        if (!ret || ret.uf !== alvo) continue;
+        const dataIso = String(dataDeclaradaDoDocumento(notaCrua?.dhEmi || notaCrua?.dataEmissao) || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dataIso)) { semData.push(ret.rotulo); continue; }
+        operacoes.push({ numero: ret.rotulo, dataIso, vST: ret.vST });
+    }
+    operacoes.sort((a, b) => a.dataIso.localeCompare(b.dataIso)
+        || a.numero.localeCompare(b.numero, undefined, { numeric: true }));
+    return { operacoes, semData };
 }
 
 /**
@@ -258,6 +300,44 @@ export function montarLinhasStBlocoE({ notas, ufEmpresa, ajustes = [], dtIni, dt
         // registro NÃO é inventado: vira aviso (o PVA recusa código errado).
         if (ap.icmsRecolher > 0) {
             const o = obrigacoesPorUf[g.uf] || {};
+            // 🧾 POR OPERAÇÃO (14/10, FASTWELD — sem IE de ST no destino): a
+            // GNRE é paga a cada saída, então o E250 sai UM POR NOTA, com
+            // DT_VCTO = a data de emissão e o valor = o ST daquela nota. A forma
+            // vem do cadastro OU do próprio código (100099 é, por nome, "por
+            // operação" na tabela da GNRE). Só se afirma por nota quando a
+            // soma das notas FECHA com o VL_ICMS_RECOL_ST do E210; senão cai no
+            // vencimento único lançado e, sem ele, a falta vai DITA.
+            const porOperacao = !!o.codRec && (o.porOperacao === true || codigoReceitaStPorOperacao(o.codRec));
+            if (porOperacao) {
+                const { operacoes, semData } = operacoesStDaUf(notas, g.uf);
+                const soma = r2(operacoes.reduce((t, x) => t + x.vST, 0));
+                if (!semData.length && operacoes.length && Math.abs(soma - ap.icmsRecolher) <= 0.004) {
+                    for (const op of operacoes) {
+                        const [aaaa, mm, dd] = op.dataIso.split('-');
+                        linhas.push(['E250', o.codOr || '000', dec(op.vST), `${dd}${mm}${aaaa}`, o.codRec, '', '', '', '', mesRefDoPeriodo(dtIni)]);
+                    }
+                    avisos.push(
+                        `ST de ${g.uf}: ${operacoes.length} E250 por operação (sem IE de substituto na UF) — receita ${o.codRec}, `
+                        + `COD_OR ${o.codOr || '000'}, vencimento = data de emissão de cada nota; `
+                        + `soma R$ ${dec(soma)} = VL_ICMS_RECOL_ST do E210. Confira com as GNREs pagas.`,
+                    );
+                    continue;
+                }
+                const motivo = semData.length
+                    ? `${semData.length} nota(s) sem data de emissão legível (nº ${semData.slice(0, 5).join(', ')})`
+                    : `a soma das notas (R$ ${dec(soma)}) não fecha com o VL_ICMS_RECOL_ST do E210 (R$ ${dec(ap.icmsRecolher)}) — há ajuste ou dedução no meio`;
+                if (!o.dtVcto) {
+                    avisos.push(
+                        `ST de ${g.uf}: R$ ${dec(ap.icmsRecolher)} a recolher POR OPERAÇÃO (receita ${o.codRec}), mas o E250 não `
+                        + `foi gerado: ${motivo}. Lance as guias dessa UF no PVA antes de transmitir.`,
+                    );
+                    continue;
+                }
+                avisos.push(
+                    `ST de ${g.uf}: receita ${o.codRec} é por operação, mas ${motivo} — o E250 saiu em linha única com o `
+                    + 'vencimento lançado na competência. Confira com as GNREs pagas.',
+                );
+            }
             if (o.dtVcto && o.codRec) {
                 // Mesmos 9 campos do E116 (IND_OBR…MES_REF), espelho do bloco próprio.
                 // COD_OR (tabela 5.4): o do CADASTRO de IE de substituto por UF

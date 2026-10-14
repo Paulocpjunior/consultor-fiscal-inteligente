@@ -35,6 +35,11 @@ export function agruparStPorUf(
     notas: unknown[],
     ufEmpresa?: string,
 ): { grupos: GrupoStUf[]; semUf: string[] };
+/** 🧾 As saídas com ST de UMA UF, nota a nota — base do E250 por operação (sem IE de ST no destino). */
+export function operacoesStDaUf(
+    notas: unknown[],
+    uf: string,
+): { operacoes: Array<{ numero: string; dataIso: string; vST: number }>; semData: string[] };
 export function apurarStDaUf(p: {
     uf: string;
     retencao: number;
@@ -52,5 +57,5 @@ export function montarLinhasStBlocoE(p: {
     ajustes?: Array<{ codigo: string; descricao?: string; valor: number }>;
     dtIni: string;
     dtFin: string;
-    obrigacoesPorUf?: Record<string, { dtVcto?: string; codRec?: string }>;
+    obrigacoesPorUf?: Record<string, { dtVcto?: string; codRec?: string; codOr?: string; origem?: string; porOperacao?: boolean }>;
 }): { linhas: string[][]; apuracoes: ApuracaoStUf[]; avisos: string[] };

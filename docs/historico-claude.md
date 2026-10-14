@@ -9,6 +9,12 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾 ST POR OPERAÇÃO (14/10)** (Paulo, FASTWELD MG 09/2026: E210 642,40 = E250 185,98 venc 08/09
+  + 456,42 venc 16/09, COD_OR 002, COD_REC 100099). Sem IE de ST no destino a GNRE é por saída.
+  `st-cadastro-uf.js` ganhou `forma` ('mensal'|'operacao'; ausente = mensal) e `codigoReceitaStPorOperacao`
+  (100099); forma × código contraditórios são recusados. `sped-bloco-e-st.js`: régua única
+  `retencaoStDoDoc` + `operacoesStDaUf`; por operação ⇒ 1 E250 por nota, DT_VCTO = emissão, só se Σ notas
+  = VL_ICMS_RECOL_ST (senão linha única com dtVcto lançado, ou aviso). Trava `stRecolhimentoPorOperacao`.
 - **📅 RETIDOS VENCEM DIA 20 (14/10)** (Paulo, CASA DA CRIANÇA BETINHO 09/2026: DARF 5960/5979
   com pagar até 30/10 e multa 25,93). `RECEITAS_DIA_20` (darf-payload-builder.js) sem 5960/5979/8045
   → "último dia útil". Incluídos (Lei 10.833 art. 35) e o código passa a ser checado ANTES do nome
