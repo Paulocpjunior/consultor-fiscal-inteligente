@@ -40,6 +40,8 @@ const DarfRetidosBloco: React.FC<Props> = ({ data, cnpj, onShowToast }) => {
         resultado: data.resultado,
         dctfwebLido: data.dctfwebLido,
         eventosNaoLidos: eventosNaoLidosDoLote(data.eventos as any),
+        // Um DARF por código declarado na DCTFWeb (14/10) — não um por família.
+        debitosDctfweb: data.camposUsadosDctfweb as any,
     });
     const cnpj14 = String(cnpj || '').replace(/\D/g, '');
     const comp = data.resultado?.competencia || data.consolidacaoReinf?.competencia || '';
@@ -142,6 +144,7 @@ const DarfRetidosBloco: React.FC<Props> = ({ data, cnpj, onShowToast }) => {
                         Reinf e DCTFWeb conferem.
                         {decisao.avulsos.length > 0 && <> A recolher: {decisao.avulsos.map((a) => `${a.familia} ${a.codigo} ${brl(a.valor)}`).join(' · ')} (vencimento dia 20).</>}
                         {decisao.inssSoNumerado > 0 && <> INSS retido {brl(decisao.inssSoNumerado)}: só sai no DARF numerado da DCTFWeb.</>}
+                        {(decisao.foraDoAvulso || []).length > 0 && <> Código(s) sem DARF avulso no CFI: {(decisao.foraDoAvulso || []).map((f) => `${f.codigo} ${brl(f.valor)}`).join(' · ')} — use o DARF numerado da DCTFWeb.</>}
                     </p>
                     <div className="flex flex-wrap gap-2">
                         {decisao.avulsos.length > 0 && (

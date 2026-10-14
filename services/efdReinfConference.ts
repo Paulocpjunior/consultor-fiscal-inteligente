@@ -158,6 +158,18 @@ export const CODIGO_DARF_AVULSO: Readonly<Partial<Record<RetencaoFamilia, string
     CSRF: '5952',
 });
 
+/**
+ * 🧾 OS CÓDIGOS DE RECEITA DOS RETIDOS QUE SAEM EM DARF AVULSO — um DARF POR
+ * CÓDIGO, como a DCTFWeb os declara (14/10, Paulo: a DCTFWeb trazia 5952-07,
+ * 5960-07 e 5979-07 e o CFI emitia UM DARF 5952 com a soma dos três; e o IRRF
+ * da cliente era 8045, que o CFI nem oferecia). A família (IRRF/CSRF) é só
+ * para conferir com a Reinf; quem diz o código da guia é o débito declarado.
+ */
+export const CODIGOS_DARF_AVULSO_RETIDOS: ReadonlySet<string> = new Set([
+    '1708', '8045',               // IRRF
+    '5952', '5960', '5979', '5987', // CSRF (agregado · COFINS · PIS · CSLL)
+]);
+
 /** Evento do lote que o CFI NÃO lê (reconhecido só pelo nome, sem valores). */
 export function eventosNaoLidosDoLote(eventos: Array<{ codigo?: string | null; schemaToken?: string; ok?: boolean }> | null | undefined): string[] {
     return (eventos || [])
@@ -172,6 +184,8 @@ export interface DecisaoDarfRetidos {
     avulsos: Array<{ familia: RetencaoFamilia; codigo: string; valor: number }>;
     /** INSS retido com valor: só sai no DARF numerado da DCTFWeb. */
     inssSoNumerado: number;
+    /** Retido de código que o CFI não emite avulso (fica no DARF numerado) — dito, nunca somado a outro código. */
+    foraDoAvulso?: Array<{ codigo: string; valor: number }>;
 }
 
 /**
@@ -183,8 +197,10 @@ export function decidirEmissaoRetidos(p: {
     resultado: ConferenciaReinfResultado | null;
     dctfwebLido: boolean;
     eventosNaoLidos: string[];
+    /** Débitos de retenção LIDOS na DCTFWeb (código de 6 dígitos + valor). Com eles, um DARF por código. */
+    debitosDctfweb?: Array<{ codReceita?: string | null; familia?: string | null; valor?: number | null }> | null;
 }): DecisaoDarfRetidos {
-    const nada = (motivo: string): DecisaoDarfRetidos => ({ pode: false, motivo, avulsos: [], inssSoNumerado: 0 });
+    const nada = (motivo: string): DecisaoDarfRetidos => ({ pode: false, motivo, avulsos: [], inssSoNumerado: 0, foraDoAvulso: [] });
     if (!p.dctfwebLido || !p.resultado) {
         return nada('A DCTFWeb não foi lida — sem o débito declarado não há DARF a emitir.');
     }
@@ -201,6 +217,22 @@ export function decidirEmissaoRetidos(p: {
     }
     const avulsos: DecisaoDarfRetidos['avulsos'] = [];
     let inssSoNumerado = 0;
+    // Com os débitos da DCTFWeb na mão, um DARF POR CÓDIGO declarado (14/10).
+    const debitos = (p.debitosDctfweb || []).filter((d) => Number(d?.valor) > 0 && String(d?.codReceita || '').replace(/\D/g, '').length >= 4);
+    if (debitos.length) {
+        const porCodigo = new Map<string, { familia: RetencaoFamilia; valor: number }>();
+        const fora = new Map<string, number>();
+        for (const d of debitos) {
+            const familia = String(d.familia || '') as RetencaoFamilia;
+            const cod = String(d.codReceita).replace(/\D/g, '').slice(0, 4);
+            if (familia === 'INSS') { inssSoNumerado = round2(inssSoNumerado + Number(d.valor)); continue; }
+            if (!CODIGOS_DARF_AVULSO_RETIDOS.has(cod)) { fora.set(cod, round2((fora.get(cod) || 0) + Number(d.valor))); continue; }
+            const atual = porCodigo.get(cod);
+            porCodigo.set(cod, { familia, valor: round2((atual?.valor || 0) + Number(d.valor)) });
+        }
+        for (const [codigo, v] of porCodigo) avulsos.push({ familia: v.familia, codigo, valor: v.valor });
+        return { pode: true, motivo: null, avulsos, inssSoNumerado, foraDoAvulso: [...fora].map(([codigo, valor]) => ({ codigo, valor })) };
+    }
     for (const d of p.resultado.divergencias) {
         if (!(d.valorDctfweb > 0)) continue;
         const codigo = CODIGO_DARF_AVULSO[d.familia];

@@ -187,7 +187,8 @@ const RECEITAS_GUIA_SEPARADA = new Set([
 // DARF avulso SÓ quando pedidos EXPLICITAMENTE em `apenasCodigos`. Quem pede é
 // a tela do Reinf, depois da TRAVA (Reinf × DCTFWeb batendo); as "guias
 // separadas" da declaração continuam sem eles, como sempre.
-const RECEITAS_RETIDAS_AVULSO = new Set(['1708', '5952']);
+// Um DARF por código declarado (14/10): IRRF 1708/8045 e CSRF 5952/5960/5979/5987.
+const RECEITAS_RETIDAS_AVULSO = new Set(['1708', '8045', '5952', '5960', '5979', '5987']);
 const DARF_VALOR_MINIMO = 10;       // R$ — DARF inferior a R$10 não pode ser emitido (RFB)
 
 // A régua das quotas (mínimo por quota, divisão em centavos, vencimento e —

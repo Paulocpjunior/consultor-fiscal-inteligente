@@ -38,6 +38,7 @@ import { validarXmlSeguro } from './xml-seguranca.js';
 const RECEITA_RAIZ_FAMILIA = {
     '1162': 'INSS',
     '1708': 'IRRF',
+    '8045': 'IRRF', // comissões/corretagens/propaganda e outros serviços PJ (14/10)
     '5952': 'CSRF',
     '5987': 'CSRF', // CSLL retida PJ
     '5979': 'CSRF', // PIS retido PJ
