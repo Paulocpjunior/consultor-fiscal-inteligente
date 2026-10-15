@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { conferirReinfDctfweb, conferirIrrfR4010, type ConferenciaReinfCompleta, type IrrfR4010Resposta } from '../../services/efdReinfConferenceService';
 import DarfRetidosBloco from './DarfRetidosBloco';
+import { eventosComValorNaoLido } from '../../services/efdReinfConference';
 
 interface Props {
     onShowToast?: (msg: string) => void;
@@ -303,6 +304,7 @@ function ResultadoIrrfPf({ r }: { r: IrrfR4010Resposta }) {
 function Resultado({ data }: { data: ConferenciaReinfCompleta }) {
     const cons = data.consolidacaoReinf;
     const card: React.CSSProperties = { background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' };
+    const semValorNoLote = eventosComValorNaoLido(data.eventos as any);
 
     return (
         <>
@@ -325,6 +327,9 @@ function Resultado({ data }: { data: ConferenciaReinfCompleta }) {
                                     não tem valores lidos — ✓ ali dizia "lido" sobre o que não foi. */}
                                 {ev.ok !== false && !ev.codigo
                                     ? <span style={{ color: 'var(--warning)' }}>⚠ não lido pelo CFI — os valores deste evento NÃO entraram na conferência</span>
+                                    // 🚦 15/10: reconhecido pelo NOME (R-5001…), valores não lidos — ✓ ali escondia o INSS que faltava.
+                                    : semValorNoLote.some((x) => x.codigo === ev.codigo)
+                                    ? <span style={{ color: 'var(--warning)' }}>⚠ valores deste evento ({semValorNoLote.find((x) => x.codigo === ev.codigo)?.familias.join('/')}) ainda não são lidos pelo CFI — não entraram na conferência</span>
                                     : ev.validacao?.valido === false
                                     ? <span style={{ color: 'var(--danger)' }}>⚠ {ev.validacao.erros[0]}</span>
                                     : ev.validacao?.avisos?.length

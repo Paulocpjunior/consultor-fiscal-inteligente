@@ -177,6 +177,41 @@ export function eventosNaoLidosDoLote(eventos: Array<{ codigo?: string | null; s
         .map((e) => e.schemaToken || 'evento sem nome');
 }
 
+/**
+ * 🚦 EVENTO COM VALOR QUE O CFI AINDA NÃO LÊ (15/10, Paulo: lote com R-9015 +
+ * R-5001; o INSS retido de 457,60 da DCTFWeb não apareceu na Reinf e a tela
+ * mostrava ✓ verde no R-5001). O parser RECONHECE R-5001/R-5011/R-2020 e a
+ * série R-4000 de IR/CSRF pelo nome, mas não lê os valores deles enquanto não
+ * houver um arquivo real para calibrar (leiaute não se chuta). Este é o
+ * farol: quais eventos do lote têm valor NÃO lido, e de que família — para a
+ * divergência dizer a causa em vez de parecer erro de declaração.
+ * O R-2099 (fechamento, sem valor) não entra. E a família que outro evento
+ * do MESMO lote já traz lida (INSS pelo R-2010; IRRF/CSRF pelo R-9015) não é
+ * alarme: a conferência dela está coberta.
+ */
+const FAMILIAS_DO_EVENTO_SEM_VALOR: Readonly<Record<string, readonly RetencaoFamilia[]>> = Object.freeze({
+    'R-2020': ['INSS'], 'R-5001': ['INSS'], 'R-5011': ['INSS'],
+    'R-4020': ['IRRF', 'CSRF'], 'R-4040': ['IRRF'], 'R-4080': ['IRRF'],
+});
+
+export function eventosComValorNaoLido(
+    eventos: Array<{ ok?: boolean; codigo?: string | null; calibrado?: boolean }> | null | undefined,
+): Array<{ codigo: string; familias: readonly RetencaoFamilia[] }> {
+    const lista = eventos || [];
+    const lidoNoLote = (codigo: string) => lista.some((e) => e && e.ok !== false && e.codigo === codigo && e.calibrado !== false);
+    const cobertas = new Set<RetencaoFamilia>([
+        ...(lidoNoLote('R-2010') ? ['INSS' as const] : []),
+        ...(lidoNoLote('R-9015') ? ['IRRF' as const, 'CSRF' as const] : []),
+    ]);
+    const vistos = new Map<string, readonly RetencaoFamilia[]>();
+    for (const e of lista) {
+        if (!e || e.ok === false || !e.codigo || e.calibrado !== false) continue;
+        const familias = (FAMILIAS_DO_EVENTO_SEM_VALOR[e.codigo] || []).filter((f) => !cobertas.has(f));
+        if (familias.length) vistos.set(e.codigo, familias);
+    }
+    return [...vistos].map(([codigo, familias]) => ({ codigo, familias }));
+}
+
 export interface DecisaoDarfRetidos {
     pode: boolean;
     motivo: string | null;
@@ -199,6 +234,8 @@ export function decidirEmissaoRetidos(p: {
     eventosNaoLidos: string[];
     /** Débitos de retenção LIDOS na DCTFWeb (código de 6 dígitos + valor). Com eles, um DARF por código. */
     debitosDctfweb?: Array<{ codReceita?: string | null; familia?: string | null; valor?: number | null }> | null;
+    /** `eventosComValorNaoLido(...)` — para a divergência dizer a causa. */
+    eventosSemValor?: Array<{ codigo: string; familias: readonly RetencaoFamilia[] }>;
 }): DecisaoDarfRetidos {
     const nada = (motivo: string): DecisaoDarfRetidos => ({ pode: false, motivo, avulsos: [], inssSoNumerado: 0, foraDoAvulso: [] });
     if (!p.dctfwebLido || !p.resultado) {
@@ -210,7 +247,18 @@ export function decidirEmissaoRetidos(p: {
     }
     const div = p.resultado.divergencias.filter((d) => d.status !== 'ok');
     if (div.length) {
-        return nada(`Reinf e DCTFWeb não batem em ${div.map((d) => d.familia).join(', ')} — confira e corrija antes de emitir o DARF.`);
+        // A causa, quando o CFI a conhece: a família divergente vem de um
+        // evento do lote cujos valores o CFI ainda não lê (ex.: o INSS do
+        // R-5001). Aí a divergência é de LEITURA, não de declaração — e o
+        // caminho é subir o evento que o CFI lê (o R-2010 enviado).
+        const causas = div.flatMap((d) => {
+            const evs = (p.eventosSemValor || []).filter((e) => e.familias.includes(d.familia)).map((e) => e.codigo);
+            if (!evs.length) return [];
+            const suba = d.familia === 'INSS' ? 'o XML do R-2010 enviado (o CFI lê o INSS dele)' : 'os XMLs do R-9015 (consolidação da série R-4000)';
+            return [`${d.familia}: o lote só traz ${evs.join(', ')}, cujos valores o CFI ainda não lê — suba junto ${suba}`];
+        });
+        return nada(`Reinf e DCTFWeb não batem em ${div.map((d) => d.familia).join(', ')} — confira e corrija antes de emitir o DARF.`
+            + (causas.length ? ` ${causas.join('; ')}.` : ''));
     }
     if (!(p.resultado.totalDctfweb > 0)) {
         return nada('Não há retenção a recolher na DCTFWeb desta competência.');

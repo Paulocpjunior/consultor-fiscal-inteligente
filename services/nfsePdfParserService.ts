@@ -243,6 +243,7 @@ export async function parseNfsePdf(file: File): Promise<NfsePdfParsed> {
  * em jsdom com Worker mockado).
  */
 export function parseNfseFromText(text: string): NfsePdfParsed {
+    if (ehNfeBarueri(text)) return parseNfseBarueri(text);
     const upperText = text.toUpperCase();
     if (
         !upperText.includes('NFS-E') &&
@@ -512,5 +513,156 @@ export function matchNfseEmpresa(
         ok: false,
         direcao: 'entrada',
         motivo: `CNPJ ${parsed.prestador.cnpj || parsed.tomador.cnpj || '(vazio)'} nao corresponde a empresa selecionada (${cnpjEmpresa}). Confira se o PDF eh da NFSe correta ou se o layout do municipio esta suportado.`,
+    };
+}
+
+// ─── Barueri (NF-e de Serviços da prefeitura, leiaute próprio) ──────────────
+//
+// 🧾 15/10 — Paulo, CHRISTIAN FAMILY (tomadora): o PDF de Barueri era recusado
+// com "Documento nao parece ser uma NFSe" — ele se chama "NOTA FISCAL
+// ELETRÔNICA DE SERVIÇOS - NFE", sem nenhum dos três rótulos da porta. E mesmo
+// passando dela, o leitor genérico não o leria: o tomador é uma TABELA (todos
+// os rótulos primeiro, depois todos os valores), e o prestador não tem
+// "Nome:". Calibrado contra o PDF real (nota 0001480, 14/09/2026, REGULATORIO
+// MAIS → CHRISTIAN FAMILY BANK, 7.990,00).
+//
+// O que o papel de Barueri NÃO traz fica vazio/zero como em todo leiaute deste
+// leitor, e a tela mostra para a pessoa conferir: COMPETÊNCIA (o recorte usa a
+// data de emissão, e diz), BASE e VALOR do ISS (só a alíquota está no papel —
+// o valor não é calculado aqui).
+
+/** É a NF-e de Serviços da Prefeitura de Barueri? */
+export function ehNfeBarueri(text: string): boolean {
+    return /PREFEITURA\s+MUNICIPAL\s+DE\s+BARUERI/i.test(text)
+        && /NOTA\s+FISCAL\s+ELETR[OÔ]NICA\s+DE\s+SERVI[CÇ]OS/i.test(text);
+}
+
+const VALOR_BR = /^[\d.]+,\d{2}$/;
+const CNPJ_CPF = /^(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{14}|\d{11})$/;
+
+function parseNfseBarueri(text: string): NfsePdfParsed {
+    const linhas = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const semAcento = (l: string) => l.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+    const idx = (rotulo: string, de = 0) => {
+        const alvo = semAcento(rotulo);
+        for (let i = de; i < linhas.length; i++) if (semAcento(linhas[i] ?? '') === alvo) return i;
+        return -1;
+    };
+    /** Primeira linha DEPOIS do rótulo que casa o padrão (dentro de `alcance` linhas). */
+    const depois = (rotulo: string, padrao: RegExp, alcance = 4) => {
+        const i = idx(rotulo);
+        if (i < 0) return '';
+        for (let k = i + 1; k <= i + alcance && k < linhas.length; k++) {
+            const l = linhas[k] ?? '';
+            if (padrao.test(l)) return l;
+        }
+        return '';
+    };
+
+    const data = depois('Data Emissão', /^\d{2}\/\d{2}\/\d{4}$/);
+    const hora = depois('Data Emissão', /^\d{2}:\d{2}(:\d{2})?$/, 6);
+    const dataEmissao = data ? (hora ? `${data} ${hora}` : data) : '';
+    const numero = depois('Número da Nota', /^\d+$/, 2);
+    const serie = depois('Série da Nota', /^[A-Z0-9]{1,5}$/, 1);
+    const codigoVerificacao = depois('Código Autenticidade', /^[A-Z0-9][A-Z0-9.\-]{5,}$/i, 2);
+
+    // Prestador: nome na linha seguinte ao rótulo; endereço até a linha "CEP …".
+    const prestador = empty();
+    const iPrest = idx('Prestador de Serviços');
+    if (iPrest >= 0) {
+        prestador.nome = linhas[iPrest + 1] ?? '';
+        const iCep = linhas.findIndex((l, k) => k > iPrest && /^CEP\s+\d{5}-?\d{3}/i.test(l));
+        if (iCep > iPrest + 1) {
+            const end = linhas.slice(iPrest + 2, iCep);
+            prestador.endereco = end[0] ?? '';
+            prestador.bairro = end.length > 1 ? (end[end.length - 1] ?? '') : '';
+            // "CEP 06455-030 - BARUERI - SP"
+            const m = (linhas[iCep] ?? '').match(/^CEP\s+(\d{5}-?\d{3})\s*-\s*(.+?)\s*-\s*([A-Z]{2})$/i);
+            if (m) { prestador.cep = m[1] ?? ''; prestador.municipio = m[2] ?? ''; prestador.uf = (m[3] ?? '').toUpperCase(); }
+        }
+    }
+    prestador.cnpj = depois('CNPJ/CPF', CNPJ_CPF, 2);
+    prestador.inscricaoMunicipal = depois('Inscrição Municipal', /^[0-9A-Z][0-9A-Z.\-\/]*$/i, 2);
+
+    // Tomador: a tabela traz os rótulos e DEPOIS os valores, na mesma ordem
+    // (Nome, CPF/CNPJ, Endereço, Complemento, CEP, Bairro, Cidade, UF, E-mail,
+    // e a linha do serviço: Qtde, Descrição, Código, Alíquota, Unitário,
+    // Total). Campo vazio NÃO vem no texto, então os valores se reconhecem
+    // pela FORMA (CNPJ, CEP, UF, e-mail), nunca pela posição cega.
+    const tomador = empty();
+    let codigoServico = '';
+    let aliquotaIss = 0;
+    const iTabela = idx('Valor Total');
+    const iDisc = linhas.findIndex(l => /^DISCRIMINACAO DOS SERVICOS/.test(semAcento(l)));
+    if (iTabela >= 0 && iDisc > iTabela) {
+        const v = linhas.slice(iTabela + 1, iDisc);
+        const iDoc = v.findIndex(t => CNPJ_CPF.test(t));
+        const iCepT = v.findIndex((t, k) => k > iDoc && /^\d{5}-\d{3}$/.test(t));
+        const iUf = v.findIndex((t, k) => k > Math.max(iCepT, iDoc) && /^[A-Z]{2}$/.test(t));
+        if (iDoc > 0) {
+            tomador.nome = v.slice(0, iDoc).join(' ');
+            tomador.cnpj = v[iDoc] ?? '';
+        }
+        if (iDoc >= 0 && iCepT > iDoc) {
+            tomador.endereco = [v[iDoc + 1], ...v.slice(iDoc + 2, iCepT)].filter(Boolean).join(' - ');
+            tomador.cep = v[iCepT] ?? '';
+        }
+        if (iUf > 0) {
+            tomador.uf = v[iUf] ?? '';
+            const entre = iCepT >= 0 ? v.slice(iCepT + 1, iUf) : [];
+            // Cidade é a coluna colada na UF; o que vier antes dela é o bairro.
+            if (entre.length) tomador.municipio = entre[entre.length - 1] ?? '';
+            if (entre.length > 1) tomador.bairro = entre.slice(0, -1).join(' ');
+        }
+        const iEmail = v.findIndex(t => /@/.test(t));
+        if (iEmail >= 0) tomador.email = v[iEmail] ?? '';
+        // Linha do serviço: o código de Barueri tem 9 dígitos; a alíquota vem logo depois.
+        const iCod = v.findIndex((t, k) => k > Math.max(iUf, iEmail) && /^\d{9}$/.test(t));
+        if (iCod >= 0) {
+            codigoServico = v[iCod] ?? '';
+            const aliq = v[iCod + 1] ?? '';
+            if (/^\d{1,2}(,\d{1,4})?$/.test(aliq)) aliquotaIss = parseValor(aliq);
+        }
+    }
+
+    // Discriminação: do título até "VALORES DE REPASSE".
+    let discriminacao = '';
+    if (iDisc >= 0) {
+        const iFim = linhas.findIndex((l, k) => k > iDisc && /^VALORES DE REPASSE/i.test(semAcento(l)));
+        discriminacao = linhas.slice(iDisc + 1, iFim > iDisc ? iFim : iDisc + 30).join('\n').slice(0, 2000);
+    }
+
+    // Retenções federais: rótulos (IRRF, PIS/PASEP, COFINS, CSLL[, INSS]) e
+    // depois os valores, na mesma ordem. Só se lê quando as contas batem —
+    // rótulo sem valor par não vira o valor do vizinho.
+    const ret: Record<string, number> = {};
+    const iIrrf = idx('IRRF');
+    const iTotal = idx('VALOR TOTAL DA NOTA');
+    if (iIrrf >= 0 && iTotal > iIrrf) {
+        const bloco = linhas.slice(iIrrf, iTotal);
+        const rotulos = bloco.filter(t => !VALOR_BR.test(t));
+        const valores = bloco.filter(t => VALOR_BR.test(t));
+        if (rotulos.length === valores.length) rotulos.forEach((r, k) => { ret[semAcento(r)] = parseValor(valores[k]); });
+    }
+    const valorServicos = parseValor(depois('VALOR TOTAL DA NOTA', VALOR_BR, 2));
+    const liquidoMatch = text.match(/Valor\s+l[ií]quido\s+da\s+Nota\s+Fiscal\s*=\s*R\$\s*([\d.]+,\d{2})/i);
+
+    return {
+        numero, serie, competencia: '', dataEmissao, codigoVerificacao,
+        municipioPrestacao: prestador.municipio, chaveAcesso: '',
+        prestador, tomador,
+        codigoServico, discriminacao, naturezaOperacao: '',
+        valorServicos, baseCalculo: 0,
+        aliquotaIss, valorIss: 0, valorIssRetido: 0,
+        valorPis: ret['PIS/PASEP'] ?? ret['PIS'] ?? 0,
+        valorCofins: ret['COFINS'] ?? 0,
+        valorInss: ret['INSS'] ?? 0,
+        valorIrrf: ret['IRRF'] ?? 0,
+        valorCsll: ret['CSLL'] ?? 0,
+        valorOutrasRetencoes: 0, valorDeducoes: 0,
+        valorDescIncondicional: 0, valorDescCondicional: 0,
+        valorLiquido: liquidoMatch?.[1] ? parseValor(liquidoMatch[1]) : 0,
+        municipioEmissor: 'BARUERI',
+        rawText: text,
     };
 }

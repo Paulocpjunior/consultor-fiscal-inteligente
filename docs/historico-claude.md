@@ -9,6 +9,13 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧾 NFS-e BARUERI + 🚦 R-5001 (15/10)** (Paulo, CHRISTIAN FAMILY: PDF de Barueri recusado "não parece
+  NFSe"; contribuinte 00621930 09/2026: INSS 116201 457,60 na DCTFWeb, lote R-9015+R-5001, DARF travado).
+  `nfsePdfParserService.ts`: `ehNfeBarueri` + `parseNfseBarueri` (tomador é tabela: valores reconhecidos pela
+  FORMA; sem competência/base/valor ISS no papel → vazio). Trava `nfsePdfBarueri` (texto real do PDF).
+  Reinf: R-5001 é reconhecido mas NÃO calibrado (sem arquivo real) — `eventosComValorNaoLido` nomeia, a tela
+  troca ✓ por ⚠ e a trava do DARF diz "suba o R-2010". Trava `reinfEventoComValorNaoLido`. PENDENTE:
+  calibrar R-5001 (RTom/infoCRTom) quando o Paulo mandar o XML real.
 - **🧾 ST POR OPERAÇÃO (14/10)** (Paulo, FASTWELD MG 09/2026: E210 642,40 = E250 185,98 venc 08/09
   + 456,42 venc 16/09, COD_OR 002, COD_REC 100099). Sem IE de ST no destino a GNRE é por saída.
   `st-cadastro-uf.js` ganhou `forma` ('mensal'|'operacao'; ausente = mensal) e `codigoReceitaStPorOperacao`
