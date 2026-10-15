@@ -11,7 +11,7 @@
  * gestor em cópia oculta, SharePoint e auditoria do que saiu.
  */
 import React, { useState } from 'react';
-import { decidirEmissaoRetidos, eventosNaoLidosDoLote } from '../../services/efdReinfConference';
+import { decidirEmissaoRetidos, eventosNaoLidosDoLote, eventosComValorNaoLido } from '../../services/efdReinfConference';
 import type { ConferenciaReinfCompleta } from '../../services/efdReinfConferenceService';
 import { gerarDarf, gerarDarfsSeparados } from '../../services/dctfwebService';
 import { enviarGuiaPeloServidor, mensagemEnvioServidor } from '../../services/envioImpostoService';
@@ -42,6 +42,7 @@ const DarfRetidosBloco: React.FC<Props> = ({ data, cnpj, onShowToast }) => {
         eventosNaoLidos: eventosNaoLidosDoLote(data.eventos as any),
         // Um DARF por código declarado na DCTFWeb (14/10) — não um por família.
         debitosDctfweb: data.camposUsadosDctfweb as any,
+        eventosSemValor: eventosComValorNaoLido(data.eventos as any),
     });
     const cnpj14 = String(cnpj || '').replace(/\D/g, '');
     const comp = data.resultado?.competencia || data.consolidacaoReinf?.competencia || '';

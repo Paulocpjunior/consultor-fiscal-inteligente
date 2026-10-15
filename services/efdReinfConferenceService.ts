@@ -30,6 +30,8 @@ export interface ReinfAnaliseResposta {
     qtd: number;
     eventos: Array<{
         ok: boolean; codigo: string | null; schemaToken: string; tipoRetorno: string;
+        /** false = evento reconhecido pelo nome, com valores ainda NÃO lidos pelo CFI. */
+        calibrado?: boolean;
         perApur: string; contribuinte: { tpInsc: string; nrInsc: string };
         totais: { inssRetPrinc: number; inssRetAdic: number; irrf: number; csll: number; pis: number; cofins: number; csrf?: number };
         fechamento: { fechRet: string | null; responsavel?: { nome: string; cpf: string } | null } | null;
