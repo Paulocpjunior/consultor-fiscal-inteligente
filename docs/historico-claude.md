@@ -9,6 +9,10 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🚨 FALHA INTERNA COM CAUSA (15/10)** (Paulo, A CASTELLANO 0025 · 09/2026: "Erro ao gerar SPED — Falha
+  interna"; sem acesso a log daqui). `falha-interna.js` `textoDaFalhaInterna` (mensagem + 1º arquivo:linha do
+  CFI na pilha) no `tratarErro` de `sped-fiscal-routes.js`. Trava `falhaInternaComCausa`. Causa raiz do caso:
+  PENDENTE do log/print.
 - **🧾 NFS-e BARUERI + 🚦 R-5001 (15/10)** (Paulo, CHRISTIAN FAMILY: PDF de Barueri recusado "não parece
   NFSe"; contribuinte 00621930 09/2026: INSS 116201 457,60 na DCTFWeb, lote R-9015+R-5001, DARF travado).
   `nfsePdfParserService.ts`: `ehNfeBarueri` + `parseNfseBarueri` (tomador é tabela: valores reconhecidos pela
