@@ -40,6 +40,7 @@ import { valorDoDocumento, docContaNoLivro } from './xml-metadata-helper.js';
 // EFD ICMS/IPI continuaria produzindo arquivos indistinguíveis (PWR, 25/08).
 import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arquivo.js';
 import { conferirPeriodoDaGeracao, SITUACOES_PERIODO } from './sped-fiscal-periodo.js';
+import { textoDaFalhaInterna } from './falha-interna.js';
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
@@ -840,7 +841,9 @@ function tratarErro(e, res) {
         });
     }
     console.error('[sped-fiscal]', e);
-    return res.status(500).json({ error: "Falha interna" });
+    // A causa vai para a tela (rota de admin): "Falha interna" sozinha só o
+    // log do Cloud Run explicava (15/10, A CASTELLANO).
+    return res.status(500).json({ error: textoDaFalhaInterna(e) });
 }
 
 export default router;
