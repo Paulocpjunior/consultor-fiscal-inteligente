@@ -23,6 +23,7 @@ import { nomeDoArquivoSped, avisoDeIdentidadeDoArquivo } from './sped-nome-arqui
 import admin from 'firebase-admin';
 import { conferirCadastroNaturezaReceita, CSTS_SEM_ONUS, TABELA_NAT_REC_POR_CST, SUGESTOES_PROVADAS } from './sped-contrib-m400.js';
 import { conferirCadastroCst, CST_SAIDA, TIPOS_DE_SAIDA } from './cst-pis-cofins-saida.js';
+import { conferirFiliaisContrib, raizDoCnpj } from './sped-contrib-estabelecimentos.js';
 
 const router = express.Router();
 
@@ -264,6 +265,78 @@ router.post('/natureza-receita', requireAdmin, express.json(), async (req, res) 
             naturezaReceitaContribAtualizadoPor: (req.user && req.user.email) || null,
         }, { merge: true });
         return res.json({ ok: true, naturezaReceita: conf.cadastro, cstPisCofins: confCst.cadastro });
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+/**
+ * 🏢 FILIAIS NA ESCRITURAÇÃO DA MATRIZ (15/10, 0181 · SBE) — a lista mora no
+ * cadastro da matriz (`filiaisContrib`), como a natureza da receita: não muda
+ * de mês para mês. A tela SUGERE as cadastradas da mesma raiz; quem vincula é
+ * a pessoa, e o servidor confere de novo (mesma raiz, cadastrada, com UF e
+ * município) antes de gravar.
+ */
+async function cadastradasDaRaiz(raiz) {
+    const db = admin.firestore();
+    const out = [];
+    for (const col of ['simples_empresas', 'lucro_empresas']) {
+        const snap = await db.collection(col).select('cnpj', 'nome', 'dadosFiscais', '_deleted', '_merged_into').get();
+        snap.forEach((d) => {
+            const e = d.data() || {};
+            if (raizDoCnpj(e.cnpj) === raiz) out.push({ id: d.id, ...e });
+        });
+    }
+    return out;
+}
+
+router.get('/filiais', requireAdmin, async (req, res) => {
+    try {
+        const { empresaId } = req.query;
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        const doc = await docDaEmpresa(empresaId);
+        if (!doc) return res.status(404).json({ error: 'EMPRESA_NAO_ENCONTRADA' });
+        const matrizCnpj = String(doc.data.cnpj || '').replace(/\D/g, '');
+        const candidatas = (await cadastradasDaRaiz(raizDoCnpj(matrizCnpj)))
+            .filter((e) => !e._deleted && !e._merged_into && String(e.cnpj || '').replace(/\D/g, '') !== matrizCnpj)
+            .map((e) => ({
+                cnpj: String(e.cnpj || '').replace(/\D/g, ''),
+                nome: e.nome || '',
+                uf: e.dadosFiscais?.uf || '',
+                temMunicipio: !!e.dadosFiscais?.codMunIBGE,
+            }));
+        return res.json({
+            empresaId,
+            matrizCnpj,
+            filiais: Array.isArray(doc.data.filiaisContrib) ? doc.data.filiaisContrib : [],
+            candidatas,
+            atualizadoEm: doc.data.filiaisContribAtualizadoEm || null,
+            atualizadoPor: doc.data.filiaisContribAtualizadoPor || null,
+        });
+    } catch (e) {
+        return tratarErro(e, res);
+    }
+});
+
+router.post('/filiais', requireAdmin, express.json(), async (req, res) => {
+    try {
+        const { empresaId, filiais } = req.body || {};
+        if (!empresaId) return res.status(400).json({ error: 'empresaId obrigatorio' });
+        const doc = await docDaEmpresa(empresaId);
+        if (!doc) return res.status(404).json({ error: 'EMPRESA_NAO_ENCONTRADA' });
+        const matrizCnpj = String(doc.data.cnpj || '').replace(/\D/g, '');
+        const conf = conferirFiliaisContrib({
+            matrizCnpj, filiais, cadastradas: await cadastradasDaRaiz(raizDoCnpj(matrizCnpj)),
+        });
+        if (!conf.ok) return res.status(400).json({ error: 'CADASTRO_INVALIDO', erros: conf.erros });
+        const em = new Date().toISOString();
+        const por = (req.user && req.user.email) || null;
+        await doc.ref.set({
+            filiaisContrib: conf.filiais,
+            filiaisContribAtualizadoEm: em,
+            filiaisContribAtualizadoPor: por,
+        }, { merge: true });
+        return res.json({ ok: true, filiais: conf.filiais, atualizadoEm: em, atualizadoPor: por });
     } catch (e) {
         return tratarErro(e, res);
     }

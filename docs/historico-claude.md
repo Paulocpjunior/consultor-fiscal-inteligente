@@ -9,6 +9,13 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏢 CONTRIB MATRIZ+FILIAIS + 🚚 CC-e TRANSPORTADOR (15/10)** (Paulo, 0181 SBE: EFD-Contrib entregue pela
+  matriz com 3 0140 / 2 C010; B & T: CC-e de troca de transportador travava a etapa 2). `filiaisContrib` no doc da
+  matriz (GET/POST `/api/admin/sped-contrib/filiais`, `FiliaisContrib.tsx`); `sped-contrib-estabelecimentos.js`
+  (conferir, repartir por `empresaCnpj`, identidade, `blocoPorEstabelecimento`, `visoesPorEstabelecimento`);
+  orchestrator lê as notas da filial (empresaId próprio) + `cadastrosDasNotas` por estabelecimento; 0140 com
+  COD_EST = CNPJ quando há filial; M/lerPisCofins usam `_cnpjEstab`. F e 1 seguem na matriz. Travas
+  `contribFiliaisNaMatriz`, `cceTrocaDeTransportador` (`TERMOS_TRANSPORTE` em cce-escrituracao.js).
 - **🚨 FALHA INTERNA COM CAUSA (15/10)** (Paulo, A CASTELLANO 0025 · 09/2026: "Erro ao gerar SPED — Falha
   interna"; sem acesso a log daqui). `falha-interna.js` `textoDaFalhaInterna` (mensagem + 1º arquivo:linha do
   CFI na pilha) no `tratarErro` de `sped-fiscal-routes.js`. Trava `falhaInternaComCausa`. Causa raiz do caso:

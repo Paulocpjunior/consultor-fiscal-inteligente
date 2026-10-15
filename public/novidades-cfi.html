@@ -77,6 +77,20 @@
 <section>
     <h2>🆕 O que mudou agora (15/10) — leia esta parte primeiro</h2>
 
+    <h3>🏢 <strong>EFD-Contribuições da matriz com as filiais</strong></h3>
+    <p>Quem entrega a EFD-Contribuições centralizada na matriz agora vincula as filiais. Cada filial sai no arquivo da matriz
+    com o próprio 0140 (com os 0150/0190/0200 dela) e o próprio C010/A010/D010 com as notas do CNPJ dela; o bloco M sai um só,
+    consolidado. A tela sugere as filiais cadastradas da mesma raiz, e você marca quais entram. A filial precisa estar cadastrada
+    no CFI com UF e município (o 0140 dela sai do cadastro dela).</p>
+    <p><strong>Onde:</strong> SPED Fiscal → SPED Contribuições → 1. Empresa (na matriz) → "Filiais na escrituração da matriz".</p>
+
+    <h3>🚚 <strong>CC-e de troca de transportador não trava mais a validação</strong></h3>
+    <p>A carta de correção que só trocava o transportador era lida como "menciona algo que a CC-e não pode corrigir", porque o
+    texto traz o CNPJ do novo transportador. Agora os dados do transporte (transportador, CNPJ/CPF dele, placa, volumes) contam como
+    correção sem efeito fiscal. Se a carta também mexer em destinatário, valor ou quantidade da mercadoria, ela continua pedindo
+    conferência.</p>
+    <p><strong>Onde:</strong> Rotina Fiscal → etapa 2 (Validar as notas).</p>
+
     <h3>🚨 <strong>SPED Fiscal: "Falha interna" agora diz a causa</strong></h3>
     <p>Quando a geração do SPED quebrava, a tela mostrava só "Falha interna" e o motivo ficava escondido no servidor. Agora a
     mensagem traz o erro e o ponto do sistema onde ele aconteceu. Mande o print para o suporte: ele já é o diagnóstico.</p>

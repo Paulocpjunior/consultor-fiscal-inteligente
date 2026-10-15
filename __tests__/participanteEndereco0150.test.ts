@@ -183,7 +183,9 @@ describe('o aviso da geração diz a ação certa — reler a FONTE, não digita
         const path = require('path');
         for (const rel of ['sefaz-backend/sped-fiscal-bloco0.js', 'sefaz-backend/sped-contrib-bloco0.js']) {
             const src = fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
-            expect({ rel, chama: src.includes('avisoParticipantesSemEndereco(dados.participantes)') })
+            // O fato é a CHAMADA com os participantes do arquivo — no Contribuições,
+            // desde 15/10, os de TODOS os estabelecimentos (matriz + filiais).
+            expect({ rel, chama: /avisoParticipantesSemEndereco\((dados\.participantes|todosParticipantes)\)/.test(src) })
                 .toEqual({ rel, chama: true });
         }
     });

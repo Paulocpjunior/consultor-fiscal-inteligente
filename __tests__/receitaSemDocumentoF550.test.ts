@@ -222,8 +222,9 @@ describe('🚨 orquestrador — ficha casada por competência NORMALIZADA', () =
         expect(fonte).toMatch(/não deve ser informado para esse perfil/);
         // A exclusão tem que vir ANTES da coleta de participantes/itens —
         // coletar quem vai sair deixaria o 0150/0200 órfãos (recusa do PVA).
+        // Desde 15/10 a coleta é uma função (por estabelecimento): vale onde ela é CHAMADA.
         expect(fonte.indexOf('entradasForaDaConsolidada'))
-            .toBeLessThan(fonte.indexOf('Extrai participantes unicos'));
+            .toBeLessThan(fonte.indexOf('await cadastrosDasNotas('));
     });
 
     it('⚠️ o detalhado NÃO exclui — o PVA aceitou as entradas da MANTOAN (IND_REG_CUM 9)', () => {
