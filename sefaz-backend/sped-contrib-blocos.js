@@ -711,7 +711,7 @@ export function lerPisCofinsDosItens(nota, direcao, dados) {
     const liquidosDosItens = valoresLiquidosDosItens(nota);
     const descontosPorItem = descontosDosItens(nota);
     const fretesPorItem = fretesDosItens(nota);
-    const codPartDoDoc = codPartDoDocumento(nota, dados.empresa?.cnpj);
+    const codPartDoDoc = codPartDoDocumento(nota, nota._cnpjEstab || dados.empresa?.cnpj);
     const dataRefDoc = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
     const pisCofinsDosItens = (nota.itens || []).map((item, k) => pisCofinsDoItemC170(
         item, direcao, regimeApuracao, aliq, liquidosDosItens[k] || 0, fretesPorItem[k] || 0,
@@ -1746,7 +1746,8 @@ export function buildBlocoM(dados) {
             // física → cadastro NCM → padrão. Decidir aqui de outro jeito faria
             // o bloco M discordar dos próprios documentos do arquivo.
             const itensNota = nota.itens || [];
-            const codPartNota = codPartDoDocumento(nota, dados.empresa?.cnpj);
+            // Com filiais (15/10), o "lado nosso" é o do estabelecimento da nota.
+            const codPartNota = codPartDoDocumento(nota, nota._cnpjEstab || dados.empresa?.cnpj);
             const dataRefNota = String(nota.dataEmissao || nota.dhEmi || '').slice(0, 10);
             const ehServicoDoc = semItens || String(nota.tipo || '').toUpperCase() === 'NFSE';
             const decidir = (item) => cstDaAquisicao({

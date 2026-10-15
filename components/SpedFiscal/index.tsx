@@ -40,6 +40,7 @@ interface Props {
 }
 
 import MensagemBlock, { type MensagemRetorno } from './MensagemBlock';
+import FiliaisContrib from './FiliaisContrib';
 
 type Escopo = 'mensal' | 'trimestral';
 
@@ -988,6 +989,8 @@ const SpedFiscal: React.FC<Props> = ({ currentUser, onShowToast }) => {
                 ) : (
                     <EmpresaAtivaFixa rotulo="Empresa" />
                 )}
+                {/* 🏢 15/10: EFD-Contribuições centralizada — filiais vinculadas na matriz. */}
+                {!isSimples && empresaId && <FiliaisContrib empresaId={empresaId} />}
 
                 {isSimples && (
                     <div

@@ -144,9 +144,10 @@ describe('os dois orquestradores releem o município antes do bloco 0', () => {
         expect(src).toContain('completarMunicipioDosParticipantes({');
         const i = src.indexOf('completarMunicipioDosParticipantes({');
         const trecho = src.slice(i, i + 300);
-        expect(trecho).toContain('dados.participantes');
-        expect(trecho).toContain('dados.notas');
-        expect(trecho).toContain('dados.empresa');
+        // `dados` ou a visão de cada estabelecimento (Contribuições com filiais, 15/10).
+        expect(trecho).toMatch(/\b(dados|v)\.participantes/);
+        expect(trecho).toMatch(/\b(dados|v)\.notas/);
+        expect(trecho).toMatch(/\b(dados|v)\.empresa/);
     });
 
     it('o módulo não grava nada: nenhuma escrita no Firestore', () => {

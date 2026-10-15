@@ -59,6 +59,27 @@ const TERMOS_PROIBIDOS = [
     /data\s+de\s+(emiss|sa[íi]da)/i,
 ];
 
+/**
+ * 🚚 A TROCA DE TRANSPORTADOR NÃO É CC-e INDEVIDA (15/10, B & T MATERIAIS:
+ * *"a carta de correção estava regular, informava apenas a troca do
+ * transportador"* — e a etapa 2 travava com "1 mencionam algo que a CC-e não
+ * pode corrigir"). Os dados do TRANSPORTADOR — CNPJ/CPF dele, e a quantidade
+ * de VOLUMES — podem ser corrigidos (a vedação da cláusula 14-A §1º é para
+ * remetente/destinatário e para a quantidade da MERCADORIA, que mexe no
+ * imposto). Quando o texto é de transporte, esses termos são do transportador;
+ * o resto (valor, destinatário, data…) continua proibido e continua acendendo.
+ */
+const TERMOS_TRANSPORTE = [
+    /transportad/i,
+    /\bplaca\b/i,
+    /\bve[íi]culo\b/i,
+    /\bmotorista\b/i,
+    /\bredespacho\b/i,
+    /\bvolumes?\b/i,
+];
+/** Os termos "proibidos" que, num texto de transporte, são do TRANSPORTADOR. */
+const PROIBIDOS_DO_TRANSPORTADOR = new Set(['cnpj', 'cpf', 'quantidade', 'qtde']);
+
 const so = (v) => String(v ?? '').trim();
 
 /**
@@ -91,7 +112,9 @@ export function classificarCce(evento) {
         .filter((re) => re.test(texto))
         .map((re) => re.source.replace(/\\b|\\s\+|[\\()?:]/g, '').slice(0, 24));
 
-    const proibidos = achados(TERMOS_PROIBIDOS);
+    const deTransporte = TERMOS_TRANSPORTE.some((re) => re.test(texto));
+    const proibidos = achados(TERMOS_PROIBIDOS)
+        .filter((t) => !(deTransporte && PROIBIDOS_DO_TRANSPORTADOR.has(t.toLowerCase())));
     const escrituracao = achados(TERMOS_ESCRITURACAO);
     const m = DE_PARA.exec(texto);
     const sugestao = m ? { de: so(m[1]), para: so(m[2]) } : null;
@@ -118,7 +141,9 @@ export function classificarCce(evento) {
     }
     return {
         classe: 'sem-efeito-fiscal',
-        motivo: 'Correção sem efeito aparente na escrituração (transporte, observação, descrição).',
+        motivo: deTransporte
+            ? 'Correção dos dados do TRANSPORTE (transportador, CNPJ/CPF dele, placa, volumes) — sem efeito na escrituração.'
+            : 'Correção sem efeito aparente na escrituração (transporte, observação, descrição).',
         exigeConferencia: false,
         termos: [], sugestao, texto,
     };

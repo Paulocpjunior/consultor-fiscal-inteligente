@@ -70,32 +70,41 @@ function buildBloco0Contrib(dados) {
     linhas.push(build0110(dados));
 
     // ── 0140 — Estabelecimentos ─────────────────────────────────────────
-    linhas.push(build0140(dados));
+    // 🏢 Um 0140 por estabelecimento, cada um com os 0150/0190/0200 DELE
+    // (15/10, 0181 · SBE: matriz + filiais vinculadas). Sem filial, um só —
+    // como sempre saiu.
+    const estabs = Array.isArray(dados.estabelecimentos) && dados.estabelecimentos.length
+        ? dados.estabelecimentos
+        : [{ empresa: dados.empresa, participantes: dados.participantes, unidades: dados.unidades, itens: dados.itens }];
+    const varios = estabs.length > 1;
+    for (const est of estabs) {
+        linhas.push(build0140({ ...dados, empresa: est.empresa }, varios));
 
-    // ── 0150 — Participantes ────────────────────────────────────────────
-    // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
-    //
-    // Paulo, 18/08 (MANTOAN, 30 recusas): *"alguns erros como COD MUN eu
-    // arrumava manual mesmo, pq na nota não tinha mesmo"*. A decisão dele fica:
-    // o app NÃO preenche — inventar município é afirmar domicílio de terceiro, e
-    // o '9999999' que a mensagem do PVA sugere significa "NÃO domiciliado no
-    // Brasil", o que seria FALSO para um paciente de São Paulo.
-    //
-    // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
-    // contagem, em vez de deixar a descoberta para o PVA depois do upload.
-    // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
-    for (const p of dados.participantes || []) {
-        linhas.push(build0150(p));
-    }
+        // ── 0150 — Participantes ────────────────────────────────────────────
+        // 🚨 COD_MUN DO PARTICIPANTE — o PVA cobra, e o app tem que cobrar ANTES.
+        //
+        // Paulo, 18/08 (MANTOAN, 30 recusas): *"alguns erros como COD MUN eu
+        // arrumava manual mesmo, pq na nota não tinha mesmo"*. A decisão dele fica:
+        // o app NÃO preenche — inventar município é afirmar domicílio de terceiro, e
+        // o '9999999' que a mensagem do PVA sugere significa "NÃO domiciliado no
+        // Brasil", o que seria FALSO para um paciente de São Paulo.
+        //
+        // O que o app passa a fazer é DENUNCIAR na geração, com a lista e a
+        // contagem, em vez de deixar a descoberta para o PVA depois do upload.
+        // (Regra de 06/08: cadastro faltando é ALERTA, nunca contorno.)
+        for (const p of est.participantes || []) {
+            linhas.push(build0150(p));
+        }
 
-    // ── 0190 — Unidades de Medida ───────────────────────────────────────
-    for (const u of dados.unidades || []) {
-        linhas.push(build0190(u));
-    }
+        // ── 0190 — Unidades de Medida ───────────────────────────────────────
+        for (const u of est.unidades || []) {
+            linhas.push(build0190(u));
+        }
 
-    // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
-    for (const item of dados.itens || []) {
-        linhas.push(build0200(item));
+        // ── 0200 — Itens (produtos/servicos) ────────────────────────────────
+        for (const item of est.itens || []) {
+            linhas.push(build0200(item));
+        }
     }
 
     // ── 0500 — Plano de contas ──────────────────────────────────────────
@@ -148,12 +157,13 @@ function buildBloco0Contrib(dados) {
     }
 
 
-    const avisoMun = avisoParticipantesSemMunicipio(dados.participantes);
+    const todosParticipantes = estabs.flatMap((e) => e.participantes || []);
+    const avisoMun = avisoParticipantesSemMunicipio(todosParticipantes);
     if (avisoMun && Array.isArray(dados.warnings)) dados.warnings.push(avisoMun);
     // O campo 10 (ENDERECO) é obrigatório SEM condição — e a recusa dele veio
     // 732 vezes num arquivo só (VINATEX, 18/09). Aviso próprio porque a AÇÃO é
     // outra: ali é o ♻️ que relê o XML, aqui é o cadastro do participante.
-    const avisoEnd = avisoParticipantesSemEndereco(dados.participantes);
+    const avisoEnd = avisoParticipantesSemEndereco(todosParticipantes);
     if (avisoEnd && Array.isArray(dados.warnings)) dados.warnings.push(avisoEnd);
 
     // ── 0990 — Encerramento do Bloco 0 ──────────────────────────────────
@@ -375,12 +385,15 @@ export function ieDoArquivo(bruto) {
     return fmt.sanitizeIe(bruto);
 }
 
-function build0140(dados) {
+function build0140(dados, varios = false) {
     const { empresa } = dados;
     const df = empresa.dadosFiscais || {};
     return fmt.buildLine([
         '0140',
-        '1',  // COD_EST: estabelecimento unico
+        // COD_EST: '1' com estabelecimento único (como sempre); com filiais,
+        // o CNPJ de cada um — único por definição, e é o que o arquivo real
+        // da SBE (07/2026) usa.
+        varios ? fmt.sanitizeCnpjCpf(empresa.cnpj) : '1',
         fmt.sanitizeString(empresa.nome, 100),
         fmt.sanitizeCnpjCpf(empresa.cnpj),
         fmt.sanitizeString(df.uf || '', 2).toUpperCase(),

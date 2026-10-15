@@ -65,12 +65,178 @@ import { lerParametrosCfopDaEmpresa, avisoParametrosCfop } from './cfop-parametr
 // 📗 A CST de PIS/COFINS da ENTRADA lê o cadastro de NCM (28/09, ELS): o
 // catálogo inteiro viaja em `dados.cadastroNcm` e a régua (pura) decide por item.
 import { carregarCatalogoNcm } from './ncm-catalogo-store.js';
+import { acharEmpresaCadastrada } from './empresa-cadastro-lookup.js';
+import {
+    repartirPorEstabelecimento, identidadeDoEstabelecimento, raizDoCnpj, blocoPorEstabelecimento,
+    visoesPorEstabelecimento,
+} from './sped-contrib-estabelecimentos.js';
+import * as fmtContrib from './sped-fiscal-format.js';
 
 function fa() {
     if (!admin.apps.length) {
         admin.initializeApp({ credential: admin.credential.applicationDefault() });
     }
     return admin;
+}
+
+/**
+ * 0150/0190/0200 de UM conjunto de documentos — os cadastros que o 0140 de um
+ * estabelecimento carrega (15/10: com filiais vinculadas, cada 0140 traz os
+ * DELE). `cnpjEstab` é quem escritura esses documentos; `unidadesPorCodigo` é
+ * o do ARQUIVO inteiro, para o código do item ser o mesmo no 0200 e no C170.
+ */
+async function cadastrosDasNotas(notas, cnpjEstab, unidadesPorCodigo) {
+    // ─── 4. Extrai participantes unicos ───
+    const participantesMap = new Map();
+    for (const notaCrua of notas) {
+        // MESMA régua do bloco A: o documento chega em DUAS formas e ler só a
+        // aninhada deixava o 0150 VAZIO — e sem 0150 o COD_PART do A100 aponta
+        // para um cadastro que não existe. Foi o arquivo de 17/08 (CLINICA
+        // MANTOAN): 37 documentos e nenhum participante.
+        const nota = normalizarParticipantesDoc(notaCrua);
+        // 🚨 O MESMO DONO QUE O C100 e o A100 usam. Escolher aqui pela direção
+        // crua colocaria no 0150 o participante ERRADO da nota própria de
+        // entrada (tpNF=0) — e aí o C100 referenciaria um COD_PART que a Tabela
+        // de Cadastro do Participante não tem, que é recusa do PVA.
+        const participanteRaw = participanteDoDocumento(nota, cnpjEstab);
+
+        if (!participanteRaw) continue;
+        const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';
+        if (!cnpjBruto) continue;
+
+        const docLimpo = String(cnpjBruto).replace(/\D/g, '');
+        if (!docLimpo) continue;
+        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
+        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
+        // preenchendo só o que o primeiro documento não trouxe.
+
+        let cnpjFinal = '';
+        let cpfFinal = '';
+        if (docLimpo.length === 14) {
+            cnpjFinal = docLimpo;
+        } else if (docLimpo.length === 11) {
+            cpfFinal = docLimpo;
+        } else {
+            continue;
+        }
+
+        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
+            codPart: docLimpo,
+            nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
+            cnpj: cnpjFinal,
+            cpf: cpfFinal,
+            ie: participanteRaw.ie || participanteRaw.inscricaoEstadual || '',
+            codMunIBGE: participanteRaw.codMunIBGE || '',
+            logradouro: participanteRaw.logradouro || participanteRaw.endereco || '',
+            numero: participanteRaw.numero || '',
+            complemento: participanteRaw.complemento || '',
+            bairro: participanteRaw.bairro || '',
+        }));
+    }
+    const participantes = Array.from(participantesMap.values());
+
+    // Enriquece participantes via BrasilAPI
+    try {
+        const stats = await enrichParticipantesViaBrasilApi(participantes);
+        console.log(`[sped-contrib] BrasilAPI enrich: ${JSON.stringify(stats)}`);
+    } catch (err) {
+        console.warn(`[sped-contrib] BrasilAPI falhou: ${err.message}`);
+    }
+
+    // ─── 5. Extrai itens unicos e unidades ───
+    //
+    // 🚨 SÓ DE QUEM VAI REFERENCIÁ-LOS. O 0200 é a Tabela de Identificação do
+    // Item e o 0190 a de Unidades: quem aponta para elas é o C170/A170. Item
+    // declarado e referenciado por ninguém é item ÓRFÃO — recusa que a PWR já
+    // pagou em 19/08 —, e desde 24/08 a **NFC-e não leva C170** neste arquivo
+    // (HYPE CAFE, 572 recusas do PVA). Sem esta linha, corrigir o C170 trocaria
+    // 572 recusas por outras tantas de item órfão: na HYPE seriam quatro itens
+    // (`10`, `11`, `20`, `101`), que só existem em cupom.
+    //
+    // ⚠️ Quem responde é o MESMO dono que decide o C170 — duas perguntas
+    // ligadas não podem ter duas respostas. Item que também aparece numa nota
+    // 55 continua entrando, por ela.
+    const itensMap = new Map();
+    const unidadesMap = new Map();
+    let itensSoEmNfce = 0;
+    // Mesma colisão do EFD ICMS/IPI, e ela entra nas DUAS famílias no mesmo PR:
+    // deixar numa só é a "meia trava" do COD_MUN do 0150 (22/08).
+    const colisoesDeItem = [];
+    // Mesmo código com duas unidades: sufixo nos dois lados (0200 aqui, C170 e
+    // A170 nos blocos), com o MESMO mapa — a régua do ICMS/IPI (ELS, 11/09).
+    for (const nota of notas) {
+        if (!levaC170NoContribuicoes(nota)) {
+            itensSoEmNfce += (nota.itens || []).length;
+            continue;
+        }
+        for (const item of (nota.itens || [])) {
+            // `codItemDoItem` é a chave; `codItemNoArquivo` soma a unidade quando preciso.
+            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
+            const jaCadastrado = itensMap.get(codItem);
+            if (jaCadastrado) {
+                const campo = conferirColisaoDeItem(jaCadastrado, {
+                    descricao: item.xProd || item.descricao || '',
+                    ncm: item.NCM || item.ncm || '',
+                });
+                if (campo) {
+                    colisoesDeItem.push({
+                        codItem,
+                        de: jaCadastrado[campo],
+                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
+                    });
+                }
+            }
+            if (!itensMap.has(codItem)) {
+                itensMap.set(codItem, {
+                    codItem,
+                    descricao: item.xProd || item.descricao || codItem,
+                    codBarra: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : '',
+                    unidade: unidadeDoItem(item),
+                    tipo: tipoItemDoDocumento(nota),
+                    ncm: item.NCM || item.ncm || '',
+                });
+            }
+            const unidade = unidadeDoItem(item);
+            if (!unidadesMap.has(unidade)) {
+                unidadesMap.set(unidade, {
+                    codigo: unidade,
+                    descricao: descreverUnidade(unidade),
+                });
+            }
+        }
+    }
+    // Documento de serviço sem itens capturados (NFS-e do portal, que grava
+    // `valorTotal` em vez de `itens[]`) vira UM item sintético no A170 — cod
+    // `COD_ITEM_SERVICO_GENERICO` — e ele precisa constar do 0200, senão o
+    // A170 aponta pra um item que a Tabela de Identificação não cadastrou.
+    // 🚨 E ELE CONCORDA COM O BLOCO A PELO DONO (03/09, INSTITUTO HAYAY): a nota
+    // de serviço TOMADO sem COD_PART não sai no A100 (o PVA recusa o arquivo
+    // inteiro), então o A170 dela também não — e se este coletor continuasse a
+    // declarar o `SERV-GENERICO`, o arquivo trocaria aquela recusa pela do item
+    // ÓRFÃO. Duas leituras de "quais notas o bloco A declara" divergiriam no
+    // primeiro caso novo; é a régua de 24/08 (medir o que o registro SUSTENTA).
+    if (!itensMap.has(COD_ITEM_SERVICO_GENERICO)
+        && separarDeclaraveisNoBlocoA(filtrarNotasBlocoA(notas), cnpjEstab)
+            .declaraveis.some(n => !(n.itens || []).length)) {
+        itensMap.set(COD_ITEM_SERVICO_GENERICO, {
+            codItem: COD_ITEM_SERVICO_GENERICO,
+            descricao: 'Prestação de serviços sem discriminação de itens no documento',
+            codBarra: '',
+            unidade: 'UN',
+            // Este item EXISTE porque o documento é de SERVIÇO — declará-lo
+            // como '00' (mercadoria para revenda) era o documento se
+            // desmentindo dentro do próprio arquivo.
+            tipo: TIPO_ITEM_SERVICO,
+            ncm: '',
+        });
+        if (!unidadesMap.has('UN')) {
+            unidadesMap.set('UN', { codigo: 'UN', descricao: descreverUnidade('UN') });
+        }
+    }
+
+    const itens = Array.from(itensMap.values());
+    const unidades = Array.from(unidadesMap.values());
+    return { participantes, itens, unidades, itensSoEmNfce, colisoesDeItem };
 }
 
 /**
@@ -148,6 +314,64 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
     // geração do SPED em 20/08, e que a trava de nomes do backend pega.
     const avisosDoFechamento = avisosDoRecorte(recorte);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🏢 FILIAIS VINCULADAS — a escrituração é da MATRIZ (15/10, 0181 · SBE).
+    //
+    // A lista vem do cadastro da matriz (`filiaisContrib`), gravada pela
+    // pessoa. Cada filial entra com o PRÓPRIO cadastro (o 0140 dela) e os
+    // documentos que estão sob ela; o documento que está sob a matriz mas
+    // carrega o CNPJ de uma filial vinculada vai para a filial
+    // (`repartirPorEstabelecimento`). Filial que sumiu do cadastro ou perdeu UF/
+    // município PARA a geração, dita — escriturar sem o 0140 dela não existe.
+    // ═══════════════════════════════════════════════════════════════════════
+    const cnpjMatriz = String(empresa.cnpj || '').replace(/\D/g, '');
+    for (const n of notas) n._cnpjCarga = cnpjMatriz;
+    const filiaisDoArquivo = [];
+    const vinculadas = (Array.isArray(empresa.filiaisContrib) ? empresa.filiaisContrib : [])
+        .map((c) => String(c || '').replace(/\D/g, ''))
+        .filter((c) => c.length === 14 && c !== cnpjMatriz);
+    for (const cnpjFilial of vinculadas) {
+        const achada = await acharEmpresaCadastrada(db, cnpjFilial);
+        const snapFilial = achada ? await db.collection(achada.colecao).doc(achada.empresaId).get() : null;
+        const filial = snapFilial?.exists ? { id: snapFilial.id, ...snapFilial.data() } : null;
+        if (!filial || !filial.dadosFiscais?.uf || !filial.dadosFiscais?.codMunIBGE) {
+            const err = new Error(
+                `A filial ${cnpjFilial}, vinculada à EFD-Contribuições de "${empresa.nome}", `
+                + (filial ? 'está sem UF ou município nos Dados Fiscais' : 'não está mais cadastrada no CFI')
+                + ' — o 0140 dela sai do cadastro dela. Corrija o cadastro da filial ou desvincule-a '
+                + '(SPED Contribuições → Filiais na escrituração da matriz).',
+            );
+            err.code = 'DADOS_FISCAIS_INCOMPLETOS';
+            throw err;
+        }
+        filiaisDoArquivo.push({ cnpj: cnpjFilial, empresa: filial });
+        if (filial.id === empresaId) continue;
+        const snapF = await db.collection('documentos_fiscais')
+            .where('empresaId', '==', filial.id)
+            .where('competencia', '==', competencia)
+            .get();
+        const docsF = snapF.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const vivosF = docsF.filter(docContaNoLivro);
+        const recorteF = recortarPeloFechamento(vivosF, await lerFechamentoDaCompetencia(db, filial.id, competencia));
+        avisosDoFechamento.push(...avisosDoRecorte(recorteF).map((a) => `Filial ${cnpjFilial}: ${a}`));
+        for (const d of recorteF.docs) { d._cnpjCarga = cnpjFilial; notas.push(d); }
+    }
+    // Documento sob a matriz com CNPJ de OUTRA filial da raiz, não vinculada:
+    // segue com a matriz, como sempre saiu — mas DITO.
+    const cnpjsVinculados = new Set([cnpjMatriz, ...filiaisDoArquivo.map((f) => f.cnpj)]);
+    const deFilialSemVinculo = notas.filter((n) => {
+        const c = String(n.empresaCnpj || '').replace(/\D/g, '');
+        return c.length === 14 && !cnpjsVinculados.has(c) && raizDoCnpj(c) === raizDoCnpj(cnpjMatriz);
+    });
+    if (deFilialSemVinculo.length) {
+        const cnpjs = [...new Set(deFilialSemVinculo.map((n) => String(n.empresaCnpj).replace(/\D/g, '')))];
+        avisosDoFechamento.push(
+            `${deFilialSemVinculo.length} documento(s) desta empresa são de filial NÃO vinculada (${cnpjs.join(', ')}) e saíram `
+            + 'no estabelecimento da matriz. Se a escrituração é centralizada, vincule a filial em SPED Contribuições → '
+            + '"Filiais na escrituração da matriz" e gere de novo.',
+        );
+    }
+
     // ─── 3b. A RECEITA SEM DOCUMENTO decide o PERFIL — e o perfil decide quem
     //         entra (por isso ela é lida AQUI, antes de coletar participante e
     //         item; a coleta de quem vai sair deixaria 0150/0200 órfãos). ───
@@ -195,157 +419,30 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         entradasForaDaConsolidada = antes - notas.length;
     }
 
-    // ─── 4. Extrai participantes unicos ───
-    const participantesMap = new Map();
-    for (const notaCrua of notas) {
-        // MESMA régua do bloco A: o documento chega em DUAS formas e ler só a
-        // aninhada deixava o 0150 VAZIO — e sem 0150 o COD_PART do A100 aponta
-        // para um cadastro que não existe. Foi o arquivo de 17/08 (CLINICA
-        // MANTOAN): 37 documentos e nenhum participante.
-        const nota = normalizarParticipantesDoc(notaCrua);
-        // 🚨 O MESMO DONO QUE O C100 e o A100 usam. Escolher aqui pela direção
-        // crua colocaria no 0150 o participante ERRADO da nota própria de
-        // entrada (tpNF=0) — e aí o C100 referenciaria um COD_PART que a Tabela
-        // de Cadastro do Participante não tem, que é recusa do PVA.
-        const participanteRaw = participanteDoDocumento(nota, empresa.cnpj);
-
-        if (!participanteRaw) continue;
-        const cnpjBruto = participanteRaw.cnpjCpf || participanteRaw.cnpj || participanteRaw.CNPJ || '';
-        if (!cnpjBruto) continue;
-
-        const docLimpo = String(cnpjBruto).replace(/\D/g, '');
-        if (!docLimpo) continue;
-        // ⚠️ NÃO há `if (participantesMap.has(docLimpo)) continue;` aqui: o mesmo
-        // participante em vários documentos é FUNDIDO abaixo (mesclarParticipante),
-        // preenchendo só o que o primeiro documento não trouxe.
-
-        let cnpjFinal = '';
-        let cpfFinal = '';
-        if (docLimpo.length === 14) {
-            cnpjFinal = docLimpo;
-        } else if (docLimpo.length === 11) {
-            cpfFinal = docLimpo;
-        } else {
-            continue;
-        }
-
-        participantesMap.set(docLimpo, mesclarParticipante(participantesMap.get(docLimpo), {
-            codPart: docLimpo,
-            nome: participanteRaw.nome || participanteRaw.razaoSocial || participanteRaw.xNome || 'SEM NOME',
-            cnpj: cnpjFinal,
-            cpf: cpfFinal,
-            ie: participanteRaw.ie || participanteRaw.inscricaoEstadual || '',
-            codMunIBGE: participanteRaw.codMunIBGE || '',
-            logradouro: participanteRaw.logradouro || participanteRaw.endereco || '',
-            numero: participanteRaw.numero || '',
-            complemento: participanteRaw.complemento || '',
-            bairro: participanteRaw.bairro || '',
-        }));
-    }
-    const participantes = Array.from(participantesMap.values());
-
-    // Enriquece participantes via BrasilAPI
-    try {
-        const stats = await enrichParticipantesViaBrasilApi(participantes);
-        console.log(`[sped-contrib] BrasilAPI enrich: ${JSON.stringify(stats)}`);
-    } catch (err) {
-        console.warn(`[sped-contrib] BrasilAPI falhou: ${err.message}`);
-    }
-
-    // ─── 5. Extrai itens unicos e unidades ───
-    //
-    // 🚨 SÓ DE QUEM VAI REFERENCIÁ-LOS. O 0200 é a Tabela de Identificação do
-    // Item e o 0190 a de Unidades: quem aponta para elas é o C170/A170. Item
-    // declarado e referenciado por ninguém é item ÓRFÃO — recusa que a PWR já
-    // pagou em 19/08 —, e desde 24/08 a **NFC-e não leva C170** neste arquivo
-    // (HYPE CAFE, 572 recusas do PVA). Sem esta linha, corrigir o C170 trocaria
-    // 572 recusas por outras tantas de item órfão: na HYPE seriam quatro itens
-    // (`10`, `11`, `20`, `101`), que só existem em cupom.
-    //
-    // ⚠️ Quem responde é o MESMO dono que decide o C170 — duas perguntas
-    // ligadas não podem ter duas respostas. Item que também aparece numa nota
-    // 55 continua entrando, por ela.
-    const itensMap = new Map();
-    const unidadesMap = new Map();
-    let itensSoEmNfce = 0;
-    // Mesma colisão do EFD ICMS/IPI, e ela entra nas DUAS famílias no mesmo PR:
-    // deixar numa só é a "meia trava" do COD_MUN do 0150 (22/08).
-    const colisoesDeItem = [];
-    // Mesmo código com duas unidades: sufixo nos dois lados (0200 aqui, C170 e
-    // A170 nos blocos), com o MESMO mapa — a régua do ICMS/IPI (ELS, 11/09).
     const unidadesPorCodigo = unidadesPorCodItem(notas, levaC170NoContribuicoes);
-    for (const nota of notas) {
-        if (!levaC170NoContribuicoes(nota)) {
-            itensSoEmNfce += (nota.itens || []).length;
-            continue;
-        }
-        for (const item of (nota.itens || [])) {
-            // `codItemDoItem` é a chave; `codItemNoArquivo` soma a unidade quando preciso.
-            const codItem = codItemNoArquivo(item, unidadesPorCodigo);
-            const jaCadastrado = itensMap.get(codItem);
-            if (jaCadastrado) {
-                const campo = conferirColisaoDeItem(jaCadastrado, {
-                    descricao: item.xProd || item.descricao || '',
-                    ncm: item.NCM || item.ncm || '',
-                });
-                if (campo) {
-                    colisoesDeItem.push({
-                        codItem,
-                        de: jaCadastrado[campo],
-                        para: campo === 'ncm' ? (item.NCM || item.ncm) : (item.xProd || item.descricao),
-                    });
-                }
-            }
-            if (!itensMap.has(codItem)) {
-                itensMap.set(codItem, {
-                    codItem,
-                    descricao: item.xProd || item.descricao || codItem,
-                    codBarra: item.cEAN && item.cEAN !== 'SEM GTIN' ? item.cEAN : '',
-                    unidade: unidadeDoItem(item),
-                    tipo: tipoItemDoDocumento(nota),
-                    ncm: item.NCM || item.ncm || '',
-                });
-            }
-            const unidade = unidadeDoItem(item);
-            if (!unidadesMap.has(unidade)) {
-                unidadesMap.set(unidade, {
-                    codigo: unidade,
-                    descricao: descreverUnidade(unidade),
-                });
-            }
+    // ─── 4. Participantes, unidades e itens — por ESTABELECIMENTO (15/10) ───
+    const cnpjsDoArquivo = [cnpjMatriz, ...filiaisDoArquivo.map((f) => f.cnpj)];
+    const porEstab = repartirPorEstabelecimento(
+        notas.map((doc) => ({ doc, cnpjDaCarga: doc._cnpjCarga || cnpjMatriz })), cnpjsDoArquivo,
+    );
+    const cadMatriz = await cadastrosDasNotas(porEstab.get(cnpjMatriz) || [], empresa.cnpj, unidadesPorCodigo);
+    const { participantes, itens, unidades } = cadMatriz;
+    let { itensSoEmNfce } = cadMatriz;
+    const colisoesDeItem = [...cadMatriz.colisoesDeItem];
+    const estabelecimentos = [];
+    if (filiaisDoArquivo.length) {
+        estabelecimentos.push({ empresa, notas: porEstab.get(cnpjMatriz) || [], participantes, itens, unidades });
+        for (const f of filiaisDoArquivo) {
+            const notasF = porEstab.get(f.cnpj) || [];
+            const cad = await cadastrosDasNotas(notasF, f.cnpj, unidadesPorCodigo);
+            itensSoEmNfce += cad.itensSoEmNfce;
+            colisoesDeItem.push(...cad.colisoesDeItem);
+            estabelecimentos.push({
+                empresa: identidadeDoEstabelecimento(empresa, f.empresa), notas: notasF,
+                participantes: cad.participantes, itens: cad.itens, unidades: cad.unidades,
+            });
         }
     }
-    // Documento de serviço sem itens capturados (NFS-e do portal, que grava
-    // `valorTotal` em vez de `itens[]`) vira UM item sintético no A170 — cod
-    // `COD_ITEM_SERVICO_GENERICO` — e ele precisa constar do 0200, senão o
-    // A170 aponta pra um item que a Tabela de Identificação não cadastrou.
-    // 🚨 E ELE CONCORDA COM O BLOCO A PELO DONO (03/09, INSTITUTO HAYAY): a nota
-    // de serviço TOMADO sem COD_PART não sai no A100 (o PVA recusa o arquivo
-    // inteiro), então o A170 dela também não — e se este coletor continuasse a
-    // declarar o `SERV-GENERICO`, o arquivo trocaria aquela recusa pela do item
-    // ÓRFÃO. Duas leituras de "quais notas o bloco A declara" divergiriam no
-    // primeiro caso novo; é a régua de 24/08 (medir o que o registro SUSTENTA).
-    if (!itensMap.has(COD_ITEM_SERVICO_GENERICO)
-        && separarDeclaraveisNoBlocoA(filtrarNotasBlocoA(notas), empresa?.cnpj)
-            .declaraveis.some(n => !(n.itens || []).length)) {
-        itensMap.set(COD_ITEM_SERVICO_GENERICO, {
-            codItem: COD_ITEM_SERVICO_GENERICO,
-            descricao: 'Prestação de serviços sem discriminação de itens no documento',
-            codBarra: '',
-            unidade: 'UN',
-            // Este item EXISTE porque o documento é de SERVIÇO — declará-lo
-            // como '00' (mercadoria para revenda) era o documento se
-            // desmentindo dentro do próprio arquivo.
-            tipo: TIPO_ITEM_SERVICO,
-            ncm: '',
-        });
-        if (!unidadesMap.has('UN')) {
-            unidadesMap.set('UN', { codigo: 'UN', descricao: descreverUnidade('UN') });
-        }
-    }
-
-    const itens = Array.from(itensMap.values());
-    const unidades = Array.from(unidadesMap.values());
 
     // ─── 5b. (A receita sem documento é lida na seção 3b — ela decide o
     //         PERFIL do arquivo e por isso vem antes da coleta.) ───
@@ -575,6 +672,8 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
         // o documento (o caso FRONTINI: a nota foi capturada com retenção zero
         // porque o cliente esqueceu de informá-la ao emitir).
         retencoesAjustadas,
+        // 🏢 Um por estabelecimento (matriz primeiro) — só com filial vinculada.
+        estabelecimentos,
         warnings,
     };
 }
@@ -585,8 +684,12 @@ export async function coletarDadosContribuicoes({ empresaId, competencia }) {
  * relatório de monofásicos: sem ele a base do relatório não bateria com o C170.
  */
 export async function completarFreteDoPeriodo(dados) {
-    await completarFreteDasNotas(selecionarNotasBlocoCFrete(dados.notas, dados.empresa?.cnpj).notas);
+    // Com filiais, cada estabelecimento seleciona as notas dele pelo PRÓPRIO CNPJ.
+    for (const v of visoesPorEstabelecimento(dados)) {
+        await completarFreteDasNotas(selecionarNotasBlocoCFrete(v.notas, v.empresa?.cnpj).notas);
+    }
 }
+
 
 /**
  * Monta o arquivo .txt completo do SPED Contribuicoes.
@@ -598,14 +701,22 @@ export async function montarBlocosContribuicoes({ dados }) {
     dados.ajusteDevolucoesVenda = ajusteDasDevolucoesDeVenda(dados);
     // ♻️ COD_MUN do 0150 relido do XML guardado quando o documento veio sem
     // (28/09, ELS: produtor rural PF). Só na memória; o que faltar segue dito.
-    const relMun = await completarMunicipioDosParticipantes({
-        participantes: dados.participantes, notas: dados.notas, empresaCnpj: dados.empresa?.cnpj,
-    });
-    if (relMun.aviso && Array.isArray(dados.warnings)) dados.warnings.push(relMun.aviso);
+    const visoes = visoesPorEstabelecimento(dados);
+    for (const v of visoes) {
+        const relMun = await completarMunicipioDosParticipantes({
+            participantes: v.participantes, notas: v.notas, empresaCnpj: v.empresa?.cnpj,
+        });
+        if (relMun.aviso && Array.isArray(dados.warnings)) dados.warnings.push(relMun.aviso);
+    }
     const linhasBloco0 = buildBloco0Contrib(dados);
-    const linhasBlocoA = buildBlocoA(dados);
-    const linhasBlocoC = buildBlocoC_Contrib(dados);
-    const linhasBlocoD = buildBlocoD_Contrib(dados);
+    // 🏢 A, C e D: um X010 por estabelecimento, sob um X001/X990 só (15/10).
+    // Sem filial, `visoes` é o próprio `dados` e o bloco sai como sempre.
+    const porEstab = (bloco, gerar) => (visoes.length > 1
+        ? blocoPorEstabelecimento(bloco, visoes, gerar, fmtContrib.buildLine)
+        : gerar(dados));
+    const linhasBlocoA = porEstab('A', buildBlocoA);
+    const linhasBlocoC = porEstab('C', buildBlocoC_Contrib);
+    const linhasBlocoD = porEstab('D', buildBlocoD_Contrib);
     const linhasBlocoF = buildBlocoF(dados);
     const linhasBlocoM = buildBlocoM(dados);
     const linhasBloco1 = buildBloco1_Contrib(dados);
