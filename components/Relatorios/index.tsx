@@ -46,7 +46,7 @@ import {
     // importação que o app nunca mediu.
     ressalvaSemRetencaoGravada, duplicatasNasLinhas, ressalvaDuplicatas,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
-    produtosPorNota, csvProdutosPorNota,
+    produtosPorNota, csvProdutosPorNota, operacoesComSt,
     contraparteDoc, docValido, lerFaltantesPorSerie,
 } from '../../services/relatoriosAgregacoes';
 // A retenção INFORMADA à mão (04/09). Sem esta leitura a aba mostra o zero do
@@ -90,7 +90,7 @@ interface Props {
 
 export type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
-    | 'canceladas' | 'aliquota' | 'produto' | 'produto-nota' | 'participante' | 'cfop-nota'
+    | 'canceladas' | 'aliquota' | 'produto' | 'produto-nota' | 'operacoes-st' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
     | 'apuracao-icms' | 'apuracao-ipi' | 'difal-ec87' | 'monofasico';
@@ -141,6 +141,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'aliquota', label: '➗ Por alíquota' },
             { id: 'produto', label: '📦 Por produto' },
             { id: 'produto-nota', label: '🧾 Produtos por nota (de-para)' },
+            { id: 'operacoes-st', label: '🧷 Operações com ST (por UF)' },
             { id: 'participante', label: '👥 Por participante' },
         ],
     },
@@ -448,6 +449,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             )}
             {aba === 'produto-nota' && escriturados && empresa && (
                 <AbaProdutoNota docs={escriturados} empresa={empresa} competencia={competencia} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
+            )}
+            {aba === 'operacoes-st' && escriturados && empresa && (
+                <AbaOperacoesSt docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
             {aba === 'participante' && escriturados && empresa && (
                 <AbaParticipante docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
@@ -2648,6 +2652,170 @@ const AbaProdutoNota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, tr
                                     <td className="text-right font-mono text-slate-500">{l.contabilNota != null ? fmtBRL(l.contabilNota) : ''}</td>
                                 </tr>
                             ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── 🧷 Operações com Substituição Tributária ───────────────────────────────
+//
+// 16/10, Paulo, modelo do e-Fiscal (KROYA 09/2026, "NF SAÍDAS — OPERAÇÕES COM
+// SUBSTITUIÇÃO TRIBUTÁRIA", interestaduais, ordenado por UF): uma linha por
+// nota × CFOP com ICMS-ST, total por UF e geral — e o FCP-ST de outros estados.
+// O contábil do CFOP é o mesmo do Resumo por CFOP (dono único).
+
+const AbaOperacoesSt: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, identificacao, cadastroFiscal, parametrosCfop }) => {
+    const { gerando, rodar } = usePdf();
+    const [direcao, setDirecao] = useState<'entrada' | 'saida'>('saida');
+    const [ambito, setAmbito] = useState<'interna' | 'interestadual' | 'todas'>('interestadual');
+    const ufEmpresa = String(cadastroFiscal?.uf || '').toUpperCase();
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+    const regimeEscrituracao = useMemo(
+        () => (regimeDaEmpresa({
+            dadosFiscais: cadastroFiscal || {},
+            colecao: empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas',
+        }) as { regime: string }).regime,
+        [cadastroFiscal, empresa?.fonte],
+    );
+    const linhas = useMemo(() => operacoesComSt(
+        docs.filter(d => ['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)),
+        {
+            naturezaAtividade: natureza.natureza,
+            cfopOverrides: cadastroFiscal?.cfopOverrides,
+            parametrosCfop: cerebroAtivo(parametrosCfop),
+            regimeTributario: regimeEscrituracao,
+            contribuinteIpi: cadastroFiscal?.contribuinteIpi || null,
+        },
+        { direcao, ambito, ufEmpresa },
+    ), [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao, direcao, ambito, ufEmpresa]);
+
+    type Soma = { contabil: number; baseIcms: number; icms: number; baseSt: number; icmsSt: number; fcpSt: number };
+    const zero = (): Soma => ({ contabil: 0, baseIcms: 0, icms: 0, baseSt: 0, icmsSt: 0, fcpSt: 0 });
+    const somar = (a: Soma, l: Soma) => {
+        for (const k of Object.keys(a) as Array<keyof Soma>) a[k] = Math.round((a[k] + l[k]) * 100) / 100;
+        return a;
+    };
+    const porUf = useMemo(() => {
+        const m = new Map<string, { linhas: typeof linhas; total: Soma }>();
+        for (const l of linhas) {
+            const g = m.get(l.uf || '—') || { linhas: [] as typeof linhas, total: zero() };
+            g.linhas.push(l); somar(g.total, l);
+            m.set(l.uf || '—', g);
+        }
+        return Array.from(m.entries());
+    }, [linhas]);
+    const geral = useMemo(() => linhas.reduce((a, l) => somar(a, l), zero()), [linhas]);
+    const v = (n: number) => fmtBRL(n).replace('R$', '').trim();
+
+    const pdf = () => rodar(() => gerarRelatorioPdf({
+        titulo: `NF ${direcao === 'saida' ? 'SAÍDAS' : 'ENTRADAS'} — OPERAÇÕES COM SUBSTITUIÇÃO TRIBUTÁRIA — ${fmtComp(competencia)}`,
+        subtitulo: `${empresa.nome} · ${fmtCnpj(empresa.cnpj)} · ${ambito === 'interna' ? 'operações internas' : ambito === 'interestadual' ? 'operações interestaduais' : 'todas as operações'} · ordenado por UF`,
+        orientacao: 'landscape',
+        colunas: [
+            { titulo: 'Número', largura: 8 }, { titulo: 'Espécie/Série', largura: 7 }, { titulo: 'Emissão', largura: 7 },
+            { titulo: 'Participante', largura: 20, quebra: true }, { titulo: 'UF', largura: 3 }, { titulo: 'CFOP', largura: 5 },
+            { titulo: 'Valor Contábil', largura: 9, alinhamento: 'direita' }, { titulo: 'BC ICMS', largura: 8, alinhamento: 'direita' },
+            { titulo: 'Alíq.', largura: 4, alinhamento: 'direita' }, { titulo: 'ICMS', largura: 7, alinhamento: 'direita' },
+            { titulo: 'BC ST', largura: 8, alinhamento: 'direita' }, { titulo: 'ICMS ST', largura: 7, alinhamento: 'direita' },
+            { titulo: 'FCP-ST', largura: 7, alinhamento: 'direita' },
+        ],
+        linhas: porUf.flatMap(([uf, g]) => [
+            ...g.linhas.map(l => [
+                l.numero, `${l.especie} ${l.serie}`, l.emissao.split('-').reverse().join('/'),
+                `${l.participanteNome}${l.participanteDoc ? ` · ${fmtCnpj(l.participanteDoc) || l.participanteDoc}` : ''}`, l.uf, l.cfop,
+                v(l.contabil), v(l.baseIcms), l.aliqIcms === '' ? '—' : String(l.aliqIcms).replace('.', ','), v(l.icms),
+                v(l.baseSt), v(l.icmsSt), v(l.fcpSt),
+            ]),
+            ['', '', '', `Total de ${uf}`, '', '', v(g.total.contabil), v(g.total.baseIcms), '', v(g.total.icms), v(g.total.baseSt), v(g.total.icmsSt), v(g.total.fcpSt)],
+        ]),
+        totais: ['', '', '', 'Total Geral', '', '', v(geral.contabil), v(geral.baseIcms), '', v(geral.icms), v(geral.baseSt), v(geral.icmsSt), v(geral.fcpSt)],
+        identificacao,
+        observacoes: [
+            'Uma linha por nota × CFOP com ICMS-ST ou FCP-ST. Valor Contábil = soma dos itens do CFOP (produto + acessórias − desconto + ICMS-ST + IPI), o mesmo do Resumo por CFOP e do C190; os demais valores são os do documento.',
+            ...(ufEmpresa ? [] : ['⚠️ A UF da empresa não está nos Dados Fiscais — interna × interestadual não pôde ser separado (todas as operações foram listadas).']),
+            ...obsTruncado(truncado),
+        ],
+        fileName: `operacoes-st-${direcao}-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.pdf`,
+    }));
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                {(['saida', 'entrada'] as const).map(d => (
+                    <button key={d} onClick={() => setDirecao(d)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${direcao === d ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {d === 'saida' ? '📤 NF de saída' : '📥 NF de entrada'}
+                    </button>
+                ))}
+                {(['interestadual', 'interna', 'todas'] as const).map(a => (
+                    <button key={a} onClick={() => setAmbito(a)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${ambito === a ? 'bg-emerald-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {a === 'interestadual' ? 'Interestaduais' : a === 'interna' ? 'Internas' : 'Todas'}
+                    </button>
+                ))}
+                <BotaoPdf onClick={pdf} disabled={!linhas.length} gerando={gerando} />
+            </div>
+            <p className="text-xs text-slate-500">
+                Uma linha por nota × CFOP com ICMS-ST ou FCP-ST, ordenada por UF, com total por UF e geral. O Valor Contábil é o do Resumo por CFOP;
+                base, ICMS, base ST, ICMS-ST e FCP-ST são os do documento.
+                {!ufEmpresa && <strong> ⚠️ UF da empresa ausente nos Dados Fiscais — interna × interestadual não separado.</strong>}
+            </p>
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhuma operação com ICMS-ST ou FCP-ST nesse filtro.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">Número</th><th className="text-left">Emissão</th><th className="text-left">Participante</th>
+                                <th className="text-left">UF</th><th className="text-left">CFOP</th><th className="text-right">Contábil</th>
+                                <th className="text-right">BC ICMS</th><th className="text-right">Alíq.</th><th className="text-right">ICMS</th>
+                                <th className="text-right">BC ST</th><th className="text-right">ICMS ST</th><th className="text-right">FCP-ST</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {porUf.map(([uf, g]) => (
+                                <React.Fragment key={uf}>
+                                    {g.linhas.map((l, i) => (
+                                        <tr key={`${uf}-${i}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                                            <td className="py-1 font-mono">{l.numero}</td>
+                                            <td className="font-mono">{l.emissao.split('-').reverse().join('/')}</td>
+                                            <td className="max-w-[220px] truncate" title={l.participanteDoc}>{l.participanteNome}</td>
+                                            <td>{l.uf}</td><td className="font-mono">{l.cfop}</td>
+                                            <td className="text-right font-mono">{v(l.contabil)}</td>
+                                            <td className="text-right font-mono">{v(l.baseIcms)}</td>
+                                            <td className="text-right font-mono">{l.aliqIcms === '' ? '—' : String(l.aliqIcms).replace('.', ',')}</td>
+                                            <td className="text-right font-mono">{v(l.icms)}</td>
+                                            <td className="text-right font-mono">{v(l.baseSt)}</td>
+                                            <td className="text-right font-mono font-semibold">{v(l.icmsSt)}</td>
+                                            <td className="text-right font-mono">{v(l.fcpSt)}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="font-bold border-b border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50">
+                                        <td colSpan={5} className="py-1">Total de {uf}</td>
+                                        <td className="text-right font-mono">{v(g.total.contabil)}</td>
+                                        <td className="text-right font-mono">{v(g.total.baseIcms)}</td><td />
+                                        <td className="text-right font-mono">{v(g.total.icms)}</td>
+                                        <td className="text-right font-mono">{v(g.total.baseSt)}</td>
+                                        <td className="text-right font-mono">{v(g.total.icmsSt)}</td>
+                                        <td className="text-right font-mono">{v(g.total.fcpSt)}</td>
+                                    </tr>
+                                </React.Fragment>
+                            ))}
+                            <tr className="font-bold bg-slate-100 dark:bg-slate-700">
+                                <td colSpan={5} className="py-1">Total Geral</td>
+                                <td className="text-right font-mono">{v(geral.contabil)}</td>
+                                <td className="text-right font-mono">{v(geral.baseIcms)}</td><td />
+                                <td className="text-right font-mono">{v(geral.icms)}</td>
+                                <td className="text-right font-mono">{v(geral.baseSt)}</td>
+                                <td className="text-right font-mono">{v(geral.icmsSt)}</td>
+                                <td className="text-right font-mono">{v(geral.fcpSt)}</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>

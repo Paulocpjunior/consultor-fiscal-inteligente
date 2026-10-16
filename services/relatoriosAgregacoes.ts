@@ -894,6 +894,84 @@ export interface LinhaProduto {
     valor: number;
 }
 
+/** Uma linha do 🧷 Operações com ST: o CFOP de uma nota que carrega ICMS-ST/FCP-ST. */
+export interface LinhaOperacaoSt {
+    direcao: 'entrada' | 'saida';
+    numero: string;
+    serie: string;
+    especie: string;
+    emissao: string;
+    participanteDoc: string;
+    participanteNome: string;
+    uf: string;
+    cfop: string;
+    contabil: number;
+    baseIcms: number;
+    /** Alíquota do ICMS próprio quando os itens do CFOP têm UMA só; '' quando misturam. */
+    aliqIcms: number | '';
+    icms: number;
+    baseSt: number;
+    icmsSt: number;
+    fcpSt: number;
+}
+
+/**
+ * 🧷 OPERAÇÕES COM SUBSTITUIÇÃO TRIBUTÁRIA (16/10, modelo do e-Fiscal da KROYA):
+ * uma linha por NOTA × CFOP com ICMS-ST ou FCP-ST, por UF do participante, com
+ * total por UF e geral. O contábil do CFOP é o do dono (`contabilDosGruposDeCfop`
+ * — o mesmo do Resumo por CFOP e do C190); base, ICMS, base ST, ICMS-ST e FCP-ST
+ * são os do documento (soma dos itens do CFOP).
+ *
+ * @param ufEmpresa  UF da empresa — separa operação interna × interestadual.
+ */
+export function operacoesComSt(
+    docs: DocumentoFiscal[], ctx: CtxCorrelacao,
+    { direcao, ambito, ufEmpresa }: { direcao: 'entrada' | 'saida'; ambito: 'interna' | 'interestadual' | 'todas'; ufEmpresa: string },
+): LinhaOperacaoSt[] {
+    const out: LinhaOperacaoSt[] = [];
+    const ufE = String(ufEmpresa || '').toUpperCase();
+    for (const d of docs) {
+        if (!docValido(d) || direcaoDoc(d) !== direcao) continue;
+        const itens = (d.itens || []) as any[];
+        if (!itens.length) continue;
+        const cp = contraparteDoc(d) || {};
+        const uf = String(cp.uf || '').toUpperCase();
+        if (ambito !== 'todas' && ufE) {
+            const interna = uf === ufE;
+            if ((ambito === 'interna') !== interna) continue;
+        }
+        const porCfop = new Map<string, any[]>();
+        for (const it of itens) {
+            const cru = String(it.cfop || '0000').replace(/\D/g, '') || '0000';
+            const cfop = String(cfopDoLancamento(d, cru, direcao as any, ctx, it) || cru);
+            if (!porCfop.has(cfop)) porCfop.set(cfop, []);
+            porCfop.get(cfop)!.push(it);
+        }
+        const grupos = Array.from(porCfop.entries());
+        const contabeis = contabilDosGruposDeCfop(d, itens, grupos.map(([, its]) => its), contabilDoc(d));
+        const x = d as any;
+        grupos.forEach(([cfop, its], idx) => {
+            const soma = (f: (i: any) => unknown) => r2(its.reduce((a, i) => a + n0(f(i)), 0));
+            const icmsSt = soma((i) => i.vICMSST);
+            const fcpSt = soma((i) => i.vFCPST);
+            if (!(icmsSt > 0) && !(fcpSt > 0)) return;
+            const aliqs = new Set(its.map((i) => n0(i.aliqIcms ?? i.pICMS)).filter((a) => a > 0));
+            out.push({
+                direcao, numero: String(x.numero || ''), serie: String(x.serie || ''),
+                especie: ((d as any).tipoDoc || d.tipo) === 'NFCe' ? 'NFC-E' : 'NF-E',
+                emissao: String(x.dataEmissao || x.dhEmi || '').slice(0, 10),
+                participanteDoc: String(cp.cnpjCpf || cp.cnpj || cp.cpf || ''),
+                participanteNome: String(cp.nome || cp.razaoSocial || ''),
+                uf, cfop, contabil: contabeis[idx] ?? 0,
+                baseIcms: soma((i) => i.vBC), aliqIcms: aliqs.size === 1 ? [...aliqs][0]! : '', icms: soma((i) => i.vICMS),
+                baseSt: soma((i) => i.vBCST), icmsSt, fcpSt,
+            });
+        });
+    }
+    return out.sort((a, b) => a.uf.localeCompare(b.uf) || a.emissao.localeCompare(b.emissao)
+        || a.numero.localeCompare(b.numero, undefined, { numeric: true }) || a.cfop.localeCompare(b.cfop));
+}
+
 /** Uma linha do 🧾 Produtos por nota — o item como o livro o escritura. */
 export interface LinhaProdutoNota {
     direcao: 'entrada' | 'saida';

@@ -9,6 +9,10 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧷 OPERAÇÕES COM ST POR UF (16/10)** (Paulo, modelo do e-Fiscal KROYA 09/2026). `operacoesComSt` em
+  relatoriosAgregacoes.ts: linha por nota × CFOP com vICMSST/vFCPST > 0, contábil pelo dono
+  `contabilDosGruposDeCfop`, interna × interestadual pela UF da empresa; aba 🧷 com total por UF/geral e PDF.
+  Trava `operacoesComSt` (NF 15595 real: MG 6401 1.111,69 / ST 235,28).
 - **📊 CONTÁBIL POR CFOP POR ITEM + 🧾 PRODUTOS POR NOTA (16/10)** (Paulo, KROYA 09/2026: CFI 5101 49.597,72 /
   5401 1.676,59 × Fiscal 49.432,09 / 1.842,22, mesma soma). O Resumo por CFOP e o E201 rateavam o contábil pela
   proporção do vProd; o C190 e o e-Fiscal somam por item (vProd+acessórias−desc+ST+FCP-ST+IPI). Dono novo
