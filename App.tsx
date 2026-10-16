@@ -45,6 +45,8 @@ import { EmpresaAtivaProvider } from './services/empresaAtivaContext';
 // ✅ REMOVIDO: import { onAuthStateChanged } from 'firebase/auth';
 // Ambos encapsulados em authService.subscribeAuthState
 
+const FiscaAssistant = lazy(() => import('./components/Fisca/FiscaAssistant'));
+
 const ResultsDisplay = lazy(() => import('./components/ResultsDisplay'));
 const ComparisonDisplay = lazy(() => import('./components/ComparisonDisplay'));
 const ReformaResultDisplay = lazy(() => import('./components/ReformaResultDisplay'));
@@ -1637,6 +1639,12 @@ const App: React.FC = () => {
                 </div>
                 <Footer />
             </div>
+
+            <ErrorBoundary modulo="Físca">
+                <Suspense fallback={null}>
+                    <FiscaAssistant key={`${currentUser.id}:${empresaAtiva?.fonte || ''}:${empresaAtiva?.id || 'geral'}`} />
+                </Suspense>
+            </ErrorBoundary>
 
             {/* Global Toast Notification */}
             {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
