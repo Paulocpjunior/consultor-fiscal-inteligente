@@ -63,6 +63,7 @@ import { carregarRotinaFiscal, type PainelRotina } from '../../services/rotinaFi
 import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamService';
 // 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 — a tela não calcula.
 import { carregarApuracaoIcms, type ApuracaoIcmsResposta } from '../../services/apuracaoIcmsService';
+import { carregarApuracaoIpi, type ApuracaoIpiResposta } from '../../services/apuracaoIpiService';
 import { carregarRelatorioMonofasico, baixarCsvMonofasico, type RelatorioMonofasicoResposta } from '../../services/relatorioMonofasicoService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
 import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, parseValorMoeda, type MesDeclaracao } from '../../services/declaracaoFaturamento';
@@ -91,7 +92,7 @@ export type AbaId =
     | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
-    | 'apuracao-icms' | 'difal-ec87' | 'monofasico';
+    | 'apuracao-icms' | 'apuracao-ipi' | 'difal-ec87' | 'monofasico';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -158,6 +159,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
             { id: 'trimestre', label: '🧮 Apuração trimestral (Presumido)' },
             { id: 'apuracao-icms', label: '📒 Apuração do ICMS (RAICMS)' },
+            { id: 'apuracao-ipi', label: '🏭 Apuração do IPI (livro modelo 8)' },
             { id: 'monofasico', label: '🧪 PIS/COFINS monofásico × tributado' },
         ],
     },
@@ -458,6 +460,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
             {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
             {aba === 'apuracao-icms' && <AbaApuracaoIcms currentUser={currentUser} competencia={competencia} />}
+            {aba === 'apuracao-ipi' && <AbaApuracaoIpi currentUser={currentUser} competencia={competencia} />}
             {aba === 'monofasico' && <AbaMonofasico currentUser={currentUser} competencia={competencia} />}
         </div>
     );
@@ -3584,6 +3587,204 @@ const AbaApuracaoIcms: React.FC<{ currentUser: User; competencia: string }> = ({
                     {dados.origemSaldoAnterior && (
                         <p className="text-xs text-slate-500">Saldo credor do período anterior (009): {dados.origemSaldoAnterior}.</p>
                     )}
+                    {dados.avisos.length > 0 && (
+                        <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc pl-5 space-y-1">
+                            {dados.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                        </ul>
+                    )}
+                    {dados.avisosDaColeta.length > 0 && (
+                        <div className="text-xs text-slate-500">
+                            <button type="button" className="underline" onClick={() => setVerColeta(v => !v)}>
+                                {verColeta ? 'Ocultar' : 'Ver'} os {dados.avisosDaColeta.length} aviso(s) da coleta (os mesmos da geração do SPED)
+                            </button>
+                            {verColeta && (
+                                <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {dados.avisosDaColeta.map((a, i) => <li key={i}>{a}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </Card>
+    );
+};
+
+// ─── 🏭 Livro de Apuração do IPI (modelo 8) ─────────────────────────────────
+//
+// 16/10, Paulo, com o modelo do e-Fiscal (PWR · 09/2026): Entradas e Saídas
+// por CFOP (Valores Contábeis · Base · Imposto · Isentas/Não tributadas ·
+// Outras), subtotal por família, total, e o Demonstrativo Auxiliar 001–012.
+// A tela NÃO calcula nada: tudo vem do MESMO dono do E510/E520 do SPED.
+
+const brl2 = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+type LinhaLivroIpi = { tipo: 'lado' | 'familia' | 'cfop' | 'subtotal' | 'total' | 'demo-secao' | 'demo'; c1: string; vals: string[] };
+
+const AbaApuracaoIpi: React.FC<{ currentUser: User; competencia: string }> = ({ currentUser, competencia }) => {
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
+    const [loadingLista, setLoadingLista] = useState(false);
+    const [dados, setDados] = useState<ApuracaoIpiResposta | null>(null);
+    const [erro, setErro] = useState<string | null>(null);
+    const [carregando, setCarregando] = useState(false);
+    const [verColeta, setVerColeta] = useState(false);
+    const { gerando, rodar } = usePdf();
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoadingLista(true);
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
+            .finally(() => { if (alive) setLoadingLista(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId || !competencia) { setDados(null); setErro(null); return; }
+        setCarregando(true);
+        setErro(null);
+        carregarApuracaoIpi(empresaId, competencia)
+            .then(r => {
+                if (!alive) return;
+                if (!r.ok) { setErro(r.error || 'Falha ao ler a apuração do IPI.'); setDados(null); return; }
+                setDados(r);
+            })
+            .catch(e => { if (alive) { setErro(`Falha ao ler a apuração do IPI: ${e?.message || e}`); setDados(null); } })
+            .finally(() => { if (alive) setCarregando(false); });
+        return () => { alive = false; };
+    }, [empresaId, competencia]);
+
+    const compFmt = (c: string) => c.split('-').reverse().join('/');
+
+    /** As linhas do livro — a MESMA montagem serve tela e PDF. */
+    const linhas = useMemo(() => {
+        if (!dados) return [] as LinhaLivroIpi[];
+        const out: LinhaLivroIpi[] = [];
+        const cols = (v: { vlCont: number; bc: number; imposto: number; isentas: number; outras: number }) =>
+            [brl2(v.vlCont), brl2(v.bc), brl2(v.imposto), brl2(v.isentas), brl2(v.outras)];
+        const lado = (nome: string, l: ApuracaoIpiResposta['entradas']) => {
+            out.push({ tipo: 'lado', c1: nome, vals: [] });
+            if (!l.familias.length) out.push({ tipo: 'familia', c1: 'Sem operações com CST do IPI nesta competência', vals: [] });
+            for (const f of l.familias) {
+                out.push({ tipo: 'familia', c1: f.titulo, vals: [] });
+                for (const c of f.linhas) out.push({ tipo: 'cfop', c1: c.cfop, vals: cols(c) });
+                out.push({ tipo: 'subtotal', c1: 'Subtotal', vals: cols(f.subtotal) });
+            }
+            out.push({ tipo: 'total', c1: 'Total', vals: cols(l.total) });
+        };
+        lado('ENTRADAS', dados.entradas);
+        lado('SAÍDAS', dados.saidas);
+        out.push({ tipo: 'lado', c1: 'DEMONSTRATIVO AUXILIAR DE IPI', vals: [] });
+        for (const d of dados.demonstrativo) {
+            if (d.secao) out.push({ tipo: 'demo-secao', c1: d.secao, vals: [] });
+            out.push({ tipo: 'demo', c1: `${d.codigo} - ${d.historico}`, vals: ['', '', '', '', brl2(d.soma)] });
+        }
+        return out;
+    }, [dados]);
+
+    const pdf = () => {
+        if (!dados) return;
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Apuração de IPI - Mensal — ${dados.empresaNome}`,
+            subtitulo: `${fmtCnpj(dados.cnpj)} · IE ${dados.inscricaoEstadual || 'não cadastrada'} · Mês/Ano ${compFmt(dados.competencia)}`
+                + (dados.periodoEncerrado ? '' : ' · PERÍODO NÃO ENCERRADO'),
+            colunas: [
+                { titulo: 'Codificação (Fisc.) / Histórico', largura: 40, quebra: true },
+                { titulo: 'Valores Contábeis', largura: 14, alinhamento: 'direita' },
+                { titulo: 'Base de Cálculo', largura: 14, alinhamento: 'direita' },
+                { titulo: 'Imposto Creditado/Debitado', largura: 14, alinhamento: 'direita' },
+                { titulo: 'Isentas/Não tributadas', largura: 14, alinhamento: 'direita' },
+                { titulo: 'Outras / Somas', largura: 14, alinhamento: 'direita' },
+            ],
+            linhas: linhas.map(l => [
+                ['lado', 'familia', 'demo-secao'].includes(l.tipo) ? l.c1.toUpperCase() : (l.tipo === 'cfop' ? `   ${l.c1}` : l.c1),
+                ...(l.vals.length ? l.vals : ['', '', '', '', '']),
+            ]),
+            totais: dados.devedor
+                ? ['011 - SALDO DEVEDOR (IPI A RECOLHER)', '', '', '', '', brl2(dados.impostoARecolher)]
+                : ['012 - SALDO CREDOR A TRANSPORTAR', '', '', '', '', brl2(dados.saldoCredorATransportar)],
+            identificacao: montarIdentificacao(dados.identificacao),
+            observacoes: [
+                'Mesmos números dos registros E510/E520 do SPED Fiscal: este livro passa pelo MESMO coletor e pela MESMA apuração '
+                + 'que gera o arquivo, sem gerá-lo. Linhas por CFOP = os E510; Demonstrativo = o E520.',
+                'Outros débitos/créditos e estornos (002, 003, 006, 007) saem como no arquivo: o CFI não lança ajustes da apuração do IPI (E530).',
+                ...(dados.periodoEncerrado ? [] : ['PERÍODO NÃO ENCERRADO: a competência não foi fechada no Fim de mês — os números podem mudar.']),
+                ...dados.avisos,
+            ],
+            fileName: `apuracao-ipi-${dados.cnpj.replace(/\D/g, '')}-${dados.competencia}.pdf`,
+        }));
+    };
+
+    const estiloLinha = (t: LinhaLivroIpi['tipo']) => (
+        t === 'lado' ? 'bg-slate-200 dark:bg-slate-700 font-bold uppercase'
+            : t === 'familia' || t === 'demo-secao' ? 'bg-slate-100 dark:bg-slate-700/60 font-semibold italic'
+                : t === 'subtotal' || t === 'total' ? 'font-bold border-t border-slate-300 dark:border-slate-600'
+                    : 'border-t border-slate-100 dark:border-slate-700'
+    );
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loadingLista ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
+                </div>
+                <BotaoPdf onClick={pdf} disabled={!dados} gerando={gerando} />
+            </div>
+            <p className="text-xs text-slate-500">
+                Livro de Apuração do IPI (modelo 8), competência {compFmt(competencia)} (a mesma do topo): Entradas e Saídas por CFOP
+                e o Demonstrativo Auxiliar 001–012. Os números são os do E510/E520 do SPED Fiscal — <strong>a mesma apuração, sem
+                gerar o arquivo</strong>.
+            </p>
+            {carregando && <p className="text-sm text-slate-500">Apurando…</p>}
+            {erro && <p className="text-sm text-red-700 dark:text-red-300 font-semibold">⛔ {erro}</p>}
+            {!empresaId && !erro && <p className="text-sm text-slate-500">Escolha uma empresa do Lucro para apurar.</p>}
+            {dados && (
+                <>
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                        <strong>{dados.empresaNome}</strong> · {fmtCnpj(dados.cnpj)} · IE {dados.inscricaoEstadual || 'não cadastrada'} · Mês/Ano {compFmt(dados.competencia)} · {dados.documentosLidos} documento(s) lido(s)
+                        {!dados.periodoEncerrado && <span className="ml-2 font-bold text-amber-700 dark:text-amber-300">PERÍODO NÃO ENCERRADO</span>}
+                    </div>
+                    {!dados.geraNoSped && (
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
+                            O SPED desta competência não leva o bloco do IPI (E500/E520): sem IPI e sem saldo credor anterior, ou a empresa não está marcada como contribuinte — veja os avisos abaixo.
+                        </p>
+                    )}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <th className="text-left py-1 pr-2">Codificação (Fisc.) / Histórico</th>
+                                    <th className="text-right py-1 pr-2 w-32">Valores Contábeis</th>
+                                    <th className="text-right py-1 pr-2 w-32">Base de Cálculo</th>
+                                    <th className="text-right py-1 pr-2 w-32">Imposto Cred./Deb.</th>
+                                    <th className="text-right py-1 pr-2 w-32">Isentas/Não trib.</th>
+                                    <th className="text-right py-1 w-32">Outras / Somas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {linhas.map((l, i) => (
+                                    <tr key={i} className={estiloLinha(l.tipo)} data-raipi-linha={l.tipo}>
+                                        <td className={`py-1 pr-2 ${l.tipo === 'cfop' ? 'pl-6 font-mono' : ''}`} colSpan={l.vals.length ? 1 : 6}>{l.c1}</td>
+                                        {l.vals.map((v, k) => <td key={k} className="py-1 pr-2 text-right font-mono">{v}</td>)}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className={`rounded-lg p-3 text-sm font-semibold ${dados.devedor ? 'bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100'}`}>
+                        {dados.devedor
+                            ? <>IPI a recolher (011): {fmtBRL(dados.impostoARecolher)}</>
+                            : <>Saldo credor a transportar para o período seguinte (012): {fmtBRL(dados.saldoCredorATransportar)}</>}
+                    </div>
                     {dados.avisos.length > 0 && (
                         <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc pl-5 space-y-1">
                             {dados.avisos.map((a, i) => <li key={i}>{a}</li>)}
