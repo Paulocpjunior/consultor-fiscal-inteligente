@@ -11,7 +11,7 @@ A conferência do acervo é limitada a registros da competência informada e nã
 Diferencie fatos do contexto, hipóteses e próximos passos. Cite IDs dos registros quando disponíveis. Para legislação, use a pesquisa disponível e priorize fontes oficiais; indique competência e vigência, não invente referências. Se não encontrar fonte ou faltarem fatos, diga o que falta para concluir.
 Sem consulta ao acervo nesta rodada, não diga que verificou documentos. A competência da conversa é informada pelo usuário, não é necessariamente o período aberto em outro módulo.`;
 
-function erro(status, message) { return Object.assign(new Error(message), { status }); }
+function erro(status, message) { return Object.assign(new Error(message), { status, fiscaPublico: true }); }
 export function validarPedidoFisca(body) {
     if (!body || typeof body !== 'object') throw erro(400, 'Pedido inválido.');
     const { mensagem, empresaId, fonte, competencia, analisarAcervo = false, historico = [] } = body;
@@ -88,10 +88,10 @@ export function criarFiscaHandler({ autorizar, lerEmpresa, lerDocumentos, gerar 
             if (!resposta?.text?.trim()) throw erro(502, 'A Físca não recebeu uma resposta. Tente novamente.');
             return res.json({ texto: resposta.text, fontes: fontesFisca(resposta.candidates), contexto });
         } catch (e) {
-            if (e.status) return res.status(e.status).json({ error: e.message });
+            if (e.fiscaPublico === true) return res.status(e.status).json({ error: e.message });
             // Não devolver logs, prompts, dados fiscais ou mensagens cruas do provedor.
-            const quota = /429|RESOURCE_EXHAUSTED|quota/i.test(String(e?.message || ''));
-            return res.status(quota ? 429 : 503).json({ error: quota ? 'A cota da IA está indisponível. Tente novamente mais tarde.' : 'Não foi possível concluir a consulta da Físca. Nenhum dado foi alterado. Tente novamente.' });
+            const quota = [402, 429].includes(Number(e?.status)) || /402|429|RESOURCE_EXHAUSTED|quota|prepayment credits/i.test(String(e?.message || ''));
+            return res.status(quota ? 429 : 503).json({ error: quota ? 'O Gemini está sem créditos ou com a cota indisponível. Peça ao administrador para verificar o faturamento e os limites no Google AI Studio. Nenhum dado foi alterado.' : 'Não foi possível concluir a consulta da Físca. Nenhum dado foi alterado. Tente novamente.' });
         }
     };
 }

@@ -95,3 +95,19 @@ test('registros retirados ou mesclados não geram alertas de repetição ou dire
     expect(resumo.retirados).toEqual(['retirado', 'mesclado']);
     expect(resumo.semDirecao).toEqual([]); expect(resumo.possiveisRepeticoes).toEqual([]);
 });
+
+
+test('erro do SDK com status 402 recebe mensagem clara e não vaza resposta crua', async () => {
+    const f = fixture();
+    f.deps.gerar.mockRejectedValue(Object.assign(new Error('Your prepayment credits are depleted. private-provider-details'), { status: 402 }));
+    await f.run();
+    expect(f.res.status).toHaveBeenCalledWith(429);
+    expect(f.res.json.mock.calls[0][0].error).toContain('Google AI Studio');
+    expect(JSON.stringify(f.res.json.mock.calls)).not.toContain('private-provider-details');
+});
+test('status de erro do provedor não é confundido com erro público da Físca', async () => {
+    const f = fixture();
+    f.deps.gerar.mockRejectedValue(Object.assign(new Error('private-provider-details'), { status: 500 }));
+    await f.run(); expect(f.res.status).toHaveBeenCalledWith(503);
+    expect(JSON.stringify(f.res.json.mock.calls)).not.toContain('private-provider-details');
+});
