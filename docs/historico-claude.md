@@ -15993,3 +15993,10 @@ Pedido do Paulo após o #1406: `analisarEmpresaCompleta` (nfp-compliance-provide
 - Acervo: consulta de empresa/competência limitada a 201 registros para detectar corte em 200, projeção de chave, direção, status, eventos de cancelamento e marcadores de retirada/mesclagem; registros retirados não geram alertas. Mostra contagem, IDs sem direção e grupos de possíveis repetições. Não calcula valores, não declara duplicidade confirmada ou regularidade. Cadastro enviado ao modelo tem projeção explícita.
 - Testes de isolamento, revogação durante leitura/geração, limites, falha de consulta, cota, fontes e cancelamento de respostas antigas; validação de tipos, lint estrito e build locais.
 - Sem commit, push, publicação ou validação autenticada em produção nesta etapa. A regra do CLAUDE.md exige autorização explícita antes de commit/push/deploy.
+
+
+## 16/10/2026 — Físca publicada; crédito Gemini esgotado na validação real
+
+- PR #1422 publicado no build 1160, revisão consultor-fiscal-inteligente-02677-put, 100% do tráfego; ready/Firestore OK e rota sem token responde 401.
+- Safari autenticado abriu a Físca na empresa ativa. A pergunta de apresentação recebeu do Gemini status 402 / RESOURCE_EXHAUSTED por créditos pré-pagos esgotados; portanto a resposta da IA ainda não foi homologada com sucesso.
+- Correção: distinguir erros públicos da aplicação de erros do SDK (que também têm status), tratar 402/429 com orientação para Google AI Studio e não devolver o corpo cru do provedor. Testes reproduzem o status real. Crédito/faturamento depende de ação do administrador, sem troca de credenciais ou contratação automática.
