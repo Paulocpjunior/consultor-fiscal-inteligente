@@ -46,6 +46,7 @@ import {
     // importação que o app nunca mediu.
     ressalvaSemRetencaoGravada, duplicatasNasLinhas, ressalvaDuplicatas,
     nfCanceladasFaltantes, formatarFaixas, resumoPorParticipante, resumoPorAliquota, resumoPorProduto,
+    produtosPorNota, csvProdutosPorNota,
     contraparteDoc, docValido, lerFaltantesPorSerie,
 } from '../../services/relatoriosAgregacoes';
 // A retenção INFORMADA à mão (04/09). Sem esta leitura a aba mostra o zero do
@@ -89,7 +90,7 @@ interface Props {
 
 export type AbaId =
     | 'livro' | 'cfop' | 'impostos-resumo' | 'uf'
-    | 'canceladas' | 'aliquota' | 'produto' | 'participante' | 'cfop-nota'
+    | 'canceladas' | 'aliquota' | 'produto' | 'produto-nota' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
     | 'apuracao-icms' | 'apuracao-ipi' | 'difal-ec87' | 'monofasico';
@@ -139,6 +140,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'canceladas', label: '🚫 Canceladas/Faltantes' },
             { id: 'aliquota', label: '➗ Por alíquota' },
             { id: 'produto', label: '📦 Por produto' },
+            { id: 'produto-nota', label: '🧾 Produtos por nota (de-para)' },
             { id: 'participante', label: '👥 Por participante' },
         ],
     },
@@ -443,6 +445,9 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             )}
             {aba === 'produto' && escriturados && empresa && (
                 <AbaProduto docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
+            )}
+            {aba === 'produto-nota' && escriturados && empresa && (
+                <AbaProdutoNota docs={escriturados} empresa={empresa} competencia={competencia} truncado={truncado} cadastroFiscal={cadastroFiscal} parametrosCfop={parametrosCfop} />
             )}
             {aba === 'participante' && escriturados && empresa && (
                 <AbaParticipante docs={escriturados} empresa={empresa} competencia={competencia} identificacao={identificacao} truncado={truncado} />
@@ -1685,7 +1690,7 @@ const AbaCfop: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado,
         linhas: linhas.map(l => [l.direcao === 'entrada' ? 'E' : 'S', l.cfop, l.notas, l.ctes || 0, l.itens, l.contabil, l.base, l.icms, l.isentos, l.outras, l.ipi, l.st]),
         identificacao,
         observacoes: [
-            'Contábil da nota rateado entre os CFOPs dela na proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).',
+            'Contábil de cada CFOP = soma do valor de cada item (produto + frete + seguro + despesas − desconto + ICMS-ST + IPI do item) — a mesma régua do C190 do SPED e do E201 do Exportar SAGE. O detalhe item a item está em 🧾 Produtos por nota.',
             ...(fretes.ctes ? [
                 `🚚 Fretes (CT-e): ${fretes.ctes} conhecimento(s) · contábil ${fmtBRL(fretes.contabil)} · base ICMS `
                 + `${fmtBRL(fretes.base)} · ICMS creditado ${fmtBRL(fretes.icms)} · Outras ${fmtBRL(fretes.outras)}. `
@@ -2511,6 +2516,136 @@ const AbaProduto: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, trunca
                                     <td className="text-right font-mono">{l.qtd.toLocaleString('pt-BR')} {l.unidade !== '—' ? l.unidade : ''}</td>
                                     <td className="text-right font-mono">{l.notas}</td>
                                     <td className="text-right font-mono">{fmtBRL(l.valor)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+// ─── 🧾 Produtos por nota (de-para) ─────────────────────────────────────────
+//
+// 16/10, Paulo, KROYA 09/2026: o contábil por CFOP do CFI divergia do Fiscal e,
+// para achar a nota, ele precisava do relatório de produtos do e-Fiscal (um
+// item por linha, com CFOP e valores). Mesma seleção e mesmo CFOP do Resumo
+// por CFOP; o "Valor Contábil do Item" é o que o Resumo soma e o C190 declara.
+
+const AbaProdutoNota: React.FC<AbaDocsProps> = ({ docs, empresa, competencia, truncado, cadastroFiscal, parametrosCfop }) => {
+    const [direcao, setDirecao] = useState<'entrada' | 'saida' | 'todas'>('saida');
+    const [cfopFiltro, setCfopFiltro] = useState('');
+    const [nfFiltro, setNfFiltro] = useState('');
+    const natureza = useMemo(
+        () => resolverNaturezaAtividade(cadastroFiscal || {}) as { natureza: string; origem: string },
+        [cadastroFiscal],
+    );
+    const regimeEscrituracao = useMemo(
+        () => (regimeDaEmpresa({
+            dadosFiscais: cadastroFiscal || {},
+            colecao: empresa?.fonte === 'simples' ? 'simples_empresas' : 'lucro_empresas',
+        }) as { regime: string }).regime,
+        [cadastroFiscal, empresa?.fonte],
+    );
+    const todas = useMemo(() => produtosPorNota(
+        docs.filter(d => (['NFe', 'NFCe'].includes((d as any).tipoDoc || d.tipo) || ehConhecimentoDeTransporte(d)) && cteDaEmpresa(d, empresa.cnpj)),
+        {
+            naturezaAtividade: natureza.natureza,
+            cfopOverrides: cadastroFiscal?.cfopOverrides,
+            parametrosCfop: cerebroAtivo(parametrosCfop),
+            regimeTributario: regimeEscrituracao,
+            contribuinteIpi: cadastroFiscal?.contribuinteIpi || null,
+        },
+    ), [docs, natureza, cadastroFiscal, parametrosCfop, regimeEscrituracao, empresa.cnpj]);
+    const linhas = useMemo(() => todas.filter(l =>
+        (direcao === 'todas' || l.direcao === direcao)
+        && (!cfopFiltro || l.cfop === cfopFiltro)
+        && (!nfFiltro || l.numero.replace(/^0+/, '').includes(nfFiltro.replace(/^0+/, '')))), [todas, direcao, cfopFiltro, nfFiltro]);
+    const cfops = useMemo(() => Array.from(new Set(todas.filter(l => direcao === 'todas' || l.direcao === direcao).map(l => l.cfop))).sort(), [todas, direcao]);
+    /** Σ do contábil do item por CFOP — o "de" do de-para (é o Resumo por CFOP). */
+    const porCfop = useMemo(() => {
+        const m = new Map<string, { itens: number; contabil: number }>();
+        for (const l of linhas) {
+            const a = m.get(l.cfop) || { itens: 0, contabil: 0 };
+            a.itens += 1; a.contabil = Math.round((a.contabil + l.contabilItem) * 100) / 100;
+            m.set(l.cfop, a);
+        }
+        return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+    }, [linhas]);
+
+    const baixar = () => {
+        const blob = new Blob(['﻿' + csvProdutosPorNota(linhas)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `produtos-por-nota-${empresa.cnpj.replace(/\D/g, '')}-${competencia}.csv`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 flex-wrap">
+                {(['saida', 'entrada', 'todas'] as const).map(d => (
+                    <button key={d} onClick={() => { setDirecao(d); setCfopFiltro(''); }}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg ${direcao === d ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                        {d === 'entrada' ? '📥 Entradas' : d === 'saida' ? '📤 Saídas' : 'Todas'}
+                    </button>
+                ))}
+                <select value={cfopFiltro} onChange={e => setCfopFiltro(e.target.value)}
+                    className="px-2 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                    <option value="">Todos os CFOP</option>
+                    {cfops.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input value={nfFiltro} onChange={e => setNfFiltro(e.target.value.replace(/\D/g, ''))} placeholder="Nº da NF"
+                    className="w-28 px-2 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+                <button onClick={baixar} disabled={!linhas.length}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-700 text-white disabled:opacity-50">⬇️ Baixar CSV ({linhas.length} itens)</button>
+                {linhas.length > LIMITE_TELA && <span className="text-[11px] text-slate-500">mostrando {LIMITE_TELA} de {linhas.length} — o CSV traz todos</span>}
+            </div>
+            <p className="text-xs text-slate-500">
+                Um item por linha, no formato do relatório de produtos do e-Fiscal: nota, participante, CFOP (do XML e o escriturado),
+                valores do item e o <strong>Valor Contábil do Item</strong> (produto + frete + seguro + despesas − desconto + ICMS-ST + IPI
+                do item). A soma por CFOP abaixo É o Resumo por CFOP — compare com o Fiscal e filtre o CFOP divergente para achar a nota.
+                {truncado ? ' ⚠️ A competência tem mais documentos do que a tela carregou — a lista pode estar incompleta.' : ''}
+            </p>
+            {porCfop.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                    {porCfop.map(([c, v]) => (
+                        <button key={c} onClick={() => setCfopFiltro(cfopFiltro === c ? '' : c)}
+                            className={`px-2 py-1 rounded border font-mono ${cfopFiltro === c ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'}`}>
+                            {c}: {fmtBRL(v.contabil)} · {v.itens} itens
+                        </button>
+                    ))}
+                </div>
+            )}
+            {!linhas.length && <p className="text-xs text-slate-500">Nenhum item de NF-e/NFC-e/CT-e com esse filtro.</p>}
+            {linhas.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                        <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                                <th className="text-left py-1">NF</th><th className="text-left">Emissão</th><th className="text-left">Participante</th>
+                                <th className="text-right">Item</th><th className="text-left">Produto</th><th className="text-left">CFOP</th>
+                                <th className="text-right">Produto</th><th className="text-right">ICMS-ST</th><th className="text-right">IPI</th>
+                                <th className="text-right">Contábil item</th><th className="text-right">Contábil nota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {linhas.slice(0, LIMITE_TELA).map((l, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50">
+                                    <td className="py-1 font-mono">{l.numero}</td>
+                                    <td className="font-mono">{l.emissao.split('-').reverse().join('/')}</td>
+                                    <td className="max-w-[180px] truncate" title={l.participanteNome}>{l.participanteNome}</td>
+                                    <td className="text-right font-mono">{l.item}</td>
+                                    <td className="max-w-[220px] truncate" title={l.descricao}>{l.descricao}</td>
+                                    <td className="font-mono" title={l.cfopXml !== l.cfop ? `CFOP do XML: ${l.cfopXml}` : ''}>{l.cfop}</td>
+                                    <td className="text-right font-mono">{fmtBRL(l.valorProduto)}</td>
+                                    <td className="text-right font-mono">{l.icmsSt ? fmtBRL(l.icmsSt) : ''}</td>
+                                    <td className="text-right font-mono">{l.ipi ? fmtBRL(l.ipi) : ''}</td>
+                                    <td className="text-right font-mono font-semibold">{fmtBRL(l.contabilItem)}</td>
+                                    <td className="text-right font-mono text-slate-500">{l.contabilNota != null ? fmtBRL(l.contabilNota) : ''}</td>
                                 </tr>
                             ))}
                         </tbody>

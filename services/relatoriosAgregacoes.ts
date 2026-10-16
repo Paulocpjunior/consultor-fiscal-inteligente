@@ -9,6 +9,8 @@ import { federaisDoRelatorio } from '../sefaz-backend/federais-relatorio.js';
  */
 import type { DocumentoFiscal } from '../types';
 import { alocarTributacaoIcms, ctxAlocacaoDoDoc } from './iobSageExportService';
+import { contabilDosGruposDeCfop } from '../sefaz-backend/contabil-por-cfop.js';
+import { valorOperacaoDosItens } from '../sefaz-backend/valor-operacao-c190.js';
 // 🚚 O CT-e COMO ITEM (21/09, EDUARDO GUERRA): o conhecimento não tem `itens[]`
 // e por isso SUMIA do Resumo por CFOP em silêncio — enquanto o D100/D190 do
 // SPED o escriturava. O cabeçalho vira o item sintético e passa pela MESMA
@@ -172,8 +174,11 @@ export interface LinhaCfop {
 }
 
 /**
- * Agrega por CFOP com o contábil da nota RATEADO entre os CFOPs dela na
- * proporção do valor dos itens (mesma regra do E201 do Exportar SAGE).
+ * Agrega por CFOP com o contábil da nota repartido entre os CFOPs dela pelo
+ * VALOR DA OPERAÇÃO DE CADA ITEM (produto + acessórias − desconto + ST + IPI
+ * do item) — a régua do C190 do SPED e do E201 do Exportar SAGE
+ * (`contabil-por-cfop.js`, 16/10, KROYA: o rateio pela proporção do produto
+ * espalhava o ICMS-ST do 5401 pelo 5101).
  *
  * ⚠️ **O CFOP DA ENTRADA NÃO É O DO XML.** Numa compra, o documento é do
  * FORNECEDOR e traz o CFOP de SAÍDA dele (5102, 6102…); quem escritura a
@@ -206,17 +211,11 @@ export function resumoPorCfop(docs: DocumentoFiscal[], ctx: CtxCorrelacao): Linh
             if (!porCfop.has(cfop)) porCfop.set(cfop, []);
             porCfop.get(cfop)!.push(it);
         }
-        const valorGrupo = (its: typeof d.itens) => its.reduce((a, i) => a + (i.vProd || 0) - (i.vDesc || 0), 0);
-        const totalItens = Array.from(porCfop.values()).reduce((a, g) => a + valorGrupo(g), 0);
         const contabil = contabilDoc(d);
         const grupos = Array.from(porCfop.entries());
-        let distribuido = 0;
+        const contabilDosGrupos = contabilDosGruposDeCfop(d, itensDoDoc, grupos.map(([, its]) => its), contabil);
         grupos.forEach(([cfop, its], idx) => {
-            const ultimo = idx === grupos.length - 1;
-            const contabilLinha = ultimo
-                ? r2(contabil - distribuido)
-                : (totalItens > 0 ? r2(contabil * (valorGrupo(its) / totalItens)) : 0);
-            distribuido = r2(distribuido + contabilLinha);
+            const contabilLinha = contabilDosGrupos[idx] ?? 0;
             const a = alocarTributacaoIcms(its, contabilLinha, ctxAlocacaoDoDoc(d, ctx));
             const k = `${direcaoDoc(d)}|${cfop}`;
             const linha = mapa.get(k) || {
@@ -893,6 +892,130 @@ export interface LinhaProduto {
     itens: number;
     notas: number;
     valor: number;
+}
+
+/** Uma linha do 🧾 Produtos por nota — o item como o livro o escritura. */
+export interface LinhaProdutoNota {
+    direcao: 'entrada' | 'saida';
+    situacao: string;
+    emissao: string;
+    numero: string;
+    serie: string;
+    participanteDoc: string;
+    participanteNome: string;
+    uf: string;
+    chave: string;
+    /** Contábil da NOTA — só no 1º item dela (como o e-Fiscal), para somar sem duplicar. */
+    contabilNota: number | null;
+    item: string;
+    codigo: string;
+    descricao: string;
+    ncm: string;
+    cfopXml: string;
+    cfop: string;
+    unidade: string;
+    quantidade: number;
+    valorUnitario: number;
+    valorProduto: number;
+    frete: number;
+    seguro: number;
+    outras: number;
+    desconto: number;
+    cstIcms: string;
+    baseIcms: number;
+    aliqIcms: number;
+    icms: number;
+    baseSt: number;
+    icmsSt: number;
+    cstIpi: string;
+    baseIpi: number;
+    aliqIpi: number;
+    ipi: number;
+    cstPis: string;
+    pis: number;
+    cstCofins: string;
+    cofins: number;
+    /** Valor contábil DO ITEM — o mesmo que o Resumo por CFOP soma e o C190 declara. */
+    contabilItem: number;
+}
+
+const n0 = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+/**
+ * 🧾 PRODUTOS POR NOTA (16/10, KROYA): o relatório de produtos do e-Fiscal, para
+ * o "de-para" item a item quando o contábil por CFOP diverge. Mesma seleção e
+ * mesmo CFOP do Resumo por CFOP; o contábil de cada item é o do dono
+ * (`valorOperacaoDosItens`, o VL_OPR do C190) — a soma por CFOP desta lista É o
+ * Resumo por CFOP.
+ */
+export function produtosPorNota(docs: DocumentoFiscal[], ctx: CtxCorrelacao): LinhaProdutoNota[] {
+    const out: LinhaProdutoNota[] = [];
+    for (const d of docs) {
+        if (!docValido(d)) continue;
+        // 🚚 O CT-e entra pelo item sintético, como no Resumo por CFOP — senão o
+        // frete some do de-para e a soma por CFOP deixa de ser o Resumo.
+        const itens = (itensParaEscriturar(d) || []) as any[];
+        if (!itens.length) continue;
+        const direcao = direcaoDoc(d);
+        const { porItem } = valorOperacaoDosItens({ ...(d as any), itens });
+        const cp = contraparteDoc(d) || {};
+        const x = d as any;
+        itens.forEach((it, idx) => {
+            const cru = String(it.cfop || '').replace(/\D/g, '');
+            out.push({
+                direcao,
+                situacao: String(x.status || x.situacao || ''),
+                emissao: String(x.dataEmissao || x.dhEmi || '').slice(0, 10),
+                numero: String(x.numero || ''),
+                serie: String(x.serie || ''),
+                participanteDoc: String(cp.cnpjCpf || cp.cnpj || cp.cpf || ''),
+                participanteNome: String(cp.nome || cp.razaoSocial || ''),
+                uf: String(cp.uf || ''),
+                chave: String(x.chave || ''),
+                contabilNota: idx === 0 ? r2(contabilDoc(d)) : null,
+                item: String(it.nItem || idx + 1),
+                codigo: String(it.cProd || it.codigo || ''),
+                descricao: String(it.xProd || it.descricao || ''),
+                ncm: String(it.ncm || it.NCM || ''),
+                cfopXml: cru,
+                cfop: cru ? String(cfopDoLancamento(d, cru, direcao as any, ctx, it) || cru) : '',
+                unidade: String(it.uCom || it.unidade || ''),
+                quantidade: n0(it.qCom ?? it.quantidade),
+                valorUnitario: n0(it.vUnCom),
+                valorProduto: n0(it.vProd ?? it.valor),
+                frete: n0(it.vFrete), seguro: n0(it.vSeg), outras: n0(it.vOutro), desconto: n0(it.vDesc),
+                cstIcms: `${it.orig ?? ''}${it.cst ?? it.csosn ?? ''}`,
+                baseIcms: n0(it.vBC), aliqIcms: n0(it.aliqIcms ?? it.pICMS), icms: n0(it.vICMS),
+                baseSt: n0(it.vBCST), icmsSt: n0(it.vICMSST) + n0(it.vFCPST),
+                cstIpi: String(it.cstIpi ?? ''), baseIpi: n0(it.vBcIpi ?? it.vBCIPI), aliqIpi: n0(it.aliqIPI), ipi: n0(it.vIPI),
+                cstPis: String(it.cstPis ?? ''), pis: n0(it.vPIS),
+                cstCofins: String(it.cstCofins ?? ''), cofins: n0(it.vCOFINS),
+                contabilItem: r2(porItem[idx] || 0),
+            });
+        });
+    }
+    return out.sort((a, b) => a.direcao.localeCompare(b.direcao) || a.emissao.localeCompare(b.emissao)
+        || a.numero.localeCompare(b.numero, undefined, { numeric: true }) || Number(a.item) - Number(b.item));
+}
+
+/** CSV do 🧾 Produtos por nota — `;` e vírgula decimal (Excel em português). */
+export function csvProdutosPorNota(linhas: LinhaProdutoNota[]): string {
+    const dec = (v: number | null) => (v == null ? '' : v.toFixed(2).replace('.', ','));
+    const qt = (v: number) => String(v).replace('.', ',');
+    const txt = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const cab = ['Tipo', 'Situação', 'Emissão', 'Nº da NF', 'Série', 'CNPJ/CPF Participante', 'Razão Social', 'UF', 'Chave',
+        'Valor Contábil da Nota', 'Item', 'Código Produto', 'Descrição Produto', 'NCM', 'CFOP do XML', 'CFOP Escriturado',
+        'Unidade', 'Quantidade', 'Valor Unitário', 'Valor do Produto', 'Frete', 'Seguro', 'Despesas Acessórias', 'Desconto',
+        'CST ICMS', 'Base ICMS', 'Alíq. ICMS', 'Valor ICMS', 'Base ICMS ST', 'Valor ICMS ST', 'CST IPI', 'Base IPI', 'Alíq. IPI',
+        'Valor IPI', 'CST PIS', 'Valor PIS', 'CST COFINS', 'Valor COFINS', 'Valor Contábil do Item'];
+    const rows = linhas.map((l) => [
+        ({ entrada: 'ENTRADA', saida: 'SAÍDA' } as const)[l.direcao], txt(l.situacao), l.emissao.split('-').reverse().join('/'), l.numero, l.serie,
+        l.participanteDoc, txt(l.participanteNome), l.uf, `'${l.chave}`, dec(l.contabilNota), l.item, txt(l.codigo), txt(l.descricao),
+        l.ncm, l.cfopXml, l.cfop, txt(l.unidade), qt(l.quantidade), dec(l.valorUnitario), dec(l.valorProduto), dec(l.frete), dec(l.seguro),
+        dec(l.outras), dec(l.desconto), l.cstIcms, dec(l.baseIcms), dec(l.aliqIcms), dec(l.icms), dec(l.baseSt), dec(l.icmsSt),
+        l.cstIpi, dec(l.baseIpi), dec(l.aliqIpi), dec(l.ipi), l.cstPis, dec(l.pis), l.cstCofins, dec(l.cofins), dec(l.contabilItem),
+    ].join(';'));
+    return [cab.join(';'), ...rows].join('\r\n');
 }
 
 /**
