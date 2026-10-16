@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Fragment } from 'react';
 
 /**
  * SafeMarkdown — render seguro de texto com **negrito** e quebras de linha.
@@ -22,7 +22,7 @@ function renderInlineBold(s: string): React.ReactNode[] {
     return parts.map((p, i) => {
         const m = /^\*\*([^*]+)\*\*$/.exec(p);
         if (m) return <strong key={i}>{m[1]}</strong>;
-        return <React.Fragment key={i}>{p}</React.Fragment>;
+        return <Fragment key={i}>{p}</Fragment>;
     });
 }
 
@@ -31,7 +31,7 @@ function renderBlockWithLineBreaks(block: string, keyPrefix: string): React.Reac
     const out: React.ReactNode[] = [];
     lines.forEach((line, idx) => {
         if (idx > 0) out.push(<br key={`${keyPrefix}-br-${idx}`} />);
-        out.push(<React.Fragment key={`${keyPrefix}-l-${idx}`}>{renderInlineBold(line)}</React.Fragment>);
+        out.push(<Fragment key={`${keyPrefix}-l-${idx}`}>{renderInlineBold(line)}</Fragment>);
     });
     return out;
 }

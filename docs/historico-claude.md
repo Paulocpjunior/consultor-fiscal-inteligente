@@ -15983,3 +15983,13 @@ Pedido do Paulo após o #1406: `analisarEmpresaCompleta` (nfp-compliance-provide
 - **Túnel do DP (`/empresa-completo`):** `fgts`, `esocial`, `dctfweb` passam por `comStatusDaObrigacao` → acrescenta `statusObrigacao` (+ `motivo`), nenhum campo removido; `crfFgts` (certidão) intacto. As rotas avulsas `/fgts/recolhimento`, `/esocial/status`, `/dctfweb/status` não mudaram.
 - **Tela (Consulta Situação Fiscal):** `NfpObrigacao.motivo`; `mapearRespostaSerpro` casa por sigla OU nome normalizado (o backend manda 'SPED Fiscal'/'SPED Contribuicoes'/'FGTS Digital' onde a base usa EFD/EFD-C/FGTS — antes esses nunca casavam) e leva o motivo; aba Obrigações mostra "não verificada" + motivo (o motivo some quando alguém muda o status); card "Obrigações Pendentes" do Dashboard via `contarObrigacoes` (nfpManualAnalysis.ts) com "· N não verificada(s)". PDF já lia `motivo` e já separava não verificada.
 - **Travas:** `obrigacaoNaoVerificada.test.ts` — análise completa com SERPRO simulado (nao_oferecido/indisponível → não verificada; entregue → entregue; não entregue → pendente; resumo), rota `/empresa-completo` invocada (campos de antes + statusObrigacao), mapeador da tela e contagem. Conferido que o mapeamento antigo reprova a trava.
+
+
+## 16/10/2026 — Físca: assistente de consulta no CFI (implementação local)
+
+- Pedido: criar a assistente Físca com corujinha azul e turquesa, mantendo FiA no Financeiro.
+- Conversa flutuante e responsiva; empresa ativa global; competência explicitamente informada na conversa (o CFI não expõe período global); cancelamento e limpeza ao trocar empresa, usuário ou competência. Conversa só em memória.
+- POST /api/fiscal/fisca: Firebase Auth, perfil válido, carteira validada antes de ler, antes de enviar à IA e antes de responder; Gemini já usado pelo CFI, com instrução de análise e pesquisa; sem ferramentas de escrita. Exceção de leitura restrita ao POST exato da Físca no controle operacional.
+- Acervo: consulta de empresa/competência limitada a 201 registros para detectar corte em 200, projeção de chave, direção, status, eventos de cancelamento e marcadores de retirada/mesclagem; registros retirados não geram alertas. Mostra contagem, IDs sem direção e grupos de possíveis repetições. Não calcula valores, não declara duplicidade confirmada ou regularidade. Cadastro enviado ao modelo tem projeção explícita.
+- Testes de isolamento, revogação durante leitura/geração, limites, falha de consulta, cota, fontes e cancelamento de respostas antigas; validação de tipos, lint estrito e build locais.
+- Sem commit, push, publicação ou validação autenticada em produção nesta etapa. A regra do CLAUDE.md exige autorização explícita antes de commit/push/deploy.

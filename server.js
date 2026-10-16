@@ -102,6 +102,8 @@ import cadastroContabilRouter from './sefaz-backend/cadastro-contabil-routes.js'
 import { protegerOperacaoFiscal } from './sefaz-backend/cfi-acesso-middleware.js';
 import cfiPermissoesRouter from './sefaz-backend/cfi-permissoes-routes.js';
 import gestaoAcessosRouter from './sefaz-backend/gestao-acessos-routes.js';
+import { criarFiscaHandler } from './sefaz-backend/fisca.js';
+import { podeAcessarEmpresaId } from './sefaz-backend/carteira-auth.js';
 import { requireAdmin, requireAuth } from './sefaz-backend/require-admin.js';
 import { podeAcessarCnpj, getCnpjsDaCarteira } from './sefaz-backend/carteira-auth.js';
 import { enviarEmail } from './sefaz-backend/graph-provider.js';
@@ -647,6 +649,32 @@ function respondeGeminiQuota(res) {
         error: 'Limite de créditos/cota da IA esgotado. Consultas determinísticas de CFOP continuam funcionando; para análises por IA, recarregue créditos ou configure faturamento no Google AI Studio.',
     });
 }
+
+// Assistente de leitura: autenticação e carteira verificadas no servidor.
+app.post('/api/fiscal/fisca', requireAuth, rateLimit({
+    windowMs: 60_000, max: 12, standardHeaders: true, legacyHeaders: false,
+    keyGenerator: req => req.user.uid,
+    message: { error: 'Aguarde um minuto antes de consultar a Físca novamente.' },
+}), requireAI, criarFiscaHandler({
+    autorizar: podeAcessarEmpresaId,
+    lerEmpresa: async (fonte, id) => {
+        const adminMod = (await import('firebase-admin')).default;
+        const doc = await adminMod.firestore().collection(`${fonte}_empresas`).doc(id).get();
+        return doc.exists ? doc.data() : null;
+    },
+    lerDocumentos: async (empresaId, competencia, limite) => {
+        const adminMod = (await import('firebase-admin')).default;
+        const snap = await adminMod.firestore().collection('documentos_fiscais')
+            .where('empresaId', '==', empresaId).where('competencia', '==', competencia)
+            .select('chave', 'chaveAcesso', 'direcao', 'status', 'cStat', 'eventos', 'cancelamentoDeclarado', '_deleted', '_merged_into').limit(limite).get();
+        return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    },
+    gerar: async ({ systemInstruction, prompt }) => ai.models.generateContent({
+        model: GEMINI_MODEL_FLASH, contents: prompt,
+        config: { systemInstruction, temperature: 0.2, maxOutputTokens: 2500,
+            tools: [{ googleSearch: {} }], httpOptions: { timeout: 45000 } },
+    }),
+}));
 
 app.post('/api/fiscal/query', requireAuth, requireAI, async (req, res) => {
     const { prompt, model, temperature, googleSearch } = req.body;
