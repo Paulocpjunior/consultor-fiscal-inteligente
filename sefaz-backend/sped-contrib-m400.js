@@ -45,9 +45,14 @@ export const TABELA_NAT_REC_POR_CST = {
 /**
  * Códigos PROVADOS em arquivo aceito — só sugestão, nunca default.
  * EDUARDO GUERRA HORTIFRUTI 07/2026 (EFD assinado, outro sistema).
+ * SBE EDIÇÕES 0181 07/2026 (16/10, Paulo: "inclui a sugestão do 903"):
+ * |M410|903|578785,06| e |M810|903|…| — livros/e-books, NCM 4901, CST 06.
  */
 export const SUGESTOES_PROVADAS = {
-    '06': [{ natRec: '116', quando: 'hortifrúti (produtos hortícolas, frutas e ovos a alíquota zero)', prova: 'EFD aceito da EDUARDO GUERRA HORTIFRUTI 07/2026' }],
+    '06': [
+        { natRec: '116', quando: 'hortifrúti (produtos hortícolas, frutas e ovos a alíquota zero)', prova: 'EFD aceito da EDUARDO GUERRA HORTIFRUTI 07/2026' },
+        { natRec: '903', quando: 'livros e e-books (NCM 4901, alíquota zero)', prova: 'EFD aceito da SBE EDIÇÕES 07/2026' },
+    ],
     '08': [{ natRec: '999', quando: 'outras operações sem incidência', prova: 'EFD aceito da EDUARDO GUERRA HORTIFRUTI 07/2026' }],
 };
 

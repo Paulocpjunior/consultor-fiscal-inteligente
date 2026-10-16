@@ -402,7 +402,16 @@ export function notasComIpiDoArquivo(notas, dados) {
     });
 }
 
-function buildE500E520(dados) {
+/**
+ * 🏭 A APURAÇÃO DO IPI — dono único (16/10). O E500/E510/E520 do arquivo e o
+ * 🏭 Livro de Apuração do IPI dos Relatórios (`apuracao-ipi-raipi.js`) leem
+ * DAQUI: relatório com conta própria divergiria do que a Receita recebe.
+ *
+ * @returns {{gera: boolean, naoContribuinte: boolean, avisoSemContribuinte: string|null,
+ *   vlSdAnt: number, vlDeb: number, vlCred: number, vlScIpi: number, vlSdIpi: number,
+ *   e510: {linhas: string[], avisos: string[], grupos: Array<{cfop: string, cst: string, vlCont: number, vlBc: number, vlIpi: number}>}}}
+ */
+export function apurarIpi(dados) {
     const vlDeb = somarImpostoPorDirecao(dados.notas, 'saida', 'vIPI', 'vIPI');
     // Crédito pelo IPI do ARQUIVO (13/10): uso/consumo e quem não se credita saem zero.
     const notasIpi = notasComIpiDoArquivo(dados.notas, dados);
@@ -412,7 +421,23 @@ function buildE500E520(dados) {
     // não SUMIR da corrente de transporte — sumir calado é o defeito que este
     // campo teve até 19/08 (caso PWR: ficha com 2.547,39 e arquivo com 0,00).
     const vlSdAnt = parseFloat(dados.saldoCredorIpiAnterior || 0);
-    if (vlDeb <= 0 && vlCred <= 0 && vlSdAnt <= 0) return [];
+    // E510 — consolidação por CFOP+CST_IPI, ENTRE o E500 e o E520 (ordem do
+    // arquivo real). Reaproveita o MESMO convertCfop do C190: o E510 é o C190
+    // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
+    // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
+    const e510 = montarLinhasE510(notasIpi, {
+        convertCfop: (cfop, direcao, notaDados, nota, item) => convertCfopParaEntrada(cfop, direcao, notaDados, nota, item),
+    });
+    const saldo = vlDeb - vlCred - vlSdAnt;
+    const base = {
+        vlSdAnt, vlDeb, vlCred,
+        vlSdIpi: saldo >= 0 ? saldo : 0,   // saldo devedor a recolher
+        vlScIpi: saldo < 0 ? -saldo : 0,   // saldo credor a transportar
+        e510,
+        naoContribuinte: false,
+        avisoSemContribuinte: null,
+    };
+    if (vlDeb <= 0 && vlCred <= 0 && vlSdAnt <= 0) return { ...base, gera: false };
 
     // 🚨 CRÉDITO DE COMPRA NÃO PROVA CONTRIBUINTE DE IPI (PVA da PS VIDROS
     // 07/2026, 19/08: *"Se não for contribuinte do IPI, não deve apresentar os
@@ -422,29 +447,24 @@ function buildE500E520(dados) {
     // ou o saldo credor que alguém declarou na ficha (caso PWR).
     // Cadastro explícito vence os dois — é a resposta de quem sabe.
     const marcado = String(dados?.empresa?.dadosFiscais?.contribuinteIpi || '').toLowerCase();
-    if (marcado === 'nao' || marcado === 'não') return [];
+    if (marcado === 'nao' || marcado === 'não') return { ...base, gera: false, naoContribuinte: true };
     if (marcado !== 'sim' && vlDeb <= 0 && vlSdAnt <= 0) {
-        if (Array.isArray(dados.warnings)) {
-            dados.warnings.push(
-                `E500/E520 NÃO gerados: há ${fmt.formatValue(vlCred, 2)} de IPI nas ENTRADAS, mas nenhum IPI `
+        return {
+            ...base, gera: false,
+            avisoSemContribuinte: `E500/E520 NÃO gerados: há ${fmt.formatValue(vlCred, 2)} de IPI nas ENTRADAS, mas nenhum IPI `
                 + 'destacado em saída e nenhum saldo credor na ficha — em comércio isso é CUSTO, não crédito, e '
                 + 'o PVA recusa o bloco de quem não é contribuinte de IPI. Se esta empresa É contribuinte '
                 + '(indústria/equiparado), marque em Empresas → Dados Fiscais ("Contribuinte de IPI") e gere de novo.',
-            );
-        }
-        return [];
+        };
     }
-    const saldo = vlDeb - vlCred - vlSdAnt;
-    const vlSdIpi = saldo >= 0 ? saldo : 0;   // saldo devedor a recolher
-    const vlScIpi = saldo < 0 ? -saldo : 0;   // saldo credor a transportar
+    return { ...base, gera: true };
+}
 
-    // E510 — consolidação por CFOP+CST_IPI, ENTRE o E500 e o E520 (ordem do
-    // arquivo real). Reaproveita o MESMO convertCfop do C190: o E510 é o C190
-    // re-agregado. A soma do VL_IPI dos E510 de saída bate com o VL_DEB do
-    // E520 (amarração da SEFAZ) — os dois saem da mesma varredura de itens.
-    const e510 = montarLinhasE510(notasIpi, {
-        convertCfop: (cfop, direcao, notaDados, nota, item) => convertCfopParaEntrada(cfop, direcao, notaDados, nota, item),
-    });
+function buildE500E520(dados) {
+    const ap = apurarIpi(dados);
+    if (ap.avisoSemContribuinte && Array.isArray(dados.warnings)) dados.warnings.push(ap.avisoSemContribuinte);
+    if (!ap.gera) return [];
+    const { vlSdAnt, vlDeb, vlCred, vlScIpi, vlSdIpi, e510 } = ap;
     if (Array.isArray(dados.warnings)) dados.warnings.push(...e510.avisos);
 
     return [

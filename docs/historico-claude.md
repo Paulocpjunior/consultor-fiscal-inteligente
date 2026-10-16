@@ -9,6 +9,11 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🏭 LIVRO DE APURAÇÃO DO IPI + 903 (16/10)** (Paulo: modelo do e-Fiscal da PWR 09/2026; SBE M410 903).
+  `apurarIpi` extraído em sped-fiscal-blocoE.js (dono do E510/E520); `apuracao-ipi-raipi.js` só distribui nas
+  colunas pela CST do IPI (01-04/51-54 → Isentas; com IPI → base+imposto, sobra em Outras; resto → Outras) e
+  monta o demonstrativo 001-012 = E520. Rota GET `/api/admin/sped-fiscal/apuracao-ipi`, aba 🏭 nos Relatórios.
+  `SUGESTOES_PROVADAS['06']` ganhou 903. Trava `livroApuracaoIpi`.
 - **🏢 CONTRIB MATRIZ+FILIAIS + 🚚 CC-e TRANSPORTADOR (15/10)** (Paulo, 0181 SBE: EFD-Contrib entregue pela
   matriz com 3 0140 / 2 C010; B & T: CC-e de troca de transportador travava a etapa 2). `filiaisContrib` no doc da
   matriz (GET/POST `/api/admin/sped-contrib/filiais`, `FiliaisContrib.tsx`); `sped-contrib-estabelecimentos.js`

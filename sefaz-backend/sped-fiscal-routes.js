@@ -22,6 +22,10 @@ import { extrairAberturaDoSped } from './saldo-abertura.js';
 import { competenciaParaGerarArquivo } from './competencia.js';
 // 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 (14/09, HYPE).
 import { apurarIcmsProprio, montarRaicms } from './apuracao-icms-raicms.js';
+import { apurarIpi } from './sped-fiscal-blocoE.js';
+import { montarRaipi } from './apuracao-ipi-raipi.js';
+import { lerFechamentoDaCompetencia } from './fechamento-store.js';
+import { competenciaFechada } from './fim-de-mes.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
 import { IND_EST_VALIDOS, quantidadeInformada } from './sped-bloco-k.js';
 import { fetchAllDocs } from './firestore-paginate.js';
@@ -415,6 +419,65 @@ router.get('/difal-ec87', requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[sped/difal-ec87 GET]', e);
         return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /apuracao-ipi?empresaId=…&competencia=AAAA-MM
+ *
+ * 🏭 Livro de Apuração do IPI (modelo 8) — 16/10, Paulo, com o modelo do
+ * e-Fiscal da PWR: Entradas e Saídas por CFOP e o Demonstrativo Auxiliar
+ * 001–012. Passa pelo MESMO coletor do SPED e pelo MESMO dono da conta do
+ * E510/E520 (`apurarIpi`) — o relatório não tem conta própria.
+ */
+router.get('/apuracao-ipi', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        if (!periodo.competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM) — o livro do IPI é mensal' });
+
+        const dados = await coletarDadosEmpresa({ empresaId: String(empresaId), competencia: periodo.competencia });
+        if (dados.empresa?._regime !== 'lucro') {
+            return res.status(400).json({ ok: false, error: 'O Livro de Apuração do IPI é do Lucro. Optante do Simples recolhe o IPI no DAS.' });
+        }
+        const ap = apurarIpi(dados);
+        if (ap.naoContribuinte) {
+            return res.status(400).json({
+                ok: false,
+                error: 'A empresa está marcada como NÃO contribuinte do IPI (Empresas → Dados Fiscais) — não há Livro de Apuração do IPI. O IPI das compras é custo.',
+            });
+        }
+        const raipi = montarRaipi(ap);
+        const fechamento = await lerFechamentoDaCompetencia(admin.firestore(), String(empresaId), periodo.competencia);
+        const df = dados.empresa.dadosFiscais || {};
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            empresaNome: dados.empresa.nome || '',
+            cnpj: dados.empresa.cnpj || '',
+            inscricaoEstadual: df.inscricaoEstadual || '',
+            competencia: periodo.competencia,
+            periodoEncerrado: competenciaFechada(fechamento),
+            documentosLidos: (dados.notas || []).length,
+            identificacao: {
+                respLegalNome: df.respLegalNome || null, respLegalCpf: df.respLegalCpf || null,
+                respLegalCargo: df.respLegalCargo || null, responsaveisLegais: df.responsaveisLegais || null,
+                contadorNome: df.contadorNome || null, contadorCrc: df.contadorCrc || null, contadorCpf: df.contadorCpf || null,
+            },
+            ...raipi,
+            avisos: [...(ap.avisoSemContribuinte ? [ap.avisoSemContribuinte] : []), ...raipi.avisos],
+            avisosDaColeta: dados.warnings || [],
+        });
+    } catch (e) {
+        if (e?.code === 'EMPRESA_NAO_ENCONTRADA' || e?.code === 'DADOS_FISCAIS_INCOMPLETOS') {
+            return res.status(400).json({ ok: false, error: e.message });
+        }
+        console.error('[sped/apuracao-ipi GET]', e);
+        return res.status(500).json({ ok: false, error: textoDaFalhaInterna(e) });
     }
 });
 
