@@ -25,6 +25,7 @@ import { creditoSimplesDoItem, temCreditoSimplesDeclarado } from '../sefaz-backe
 import { dataEntradaDoDocumento } from '../sefaz-backend/data-entrada-escrituracao.js';
 import type { DocumentoFiscal, DocumentoFiscalItem } from '../types';
 import { aplicarCreditoOutrasDespesas } from '../sefaz-backend/credito-outras-despesas.js';
+import { contabilDosGruposDeCfop } from '../sefaz-backend/contabil-por-cfop.js';
 
 // ─── Sanitizacao ───────────────────────────────────────────────────────────
 
@@ -926,25 +927,19 @@ function buildE201sFromDoc(d: DocumentoFiscal, ctxCfop?: CfopCtx, codigos?: Reco
         porCfop.get(cfop)!.push(it);
     }
 
-    // Contábil da NOTA rateado por CFOP na proporção do valor dos itens; a
-    // última linha fecha a diferença de centavos. O E-Fiscal valida
-    // `Valor Contábil (E200) = Σ(Base + Isentos + Outras) das E201`.
-    const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    // Contábil da NOTA repartido por CFOP pelo valor da operação de CADA ITEM
+    // (produto + acessórias − desconto + ST + IPI do item — a régua do C190;
+    // 16/10, KROYA: o rateio pela proporção do produto espalhava o ICMS-ST do
+    // 5401 pelo 5101). A última linha fecha a diferença de centavos. O
+    // E-Fiscal valida `Valor Contábil (E200) = Σ(Base + Isentos + Outras) das E201`.
     const contabilNota = d.totais?.vNF || 0;
-    const valorGrupo = (itens: DocumentoFiscalItem[]) =>
-        itens.reduce((a, i) => a + (i.vProd || 0) - (i.vDesc || 0), 0);
-    const totalItens = r2(Array.from(porCfop.values()).reduce((a, g) => a + valorGrupo(g), 0));
     const grupos = Array.from(porCfop.entries());
-    let contabilDistribuido = 0;
+    const contabilDosGrupos = contabilDosGruposDeCfop(d, d.itens || [], grupos.map(([, its]) => its), contabilNota);
 
     let seq = 0;
     for (const [cfop, itens] of grupos) {
         seq++;
-        const ultimo = seq === grupos.length;
-        const contabilLinha = ultimo
-            ? r2(contabilNota - contabilDistribuido)
-            : (totalItens > 0 ? r2(contabilNota * (valorGrupo(itens) / totalItens)) : 0);
-        contabilDistribuido = r2(contabilDistribuido + contabilLinha);
+        const contabilLinha = contabilDosGrupos[seq - 1] ?? 0;
         const a = alocarTributacaoIcms(itens, contabilLinha, ctxAlocacaoDoDoc(d, ctxCfop));
 
         linhas.push(buildRecord(L('E201'), {

@@ -122,10 +122,11 @@ describe('🚨 TODOS os leitores honram o campo — campo que uma tela só honra
     // gravada mente na nota própria de entrada). O que ele garante é a
     // INTENÇÃO: o DOCUMENTO chega como 1º argumento, senão o CFOP informado na
     // NF não vence a régua automática.
-    it('Resumo por CFOP e Por produto passam o DOCUMENTO', () => {
+    it('Resumo por CFOP, Por produto e Produtos por nota passam o DOCUMENTO', () => {
         const f = leitor('services/relatoriosAgregacoes.ts');
         // ✂️ 11/09: o ITEM vai junto — sem ele o CFOP informado por item é ignorado.
-        expect((f.match(/cfopDoLancamento\(d, cru, [^,]+, ctx, it\)/g) || []).length).toBe(2);
+        // 16/10: o 🧾 Produtos por nota é o terceiro leitor (de-para da KROYA).
+        expect((f.match(/cfopDoLancamento\(d, cru, [^,]+, ctx, it\)/g) || []).length).toBe(3);
         // E a direção não volta a ser lida crua nessas chamadas.
         expect(f).not.toMatch(/cfopDoLancamento\(d, cru, d\.direcao/);
     });

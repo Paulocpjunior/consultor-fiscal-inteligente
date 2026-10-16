@@ -9,6 +9,12 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📊 CONTÁBIL POR CFOP POR ITEM + 🧾 PRODUTOS POR NOTA (16/10)** (Paulo, KROYA 09/2026: CFI 5101 49.597,72 /
+  5401 1.676,59 × Fiscal 49.432,09 / 1.842,22, mesma soma). O Resumo por CFOP e o E201 rateavam o contábil pela
+  proporção do vProd; o C190 e o e-Fiscal somam por item (vProd+acessórias−desc+ST+FCP-ST+IPI). Dono novo
+  `contabil-por-cfop.js` (`contabilDosGruposDeCfop`, sobre `valorOperacaoDosItens`) nos dois. Relatório
+  `produtosPorNota`/`csvProdutosPorNota` + aba 🧾. Conferido com o CSV real (NF 15589: 313,32/44,94). Trava
+  `contabilPorCfopPorItem`.
 - **🏭 LIVRO DE APURAÇÃO DO IPI + 903 (16/10)** (Paulo: modelo do e-Fiscal da PWR 09/2026; SBE M410 903).
   `apurarIpi` extraído em sped-fiscal-blocoE.js (dono do E510/E520); `apuracao-ipi-raipi.js` só distribui nas
   colunas pela CST do IPI (01-04/51-54 → Isentas; com IPI → base+imposto, sobra em Outras; resto → Outras) e
