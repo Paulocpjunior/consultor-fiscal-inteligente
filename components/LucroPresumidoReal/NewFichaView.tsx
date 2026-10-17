@@ -20,7 +20,7 @@
  * puramente apresentacional, recebe tudo via props.
  */
 import React, { useState } from 'react';
-import { LucroPresumidoEmpresa, LucroResult, ItemFinanceiroAvulso } from '../../types';
+import { LucroPresumidoEmpresa, LucroResult, ItemFinanceiroAvulso, User } from '../../types';
 import DareSpModal from './DareSpModal';
 import {
     ArrowLeftIcon, SaveIcon, ShieldIcon, BuildingIcon, CalculatorIcon,
@@ -32,10 +32,13 @@ import type {
     PropostaSaldoAnterior, AvisoSaldoAnterior, TributoComTransporte,
 } from '../../services/saldoAnteriorProposto';
 import BaseCreditoModal from './BaseCreditoModal';
+import IcmsDasNotasProposto from './IcmsDasNotasProposto';
 
 interface NewFichaViewProps {
     // Contexto
     selectedEmpresa: LucroPresumidoEmpresa | undefined;
+    /** Quem lê as notas do mês para a 🧮 proposta do ICMS (17/10). */
+    currentUser?: User | null;
     selectedFichaId: string | null;
     loading: boolean;
 
@@ -406,6 +409,15 @@ const NewFichaView: React.FC<NewFichaViewProps> = (p) => {
                             </p>
                         </div>
                         <CurrencyInput label="ICMS sobre Vendas (Para dedução PIS/COFINS)" value={p.fichaIcmsVendas} onChange={p.setFichaIcmsVendas} />
+                        {p.selectedEmpresa?.id && (
+                            <IcmsDasNotasProposto
+                                currentUser={p.currentUser}
+                                empresaId={p.selectedEmpresa.id}
+                                empresaCnpj={p.selectedEmpresa.cnpj || ''}
+                                competencia={p.fichaMes}
+                                onAplicar={(icms, st) => { p.setFichaIcmsVendas(icms); p.setFichaIcmsStFaturado(st); }}
+                            />
+                        )}
 
                         <div className="col-span-1 md:col-span-2 pt-2 border-t border-orange-100 dark:border-orange-800/30">
                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer mb-2">
