@@ -824,6 +824,7 @@ const LucroPresumidoRealDashboard: React.FC<LucroPresumidoRealDashboardProps> = 
     const renderNewFicha = () => (
         <NewFichaView
             selectedEmpresa={selectedEmpresa}
+            currentUser={currentUser}
             selectedFichaId={selectedFichaId}
             loading={loading}
             fichaMes={fichaMes} setFichaMes={setFichaMes}

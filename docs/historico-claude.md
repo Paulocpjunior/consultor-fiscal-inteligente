@@ -9,6 +9,10 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **🧮 FICHA PROPÕE ICMS DAS VENDAS × ST+FCP (17/10)** (Paulo: "faz a ficha"). `services/icmsVendasProposto.ts`
+  (`proporIcmsDasVendas`: saídas válidas NF-e/NFC-e, por CFOP, ICMS por `icmsDestacadoDoItem` e ST + FCP-ST do item;
+  CFOP desmarcado sai) + `IcmsDasNotasProposto.tsx` na ficha (lê `listDocumentos`, Aplicar preenche icmsVendas e
+  valorIcmsSt). Nada é gravado sem a pessoa. Trava `icmsVendasProposto` (KROYA: ST+FCP 444,18).
 - **📕 RAICMS-ST POR UF (17/10)** (Paulo, modelo do e-Fiscal REALITY 09/2026: 5.401, 001=013=1.330,86).
   `apuracao-icms-st-raicms.js` lê as linhas de `montarLinhasStBlocoE` (E200/E210/E220/E250) e distribui no
   livro (E220 pelo 4º caractere → 002/003/006/007; E210 → 001/005/009/011–014); saídas por CFOP com contábil do
