@@ -16014,3 +16014,9 @@ Pedido do Paulo após o #1406: `analisarEmpresaCompleta` (nfp-compliance-provide
 - PR #1422 publicado no build 1160, revisão consultor-fiscal-inteligente-02677-put, 100% do tráfego; ready/Firestore OK e rota sem token responde 401.
 - Safari autenticado abriu a Físca na empresa ativa. A pergunta de apresentação recebeu do Gemini status 402 / RESOURCE_EXHAUSTED por créditos pré-pagos esgotados; portanto a resposta da IA ainda não foi homologada com sucesso.
 - Correção: distinguir erros públicos da aplicação de erros do SDK (que também têm status), tratar 402/429 com orientação para Google AI Studio e não devolver o corpo cru do provedor. Testes reproduzem o status real. Crédito/faturamento depende de ação do administrador, sem troca de credenciais ou contratação automática.
+
+## 17/10/2026 — CORS: endereço novo do Consultor DP (dp.spassessoriacontabil.com.br)
+
+- Pedido do Paulo (17/10): "pode fazer o PR do CFI para o whatsapp". O DP passou do GitHub Pages para `https://dp.spassessoriacontabil.com.br` (Firebase Hosting do `consultor-dp-folha`, com o link antigo redirecionando).
+- `server.js`: a origem nova entra em `ALLOWED_ORIGINS`, para o envio por WhatsApp e as demais chamadas do DP ao CFI responderem no endereço novo. O GitHub Pages segue na lista enquanto redireciona. Nada muda na tela do CFI.
+

@@ -184,7 +184,9 @@ const ALLOWED_ORIGINS = [
     ...(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()),
     'https://consultorfiscalapp.web.app',
     'https://consultorfiscalapp.firebaseapp.com',
-    // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio).
+    // Projeto Consultor-DP-Folhapagamentos (deploy separado, mesma org/domínio). Endereço oficial no domínio da SP
+    // desde 17/10/2026 (Firebase Hosting do consultor-dp-folha); o GitHub Pages fica enquanto redireciona.
+    'https://dp.spassessoriacontabil.com.br',
     'https://paulocpjunior.github.io',
     'https://consultor-dp-folha.web.app',
     'https://consultor-dp-folha.firebaseapp.com',
