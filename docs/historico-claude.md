@@ -9,6 +9,12 @@ Paulo autorizou ampliar os templates em todos os sistemas e depois autorizou "po
 
 ## Regras permanentes de operação
 
+- **📕 RAICMS-ST POR UF (17/10)** (Paulo, modelo do e-Fiscal REALITY 09/2026: 5.401, 001=013=1.330,86).
+  `apuracao-icms-st-raicms.js` lê as linhas de `montarLinhasStBlocoE` (E200/E210/E220/E250) e distribui no
+  livro (E220 pelo 4º caractere → 002/003/006/007; E210 → 001/005/009/011–014); saídas por CFOP com contábil do
+  dono `contabilDosGruposDeCfop`. Rota GET `/api/admin/sped-fiscal/apuracao-icms-st`, aba 📕. Trava `raicmsSt`.
+  Ficha: o campo "ICMS ST (Destacado nas Vendas)" JÁ EXISTE (deduz IRPJ/CSLL/PIS/COFINS); a equipe somava o ST
+  no "ICMS sobre vendas" (só PIS/COFINS) — orientado a separar.
 - **🧷 OPERAÇÕES COM ST POR UF (16/10)** (Paulo, modelo do e-Fiscal KROYA 09/2026). `operacoesComSt` em
   relatoriosAgregacoes.ts: linha por nota × CFOP com vICMSST/vFCPST > 0, contábil pelo dono
   `contabilDosGruposDeCfop`, interna × interestadual pela UF da empresa; aba 🧷 com total por UF/geral e PDF.

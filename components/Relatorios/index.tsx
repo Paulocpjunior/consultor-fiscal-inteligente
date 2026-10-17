@@ -65,6 +65,7 @@ import { varrerDipam, type DipamVarreduraLinha } from '../../services/dipamServi
 // 📒 O Registro de Apuração do ICMS lê a MESMA apuração do E110 — a tela não calcula.
 import { carregarApuracaoIcms, type ApuracaoIcmsResposta } from '../../services/apuracaoIcmsService';
 import { carregarApuracaoIpi, type ApuracaoIpiResposta } from '../../services/apuracaoIpiService';
+import { carregarApuracaoIcmsSt, type ApuracaoIcmsStResposta } from '../../services/apuracaoIcmsStService';
 import { carregarRelatorioMonofasico, baixarCsvMonofasico, type RelatorioMonofasicoResposta } from '../../services/relatorioMonofasicoService';
 import { carregarFaturamento, carregarFaturamentoMensal, type FaturamentoResp } from '../../services/relatoriosService';
 import { mesesDoPeriodo, montarMeses, totalDeclaracao, avisosDaDeclaracao, parseValorMoeda, type MesDeclaracao } from '../../services/declaracaoFaturamento';
@@ -93,7 +94,7 @@ export type AbaId =
     | 'canceladas' | 'aliquota' | 'produto' | 'produto-nota' | 'operacoes-st' | 'participante' | 'cfop-nota'
     | 'serv-tomados' | 'serv-prestados' | 'serv-codigo' | 'retencoes'
     | 'faturamento' | 'declaracao' | 'impostos-enviados' | 'dipam' | 'ficha' | 'trimestre'
-    | 'apuracao-icms' | 'apuracao-ipi' | 'difal-ec87' | 'monofasico';
+    | 'apuracao-icms' | 'apuracao-icms-st' | 'apuracao-ipi' | 'difal-ec87' | 'monofasico';
 
 import { escrituraveisNoLivroDeEntradas } from '../../services/livroNotaProdutor';
 import {
@@ -162,6 +163,7 @@ const GRUPOS: Array<{ titulo: string; abas: Array<{ id: AbaId; label: string }> 
             { id: 'ficha', label: '📑 Ficha Financeira (Lucro)' },
             { id: 'trimestre', label: '🧮 Apuração trimestral (Presumido)' },
             { id: 'apuracao-icms', label: '📒 Apuração do ICMS (RAICMS)' },
+            { id: 'apuracao-icms-st', label: '📕 Apuração do ICMS-ST (por UF)' },
             { id: 'apuracao-ipi', label: '🏭 Apuração do IPI (livro modelo 8)' },
             { id: 'monofasico', label: '🧪 PIS/COFINS monofásico × tributado' },
         ],
@@ -469,6 +471,7 @@ const RelatoriosHub: React.FC<Props> = ({ currentUser, onShowToast, abaInicial }
             {aba === 'ficha' && <AbaFicha currentUser={currentUser} />}
             {aba === 'trimestre' && <AbaTrimestre currentUser={currentUser} />}
             {aba === 'apuracao-icms' && <AbaApuracaoIcms currentUser={currentUser} competencia={competencia} />}
+            {aba === 'apuracao-icms-st' && <AbaApuracaoIcmsSt currentUser={currentUser} competencia={competencia} />}
             {aba === 'apuracao-ipi' && <AbaApuracaoIpi currentUser={currentUser} competencia={competencia} />}
             {aba === 'monofasico' && <AbaMonofasico currentUser={currentUser} competencia={competencia} />}
         </div>
@@ -3905,6 +3908,185 @@ const AbaApuracaoIcms: React.FC<{ currentUser: User; competencia: string }> = ({
                                     {dados.avisosDaColeta.map((a, i) => <li key={i}>{a}</li>)}
                                 </ul>
                             )}
+                        </div>
+                    )}
+                </>
+            )}
+        </Card>
+    );
+};
+
+// ─── 📕 Registro de Apuração do ICMS — Substituição Tributária ──────────────
+//
+// 17/10, Paulo, com o RAICMS-ST do e-Fiscal (REALITY 09/2026): saídas com ST por
+// CFOP e o demonstrativo 001–014, uma seção por UF. A tela NÃO calcula nada:
+// tudo vem do MESMO gerador do E200/E210/E220/E250 do SPED.
+
+const AbaApuracaoIcmsSt: React.FC<{ currentUser: User; competencia: string }> = ({ currentUser, competencia }) => {
+    const [empresas, setEmpresas] = useState<lucroPresumidoService.LucroEmpresaResumo[]>([]);
+    const empresaAtivaId = useEmpresaAtivaId();
+    const [empresaId, setEmpresaId] = useState(empresaAtivaId || '');
+    const [loadingLista, setLoadingLista] = useState(false);
+    const [dados, setDados] = useState<ApuracaoIcmsStResposta | null>(null);
+    const [erro, setErro] = useState<string | null>(null);
+    const [carregando, setCarregando] = useState(false);
+    const [verColeta, setVerColeta] = useState(false);
+    const { gerando, rodar } = usePdf();
+
+    React.useEffect(() => {
+        let alive = true;
+        setLoadingLista(true);
+        lucroPresumidoService.getEmpresasResumo(currentUser)
+            .then(r => { if (alive) setEmpresas(r.empresas); })
+            .finally(() => { if (alive) setLoadingLista(false); });
+        return () => { alive = false; };
+    }, [currentUser]);
+
+    React.useEffect(() => {
+        let alive = true;
+        if (!empresaId || !competencia) { setDados(null); setErro(null); return; }
+        setCarregando(true);
+        setErro(null);
+        carregarApuracaoIcmsSt(empresaId, competencia)
+            .then(r => {
+                if (!alive) return;
+                if (!r.ok) { setErro(r.error || 'Falha ao ler a apuração do ICMS-ST.'); setDados(null); return; }
+                setDados(r);
+            })
+            .catch(e => { if (alive) { setErro(`Falha ao ler a apuração do ICMS-ST: ${e?.message || e}`); setDados(null); } })
+            .finally(() => { if (alive) setCarregando(false); });
+        return () => { alive = false; };
+    }, [empresaId, competencia]);
+
+    const compFmt = (c: string) => c.split('-').reverse().join('/');
+    const v = (n: number) => fmtBRL(n).replace('R$', '').trim();
+    const dt = (d: string) => (d && d.length === 8 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d);
+
+    const pdf = () => {
+        if (!dados) return;
+        const linhas: Array<Array<string>> = [];
+        for (const u of dados.ufs) {
+            linhas.push([`UF ${u.uf}${u.uf === dados.ufEmpresa ? ' (própria)' : ''} — SAÍDAS COM ST`, '', '', '', '']);
+            if (!u.saidas.length) linhas.push(['   Sem saídas com ICMS-ST para a UF', '', '', '', '']);
+            for (const s of u.saidas) linhas.push([`   ${s.cfop.charAt(0)}.${s.cfop.slice(1)}`, v(s.vlCont), v(s.bcSt), v(s.icmsSt), v(s.fcpSt)]);
+            linhas.push(['   Total', v(u.totalSaidas.vlCont), v(u.totalSaidas.bcSt), v(u.totalSaidas.icmsSt), v(u.totalSaidas.fcpSt)]);
+            linhas.push([`UF ${u.uf} — DEMONSTRATIVO`, '', '', '', '']);
+            for (const d of u.demonstrativo) {
+                if (d.secao) linhas.push([`   ${d.secao.toUpperCase()}`, '', '', '', '']);
+                linhas.push([`   ${d.codigo} - ${d.historico}`, '', '', '', v(d.soma)]);
+                for (const it of d.itens) linhas.push([`      ${it.historico} (${it.codigo})`, '', '', v(it.valor), '']);
+            }
+            for (const o of u.obrigacoes) linhas.push([`   Guia (E250): receita ${o.codRec} · vencimento ${dt(o.vencimento)}`, '', '', '', v(o.valor)]);
+        }
+        rodar(() => gerarRelatorioPdf({
+            titulo: `Registro de Apuração do ICMS — Substituição Tributária — ${dados.empresaNome}`,
+            subtitulo: `${fmtCnpj(dados.cnpj)} · IE ${dados.inscricaoEstadual || 'não cadastrada'} · Mês/Ano ${compFmt(dados.competencia)}`
+                + (dados.periodoEncerrado ? '' : ' · PERÍODO NÃO ENCERRADO'),
+            colunas: [
+                { titulo: 'CFOP / Histórico', largura: 46, quebra: true },
+                { titulo: 'Valor Contábil', largura: 13, alinhamento: 'direita' },
+                { titulo: 'Base ST', largura: 13, alinhamento: 'direita' },
+                { titulo: 'ICMS-ST / Coluna Auxiliar', largura: 14, alinhamento: 'direita' },
+                { titulo: 'FCP-ST / Somas', largura: 13, alinhamento: 'direita' },
+            ],
+            linhas,
+            identificacao: montarIdentificacao(dados.identificacao),
+            observacoes: [
+                'Mesmos números dos registros E200/E210/E220/E250 do SPED Fiscal: este livro passa pelo MESMO coletor e pelo MESMO gerador do arquivo, sem gerá-lo. Ajustes (E220) aparecem na Coluna Auxiliar.',
+                'Devoluções de ST (E210 campo 04) não são apuradas pelo CFI: a linha 005 sai como no arquivo.',
+                ...(dados.periodoEncerrado ? [] : ['PERÍODO NÃO ENCERRADO: a competência não foi fechada no Fim de mês — os números podem mudar.']),
+                ...dados.avisos,
+            ],
+            fileName: `apuracao-icms-st-${dados.cnpj.replace(/\D/g, '')}-${dados.competencia}.pdf`,
+        }));
+    };
+
+    return (
+        <Card>
+            <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px] flex-1">
+                    <label className="text-[10px] uppercase font-bold block mb-1 text-slate-500">Empresa (Lucro Presumido/Real)</label>
+                    <EmpresaSearchSelect
+                        empresas={opcoesLucro(empresas)}
+                        value={empresaId}
+                        onChange={setEmpresaId}
+                        placeholder={loadingLista ? 'Carregando…' : 'Buscar por código, nome ou CNPJ…'}
+                    />
+                </div>
+                <BotaoPdf onClick={pdf} disabled={!dados || !dados.ufs.length} gerando={gerando} />
+            </div>
+            <p className="text-xs text-slate-500">
+                Registro de Apuração do ICMS — Substituição Tributária, competência {compFmt(competencia)} (a mesma do topo): uma seção por UF,
+                com as saídas com ST por CFOP e o demonstrativo 001–014. Os números são os do E200/E210 do SPED Fiscal — <strong>a mesma
+                apuração, sem gerar o arquivo</strong>. Ajustes E220 saem na Coluna Auxiliar; a guia (E250) vem no fim de cada UF.
+            </p>
+            {carregando && <p className="text-sm text-slate-500">Apurando…</p>}
+            {erro && <p className="text-sm text-red-700 dark:text-red-300 font-semibold">⛔ {erro}</p>}
+            {!empresaId && !erro && <p className="text-sm text-slate-500">Escolha uma empresa do Lucro para apurar.</p>}
+            {dados && (
+                <>
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                        <strong>{dados.empresaNome}</strong> · {fmtCnpj(dados.cnpj)} · IE {dados.inscricaoEstadual || 'não cadastrada'} · Mês/Ano {compFmt(dados.competencia)} · {dados.documentosLidos} documento(s) lido(s)
+                        {!dados.periodoEncerrado && <span className="ml-2 font-bold text-amber-700 dark:text-amber-300">PERÍODO NÃO ENCERRADO</span>}
+                    </div>
+                    {!dados.ufs.length && <p className="text-sm text-slate-500">Sem movimento de ICMS-ST nesta competência (nenhuma saída com ST retido).</p>}
+                    {dados.ufs.map(u => (
+                        <div key={u.uf} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                            <div className="font-bold text-sm">UF {u.uf}{u.uf === dados.ufEmpresa ? ' (própria)' : ''}</div>
+                            <table className="w-full text-xs">
+                                <thead className="text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                                    <tr><th className="text-left py-1">Saídas com ST — CFOP</th><th className="text-right">Valor Contábil</th><th className="text-right">Base ST</th><th className="text-right">ICMS-ST</th><th className="text-right">FCP-ST</th></tr>
+                                </thead>
+                                <tbody>
+                                    {u.saidas.map(s => (
+                                        <tr key={s.cfop} className="border-b border-slate-100 dark:border-slate-700/50">
+                                            <td className="py-1 font-mono">{s.cfop.charAt(0)}.{s.cfop.slice(1)} <span className="text-slate-500">({s.notas} nota(s))</span></td>
+                                            <td className="text-right font-mono">{v(s.vlCont)}</td><td className="text-right font-mono">{v(s.bcSt)}</td>
+                                            <td className="text-right font-mono">{v(s.icmsSt)}</td><td className="text-right font-mono">{v(s.fcpSt)}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="font-bold"><td className="py-1">Total</td><td className="text-right font-mono">{v(u.totalSaidas.vlCont)}</td><td className="text-right font-mono">{v(u.totalSaidas.bcSt)}</td><td className="text-right font-mono">{v(u.totalSaidas.icmsSt)}</td><td className="text-right font-mono">{v(u.totalSaidas.fcpSt)}</td></tr>
+                                </tbody>
+                            </table>
+                            <table className="w-full text-sm">
+                                <thead><tr className="text-[10px] uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700"><th className="text-left py-1 w-10">Nº</th><th className="text-left py-1">Históricos</th><th className="text-right py-1 w-32">Coluna Auxiliar</th><th className="text-right py-1 w-32">Somas</th></tr></thead>
+                                <tbody>
+                                    {u.demonstrativo.map(d => (
+                                        <React.Fragment key={d.codigo}>
+                                            {d.secao && <tr className="bg-slate-100 dark:bg-slate-700/60 font-bold"><td colSpan={4} className="py-1">{d.secao}</td></tr>}
+                                            <tr className="border-t border-slate-100 dark:border-slate-700">
+                                                <td className="py-1 font-mono text-xs">{d.codigo}</td><td className="py-1">{d.historico}</td><td />
+                                                <td className="py-1 text-right font-mono">{v(d.soma)}</td>
+                                            </tr>
+                                            {d.itens.map((it, i) => (
+                                                <tr key={i} className="text-slate-600 dark:text-slate-300"><td /><td className="py-1 pl-6 italic">{it.historico} ({it.codigo})</td><td className="text-right font-mono">{v(it.valor)}</td><td /></tr>
+                                            ))}
+                                        </React.Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className={`rounded-lg p-2 text-sm font-semibold ${u.devedor ? 'bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100'}`}>
+                                {u.devedor ? <>ICMS-ST a recolher para {u.uf} (013): {fmtBRL(u.impostoARecolher)}</> : <>Saldo credor de ST a transportar (014): {fmtBRL(u.saldoCredorATransportar)}</>}
+                                {u.debitosEspeciais > 0 && <> · débitos especiais: {fmtBRL(u.debitosEspeciais)}</>}
+                            </div>
+                            {u.obrigacoes.length > 0 && (
+                                <ul className="text-xs text-slate-600 dark:text-slate-300 list-disc pl-5">
+                                    {u.obrigacoes.map((o, i) => <li key={i}>Guia (E250): {fmtBRL(o.valor)} · receita {o.codRec} · vencimento {dt(o.vencimento)}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    ))}
+                    {dados.avisos.length > 0 && (
+                        <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc pl-5 space-y-1">
+                            {dados.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                        </ul>
+                    )}
+                    {dados.avisosDaColeta.length > 0 && (
+                        <div className="text-xs text-slate-500">
+                            <button type="button" className="underline" onClick={() => setVerColeta(x => !x)}>
+                                {verColeta ? 'Ocultar' : 'Ver'} os {dados.avisosDaColeta.length} aviso(s) da coleta (os mesmos da geração do SPED)
+                            </button>
+                            {verColeta && <ul className="list-disc pl-5 mt-1 space-y-1">{dados.avisosDaColeta.map((a, i) => <li key={i}>{a}</li>)}</ul>}
                         </div>
                     )}
                 </>
