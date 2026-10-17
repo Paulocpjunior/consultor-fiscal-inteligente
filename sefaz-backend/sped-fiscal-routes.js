@@ -24,6 +24,9 @@ import { competenciaParaGerarArquivo } from './competencia.js';
 import { apurarIcmsProprio, montarRaicms } from './apuracao-icms-raicms.js';
 import { apurarIpi } from './sped-fiscal-blocoE.js';
 import { montarRaipi } from './apuracao-ipi-raipi.js';
+import { montarRaicmsSt } from './apuracao-icms-st-raicms.js';
+import { montarLinhasStBlocoE } from './sped-bloco-e-st.js';
+import * as fmtSped from './sped-fiscal-format.js';
 import { lerFechamentoDaCompetencia } from './fechamento-store.js';
 import { competenciaFechada } from './fim-de-mes.js';
 import { MOTIVOS_INVENTARIO, inventarioInformado } from './sped-bloco-h.js';
@@ -419,6 +422,68 @@ router.get('/difal-ec87', requireAuth, async (req, res) => {
     } catch (e) {
         console.error('[sped/difal-ec87 GET]', e);
         return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+/**
+ * GET /apuracao-icms-st?empresaId=…&competencia=AAAA-MM
+ *
+ * 📕 Registro de Apuração do ICMS — Substituição Tributária, por UF (17/10,
+ * Paulo, modelo do e-Fiscal da REALITY). Passa pelo MESMO coletor do SPED e
+ * pelo MESMO gerador do E200/E210/E220/E250 (`montarLinhasStBlocoE`, com os
+ * mesmos parâmetros do bloco E) — o relatório não tem conta própria.
+ */
+router.get('/apuracao-icms-st', requireAuth, async (req, res) => {
+    try {
+        const { empresaId } = req.query || {};
+        if (!empresaId) return res.status(400).json({ ok: false, error: 'empresaId obrigatorio' });
+        const acesso = await podeAcessarEmpresaId(req.user, String(empresaId));
+        if (!acesso.ok) return res.status(acesso.status || 403).json({ ok: false, error: acesso.error });
+        const periodo = periodoDaRequisicao(req.query || {});
+        if (!periodo.ok) return res.status(400).json({ ok: false, error: periodo.erro });
+        if (!periodo.competencia) return res.status(400).json({ ok: false, error: 'competencia obrigatoria (AAAA-MM)' });
+
+        const dados = await coletarDadosEmpresa({ empresaId: String(empresaId), competencia: periodo.competencia });
+        if (dados.empresa?._regime !== 'lucro') {
+            return res.status(400).json({ ok: false, error: 'A apuração do ICMS-ST (E210) é do Lucro. No Simples, o ICMS-ST retido sai em guia própria, fora do DAS.' });
+        }
+        const df = dados.empresa.dadosFiscais || {};
+        const st = montarLinhasStBlocoE({
+            notas: dados.notas,
+            ufEmpresa: String(df.uf || '').toUpperCase(),
+            ajustes: dados.ajustesApuracao,
+            // As MESMAS datas do arquivo (E200 e o MES_REF do E250).
+            dtIni: fmtSped.dtIniDoArquivo(dados),
+            dtFin: fmtSped.dtFinDoArquivo(dados),
+            obrigacoesPorUf: dados.obrigacoesStPorUf || {},
+        });
+        const ufs = montarRaicmsSt({ linhas: st.linhas, notas: dados.notas });
+        const fechamento = await lerFechamentoDaCompetencia(admin.firestore(), String(empresaId), periodo.competencia);
+        return res.json({
+            ok: true,
+            empresaId: String(empresaId),
+            empresaNome: dados.empresa.nome || '',
+            cnpj: dados.empresa.cnpj || '',
+            inscricaoEstadual: df.inscricaoEstadual || '',
+            ufEmpresa: String(df.uf || '').toUpperCase(),
+            competencia: periodo.competencia,
+            periodoEncerrado: competenciaFechada(fechamento),
+            documentosLidos: (dados.notas || []).length,
+            identificacao: {
+                respLegalNome: df.respLegalNome || null, respLegalCpf: df.respLegalCpf || null,
+                respLegalCargo: df.respLegalCargo || null, responsaveisLegais: df.responsaveisLegais || null,
+                contadorNome: df.contadorNome || null, contadorCrc: df.contadorCrc || null, contadorCpf: df.contadorCpf || null,
+            },
+            ufs,
+            avisos: [...st.avisos, ...ufs.flatMap((u) => u.avisos)],
+            avisosDaColeta: dados.warnings || [],
+        });
+    } catch (e) {
+        if (e?.code === 'EMPRESA_NAO_ENCONTRADA' || e?.code === 'DADOS_FISCAIS_INCOMPLETOS') {
+            return res.status(400).json({ ok: false, error: e.message });
+        }
+        console.error('[sped/apuracao-icms-st GET]', e);
+        return res.status(500).json({ ok: false, error: textoDaFalhaInterna(e) });
     }
 });
 
